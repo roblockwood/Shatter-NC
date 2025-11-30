@@ -194,23 +194,25 @@ class GCodeParser:
 
         return None
 
-    def estimate_runtime(self) -> float:
+    def estimate_runtime(self, rapid_feedrate: float = 2000.0) -> float:
         """
         Estimate program runtime based on move distances and feedrates.
 
         Analyzes:
-        - G0 (rapid) moves - assumed 1000 ipm
+        - G0 (rapid) moves - uses rapid_feedrate parameter
         - G1 (linear) moves with F (feedrate)
         - G2/G3 (arc) moves with F (feedrate)
         - G4 (dwell) commands
         - M-codes with known delays
+
+        Args:
+            rapid_feedrate: Rapid traverse speed in ipm (default 2000 for Brother CNC)
 
         Returns:
             Estimated runtime in seconds
         """
         total_time = 0.0
         current_feedrate = 100.0  # Default feedrate (ipm)
-        rapid_feedrate = 1000.0  # Assumed rapid traverse speed (ipm)
         current_position = {"x": 0.0, "y": 0.0, "z": 0.0}
         current_plane = "G17"  # XY plane default
         modal_g_code = None  # Track modal G-code (G0, G1, etc.)
