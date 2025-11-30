@@ -43,7 +43,7 @@ class GCodeParser:
             "tools": self.extract_tools(),
             "posted_date": self.extract_posted_date(),
             "estimated_runtime_seconds": self.estimate_runtime(),
-            "wcs_location": self.extract_wcs_location(),
+            "wcs_offset": self.extract_wcs_offset(),  # Actual WCS validation data
             "stock_size": self.extract_stock_size(),
             "line_count": len(self.lines),
             "file_size": len(self.content.encode('utf-8')),
@@ -126,42 +126,37 @@ class GCodeParser:
 
         return None
 
-    def extract_wcs_location(self) -> Optional[Dict[str, Dict[str, float]]]:
+    def extract_wcs_offset(self) -> Optional[Dict[str, Any]]:
         """
-        Extract WCS (Work Coordinate System) location from header.
+        Extract WCS (Work Coordinate System) offset for validation.
 
         Expected format:
-        (WCS LOCATION)
-        (X MIN -14.2875 MAX 131.7625)
-        (Y MIN -121.7041 MAX -96.3041)
-        (Z MIN 41.1911 MAX 53.8911)
+        G65 P8901 X-21.9975 Y-2.8563 Z-15.8976 E0.01 W54
+
+        Where:
+        - X, Y, Z: Expected offset coordinates
+        - W##: Work offset number (54 = G54, 55 = G55, etc.)
+        - E: Tolerance value for comparison
 
         Returns:
-            Dict with x, y, z keys containing min/max dicts, or None if not available
+            Dict with x, y, z coordinates, work_offset number, and tolerance
+            None if not found in program
         """
-        wcs_location = {}
-        in_wcs_section = False
-
-        # Pattern: (AXIS MIN value MAX value)
-        pattern = r'\(([XYZ])\s+MIN\s+([-\d.]+)\s+MAX\s+([-\d.]+)\)'
+        # Pattern: G65 P8901 X... Y... Z... E... W##
+        pattern = r'G65\s+P8901\s+X([-\d.]+)\s+Y([-\d.]+)\s+Z([-\d.]+)\s+E([-\d.]+)\s+W(\d+)'
 
         for line in self.lines[:100]:  # Check first 100 lines
-            if '(WCS LOCATION)' in line:
-                in_wcs_section = True
-                continue
+            match = re.search(pattern, line)
+            if match:
+                return {
+                    "x": float(match.group(1)),
+                    "y": float(match.group(2)),
+                    "z": float(match.group(3)),
+                    "tolerance": float(match.group(4)),
+                    "work_offset": int(match.group(5)),  # 54 = G54, 55 = G55, etc.
+                }
 
-            if in_wcs_section:
-                match = re.search(pattern, line)
-                if match:
-                    axis = match.group(1).lower()
-                    min_val = float(match.group(2))
-                    max_val = float(match.group(3))
-                    wcs_location[axis] = {"min": min_val, "max": max_val}
-                elif line.strip() and not line.startswith('('):
-                    # End of WCS section
-                    break
-
-        return wcs_location if wcs_location else None
+        return None
 
     def extract_stock_size(self) -> Optional[Dict[str, float]]:
         """
