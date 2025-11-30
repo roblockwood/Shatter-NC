@@ -256,48 +256,37 @@ services:
 ## Development Phases
 
 ### Phase 1: Foundation (MVP)
-**Goal:** Basic single-machine monitoring and file transfer
+**Goal:** Multi-machine monitoring and file transfer
 
 **Backend:**
-- [ ] Machine registry (CRUD API and database)
-- [ ] HTTP client for CNC endpoints
-- [ ] FTP client for file operations
-- [ ] REST API for frontend:
+- [x] Machine registry (CRUD API and database)
+- [x] HTTP client for CNC endpoints
+- [x] FTP client for file operations
+- [x] REST API for frontend:
   - GET /api/machines (list configured machines)
   - POST /api/machines (add machine)
   - GET /api/machines/:id/status (machine status)
   - GET /api/machines/:id/alarms (current alarms)
   - GET /api/machines/:id/programs (list files)
-  - POST /api/machines/:id/programs/upload
-  - GET /api/machines/:id/programs/:name/download
-- [ ] Database schema and models (machines table)
-- [ ] Basic data polling service (5-second intervals, single machine)
+  - POST /api/machines/:id/programs/upload (TODO)
+  - GET /api/machines/:id/programs/:name/download (TODO)
+- [x] Database schema and models (machines table)
+- [ ] Concurrent polling service (all active machines, 5-second intervals)
+- [ ] Per-machine polling state management
+- [ ] WebSocket broadcasting for real-time updates
+- [ ] Machine health monitoring
 
 **Frontend:**
 - [ ] Machine management UI (add/edit machines)
-- [ ] Main layout with status panels
-- [ ] Real-time status display for selected machine
+- [ ] Multi-machine overview dashboard (grid/list view)
+- [ ] Real-time status cards per machine
+- [ ] Drill-down to individual machine details
 - [ ] File browser/manager with machine selector
 - [ ] Upload/download functionality
 
 **Deployment:**
-- [ ] Docker Compose setup
-- [ ] Basic documentation
-
-### Phase 1.5: Multi-Machine Support
-**Goal:** Expand to monitor multiple machines concurrently
-
-**Backend:**
-- [ ] Concurrent polling service (all active machines)
-- [ ] Per-machine polling state management
-- [ ] WebSocket broadcasting for multi-machine updates
-- [ ] Machine health monitoring
-
-**Frontend:**
-- [ ] Multi-machine overview (grid view)
-- [ ] Machine status indicators
-- [ ] Quick stats per machine
-- [ ] Drill-down to individual machine details
+- [x] Docker Compose setup
+- [x] Basic documentation
 
 ### Phase 2: Historical Data & Analytics
 - [ ] Time-series data collection (cycle times, counters) per machine
