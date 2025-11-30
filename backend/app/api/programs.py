@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from app.db.base import get_db
 from app.models.machine import Machine
 from app.parsers.gcode_parser import parse_gcode
+from app.parsers.posni_parser import get_work_offset
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
 
@@ -228,18 +229,59 @@ def _validate_wcs_offset(
     }
     tolerance = program_wcs["tolerance"]
 
-    # TODO: Parse POSNI1.NC to extract actual work offsets
-    # For now, return placeholder result
+    # Parse POSNI1.NC to get actual machine offset
+    actual_offset = get_work_offset(machine_position_data, work_offset)
+
+    if not actual_offset:
+        return WCSValidationResult(
+            valid=False,
+            work_offset=work_offset,
+            expected=expected,
+            actual={},
+            difference={},
+            tolerance=tolerance,
+            within_tolerance=False,
+            warnings=[f"G{work_offset} offset not found in machine data"]
+        )
+
+    actual = {
+        "x": actual_offset["x"],
+        "y": actual_offset["y"],
+        "z": actual_offset["z"],
+    }
+
+    # Calculate differences
+    difference = {
+        "x": abs(actual["x"] - expected["x"]),
+        "y": abs(actual["y"] - expected["y"]),
+        "z": abs(actual["z"] - expected["z"]),
+    }
+
+    # Check if within tolerance
+    within_tolerance = (
+        difference["x"] <= tolerance and
+        difference["y"] <= tolerance and
+        difference["z"] <= tolerance
+    )
+
+    warnings = []
+    if not within_tolerance:
+        if difference["x"] > tolerance:
+            warnings.append(f"X axis difference {difference['x']:.4f}\" exceeds tolerance ±{tolerance}\"")
+        if difference["y"] > tolerance:
+            warnings.append(f"Y axis difference {difference['y']:.4f}\" exceeds tolerance ±{tolerance}\"")
+        if difference["z"] > tolerance:
+            warnings.append(f"Z axis difference {difference['z']:.4f}\" exceeds tolerance ±{tolerance}\"")
 
     result = WCSValidationResult(
-        valid=False,
+        valid=within_tolerance,
         work_offset=work_offset,
         expected=expected,
-        actual={},  # TODO: Parse from POSNI1.NC
-        difference={},
+        actual=actual,
+        difference=difference,
         tolerance=tolerance,
-        within_tolerance=False,
-        warnings=["WCS validation not fully implemented - please verify G{} offset manually".format(work_offset)]
+        within_tolerance=within_tolerance,
+        warnings=warnings
     )
 
     return result
