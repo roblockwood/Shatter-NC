@@ -1,7 +1,7 @@
 """Program validation and upload endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 
 from app.db.base import get_db
@@ -31,7 +31,7 @@ class ToolValidationResult(BaseModel):
     corner_radius_match: bool = False
     length_sufficient: bool = False
     machine_tool_data: Dict[str, Any] = {}
-    warnings: list[str] = []
+    warnings: List[str] = []
 
 
 class WCSValidationResult(BaseModel):
@@ -43,16 +43,16 @@ class WCSValidationResult(BaseModel):
     difference: Dict[str, float] = {}
     tolerance: float
     within_tolerance: bool = False
-    warnings: list[str] = []
+    warnings: List[str] = []
 
 
 class ProgramValidationResponse(BaseModel):
     """Complete validation response."""
     valid: bool
     tools: Dict[int, ToolValidationResult]
-    wcs_offset: WCSValidationResult | None
-    warnings: list[str]
-    errors: list[str]
+    wcs_offset: Optional[WCSValidationResult]
+    warnings: List[str]
+    errors: List[str]
     metadata: Dict[str, Any]
 
 
