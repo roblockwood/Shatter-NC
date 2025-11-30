@@ -297,8 +297,14 @@ services:
 - [ ] Data export (CSV/JSON)
 
 ### Phase 3: Smart G-Code Features
-- [ ] G-code parser implementation
-- [ ] Tool table extraction
+- [x] G-code parser implementation
+  - [x] Tool extraction (number, diameter, corner radius, length)
+  - [x] Posted date parsing
+  - [x] Runtime estimation with configurable rapid feedrate
+  - [x] Stock size extraction
+  - [ ] WCS coordinate system validation (requires CAM post-processor update)
+    - Note: Current post outputs part bounding box, not actual WCS offsets
+    - Need G54/G55/etc. X/Y/Z offset values for validation
 - [ ] Machine tool data comparison (per target machine)
 - [ ] Pre-transfer validation
 - [ ] Tool mismatch warnings
