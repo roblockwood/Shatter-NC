@@ -40,12 +40,16 @@ else:
     print("  Not found")
 print()
 
-print("WCS LOCATION (BOUNDING BOX):")
-if result['wcs_location']:
-    for axis, values in result['wcs_location'].items():
-        print(f"  {axis.upper()}: MIN {values['min']:.4f}\" MAX {values['max']:.4f}\"")
+print("WCS OFFSET (For Validation):")
+if result['wcs_offset']:
+    wcs = result['wcs_offset']
+    print(f"  Work Offset: G{wcs['work_offset']}")
+    print(f"  Expected X: {wcs['x']:.4f}\"")
+    print(f"  Expected Y: {wcs['y']:.4f}\"")
+    print(f"  Expected Z: {wcs['z']:.4f}\"")
+    print(f"  Tolerance: ±{wcs['tolerance']:.4f}\"")
 else:
-    print("  Not found")
+    print("  Not found in program")
 print()
 
 print("FILE STATISTICS:")
