@@ -55,13 +55,15 @@ class GCodeParser:
 
         Expected format:
         (T01 D=0.25 CR=0 - ZMIN=1.7674 - FLAT END MILL - L=0.65/3.609)
+        (T02 D=0.25 CR=0.125 - ZMIN=-1.9677 - BALL END MILL - L=1.25/2.3917)
 
         Returns:
             List of dicts with tool_number, diameter, corner_radius, length_used, length_total, description
         """
         tools = []
         # Pattern: (T## D=diameter CR=corner_radius - ZMIN=... - description - L=used/total)
-        pattern = r'\(T(\d+)\s+D=([\d.]+)\s+CR=([\d.]+)\s+-\s+ZMIN=([\d.]+)\s+-\s+([^-]+)\s+-\s+L=([\d.]+)/([\d.]+)\)'
+        # Note: ZMIN can be negative
+        pattern = r'\(T(\d+)\s+D=([\d.]+)\s+CR=([\d.]+)\s+-\s+ZMIN=([-\d.]+)\s+-\s+([^-]+)\s+-\s+L=([\d.]+)/([\d.]+)\)'
 
         for line in self.lines:
             match = re.search(pattern, line)
@@ -69,19 +71,17 @@ class GCodeParser:
                 tool_number = int(match.group(1))
                 diameter = float(match.group(2))
                 corner_radius = float(match.group(3))
-                zmin = float(match.group(4))
+                # zmin = float(match.group(4))  # Not used for validation
                 description = match.group(5).strip()
-                length_used = float(match.group(6))
-                length_total = float(match.group(7))
+                # length_used = float(match.group(6))  # Stick-out, not needed
+                length_total = float(match.group(7))  # Required for validation
 
                 tools.append({
                     "tool_number": tool_number,
                     "diameter": diameter,
                     "corner_radius": corner_radius,
-                    "zmin": zmin,
                     "description": description,
-                    "length_used": length_used,
-                    "length_total": length_total,
+                    "length_total": length_total,  # Required tool length
                 })
 
         return tools
