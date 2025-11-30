@@ -1,4 +1,4 @@
-"""Test G-code parser against sample file."""
+"""Test G-code parser against 12345.NC sample file."""
 import sys
 sys.path.insert(0, 'backend')
 
@@ -6,7 +6,7 @@ from app.parsers.gcode_parser import parse_gcode
 import json
 
 # Read sample file
-with open('Samples/S700 ORANGE VISE 2-OP_OP1.NC', 'r') as f:
+with open('Samples/12345.NC', 'r') as f:
     gcode_content = f.read()
 
 # Parse
@@ -14,7 +14,7 @@ result = parse_gcode(gcode_content)
 
 # Pretty print results
 print("=" * 80)
-print("G-CODE PARSER TEST RESULTS")
+print("G-CODE PARSER TEST: 12345.NC")
 print("=" * 80)
 print()
 
@@ -40,7 +40,7 @@ else:
     print("  Not found")
 print()
 
-print("WCS LOCATION:")
+print("WCS LOCATION (BOUNDING BOX):")
 if result['wcs_location']:
     for axis, values in result['wcs_location'].items():
         print(f"  {axis.upper()}: MIN {values['min']:.4f}\" MAX {values['max']:.4f}\"")
