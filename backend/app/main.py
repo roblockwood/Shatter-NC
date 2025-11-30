@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 
 # Import routers
-from app.api import machines, status
+from app.api import machines, status, programs
 # from app.api import programs, history
 
 app = FastAPI(
@@ -42,6 +42,7 @@ async def health():
 # Include routers
 app.include_router(machines.router, prefix="/api/machines", tags=["machines"])
 app.include_router(status.router, prefix="/api/machines", tags=["status"])
+app.include_router(programs.router, prefix="/api/machines", tags=["programs"])
 # app.include_router(programs.router, prefix="/api/programs", tags=["programs"])
 # app.include_router(history.router, prefix="/api/history", tags=["history"])
 
