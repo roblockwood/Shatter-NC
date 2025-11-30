@@ -1,0 +1,32 @@
+# FastAPI and ASGI server
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# Redis
+redis==5.0.1
+
+# HTTP/FTP clients
+httpx==0.26.0
+aioftp==0.22.3
+
+# Background tasks
+celery==5.3.6
+
+# Validation and config
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+
+# Authentication (optional)
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2023.3
