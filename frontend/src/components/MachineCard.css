@@ -1,0 +1,129 @@
+.machine-card {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  padding: var(--spacing-md);
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  min-width: 320px;
+  max-width: 400px;
+}
+
+.machine-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.machine-name {
+  font-size: var(--font-lg);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.machine-card-divider,
+.machine-card-divider-thin {
+  color: var(--color-border-bright);
+  margin: var(--spacing-sm) 0;
+  white-space: pre;
+  font-size: var(--font-sm);
+}
+
+.machine-card-divider-thin {
+  color: var(--color-text-dim);
+}
+
+.machine-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.machine-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-md);
+}
+
+.machine-row .label {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.machine-row .value {
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.machine-offline {
+  opacity: 0.7;
+}
+
+.machine-timestamp {
+  font-size: var(--font-xs);
+  color: var(--color-text-dim);
+  margin-top: var(--spacing-xs);
+  text-align: right;
+}
+
+.machine-alarms {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin: var(--spacing-xs) 0;
+}
+
+.alarm-header {
+  font-weight: 700;
+  font-size: var(--font-sm);
+}
+
+.alarm-item {
+  font-size: var(--font-xs);
+  padding-left: var(--spacing-sm);
+}
+
+.tool-summary {
+  margin: var(--spacing-xs) 0;
+}
+
+.tool-count {
+  font-size: var(--font-xs);
+  text-align: center;
+}
+
+.machine-actions {
+  display: flex;
+  justify-content: center;
+  margin: var(--spacing-sm) 0;
+}
+
+.upload-button {
+  background: transparent;
+  border: 1px solid var(--color-text-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  padding: var(--spacing-xs) var(--spacing-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.upload-button:hover:not(:disabled) {
+  background: var(--color-text-primary);
+  color: var(--color-bg-primary);
+  box-shadow: var(--glow);
+}
+
+.upload-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Hover effect */
+.machine-card:hover {
+  border-color: var(--color-border-bright);
+  box-shadow: 0 0 20px rgba(0, 255, 0, 0.1);
+}
