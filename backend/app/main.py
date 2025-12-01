@@ -4,8 +4,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 
 # Import routers
-from app.api import machines, status, programs
+from app.api import machines, status, programs, websocket
 # from app.api import programs, history
+
+# Import services
+from app.services import WebSocketManager, PollingService
+
+# Global service instances
+websocket_manager = WebSocketManager()
+polling_service = PollingService(websocket_manager)
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -36,28 +43,41 @@ async def root():
 @app.get("/health")
 async def health():
     """Health check endpoint."""
-    return {"status": "healthy"}
+    return {
+        "status": "healthy",
+        "polling_service": {
+            "running": polling_service.is_running,
+            "active_machines": len(polling_service.pollers),
+            "websocket_connections": websocket_manager.get_connection_count(),
+        },
+    }
 
 
 # Include routers
 app.include_router(machines.router, prefix="/api/machines", tags=["machines"])
 app.include_router(status.router, prefix="/api/machines", tags=["status"])
 app.include_router(programs.router, prefix="/api/machines", tags=["programs"])
+app.include_router(websocket.router, prefix="/api", tags=["websocket"])
 # app.include_router(programs.router, prefix="/api/programs", tags=["programs"])
 # app.include_router(history.router, prefix="/api/history", tags=["history"])
+
+# Inject websocket manager into websocket router
+websocket.set_websocket_manager(websocket_manager)
 
 
 @app.on_event("startup")
 async def startup_event():
     """Run on application startup."""
     print(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    # TODO: Initialize database connection pool
-    # TODO: Start background polling tasks
+    print("Starting background polling service...")
+    await polling_service.start()
+    print("Polling service started - monitoring all enabled machines")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Run on application shutdown."""
     print(f"Shutting down {settings.APP_NAME}")
-    # TODO: Close database connections
-    # TODO: Stop background tasks
+    print("Stopping background polling service...")
+    await polling_service.stop()
+    print("Polling service stopped")
