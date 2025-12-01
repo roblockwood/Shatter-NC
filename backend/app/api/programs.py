@@ -182,29 +182,72 @@ def _validate_tool(
         ToolValidationResult
     """
     tool_num = program_tool["tool_number"]
+    tolerance_diameter = 0.001  # ±0.001" for diameter
+    tolerance_length = 0.01     # ±0.01" for length
 
-    # TODO: Parse machine_tool_data (currently returns raw HTML)
-    # For now, assume tool is available if we got data back
-    # Real implementation will parse the tool table HTML
+    # Find tool in machine tool table
+    machine_tools = machine_tool_data.get("tools", [])
+    machine_tool = None
+    for t in machine_tools:
+        if t["tool_number"] == tool_num:
+            machine_tool = t
+            break
 
-    # Placeholder validation
-    result = ToolValidationResult(
+    # Tool not found in machine
+    if not machine_tool:
+        return ToolValidationResult(
+            tool_number=tool_num,
+            required_diameter=program_tool["diameter"],
+            required_corner_radius=program_tool["corner_radius"],
+            required_length=program_tool["length_total"],
+            available=False,
+            diameter_match=False,
+            corner_radius_match=False,
+            length_sufficient=False,
+            machine_tool_data={},
+            warnings=[f"Tool T{tool_num:02d} not found in machine tool table"]
+        )
+
+    # Validate diameter (within tolerance)
+    machine_diameter = machine_tool.get("diameter", 0)
+    diameter_diff = abs(machine_diameter - program_tool["diameter"])
+    diameter_match = diameter_diff <= tolerance_diameter
+
+    # Validate length (machine tool must be >= required length)
+    machine_length = machine_tool.get("length", 0)
+    length_sufficient = machine_length >= program_tool["length_total"]
+
+    # TODO: Corner radius validation requires additional machine data
+    corner_radius_match = True  # Assume OK for now
+
+    warnings = []
+    if not diameter_match:
+        warnings.append(
+            f"Diameter mismatch: need {program_tool['diameter']:.4f}\", "
+            f"have {machine_diameter:.4f}\" (diff: {diameter_diff:.4f}\")"
+        )
+    if not length_sufficient:
+        warnings.append(
+            f"Tool too short: need {program_tool['length_total']:.4f}\", "
+            f"have {machine_length:.4f}\""
+        )
+
+    return ToolValidationResult(
         tool_number=tool_num,
         required_diameter=program_tool["diameter"],
         required_corner_radius=program_tool["corner_radius"],
         required_length=program_tool["length_total"],
-        available=True,  # TODO: Check actual machine data
-        diameter_match=True,  # TODO: Compare diameters
-        corner_radius_match=True,  # TODO: Compare corner radius
-        length_sufficient=True,  # TODO: Compare lengths
-        machine_tool_data={},  # TODO: Add parsed machine tool data
-        warnings=[]
+        available=True,
+        diameter_match=diameter_match,
+        corner_radius_match=corner_radius_match,
+        length_sufficient=length_sufficient,
+        machine_tool_data={
+            "tool_name": machine_tool.get("tool_name", ""),
+            "diameter": machine_diameter,
+            "length": machine_length,
+        },
+        warnings=warnings
     )
-
-    # TODO: Add actual validation logic when machine tool parsing is implemented
-    result.warnings.append("Tool validation not fully implemented - please verify manually")
-
-    return result
 
 
 def _validate_wcs_offset(

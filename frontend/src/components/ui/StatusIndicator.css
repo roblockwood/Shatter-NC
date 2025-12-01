@@ -1,0 +1,22 @@
+.status-indicator {
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  white-space: nowrap;
+}
+
+.status-icon {
+  display: inline-block;
+  line-height: 1;
+}
+
+.status-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing);
+}
+
+.status-blink .status-icon {
+  animation: blink 1s step-end infinite;
+}
