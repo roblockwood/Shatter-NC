@@ -19,7 +19,7 @@ class CNCFtpClient:
         port: int = 21,
         username: str = "anonymous",
         password: str = "anonymous",
-        timeout: int = 10,
+        timeout: int = 30,
     ):
         """
         Initialize FTP client.
@@ -36,33 +36,41 @@ class CNCFtpClient:
         self.username = username
         self.password = password
         self.timeout = timeout
+        self.ftp: Optional[FTP] = None
+        self._connected = False
+
+    def _ensure_connection(self):
+        """
+        Establish or verify FTP connection.
+
+        Creates a new connection if one doesn't exist or if the previous
+        connection was lost. Uses passive mode for compatibility with
+        Brother CNC machines.
+        """
+        if self.ftp is None or not self._connected:
+            self.ftp = FTP()
+            self.ftp.set_pasv(True)  # Use PASSIVE mode
+            self.ftp.connect(self.ip_address, self.port, timeout=self.timeout)
+            self.ftp.login(self.username, self.password)
+            self._connected = True
 
     async def test_connection(self) -> Dict[str, Any]:
         """
-        Test FTP connection using active mode.
+        Test FTP connection using passive mode.
 
         Returns:
             Dict with connection test results
         """
         def _test_sync():
-            ftp = None
             try:
                 start_time = datetime.now()
-                ftp = FTP()
-                ftp.set_pasv(False)  # Use ACTIVE mode
-                ftp.connect(self.ip_address, self.port, timeout=self.timeout)
-                ftp.login(self.username, self.password)
-                ftp.pwd()  # Get current directory to verify connection
+                self._ensure_connection()
+                self.ftp.pwd()  # Get current directory to verify connection
                 end_time = datetime.now()
                 latency = (end_time - start_time).total_seconds() * 1000
-                ftp.quit()
                 return latency
             except Exception as e:
-                if ftp:
-                    try:
-                        ftp.quit()
-                    except:
-                        pass
+                self._connected = False
                 raise e
 
         try:
@@ -86,7 +94,7 @@ class CNCFtpClient:
 
     async def list_files(self, path: str = "/") -> List[Dict[str, Any]]:
         """
-        List files in CNC directory using active FTP mode.
+        List files in CNC directory using passive FTP mode.
 
         Args:
             path: Directory path (default root)
@@ -96,51 +104,46 @@ class CNCFtpClient:
         """
         def _list_files_sync():
             """Synchronous FTP operations to run in thread pool."""
-            ftp = None
             try:
-                ftp = FTP()
-                ftp.set_pasv(False)  # Use ACTIVE mode
-                ftp.connect(self.ip_address, self.port, timeout=self.timeout)
-                ftp.login(self.username, self.password)
+                self._ensure_connection()
 
                 files = []
-                # Use MLSD if available (provides structured data)
-                try:
-                    for name, facts in ftp.mlsd(path):
-                        if name in ('.', '..'):
-                            continue
-                        files.append({
-                            "name": name,
-                            "path": f"{path}/{name}".replace("//", "/"),
-                            "is_directory": facts.get("type") == "dir",
-                            "size": int(facts.get("size", 0)),
-                            "modified": facts.get("modify", ""),
-                        })
-                except:
-                    # Fallback to NLST + SIZE for basic servers
-                    file_list = ftp.nlst(path) if path != "/" else ftp.nlst()
-                    for name in file_list:
-                        try:
-                            size = ftp.size(name)
-                        except:
-                            size = 0
-                        files.append({
-                            "name": name,
-                            "path": f"/{name}",
-                            "is_directory": False,
-                            "size": size,
-                            "modified": "",
-                        })
+                # Use NLST for Brother CNC compatibility (MLSD can hang in passive mode)
+                file_list = self.ftp.nlst(path) if path != "/" else self.ftp.nlst()
 
-                ftp.quit()
+                # Remember current directory to restore later
+                current_dir = self.ftp.pwd()
+
+                for name in file_list:
+                    is_directory = False
+                    size = 0
+
+                    # Try to get file size - fails for directories
+                    try:
+                        size = self.ftp.size(name)
+                    except:
+                        # SIZE failed, might be a directory - try to CWD into it
+                        try:
+                            self.ftp.cwd(name)
+                            is_directory = True
+                            # Restore to original directory
+                            self.ftp.cwd(current_dir)
+                        except:
+                            # Not a directory, just a file where SIZE failed
+                            pass
+
+                    files.append({
+                        "name": name,
+                        "path": f"/{name}",
+                        "is_directory": is_directory,
+                        "size": size,
+                        "modified": "",
+                    })
+
                 return files
 
             except Exception as e:
-                if ftp:
-                    try:
-                        ftp.quit()
-                    except:
-                        pass
+                self._connected = False
                 raise e
 
         try:
@@ -164,7 +167,7 @@ class CNCFtpClient:
 
     async def download_file(self, remote_path: str) -> Optional[bytes]:
         """
-        Download file from CNC using active FTP mode.
+        Download file from CNC using passive FTP mode.
 
         Args:
             remote_path: Path to file on CNC (e.g., 'O2000.NC')
@@ -173,24 +176,15 @@ class CNCFtpClient:
             File contents as bytes, or None on error
         """
         def _download_sync():
-            ftp = None
             try:
-                ftp = FTP()
-                ftp.set_pasv(False)  # Use ACTIVE mode
-                ftp.connect(self.ip_address, self.port, timeout=self.timeout)
-                ftp.login(self.username, self.password)
+                self._ensure_connection()
 
                 buffer = BytesIO()
-                ftp.retrbinary(f'RETR {remote_path}', buffer.write)
-                ftp.quit()
+                self.ftp.retrbinary(f'RETR {remote_path}', buffer.write)
                 return buffer.getvalue()
 
             except Exception as e:
-                if ftp:
-                    try:
-                        ftp.quit()
-                    except:
-                        pass
+                self._connected = False
                 raise e
 
         try:
@@ -207,7 +201,7 @@ class CNCFtpClient:
         self, local_content: bytes, remote_path: str
     ) -> Dict[str, Any]:
         """
-        Upload file to CNC using active FTP mode.
+        Upload file to CNC using passive FTP mode.
 
         Args:
             local_content: File content as bytes
@@ -217,24 +211,15 @@ class CNCFtpClient:
             Upload result dict
         """
         def _upload_sync():
-            ftp = None
             try:
-                ftp = FTP()
-                ftp.set_pasv(False)  # Use ACTIVE mode
-                ftp.connect(self.ip_address, self.port, timeout=self.timeout)
-                ftp.login(self.username, self.password)
+                self._ensure_connection()
 
                 buffer = BytesIO(local_content)
-                ftp.storbinary(f'STOR {remote_path}', buffer)
-                ftp.quit()
+                self.ftp.storbinary(f'STOR {remote_path}', buffer)
                 return True
 
             except Exception as e:
-                if ftp:
-                    try:
-                        ftp.quit()
-                    except:
-                        pass
+                self._connected = False
                 raise e
 
         try:
@@ -259,7 +244,7 @@ class CNCFtpClient:
 
     async def delete_file(self, remote_path: str) -> Dict[str, Any]:
         """
-        Delete file from CNC using active FTP mode.
+        Delete file from CNC using passive FTP mode.
 
         Args:
             remote_path: Path to file on CNC
@@ -268,23 +253,14 @@ class CNCFtpClient:
             Deletion result dict
         """
         def _delete_sync():
-            ftp = None
             try:
-                ftp = FTP()
-                ftp.set_pasv(False)  # Use ACTIVE mode
-                ftp.connect(self.ip_address, self.port, timeout=self.timeout)
-                ftp.login(self.username, self.password)
+                self._ensure_connection()
 
-                ftp.delete(remote_path)
-                ftp.quit()
+                self.ftp.delete(remote_path)
                 return True
 
             except Exception as e:
-                if ftp:
-                    try:
-                        ftp.quit()
-                    except:
-                        pass
+                self._connected = False
                 raise e
 
         try:
@@ -325,34 +301,18 @@ class CNCFtpClient:
                 return None
         return None
 
-    async def get_programs(self) -> List[Dict[str, Any]]:
+    async def get_programs(self, path: str = "/") -> List[Dict[str, Any]]:
         """
-        Get list of NC programs (O-numbers and user programs).
+        Get list of all files and directories.
+
+        Args:
+            path: Directory path to list (default: /)
 
         Returns:
-            List of program files with metadata
+            List of all files with metadata (no filtering)
         """
-        all_files = await self.list_files("/")
-
-        # Filter for NC programs (O-numbers)
-        programs = []
-        for file_info in all_files:
-            name = file_info["name"]
-            # Match O-number files (O####.NC)
-            if name.startswith("O") and name.endswith(".NC"):
-                # Try to extract O-number
-                try:
-                    o_number = int(name[1:-3])  # Remove 'O' and '.NC'
-                    file_info["o_number"] = o_number
-                    file_info["is_user_program"] = 2000 <= o_number <= 3999
-                    programs.append(file_info)
-                except ValueError:
-                    # Not a valid O-number, skip
-                    pass
-
-        # Sort by O-number
-        programs.sort(key=lambda x: x.get("o_number", 0))
-        return programs
+        all_files = await self.list_files(path)
+        return all_files
 
     async def get_alarm_data(self) -> Optional[str]:
         """
@@ -380,6 +340,52 @@ class CNCFtpClient:
             Monitor data as string
         """
         return await self.get_system_file("MONTR.NC")
+
+    async def connect(self) -> bool:
+        """
+        Explicitly establish FTP connection.
+
+        Returns:
+            True if connection successful
+        """
+        def _connect_sync():
+            self._ensure_connection()
+            return True
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _connect_sync)
+
+    async def disconnect(self):
+        """
+        Explicitly close FTP connection.
+
+        Closes the persistent FTP connection and cleans up resources.
+        """
+        def _disconnect_sync():
+            if self.ftp and self._connected:
+                try:
+                    self.ftp.quit()
+                except:
+                    pass
+                finally:
+                    self._connected = False
+                    self.ftp = None
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _disconnect_sync)
+
+    def __del__(self):
+        """
+        Cleanup connection on object destruction.
+
+        Ensures FTP connection is properly closed when the client
+        object is garbage collected.
+        """
+        if self.ftp and self._connected:
+            try:
+                self.ftp.quit()
+            except:
+                pass
 
 
 # Helper function for sync usage
