@@ -47,7 +47,11 @@ export const FileBrowser: React.FC = () => {
     fetch(`http://localhost:8000/api/machines/${selectedMachineId}/programs`)
       .then(res => {
         if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
+          return res.json().then(data => {
+            throw new Error(data.detail || `HTTP ${res.status}`);
+          }).catch(() => {
+            throw new Error(`HTTP ${res.status}`);
+          });
         }
         return res.json();
       })
@@ -58,7 +62,14 @@ export const FileBrowser: React.FC = () => {
       })
       .catch(err => {
         console.error('Error fetching programs:', err);
-        setError(`CNC FTP server offline or unreachable`);
+        const errorMsg = err.message || 'Unknown error';
+        if (errorMsg.includes('timeout')) {
+          setError('FTP connection timeout - check machine network connectivity');
+        } else if (errorMsg.includes('ConnectionReset') || errorMsg === '') {
+          setError('FTP server connection refused - verify machine FTP service is running');
+        } else {
+          setError(`Error: ${errorMsg}`);
+        }
         setLoading(false);
       });
   }, [selectedMachineId]);
