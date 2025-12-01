@@ -1,10 +1,11 @@
 """FTP client for file operations with Brother CNC machines."""
-import aioftp
 import asyncio
+from ftplib import FTP, error_perm
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
 from io import BytesIO
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -38,29 +39,43 @@ class CNCFtpClient:
 
     async def test_connection(self) -> Dict[str, Any]:
         """
-        Test FTP connection.
+        Test FTP connection using active mode.
 
         Returns:
             Dict with connection test results
         """
-        try:
-            start_time = datetime.now()
-            async with aioftp.Client.context(
-                self.ip_address,
-                port=self.port,
-                user=self.username,
-                password=self.password,
-            ) as client:
-                # Try to get current directory to verify connection
-                await client.get_current_directory()
+        def _test_sync():
+            ftp = None
+            try:
+                start_time = datetime.now()
+                ftp = FTP()
+                ftp.set_pasv(False)  # Use ACTIVE mode
+                ftp.connect(self.ip_address, self.port, timeout=self.timeout)
+                ftp.login(self.username, self.password)
+                ftp.pwd()  # Get current directory to verify connection
                 end_time = datetime.now()
                 latency = (end_time - start_time).total_seconds() * 1000
+                ftp.quit()
+                return latency
+            except Exception as e:
+                if ftp:
+                    try:
+                        ftp.quit()
+                    except:
+                        pass
+                raise e
 
-                return {
-                    "success": True,
-                    "latency_ms": round(latency, 2),
-                    "timestamp": datetime.now().isoformat(),
-                }
+        try:
+            loop = asyncio.get_event_loop()
+            latency = await asyncio.wait_for(
+                loop.run_in_executor(None, _test_sync),
+                timeout=self.timeout
+            )
+            return {
+                "success": True,
+                "latency_ms": round(latency, 2),
+                "timestamp": datetime.now().isoformat(),
+            }
         except Exception as e:
             logger.error(f"FTP connection test failed: {e}")
             return {
@@ -71,7 +86,7 @@ class CNCFtpClient:
 
     async def list_files(self, path: str = "/") -> List[Dict[str, Any]]:
         """
-        List files in CNC directory.
+        List files in CNC directory using active FTP mode.
 
         Args:
             path: Directory path (default root)
@@ -79,32 +94,77 @@ class CNCFtpClient:
         Returns:
             List of file information dicts
         """
-        try:
-            async with aioftp.Client.context(
-                self.ip_address,
-                port=self.port,
-                user=self.username,
-                password=self.password,
-            ) as client:
-                files = []
-                async for path_obj, info in client.list(path):
-                    file_info = {
-                        "name": path_obj.name,
-                        "path": str(path_obj),
-                        "is_directory": info.get("type") == "dir",
-                        "size": info.get("size", 0),
-                        "modified": info.get("modify", ""),
-                    }
-                    files.append(file_info)
+        def _list_files_sync():
+            """Synchronous FTP operations to run in thread pool."""
+            ftp = None
+            try:
+                ftp = FTP()
+                ftp.set_pasv(False)  # Use ACTIVE mode
+                ftp.connect(self.ip_address, self.port, timeout=self.timeout)
+                ftp.login(self.username, self.password)
 
+                files = []
+                # Use MLSD if available (provides structured data)
+                try:
+                    for name, facts in ftp.mlsd(path):
+                        if name in ('.', '..'):
+                            continue
+                        files.append({
+                            "name": name,
+                            "path": f"{path}/{name}".replace("//", "/"),
+                            "is_directory": facts.get("type") == "dir",
+                            "size": int(facts.get("size", 0)),
+                            "modified": facts.get("modify", ""),
+                        })
+                except:
+                    # Fallback to NLST + SIZE for basic servers
+                    file_list = ftp.nlst(path) if path != "/" else ftp.nlst()
+                    for name in file_list:
+                        try:
+                            size = ftp.size(name)
+                        except:
+                            size = 0
+                        files.append({
+                            "name": name,
+                            "path": f"/{name}",
+                            "is_directory": False,
+                            "size": size,
+                            "modified": "",
+                        })
+
+                ftp.quit()
                 return files
+
+            except Exception as e:
+                if ftp:
+                    try:
+                        ftp.quit()
+                    except:
+                        pass
+                raise e
+
+        try:
+            # Run synchronous FTP in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            files = await asyncio.wait_for(
+                loop.run_in_executor(None, _list_files_sync),
+                timeout=self.timeout
+            )
+            return files
+
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout listing files on {self.ip_address}")
+            raise Exception(f"FTP connection timeout after {self.timeout} seconds")
+        except ConnectionResetError:
+            logger.error(f"FTP connection reset by {self.ip_address}")
+            raise Exception("FTP server connection reset - server may be busy or offline")
         except Exception as e:
-            logger.error(f"Error listing files: {e}")
-            return []
+            logger.error(f"Error listing files from {self.ip_address}: {type(e).__name__}: {e}")
+            raise Exception(f"FTP error: {type(e).__name__}: {str(e)}")
 
     async def download_file(self, remote_path: str) -> Optional[bytes]:
         """
-        Download file from CNC.
+        Download file from CNC using active FTP mode.
 
         Args:
             remote_path: Path to file on CNC (e.g., 'O2000.NC')
@@ -112,17 +172,33 @@ class CNCFtpClient:
         Returns:
             File contents as bytes, or None on error
         """
-        try:
-            async with aioftp.Client.context(
-                self.ip_address,
-                port=self.port,
-                user=self.username,
-                password=self.password,
-            ) as client:
-                # Download to memory buffer
+        def _download_sync():
+            ftp = None
+            try:
+                ftp = FTP()
+                ftp.set_pasv(False)  # Use ACTIVE mode
+                ftp.connect(self.ip_address, self.port, timeout=self.timeout)
+                ftp.login(self.username, self.password)
+
                 buffer = BytesIO()
-                await client.download_stream(remote_path, buffer)
+                ftp.retrbinary(f'RETR {remote_path}', buffer.write)
+                ftp.quit()
                 return buffer.getvalue()
+
+            except Exception as e:
+                if ftp:
+                    try:
+                        ftp.quit()
+                    except:
+                        pass
+                raise e
+
+        try:
+            loop = asyncio.get_event_loop()
+            return await asyncio.wait_for(
+                loop.run_in_executor(None, _download_sync),
+                timeout=self.timeout
+            )
         except Exception as e:
             logger.error(f"Error downloading {remote_path}: {e}")
             return None
@@ -131,7 +207,7 @@ class CNCFtpClient:
         self, local_content: bytes, remote_path: str
     ) -> Dict[str, Any]:
         """
-        Upload file to CNC.
+        Upload file to CNC using active FTP mode.
 
         Args:
             local_content: File content as bytes
@@ -140,23 +216,39 @@ class CNCFtpClient:
         Returns:
             Upload result dict
         """
-        try:
-            async with aioftp.Client.context(
-                self.ip_address,
-                port=self.port,
-                user=self.username,
-                password=self.password,
-            ) as client:
-                # Upload from memory buffer
-                buffer = BytesIO(local_content)
-                await client.upload_stream(buffer, remote_path)
+        def _upload_sync():
+            ftp = None
+            try:
+                ftp = FTP()
+                ftp.set_pasv(False)  # Use ACTIVE mode
+                ftp.connect(self.ip_address, self.port, timeout=self.timeout)
+                ftp.login(self.username, self.password)
 
-                return {
-                    "success": True,
-                    "remote_path": remote_path,
-                    "size": len(local_content),
-                    "timestamp": datetime.now().isoformat(),
-                }
+                buffer = BytesIO(local_content)
+                ftp.storbinary(f'STOR {remote_path}', buffer)
+                ftp.quit()
+                return True
+
+            except Exception as e:
+                if ftp:
+                    try:
+                        ftp.quit()
+                    except:
+                        pass
+                raise e
+
+        try:
+            loop = asyncio.get_event_loop()
+            await asyncio.wait_for(
+                loop.run_in_executor(None, _upload_sync),
+                timeout=self.timeout
+            )
+            return {
+                "success": True,
+                "remote_path": remote_path,
+                "size": len(local_content),
+                "timestamp": datetime.now().isoformat(),
+            }
         except Exception as e:
             logger.error(f"Error uploading to {remote_path}: {e}")
             return {
@@ -167,7 +259,7 @@ class CNCFtpClient:
 
     async def delete_file(self, remote_path: str) -> Dict[str, Any]:
         """
-        Delete file from CNC.
+        Delete file from CNC using active FTP mode.
 
         Args:
             remote_path: Path to file on CNC
@@ -175,18 +267,35 @@ class CNCFtpClient:
         Returns:
             Deletion result dict
         """
-        try:
-            async with aioftp.Client.context(
-                self.ip_address,
-                port=self.port,
-                user=self.username,
-                password=self.password,
-            ) as client:
-                await client.remove(remote_path)
+        def _delete_sync():
+            ftp = None
+            try:
+                ftp = FTP()
+                ftp.set_pasv(False)  # Use ACTIVE mode
+                ftp.connect(self.ip_address, self.port, timeout=self.timeout)
+                ftp.login(self.username, self.password)
 
-                return {
-                    "success": True,
-                    "remote_path": remote_path,
+                ftp.delete(remote_path)
+                ftp.quit()
+                return True
+
+            except Exception as e:
+                if ftp:
+                    try:
+                        ftp.quit()
+                    except:
+                        pass
+                raise e
+
+        try:
+            loop = asyncio.get_event_loop()
+            await asyncio.wait_for(
+                loop.run_in_executor(None, _delete_sync),
+                timeout=self.timeout
+            )
+            return {
+                "success": True,
+                "remote_path": remote_path,
                     "timestamp": datetime.now().isoformat(),
                 }
         except Exception as e:
