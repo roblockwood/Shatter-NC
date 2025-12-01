@@ -6,6 +6,8 @@ interface Program {
   name: string;
   size: number;
   modified: string;
+  is_directory: boolean;
+  path: string;
 }
 
 interface Machine {
@@ -21,6 +23,7 @@ export const FileBrowser: React.FC = () => {
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentPath, setCurrentPath] = useState<string>('/');
 
   // Fetch machines on mount
   useEffect(() => {
@@ -35,7 +38,7 @@ export const FileBrowser: React.FC = () => {
       .catch(err => console.error('Error fetching machines:', err));
   }, []);
 
-  // Fetch programs when machine changes
+  // Fetch programs when machine or path changes
   useEffect(() => {
     if (selectedMachineId === null) return;
 
@@ -44,7 +47,8 @@ export const FileBrowser: React.FC = () => {
     setPrograms([]);
     setSelectedProgram(null);
 
-    fetch(`http://localhost:8000/api/machines/${selectedMachineId}/programs`)
+    const url = `http://localhost:8000/api/machines/${selectedMachineId}/programs?path=${encodeURIComponent(currentPath)}`;
+    fetch(url)
       .then(res => {
         if (!res.ok) {
           return res.json().then(data => {
@@ -72,6 +76,11 @@ export const FileBrowser: React.FC = () => {
         }
         setLoading(false);
       });
+  }, [selectedMachineId, currentPath]);
+
+  // Reset path when machine changes
+  useEffect(() => {
+    setCurrentPath('/');
   }, [selectedMachineId]);
 
   const selectedMachine = machines.find(m => m.id === selectedMachineId);
@@ -98,6 +107,37 @@ export const FileBrowser: React.FC = () => {
       return dateStr;
     }
   };
+
+  const handleItemClick = (program: Program) => {
+    if (program.is_directory) {
+      // Navigate into directory
+      if (program.name === '..') {
+        // Go up one level
+        const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
+        setCurrentPath(parentPath);
+      } else {
+        setCurrentPath(program.name);
+      }
+    } else {
+      // Select file to show details
+      setSelectedProgram(program);
+    }
+  };
+
+  // Sort and prepare display list
+  const displayPrograms = (() => {
+    // Separate directories and files
+    const directories = programs.filter(p => p.is_directory).sort((a, b) => a.name.localeCompare(b.name));
+    const files = programs.filter(p => !p.is_directory).sort((a, b) => a.name.localeCompare(b.name));
+
+    // Combine: directories first, then files
+    const sorted = [...directories, ...files];
+
+    // Add parent directory entry at the top if not at root
+    return currentPath !== '/'
+      ? [{ name: '..', size: 0, modified: '', is_directory: true, path: '..' }, ...sorted]
+      : sorted;
+  })();
 
   return (
     <div className="file-browser">
@@ -175,17 +215,17 @@ export const FileBrowser: React.FC = () => {
                 ├{'─'.repeat(80)}┤
               </div>
               <div className="table-body">
-                {programs.map((program, idx) => (
+                {displayPrograms.map((program, idx) => (
                   <div
                     key={idx}
                     className={`table-row ${selectedProgram?.name === program.name ? 'selected' : ''}`}
-                    onClick={() => setSelectedProgram(program)}
+                    onClick={() => handleItemClick(program)}
                   >
                     <div className="col-name">
-                      {selectedProgram?.name === program.name ? '► ' : '  '}
+                      {program.is_directory ? '/ ' : (selectedProgram?.name === program.name ? '► ' : '  ')}
                       {program.name}
                     </div>
-                    <div className="col-size">{formatBytes(program.size)}</div>
+                    <div className="col-size">{program.is_directory ? '<DIR>' : formatBytes(program.size)}</div>
                     <div className="col-modified">{formatDate(program.modified)}</div>
                     <div className="col-actions">
                       <button className="terminal-button-sm">DL</button>

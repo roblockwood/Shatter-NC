@@ -148,8 +148,18 @@ async def get_tools(machine_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{machine_id}/programs")
-async def list_programs(machine_id: int, db: Session = Depends(get_db)):
-    """List NC programs on machine via FTP."""
+async def list_programs(
+    machine_id: int,
+    path: str = "/",
+    db: Session = Depends(get_db)
+):
+    """
+    List files and directories on machine via FTP with navigation support.
+
+    Args:
+        machine_id: Machine ID
+        path: Directory path to list (default: /)
+    """
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not db_machine:
         raise HTTPException(
@@ -164,16 +174,17 @@ async def list_programs(machine_id: int, db: Session = Depends(get_db)):
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
         )
-        programs = await ftp_client.get_programs()
+        programs = await ftp_client.get_programs(path)
         return {
             "machine_id": machine_id,
             "machine_name": db_machine.name,
+            "current_path": path,
             "programs": programs,
             "total_count": len(programs),
         }
 
     except Exception as e:
-        logger.error(f"Error listing programs for machine {machine_id}: {e}")
+        logger.error(f"Error listing programs for machine {machine_id} at path {path}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
