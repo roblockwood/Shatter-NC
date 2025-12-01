@@ -278,12 +278,49 @@ If issues persist after changes:
 
 ## Success Criteria
 
-1. No CNC freezing or hanging during FTP operations
-2. Successful connection reuse across multiple operations
-3. Latency comparable to or better than working project
-4. All existing API endpoints continue to work
-5. Proper error handling and recovery
-6. Clean connection cleanup (no resource leaks)
+1. ✅ No CNC freezing or hanging during FTP operations
+2. ✅ Successful connection reuse across multiple operations
+3. ✅ Latency comparable to or better than working project
+4. ✅ All existing API endpoints continue to work
+5. ✅ Proper error handling and recovery
+6. ✅ Clean connection cleanup (no resource leaks)
+7. ✅ Filesystem navigation working (browse directories, navigate up/down)
+8. ✅ Directory vs file detection working
+9. ✅ Terminal aesthetic maintained (no emoji, ASCII characters only)
+
+**STATUS: COMPLETED** - All FTP refactoring goals achieved
+
+---
+
+## Next Phase: File Operations
+
+### Current State
+- ✅ File browser displays files and directories with navigation
+- ✅ Sorting implemented (directories first, then files alphabetically)
+- ❌ Download button (DL) is non-functional
+- ❌ Upload button is non-functional
+- ❌ "View Code" button is non-functional
+- ❌ Delete buttons present but should be removed (safety risk)
+
+### Goals
+1. Enable file download functionality
+2. Enable file upload functionality
+3. Implement code viewer for NC programs
+4. Remove delete functionality from UI
+
+### Implementation Priority
+1. **Download** - Add backend endpoint returning StreamingResponse, add frontend fetch with blob download
+2. **View Code** - Add backend endpoint returning file text, create modal component for code display
+3. **Upload** - Add backend endpoint accepting UploadFile, add frontend file input with FormData upload
+4. **Cleanup** - Remove delete buttons from UI (keep backend method for future use)
+
+### Key Technical Considerations
+- Use StreamingResponse for downloads with proper Content-Disposition headers
+- Validate file extensions (.NC files) on upload
+- Implement loading states for all async operations
+- Maintain terminal aesthetic in code viewer (monospace, box-drawing chars)
+- Handle errors gracefully with user-friendly messages
+- Refresh file list after successful upload
 
 ---
 
@@ -294,6 +331,7 @@ If issues persist after changes:
 - Connection reuse pattern matches industry best practices for resource-constrained servers
 - Brother CNCs typically support only 1-2 concurrent FTP connections
 - Industrial equipment often has slower response times than modern servers (30s timeout appropriate)
+- Delete functionality removed from UI as safety precaution (no undo, could delete running programs)
 
 ---
 
