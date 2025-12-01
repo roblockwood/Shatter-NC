@@ -8,6 +8,7 @@
 - Dark mode only (no light theme)
 - Monospace typography throughout
 - ASCII art for graphics, progress bars, and UI elements
+- **NO EMOJI** - Use ASCII characters only (/, -, |, *, etc.) to maintain terminal aesthetic
 - CRT/terminal visual effects (optional scanlines, glow)
 - Command-line inspired interactions
 - Information density - pack data like a terminal
