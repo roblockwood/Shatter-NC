@@ -1,0 +1,212 @@
+/* Terminal/Retro Theme - Global Styles */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Colors - CRT Phosphor Scheme */
+  --color-bg-primary: #0a0a0a;
+  --color-bg-surface: #1a1a1a;
+  --color-bg-elevated: #2a2a2a;
+  --color-border: #2a2a2a;
+  --color-border-bright: #3a3a3a;
+
+  /* Text Colors - Green Phosphor */
+  --color-text-primary: #00ff00;
+  --color-text-secondary: #33ff33;
+  --color-text-muted: #66ff66;
+  --color-text-dim: #446644;
+
+  /* Status Colors */
+  --color-success: #00ff00;
+  --color-error: #ff0000;
+  --color-warning: #ffaa00;
+  --color-info: #00ffff;
+  --color-idle: #00ffff;
+  --color-offline: #666666;
+
+  /* Font Sizes */
+  --font-xs: 10px;
+  --font-sm: 12px;
+  --font-md: 14px;
+  --font-lg: 16px;
+  --font-xl: 20px;
+  --font-xxl: 24px;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* Effects */
+  --glow: 0 0 8px currentColor;
+  --glow-strong: 0 0 12px currentColor, 0 0 24px currentColor;
+
+  /* Typography */
+  --font-mono: 'IBM Plex Mono', 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  --letter-spacing: 0.05em;
+}
+
+/* Base Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  line-height: 1.5;
+  letter-spacing: var(--letter-spacing);
+  color: var(--color-text-primary);
+  background: var(--color-bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* Selection */
+::selection {
+  background: var(--color-text-primary);
+  color: var(--color-bg-primary);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-bright);
+  border: 2px solid var(--color-bg-surface);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-dim);
+}
+
+/* Typography Utilities */
+.text-glow {
+  text-shadow: var(--glow);
+}
+
+.text-glow-strong {
+  text-shadow: var(--glow-strong);
+}
+
+.text-uppercase {
+  text-transform: uppercase;
+}
+
+.text-xs { font-size: var(--font-xs); }
+.text-sm { font-size: var(--font-sm); }
+.text-md { font-size: var(--font-md); }
+.text-lg { font-size: var(--font-lg); }
+.text-xl { font-size: var(--font-xl); }
+.text-xxl { font-size: var(--font-xxl); }
+
+/* Color Utilities */
+.text-primary { color: var(--color-text-primary); }
+.text-secondary { color: var(--color-text-secondary); }
+.text-muted { color: var(--color-text-muted); }
+.text-dim { color: var(--color-text-dim); }
+.text-success { color: var(--color-success); }
+.text-error { color: var(--color-error); }
+.text-warning { color: var(--color-warning); }
+.text-info { color: var(--color-info); }
+
+/* Animations */
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.97; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Utility Classes */
+.blink {
+  animation: blink 1s step-end infinite;
+}
+
+.pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.cursor::after {
+  content: '_';
+  animation: blink 1s step-end infinite;
+}
+
+/* CRT Effects (Optional) */
+.crt-effect {
+  position: relative;
+}
+
+.crt-effect::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.1),
+    rgba(0, 0, 0, 0.1) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.crt-effect-flicker {
+  animation: flicker 8s linear infinite;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  :root {
+    --font-xs: 9px;
+    --font-sm: 11px;
+    --font-md: 12px;
+    --font-lg: 14px;
+    --font-xl: 16px;
+    --font-xxl: 18px;
+  }
+}

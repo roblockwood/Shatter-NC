@@ -265,11 +265,50 @@ class CNCHttpClient:
         """Parse tool data HTML response."""
         data = {"tools": []}
 
-        # This will need to be refined based on actual HTML structure
-        # For now, return placeholder
-        data["timestamp"] = datetime.now().isoformat()
-        data["note"] = "Tool parsing not yet implemented - needs actual HTML sample"
+        # Parse tool table rows
+        # Each row has: pot number, tool number, tool name, tool data (diameter x length), group, life, type, color
+        # Example: <td width="80" align="right" class="border_line2 lang_same">01</td>
+        #          <td width="190" align="center" class="border_line2 lang_same">.250 3FL      </td>
+        #          <td width="150" align="right" class="border_line2 lang_same">  3.4494x  0.0000</td>
 
+        # Find all tool rows (they start with pot number)
+        row_pattern = r'<tr bgcolor="#[^"]*">.*?</tr>'
+        tool_rows = re.findall(row_pattern, html, re.DOTALL)
+
+        for row in tool_rows:
+            # Skip header row
+            if 'Tool No.' in row or 'Tool name' in row:
+                continue
+
+            # Extract tool number
+            tool_num_match = re.search(r'<td width="80"[^>]*>(\d+)</td>', row)
+            if not tool_num_match:
+                continue
+
+            tool_number = int(tool_num_match.group(1))
+
+            # Extract tool name
+            name_match = re.search(r'<td width="190"[^>]*>([^<]+)</td>', row)
+            tool_name = name_match.group(1).strip() if name_match else ""
+
+            # Skip empty tool slots (those with &nbsp; or empty names)
+            if tool_name == "&nbsp;" or tool_name == "" or tool_name.isspace():
+                continue
+
+            # Extract tool data (length x diameter format in HTML)
+            data_match = re.search(r'<td width="150"[^>]*>\s*([\d.]+)x\s*([\d.]+)</td>', row)
+            length = float(data_match.group(1)) if data_match else 0.0
+            diameter = float(data_match.group(2)) if data_match else 0.0
+
+            tool = {
+                "tool_number": tool_number,
+                "tool_name": tool_name,
+                "diameter": diameter,
+                "length": length,
+            }
+            data["tools"].append(tool)
+
+        data["timestamp"] = datetime.now().isoformat()
         return data
 
     def get_status_overview(self) -> Dict[str, Any]:
@@ -300,5 +339,11 @@ class CNCHttpClient:
         alarm_data = self.get_alarm_log()
         if "error" not in alarm_data:
             overview["alarms"] = alarm_data.get("alarms", [])
+
+        # Get tool data
+        tool_data = self.get_tool_data()
+        if "error" not in tool_data:
+            overview["tools"] = tool_data.get("tools", [])
+            overview["current_tool"] = tool_data.get("current_tool")
 
         return overview
