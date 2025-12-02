@@ -57,6 +57,9 @@ class CNCFtpClient:
         """
         Test FTP connection using passive mode.
 
+        Tests both the ability to connect to the FTP server AND authenticate
+        with the provided credentials.
+
         Returns:
             Dict with connection test results
         """
@@ -64,23 +67,25 @@ class CNCFtpClient:
             try:
                 start_time = datetime.now()
                 self._ensure_connection()
-                self.ftp.pwd()  # Get current directory to verify connection
+                # Get current directory to verify both connection and authentication
+                current_dir = self.ftp.pwd()
                 end_time = datetime.now()
                 latency = (end_time - start_time).total_seconds() * 1000
-                return latency
+                return latency, current_dir
             except Exception as e:
                 self._connected = False
                 raise e
 
         try:
             loop = asyncio.get_event_loop()
-            latency = await asyncio.wait_for(
+            latency, current_dir = await asyncio.wait_for(
                 loop.run_in_executor(None, _test_sync),
                 timeout=self.timeout
             )
             return {
                 "success": True,
                 "latency_ms": round(latency, 2),
+                "current_directory": current_dir,
                 "timestamp": datetime.now().isoformat(),
             }
         except Exception as e:

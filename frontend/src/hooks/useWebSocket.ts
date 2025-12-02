@@ -10,6 +10,17 @@ interface MachineStatus {
   counters?: Array<{ counter_number: number; count: number }>;
   error?: string;
   poll_timestamp: string;
+  ip_address?: string;
+  ftp_username?: string;
+  ftp_password?: string;
+  ftp_port?: number;
+  http_port?: number;
+  location?: string;
+  poll_interval_seconds?: number;
+  enabled?: boolean;
+  tools?: Array<{ tool_number: number; tool_name?: string; diameter?: number; length?: number }>;
+  current_tool?: number;
+  alarms?: Array<{ code: string; message: string }>;
 }
 
 interface WebSocketMessage {
@@ -23,7 +34,7 @@ export const useWebSocket = (url: string) => {
   const [machines, setMachines] = useState<Map<number, MachineStatus>>(new Map());
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<number>();
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const connect = () => {

@@ -4,6 +4,8 @@ import logging
 from typing import List, Dict, Any
 from fastapi import WebSocket
 from datetime import datetime
+from app.db.base import SessionLocal
+from app.models.machine import Machine
 
 logger = logging.getLogger(__name__)
 
@@ -21,16 +23,44 @@ class WebSocketManager:
         self.active_connections.append(websocket)
         logger.info(f"WebSocket connected. Total connections: {len(self.active_connections)}")
 
-        # Send initial status for all machines
-        if self.last_status:
+        # Send initial status for all machines (from DB + cached polling data)
+        try:
+            db = SessionLocal()
             try:
+                # Get all machines from database
+                all_machines = db.query(Machine).all()
+                machines_data = []
+
+                for machine in all_machines:
+                    # Start with database info
+                    machine_info = {
+                        "machine_id": machine.id,
+                        "machine_name": machine.name,
+                        "ip_address": machine.ip_address,
+                        "enabled": machine.enabled,
+                        "poll_timestamp": datetime.utcnow().isoformat(),
+                    }
+
+                    # Overlay cached polling data if available
+                    if machine.id in self.last_status:
+                        cached = self.last_status[machine.id]
+                        machine_info.update(cached)
+                    else:
+                        # No polling data yet - assume offline until first poll
+                        machine_info["is_online"] = False
+
+                    machines_data.append(machine_info)
+
+                # Send all machines to new client
                 await websocket.send_json({
                     "type": "initial_status",
                     "timestamp": datetime.utcnow().isoformat(),
-                    "machines": list(self.last_status.values()),
+                    "machines": machines_data,
                 })
-            except Exception as e:
-                logger.error(f"Error sending initial status: {e}")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Error sending initial status: {e}")
 
     def disconnect(self, websocket: WebSocket):
         """Remove a disconnected WebSocket."""

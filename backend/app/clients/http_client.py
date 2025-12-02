@@ -93,6 +93,15 @@ class CNCHttpClient:
             end_time = datetime.now()
             latency = (end_time - start_time).total_seconds() * 1000  # ms
 
+            # Validate that response looks like it came from a CNC machine
+            # (should contain HTML or valid response content)
+            if not response or len(response.strip()) == 0:
+                return {
+                    "success": False,
+                    "error": "Empty response from machine",
+                    "timestamp": datetime.now().isoformat(),
+                }
+
             return {
                 "success": True,
                 "latency_ms": round(latency, 2),
