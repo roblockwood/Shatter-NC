@@ -6,6 +6,7 @@ from app.db.base import get_db
 from app.models.machine import Machine
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
+from app.parsers.gcode_parser import parse_gcode
 import logging
 import io
 
@@ -320,13 +321,17 @@ async def get_file_metadata(
         except Exception:
             text_content = str(file_content)
 
-        metadata = ftp_client._parse_nc_metadata(text_content)
+        # Parse using the comprehensive G-code parser
+        parsed = parse_gcode(text_content)
+
+        # Extract tool numbers from parsed tool data
+        tools = [tool["tool_number"] for tool in parsed.get("tools", [])]
 
         return {
             "file_path": file_path,
-            "tools": metadata['tools'],
-            "runtime_seconds": metadata['runtime'],
-            "has_errors": metadata['has_errors'],
+            "tools": tools,
+            "runtime_seconds": int(parsed.get("estimated_runtime_seconds", 0)),
+            "has_errors": False,  # G-code parser doesn't detect errors, but that's OK for display
         }
 
     except HTTPException:
