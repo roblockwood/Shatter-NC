@@ -280,6 +280,65 @@ async def download_file(
         )
 
 
+@router.get("/{machine_id}/metadata")
+async def get_file_metadata(
+    machine_id: int,
+    file_path: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get file metadata including tools and runtime estimates.
+
+    Args:
+        machine_id: Machine ID
+        file_path: Path to file on machine
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    try:
+        ftp_client = CNCFtpClient(
+            db_machine.ip_address,
+            port=db_machine.ftp_port,
+            username=db_machine.ftp_username,
+            password=db_machine.ftp_password,
+        )
+        file_content = await ftp_client.download_file(file_path)
+
+        if file_content is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail=f"Failed to read file: {file_path}",
+            )
+
+        try:
+            text_content = file_content.decode('utf-8', errors='replace')
+        except Exception:
+            text_content = str(file_content)
+
+        metadata = ftp_client._parse_nc_metadata(text_content)
+
+        return {
+            "file_path": file_path,
+            "tools": metadata['tools'],
+            "runtime_seconds": metadata['runtime'],
+            "has_errors": metadata['has_errors'],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting file metadata from machine {machine_id}: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
 @router.get("/{machine_id}/view")
 async def view_file(
     machine_id: int,
