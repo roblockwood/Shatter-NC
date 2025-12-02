@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { TerminalBox, ProgressBar, StatusIndicator } from './ui';
+import React, { useState, useRef, useEffect } from 'react';
+import { StatusIndicator } from './ui';
 import { ToolListModal } from './ToolListModal';
 import { ValidationResultModal } from './ValidationResultModal';
 import './MachineCard.css';
@@ -24,19 +24,155 @@ interface MachineStatus {
   alarms?: Array<{ code: string; message: string }>;
   error?: string;
   poll_timestamp: string;
+  ip_address?: string;
+  ftp_username?: string;
+  ftp_password?: string;
+  ftp_port?: number;
+  http_port?: number;
+  location?: string;
+  poll_interval_seconds?: number;
+  enabled?: boolean;
 }
 
 interface MachineCardProps {
   machine: MachineStatus;
+  editMode?: boolean;
+  onDelete?: (machine: MachineStatus) => void;
 }
 
-export const MachineCard: React.FC<MachineCardProps> = ({ machine }) => {
+export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = false, onDelete }) => {
+  // Debug: Log machine status for debugging name color
+  console.log(`Machine: ${machine.machine_name}, is_online: ${machine.is_online}, status: "${machine.status}"`);
+
   const [showToolModal, setShowToolModal] = useState(false);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [validationResult, setValidationResult] = useState<any>(null);
   const [selectedFilename, setSelectedFilename] = useState('');
   const [isValidating, setIsValidating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSuccess, setEditSuccess] = useState(false);
+  const [isEditSaving, setIsEditSaving] = useState(false);
+  const [isEditTesting, setIsEditTesting] = useState(false);
+  const [editTestResult, setEditTestResult] = useState<any>(null);
+  const [editFormData, setEditFormData] = useState({
+    ip_address: machine.ip_address || '',
+    ftp_username: machine.ftp_username || '',
+    ftp_password: machine.ftp_password || '',
+    ftp_port: machine.ftp_port || 21,
+    http_port: machine.http_port || 80,
+    location: machine.location || '',
+    poll_interval_seconds: machine.poll_interval_seconds || 5,
+    enabled: machine.enabled !== false,
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch full machine configuration data on mount
+  useEffect(() => {
+    const fetchMachineConfig = async () => {
+      try {
+        const response = await fetch(`http://localhost:8000/api/machines/${machine.machine_id}`);
+        if (response.ok) {
+          const fullMachineData = await response.json();
+          // Update form data with fetched configuration
+          setEditFormData({
+            ip_address: fullMachineData.ip_address || '',
+            ftp_username: fullMachineData.ftp_username || '',
+            ftp_password: fullMachineData.ftp_password || '',
+            ftp_port: fullMachineData.ftp_port || 21,
+            http_port: fullMachineData.http_port || 80,
+            location: fullMachineData.location || '',
+            poll_interval_seconds: fullMachineData.poll_interval_seconds || 5,
+            enabled: fullMachineData.enabled !== false,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching machine configuration:', error);
+      }
+    };
+
+    fetchMachineConfig();
+  }, [machine.machine_id]);
+
+  const editFormValid = editFormData.ip_address && editFormData.ftp_username && editFormData.ftp_password;
+
+  const handleEditSave = async () => {
+    if (!editFormValid) {
+      setEditError('Please fill in all required fields');
+      return;
+    }
+
+    setIsEditSaving(true);
+    setEditError(null);
+    setEditSuccess(false);
+
+    try {
+      const response = await fetch(`http://localhost:8000/api/machines/${machine.machine_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editFormData),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Update failed: ${response.statusText}`);
+      }
+
+      setEditSuccess(true);
+      setTimeout(() => {
+        setIsEditing(false);
+        setEditSuccess(false);
+      }, 1500);
+    } catch (error) {
+      console.error('Edit error:', error);
+      setEditError(`Save failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsEditSaving(false);
+    }
+  };
+
+  const handleEditCancel = () => {
+    setIsEditing(false);
+    setEditError(null);
+    setEditSuccess(false);
+    setEditTestResult(null);
+    setEditFormData({
+      ip_address: machine.ip_address || '',
+      ftp_username: machine.ftp_username || '',
+      ftp_password: machine.ftp_password || '',
+      ftp_port: machine.ftp_port || 21,
+      http_port: machine.http_port || 80,
+      location: machine.location || '',
+      poll_interval_seconds: machine.poll_interval_seconds || 5,
+      enabled: machine.enabled !== false,
+    });
+  };
+
+  const handleEditTestConnection = async () => {
+    if (!editFormData.ip_address) {
+      setEditError('IP address required for connection test');
+      return;
+    }
+
+    setIsEditTesting(true);
+    setEditError(null);
+    try {
+      const response = await fetch(`http://localhost:8000/api/machines/${machine.machine_id}/test`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setEditTestResult(result);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setEditError(errorData.detail || 'Connection test failed');
+      }
+    } catch (err) {
+      setEditError(`Test failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsEditTesting(false);
+    }
+  };
 
   const getStatusType = () => {
     if (!machine.is_online) return 'offline';
@@ -86,19 +222,179 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine }) => {
   return (
     <div className="machine-card">
       <div className="machine-card-header">
-        <span className="machine-name text-glow">{machine.machine_name}</span>
-        <StatusIndicator
-          status={getStatusType()}
-          label=""
-          blink={!machine.is_online}
-        />
+        <span className={`machine-name ${!machine.is_online ? 'text-error' : (machine.status?.includes('Running') ? 'text-glow' : 'text-muted')}`}>{machine.machine_name}</span>
+        <div className="machine-header-actions">
+          {editMode && !isEditing && (
+            <>
+              <button
+                className="card-action-btn"
+                onClick={() => setIsEditing(true)}
+                title="Edit machine"
+              >
+                [=]
+              </button>
+              <button
+                className="card-action-btn delete"
+                onClick={() => onDelete?.(machine)}
+                title="Delete machine"
+              >
+                [X]
+              </button>
+            </>
+          )}
+          {!isEditing && (
+            <StatusIndicator
+              status={getStatusType()}
+              label=""
+              blink={!machine.is_online}
+            />
+          )}
+        </div>
       </div>
 
       <div className="machine-card-divider">
         ├{'─'.repeat(30)}┤
       </div>
 
-      {machine.is_online ? (
+      {isEditing ? (
+        <div className="machine-edit-form">
+          {editError && (
+            <div className="form-error text-error">
+              {editError}
+            </div>
+          )}
+
+          {editSuccess && (
+            <div className="form-success text-success">
+              Machine updated successfully!
+            </div>
+          )}
+
+          <div className="form-row">
+            <label>IP:</label>
+            <input
+              type="text"
+              value={editFormData.ip_address}
+              onChange={(e) => setEditFormData({ ...editFormData, ip_address: e.target.value })}
+              placeholder="192.168.1.100"
+              disabled={isEditSaving}
+            />
+          </div>
+
+          <div className="form-row">
+            <label>FTP USER:</label>
+            <input
+              type="text"
+              value={editFormData.ftp_username}
+              onChange={(e) => setEditFormData({ ...editFormData, ftp_username: e.target.value })}
+              placeholder="anonymous"
+              disabled={isEditSaving}
+            />
+          </div>
+
+          <div className="form-row">
+            <label>FTP PASS:</label>
+            <input
+              type="password"
+              value={editFormData.ftp_password}
+              onChange={(e) => setEditFormData({ ...editFormData, ftp_password: e.target.value })}
+              placeholder="anonymous"
+              disabled={isEditSaving}
+            />
+          </div>
+
+          <div className="form-row-inline">
+            <div>
+              <label>FTP PORT:</label>
+              <input
+                type="number"
+                min="1"
+                max="65535"
+                value={editFormData.ftp_port}
+                onChange={(e) => setEditFormData({ ...editFormData, ftp_port: parseInt(e.target.value) })}
+                disabled={isEditSaving}
+              />
+            </div>
+            <div>
+              <label>HTTP PORT:</label>
+              <input
+                type="number"
+                min="1"
+                max="65535"
+                value={editFormData.http_port}
+                onChange={(e) => setEditFormData({ ...editFormData, http_port: parseInt(e.target.value) })}
+                disabled={isEditSaving}
+              />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <label>LOCATION:</label>
+            <input
+              type="text"
+              value={editFormData.location}
+              onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
+              placeholder="Shop Floor"
+              disabled={isEditSaving}
+            />
+          </div>
+
+          <div className="form-row-inline">
+            <div>
+              <label>POLL INTERVAL:</label>
+              <input
+                type="number"
+                min="1"
+                max="300"
+                value={editFormData.poll_interval_seconds}
+                onChange={(e) => setEditFormData({ ...editFormData, poll_interval_seconds: parseInt(e.target.value) })}
+                disabled={isEditSaving}
+              />
+              <span className="form-hint">seconds</span>
+            </div>
+            <div className="form-checkbox">
+              <input
+                type="checkbox"
+                id={`enabled-${machine.machine_id}`}
+                checked={editFormData.enabled}
+                onChange={(e) => setEditFormData({ ...editFormData, enabled: e.target.checked })}
+                disabled={isEditSaving}
+              />
+              <label htmlFor={`enabled-${machine.machine_id}`}>ENABLED</label>
+            </div>
+          </div>
+
+          {editTestResult && (
+            <div className="form-success text-success">
+              Connection successful!
+            </div>
+          )}
+
+          <div className="form-actions">
+            <button
+              className="form-button test"
+              onClick={handleEditTestConnection}
+              disabled={!editFormData.ip_address || isEditSaving || isEditTesting}
+            >
+              {isEditTesting ? '[ TESTING... ]' : '[ TEST CONNECTION ]'}
+            </button>
+            <button
+              className="form-button cancel"
+              onClick={handleEditCancel}
+              disabled={isEditSaving}
+            >
+              [ CANCEL ]
+            </button>
+            <button
+              className="form-button save"
+              onClick={handleEditSave}
+              disabled={!editFormValid || isEditSaving}
+            >
+              {isEditSaving ? '[ SAVING... ]' : '[ SAVE ]'}
+            </button>
+          </div>
+        </div>
+      ) : machine.is_online ? (
         <div className="machine-card-content">
           <div className="machine-row">
             <span className="label">STATUS:</span>
@@ -210,7 +506,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine }) => {
       <ToolListModal
         isOpen={showToolModal}
         onClose={() => setShowToolModal(false)}
-        tools={machine.tools || []}
+        tools={(machine.tools || []) as any}
         machineName={machine.machine_name}
       />
 

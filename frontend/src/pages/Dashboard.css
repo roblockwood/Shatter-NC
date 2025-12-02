@@ -16,6 +16,16 @@
   text-transform: uppercase;
 }
 
+.machines-count.clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.machines-count.clickable:hover {
+  color: var(--color-text-secondary);
+  text-shadow: var(--glow);
+}
+
 .fleet-overview .separator {
   color: var(--color-text-dim);
 }
