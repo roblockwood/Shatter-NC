@@ -5,9 +5,6 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
 from io import BytesIO
-import re
-from time import mktime
-from email.utils import parsedate_to_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -121,57 +118,6 @@ class CNCFtpClient:
         except Exception as e:
             logger.debug(f"Error parsing date {date_str}: {e}")
             return ""
-
-    def _parse_nc_metadata(self, content: str) -> Dict[str, Any]:
-        """
-        Parse NC file headers to extract metadata like tools and runtime.
-
-        Returns dict with:
-        - tools: list of tool numbers used
-        - runtime: estimated runtime in seconds
-        - has_errors: boolean
-        """
-        try:
-            lines = content.split('\n')
-            tools = set()
-            total_time = 0
-            errors = False
-
-            # Parse file content for metadata
-            for line in lines[:100]:  # Check first 100 lines
-                line = line.strip().upper()
-
-                # Look for tool changes (T-codes)
-                tool_match = re.search(r'\bT(\d+)\b', line)
-                if tool_match:
-                    tools.add(int(tool_match.group(1)))
-
-                # Look for dwell times (G04/G4 with P or U parameters)
-                dwell_match = re.search(r'G0?4\s+[PU]([\d.]+)', line)
-                if dwell_match:
-                    total_time += float(dwell_match.group(1)) / 1000  # Convert ms to seconds
-
-                # Look for cycle time comments
-                if 'CYCLE TIME' in line or 'RUNTIME' in line:
-                    time_match = re.search(r'(\d+):(\d+):(\d+)', line)
-                    if time_match:
-                        hours = int(time_match.group(1))
-                        minutes = int(time_match.group(2))
-                        seconds = int(time_match.group(3))
-                        total_time = hours * 3600 + minutes * 60 + seconds
-
-                # Look for error indicators
-                if any(x in line for x in ['ERROR', 'FAULT', 'WARNING', '%']):
-                    errors = True
-
-            return {
-                'tools': sorted(list(tools)),
-                'runtime': int(total_time),
-                'has_errors': errors,
-            }
-        except Exception as e:
-            logger.debug(f"Error parsing NC metadata: {e}")
-            return {'tools': [], 'runtime': 0, 'has_errors': False}
 
     async def list_files(self, path: str = "/") -> List[Dict[str, Any]]:
         """
