@@ -278,3 +278,69 @@ async def download_file(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
+
+
+@router.get("/{machine_id}/view")
+async def view_file(
+    machine_id: int,
+    file_path: str,
+    max_size: int = 1048576,
+    db: Session = Depends(get_db)
+):
+    """
+    View file content as text (up to 1MB by default).
+
+    Args:
+        machine_id: Machine ID
+        file_path: Path to file on machine
+        max_size: Maximum file size in bytes (default 1MB)
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    try:
+        ftp_client = CNCFtpClient(
+            db_machine.ip_address,
+            port=db_machine.ftp_port,
+            username=db_machine.ftp_username,
+            password=db_machine.ftp_password,
+        )
+        file_content = await ftp_client.download_file(file_path)
+
+        if file_content is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail=f"Failed to read file: {file_path}",
+            )
+
+        if len(file_content) > max_size:
+            raise HTTPException(
+                status_code=http_status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File exceeds maximum size of {max_size} bytes",
+            )
+
+        try:
+            text_content = file_content.decode('utf-8', errors='replace')
+        except Exception as e:
+            logger.error(f"Error decoding file {file_path}: {e}")
+            text_content = str(file_content)
+
+        return {
+            "file_path": file_path,
+            "content": text_content,
+            "size": len(file_content),
+            "lines": len(text_content.split('\n')),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error viewing file from machine {machine_id}: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
