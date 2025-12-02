@@ -6,6 +6,8 @@ from datetime import datetime
 import logging
 from io import BytesIO
 import re
+from time import mktime
+from email.utils import parsedate_to_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +94,85 @@ class CNCFtpClient:
                 "timestamp": datetime.now().isoformat(),
             }
 
+    def _parse_mlst_response(self, mlst_line: str) -> Dict[str, Any]:
+        """Parse MLST response to extract file metadata."""
+        parts = mlst_line.split(';')
+        metadata = {}
+
+        # Parse facts (everything except the last part which is the filename)
+        for part in parts[:-1]:
+            part = part.strip()
+            if '=' in part:
+                key, value = part.split('=', 1)
+                metadata[key.lower()] = value
+
+        # Filename is the last part
+        filename = parts[-1].strip() if parts else ''
+
+        return {'filename': filename, 'metadata': metadata}
+
+    def _parse_mlst_date(self, date_str: str) -> str:
+        """Parse MLST date format (YYYYMMDDhhmmss) to ISO format."""
+        try:
+            if not date_str or len(date_str) != 14:
+                return ""
+            dt = datetime.strptime(date_str, "%Y%m%d%H%M%S")
+            return dt.isoformat()
+        except Exception as e:
+            logger.debug(f"Error parsing date {date_str}: {e}")
+            return ""
+
+    def _parse_nc_metadata(self, content: str) -> Dict[str, Any]:
+        """
+        Parse NC file headers to extract metadata like tools and runtime.
+
+        Returns dict with:
+        - tools: list of tool numbers used
+        - runtime: estimated runtime in seconds
+        - has_errors: boolean
+        """
+        try:
+            lines = content.split('\n')
+            tools = set()
+            total_time = 0
+            errors = False
+
+            # Parse file content for metadata
+            for line in lines[:100]:  # Check first 100 lines
+                line = line.strip().upper()
+
+                # Look for tool changes (T-codes)
+                tool_match = re.search(r'\bT(\d+)\b', line)
+                if tool_match:
+                    tools.add(int(tool_match.group(1)))
+
+                # Look for dwell times (G04/G4 with P or U parameters)
+                dwell_match = re.search(r'G0?4\s+[PU]([\d.]+)', line)
+                if dwell_match:
+                    total_time += float(dwell_match.group(1)) / 1000  # Convert ms to seconds
+
+                # Look for cycle time comments
+                if 'CYCLE TIME' in line or 'RUNTIME' in line:
+                    time_match = re.search(r'(\d+):(\d+):(\d+)', line)
+                    if time_match:
+                        hours = int(time_match.group(1))
+                        minutes = int(time_match.group(2))
+                        seconds = int(time_match.group(3))
+                        total_time = hours * 3600 + minutes * 60 + seconds
+
+                # Look for error indicators
+                if any(x in line for x in ['ERROR', 'FAULT', 'WARNING', '%']):
+                    errors = True
+
+            return {
+                'tools': sorted(list(tools)),
+                'runtime': int(total_time),
+                'has_errors': errors,
+            }
+        except Exception as e:
+            logger.debug(f"Error parsing NC metadata: {e}")
+            return {'tools': [], 'runtime': 0, 'has_errors': False}
+
     async def list_files(self, path: str = "/") -> List[Dict[str, Any]]:
         """
         List files in CNC directory using passive FTP mode.
@@ -117,6 +198,7 @@ class CNCFtpClient:
                 for name in file_list:
                     is_directory = False
                     size = 0
+                    modified = ""
 
                     # Try to get file size - fails for directories
                     try:
@@ -132,12 +214,30 @@ class CNCFtpClient:
                             # Not a directory, just a file where SIZE failed
                             pass
 
+                    # Try to get modification date
+                    try:
+                        mlst_response = self.ftp.mlst(name)
+                        if mlst_response:
+                            parsed = self._parse_mlst_response(mlst_response)
+                            if 'modify' in parsed['metadata']:
+                                modified = self._parse_mlst_date(parsed['metadata']['modify'])
+                    except:
+                        # MLST not available, try alternative methods
+                        try:
+                            time_response = self.ftp.sendcmd('MDTM ' + name)
+                            if time_response.startswith('213'):
+                                date_str = time_response.split()[1]
+                                modified = self._parse_mlst_date(date_str)
+                        except:
+                            # Can't get modification date
+                            pass
+
                     files.append({
                         "name": name,
                         "path": f"/{name}",
                         "is_directory": is_directory,
                         "size": size,
-                        "modified": "",
+                        "modified": modified,
                     })
 
                 return files
