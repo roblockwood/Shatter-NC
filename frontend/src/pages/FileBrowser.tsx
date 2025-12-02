@@ -23,6 +23,13 @@ interface ViewData {
   lines: number;
 }
 
+interface FileMetadata {
+  file_path: string;
+  tools: number[];
+  runtime_seconds: number;
+  has_errors: boolean;
+}
+
 export const FileBrowser: React.FC = () => {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
@@ -35,6 +42,7 @@ export const FileBrowser: React.FC = () => {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewModalContent, setViewModalContent] = useState<ViewData | null>(null);
   const [viewModalLoading, setViewModalLoading] = useState(false);
+  const [fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
 
   // Fetch machines on mount
   useEffect(() => {
@@ -94,12 +102,14 @@ export const FileBrowser: React.FC = () => {
     setCurrentPath('/');
   }, [selectedMachineId]);
 
-  // Fetch preview when a .nc file is selected
+  // Fetch preview and metadata when a .nc file is selected
   useEffect(() => {
     if (selectedProgram && selectedProgram.name.toUpperCase().endsWith('.NC') && !selectedProgram.is_directory) {
       fetchFilePreview(selectedProgram);
+      fetchFileMetadata(selectedProgram);
     } else {
       setPreviewLines([]);
+      setFileMetadata(null);
     }
   }, [selectedProgram]);
 
@@ -126,6 +136,14 @@ export const FileBrowser: React.FC = () => {
     } catch {
       return dateStr;
     }
+  };
+
+  const formatRuntime = (seconds: number) => {
+    if (!seconds) return '─ unknown ─';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleItemClick = (program: Program) => {
@@ -201,6 +219,31 @@ export const FileBrowser: React.FC = () => {
     } catch (err) {
       console.error('Preview error:', err);
       setPreviewLines(['Error loading preview']);
+    }
+  };
+
+  const fetchFileMetadata = async (program: Program) => {
+    if (!selectedMachineId) return;
+
+    try {
+      const filePath = `${currentPath}${currentPath === '/' ? '' : '/'}${program.name}`;
+      const url = `http://localhost:8000/api/machines/${selectedMachineId}/metadata?file_path=${encodeURIComponent(filePath)}`;
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        try {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || `HTTP ${response.status}`);
+        } catch {
+          throw new Error(`HTTP ${response.status}`);
+        }
+      }
+
+      const data: FileMetadata = await response.json();
+      setFileMetadata(data);
+    } catch (err) {
+      console.error('Metadata error:', err);
+      setFileMetadata(null);
     }
   };
 
@@ -380,11 +423,17 @@ export const FileBrowser: React.FC = () => {
               </div>
               <div className="detail-row">
                 <span className="label">TOOLS:</span>
-                <span className="value text-muted">─ parsing not yet implemented ─</span>
+                <span className={`value ${fileMetadata?.tools && fileMetadata.tools.length > 0 ? '' : 'text-muted'}`}>
+                  {fileMetadata?.tools && fileMetadata.tools.length > 0
+                    ? fileMetadata.tools.join(', ')
+                    : '─ none detected ─'}
+                </span>
               </div>
               <div className="detail-row">
                 <span className="label">RUNTIME:</span>
-                <span className="value text-muted">─ parsing not yet implemented ─</span>
+                <span className={`value ${fileMetadata?.runtime_seconds ? '' : 'text-muted'}`}>
+                  {formatRuntime(fileMetadata?.runtime_seconds || 0)}
+                </span>
               </div>
 
               <div className="detail-actions">
