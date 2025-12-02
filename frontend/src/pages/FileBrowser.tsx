@@ -16,6 +16,13 @@ interface Machine {
   ip_address: string;
 }
 
+interface ViewData {
+  file_path: string;
+  content: string;
+  size: number;
+  lines: number;
+}
+
 export const FileBrowser: React.FC = () => {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
@@ -24,6 +31,10 @@ export const FileBrowser: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentPath, setCurrentPath] = useState<string>('/');
+  const [previewLines, setPreviewLines] = useState<string[]>([]);
+  const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [viewModalContent, setViewModalContent] = useState<ViewData | null>(null);
+  const [viewModalLoading, setViewModalLoading] = useState(false);
 
   // Fetch machines on mount
   useEffect(() => {
@@ -82,6 +93,15 @@ export const FileBrowser: React.FC = () => {
   useEffect(() => {
     setCurrentPath('/');
   }, [selectedMachineId]);
+
+  // Fetch preview when a .nc file is selected
+  useEffect(() => {
+    if (selectedProgram && selectedProgram.name.toUpperCase().endsWith('.NC') && !selectedProgram.is_directory) {
+      fetchFilePreview(selectedProgram);
+    } else {
+      setPreviewLines([]);
+    }
+  }, [selectedProgram]);
 
   const selectedMachine = machines.find(m => m.id === selectedMachineId);
 
@@ -155,6 +175,62 @@ export const FileBrowser: React.FC = () => {
       console.error('Download error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(`Download failed: ${errorMessage}`);
+    }
+  };
+
+  const fetchFilePreview = async (program: Program) => {
+    if (!selectedMachineId) return;
+
+    try {
+      const filePath = `${currentPath}${currentPath === '/' ? '' : '/'}${program.name}`;
+      const url = `http://localhost:8000/api/machines/${selectedMachineId}/view?file_path=${encodeURIComponent(filePath)}`;
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        try {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || `HTTP ${response.status}`);
+        } catch {
+          throw new Error(`HTTP ${response.status}`);
+        }
+      }
+
+      const data: ViewData = await response.json();
+      const lines = data.content.split('\n');
+      setPreviewLines(lines.slice(0, 50));
+    } catch (err) {
+      console.error('Preview error:', err);
+      setPreviewLines(['Error loading preview']);
+    }
+  };
+
+  const handleViewCode = async (program: Program) => {
+    if (!selectedMachineId) return;
+
+    setViewModalLoading(true);
+    try {
+      const filePath = `${currentPath}${currentPath === '/' ? '' : '/'}${program.name}`;
+      const url = `http://localhost:8000/api/machines/${selectedMachineId}/view?file_path=${encodeURIComponent(filePath)}`;
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        try {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || `HTTP ${response.status}`);
+        } catch {
+          throw new Error(`HTTP ${response.status}`);
+        }
+      }
+
+      const data: ViewData = await response.json();
+      setViewModalContent(data);
+      setViewModalOpen(true);
+    } catch (err) {
+      console.error('View error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`View failed: ${errorMessage}`);
+    } finally {
+      setViewModalLoading(false);
     }
   };
 
@@ -318,8 +394,30 @@ export const FileBrowser: React.FC = () => {
                 >
                   [ DOWNLOAD ]
                 </button>
-                <button className="terminal-button">[ VIEW CODE ]</button>
+                {selectedProgram.name.toUpperCase().endsWith('.NC') && (
+                  <button
+                    className="terminal-button"
+                    onClick={() => handleViewCode(selectedProgram)}
+                  >
+                    [ VIEW CODE ]
+                  </button>
+                )}
               </div>
+
+              {previewLines.length > 0 && selectedProgram.name.toUpperCase().endsWith('.NC') && (
+                <div className="code-preview">
+                  <div className="preview-header">┌─ PREVIEW (First 50 Lines) ─────────────┐</div>
+                  <div className="preview-content">
+                    {previewLines.map((line, idx) => (
+                      <div key={idx} className="preview-line">
+                        <span className="line-number">{idx + 1}</span>
+                        <span className="line-text">{line || ' '}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="preview-footer">└─────────────────────────────────────┘</div>
+                </div>
+              )}
             </div>
             <div className="panel-footer">
               └{'─'.repeat(50)}┘
@@ -342,6 +440,55 @@ export const FileBrowser: React.FC = () => {
           <span className="text-dim">PROGRAMS: {programs.length}</span>
         </div>
       </div>
+
+      {/* View Modal */}
+      {viewModalOpen && (
+        <div className="modal-overlay" onClick={() => setViewModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">
+                {viewModalContent?.file_path || 'FILE VIEWER'}
+              </span>
+              <button
+                className="modal-close"
+                onClick={() => setViewModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            {viewModalLoading && (
+              <div className="modal-loading">
+                <span className="pulse">LOADING...</span>
+              </div>
+            )}
+
+            {!viewModalLoading && viewModalContent && (
+              <div className="modal-body">
+                <div className="file-stats">
+                  <span>SIZE: {(viewModalContent.size / 1024).toFixed(2)} KB</span>
+                  <span>│</span>
+                  <span>LINES: {viewModalContent.lines}</span>
+                </div>
+                <div className="code-viewer">
+                  {viewModalContent.content.split('\n').map((line, idx) => (
+                    <div key={idx} className="code-line">
+                      <span className="line-number">{idx + 1}</span>
+                      <span className="line-content">{line || ' '}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="modal-footer">
+              <button className="terminal-button" onClick={() => setViewModalOpen(false)}>
+                [ CLOSE ]
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
