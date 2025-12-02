@@ -1,5 +1,5 @@
 """API endpoints for real-time machine status."""
-from fastapi import APIRouter, Depends, HTTPException, status as http_status
+from fastapi import APIRouter, Depends, HTTPException, status as http_status, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.db.base import get_db
@@ -348,16 +348,16 @@ async def get_file_metadata(
 async def view_file(
     machine_id: int,
     file_path: str,
-    max_size: int = 1048576,
+    max_size: int = 8388608,
     db: Session = Depends(get_db)
 ):
     """
-    View file content as text (up to 1MB by default).
+    View file content as text (up to 8MB by default).
 
     Args:
         machine_id: Machine ID
         file_path: Path to file on machine
-        max_size: Maximum file size in bytes (default 1MB)
+        max_size: Maximum file size in bytes (default 8MB)
     """
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not db_machine:
@@ -404,6 +404,61 @@ async def view_file(
         raise
     except Exception as e:
         logger.error(f"Error viewing file from machine {machine_id}: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.post("/{machine_id}/upload")
+async def upload_file(
+    machine_id: int,
+    file_path: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload a file to the machine via FTP.
+
+    Args:
+        machine_id: Machine ID
+        file_path: Destination path on machine (e.g., /O2000.NC)
+        file: File to upload
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    try:
+        # Read file content
+        file_content = await file.read()
+
+        ftp_client = CNCFtpClient(
+            db_machine.ip_address,
+            port=db_machine.ftp_port,
+            username=db_machine.ftp_username,
+            password=db_machine.ftp_password,
+        )
+
+        result = await ftp_client.upload_file(file_content, file_path)
+
+        if not result.get("success"):
+            raise Exception(result.get("error", "Upload failed"))
+
+        return {
+            "success": True,
+            "file_path": file_path,
+            "size": len(file_content),
+            "message": f"File uploaded successfully to {file_path}",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading file to machine {machine_id}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
