@@ -1,11 +1,13 @@
 """API endpoints for real-time machine status."""
 from fastapi import APIRouter, Depends, HTTPException, status as http_status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.db.base import get_db
 from app.models.machine import Machine
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
 import logging
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +221,59 @@ async def get_position(machine_id: int, db: Session = Depends(get_db)):
 
     except Exception as e:
         logger.error(f"Error fetching position for machine {machine_id}: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.get("/{machine_id}/download")
+async def download_file(
+    machine_id: int,
+    file_path: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Download a file from the machine via FTP.
+
+    Args:
+        machine_id: Machine ID
+        file_path: Path to file on machine (e.g., /O2000.NC)
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    try:
+        ftp_client = CNCFtpClient(
+            db_machine.ip_address,
+            port=db_machine.ftp_port,
+            username=db_machine.ftp_username,
+            password=db_machine.ftp_password,
+        )
+        file_content = await ftp_client.download_file(file_path)
+
+        if file_content is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail=f"Failed to download file: {file_path}",
+            )
+
+        filename = file_path.split('/')[-1]
+
+        return StreamingResponse(
+            iter([file_content]),
+            media_type='application/octet-stream',
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error downloading file from machine {machine_id}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
