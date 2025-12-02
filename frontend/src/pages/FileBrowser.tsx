@@ -43,6 +43,10 @@ export const FileBrowser: React.FC = () => {
   const [viewModalContent, setViewModalContent] = useState<ViewData | null>(null);
   const [viewModalLoading, setViewModalLoading] = useState(false);
   const [fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
+  const [metadataLoading, setMetadataLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ fileName: string; percent: number } | null>(null);
+  const [highlightedFile, setHighlightedFile] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Fetch machines on mount
   useEffect(() => {
@@ -146,6 +150,33 @@ export const FileBrowser: React.FC = () => {
     return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Animated ASCII progress bar during metadata parsing
+  const [progressState, setProgressState] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!metadataLoading) return;
+
+    const interval = setInterval(() => {
+      setProgressState(prev => (prev + 1) % 8);
+    }, 900);
+
+    return () => clearInterval(interval);
+  }, [metadataLoading]);
+
+  const renderProgressBar = () => {
+    const stages = [
+      '[████░░░░░]',
+      '[██████░░░]',
+      '[████████░]',
+      '[██████████]',
+      '[██████████]',
+      '[████████░░]',
+      '[██████░░░░]',
+      '[████░░░░░░]',
+    ];
+    return <span className="ascii-progress-container">{stages[progressState]} PARSING...</span>;
+  };
+
   const handleItemClick = (program: Program) => {
     if (program.is_directory) {
       // Navigate into directory
@@ -225,6 +256,7 @@ export const FileBrowser: React.FC = () => {
   const fetchFileMetadata = async (program: Program) => {
     if (!selectedMachineId) return;
 
+    setMetadataLoading(true);
     try {
       const filePath = `${currentPath}${currentPath === '/' ? '' : '/'}${program.name}`;
       const url = `http://localhost:8000/api/machines/${selectedMachineId}/metadata?file_path=${encodeURIComponent(filePath)}`;
@@ -244,6 +276,8 @@ export const FileBrowser: React.FC = () => {
     } catch (err) {
       console.error('Metadata error:', err);
       setFileMetadata(null);
+    } finally {
+      setMetadataLoading(false);
     }
   };
 
@@ -277,6 +311,82 @@ export const FileBrowser: React.FC = () => {
     }
   };
 
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedMachineId) return;
+
+    const uploadPath = currentPath === '/' ? `/${file.name}` : `${currentPath}/${file.name}`;
+    const url = `http://localhost:8000/api/machines/${selectedMachineId}/upload?file_path=${encodeURIComponent(uploadPath)}`;
+
+    // Show upload progress entry in the file list
+    setUploadProgress({ fileName: file.name, percent: 0 });
+    setError(null);
+
+    const xhr = new XMLHttpRequest();
+
+    // Track upload progress
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const percentComplete = Math.round((e.loaded / e.total) * 100);
+        setUploadProgress({ fileName: file.name, percent: percentComplete });
+      }
+    });
+
+    // Handle completion
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        setUploadProgress(null);
+        setError(null);
+        // Highlight the uploaded file for 5 seconds
+        setHighlightedFile(file.name);
+        setTimeout(() => setHighlightedFile(null), 5000);
+        // Refresh the file list
+        const programsUrl = `http://localhost:8000/api/machines/${selectedMachineId}/programs?path=${encodeURIComponent(currentPath)}`;
+        fetch(programsUrl)
+          .then(res => res.json())
+          .then(data => {
+            setPrograms(data.programs || []);
+          })
+          .catch(err => console.error('Error refreshing programs:', err));
+      } else {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          const errorMsg = response.detail || `HTTP ${xhr.status}`;
+          setError(`Upload failed: ${errorMsg}`);
+        } catch {
+          setError(`Upload failed: HTTP ${xhr.status}`);
+        }
+        setUploadProgress(null);
+      }
+    });
+
+    // Handle errors
+    xhr.addEventListener('error', () => {
+      setError('Upload failed: Network error');
+      setUploadProgress(null);
+    });
+
+    xhr.addEventListener('abort', () => {
+      setError('Upload cancelled');
+      setUploadProgress(null);
+    });
+
+    // Send the file
+    const formData = new FormData();
+    formData.append('file', file);
+    xhr.open('POST', url);
+    xhr.send(formData);
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   // Sort and prepare display list
   const displayPrograms = (() => {
     // Separate directories and files
@@ -300,9 +410,20 @@ export const FileBrowser: React.FC = () => {
           <span className="text-glow-strong">FILE MANAGER</span>
         </div>
         <div className="header-actions">
-          <button className="terminal-button primary">
+          <button
+            className="terminal-button primary"
+            onClick={handleUploadClick}
+            disabled={uploadProgress !== null || !selectedMachineId}
+          >
             [ UPLOAD ]
           </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".nc"
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+          />
         </div>
       </div>
 
@@ -368,10 +489,28 @@ export const FileBrowser: React.FC = () => {
                 ├{'─'.repeat(80)}┤
               </div>
               <div className="table-body">
+                {uploadProgress && (
+                  <div className="table-row upload-progress-row">
+                    <div className="col-name">
+                      {uploadProgress.fileName}
+                    </div>
+                    <div className="col-size"></div>
+                    <div className="col-modified">
+                      <div className="upload-progress-bar-container">
+                        <div
+                          className="upload-progress-bar-fill"
+                          style={{ width: `${uploadProgress.percent}%` }}
+                        ></div>
+                      </div>
+                      <span className="upload-progress-text">{uploadProgress.percent}%</span>
+                    </div>
+                    <div className="col-actions"></div>
+                  </div>
+                )}
                 {displayPrograms.map((program, idx) => (
                   <div
                     key={idx}
-                    className={`table-row ${selectedProgram?.name === program.name ? 'selected' : ''}`}
+                    className={`table-row ${selectedProgram?.name === program.name ? 'selected' : ''} ${highlightedFile === program.name ? 'uploaded' : ''}`}
                     onClick={() => handleItemClick(program)}
                   >
                     <div className="col-name">
@@ -423,16 +562,16 @@ export const FileBrowser: React.FC = () => {
               </div>
               <div className="detail-row">
                 <span className="label">TOOLS:</span>
-                <span className={`value ${fileMetadata?.tools && fileMetadata.tools.length > 0 ? '' : 'text-muted'}`}>
-                  {fileMetadata?.tools && fileMetadata.tools.length > 0
+                <span className={`value ${metadataLoading ? 'text-muted' : fileMetadata?.tools && fileMetadata.tools.length > 0 ? '' : 'text-muted'}`}>
+                  {metadataLoading ? renderProgressBar() : fileMetadata?.tools && fileMetadata.tools.length > 0
                     ? fileMetadata.tools.join(', ')
                     : '─ none detected ─'}
                 </span>
               </div>
               <div className="detail-row">
                 <span className="label">RUNTIME:</span>
-                <span className={`value ${fileMetadata?.runtime_seconds ? '' : 'text-muted'}`}>
-                  {formatRuntime(fileMetadata?.runtime_seconds || 0)}
+                <span className={`value ${metadataLoading ? 'text-muted' : fileMetadata?.runtime_seconds ? '' : 'text-muted'}`}>
+                  {metadataLoading ? renderProgressBar() : formatRuntime(fileMetadata?.runtime_seconds || 0)}
                 </span>
               </div>
 
