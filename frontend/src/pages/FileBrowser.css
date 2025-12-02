@@ -276,6 +276,189 @@
   color: var(--color-text-dim);
 }
 
+/* Code Preview */
+.code-preview {
+  margin-top: var(--spacing-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+  max-height: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-header {
+  color: var(--color-text-secondary);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+  white-space: pre;
+  line-height: 1;
+  font-size: var(--font-sm);
+}
+
+.preview-content {
+  flex: 1;
+  overflow-y: auto;
+  font-size: var(--font-xs);
+}
+
+.preview-line {
+  display: flex;
+  padding: 2px var(--spacing-sm);
+  line-height: 1.4;
+  border-bottom: 1px solid var(--color-border-dim);
+}
+
+.preview-line .line-number {
+  color: var(--color-text-dim);
+  min-width: 30px;
+  text-align: right;
+  margin-right: var(--spacing-sm);
+  user-select: none;
+}
+
+.preview-line .line-text {
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  white-space: pre;
+  word-break: break-word;
+  flex: 1;
+}
+
+.preview-footer {
+  color: var(--color-text-secondary);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+  white-space: pre;
+  line-height: 1;
+  font-size: var(--font-sm);
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--color-bg-surface);
+  border: 2px solid var(--color-border-bright);
+  border-radius: 4px;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+}
+
+.modal-title {
+  color: var(--color-text-primary);
+  font-weight: 700;
+  font-size: var(--font-md);
+  text-transform: uppercase;
+  word-break: break-all;
+  flex: 1;
+}
+
+.modal-close {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-size: var(--font-lg);
+  cursor: pointer;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  margin-left: var(--spacing-md);
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  border-color: var(--color-text-primary);
+  box-shadow: var(--glow);
+}
+
+.modal-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--spacing-md);
+}
+
+.file-stats {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-sm);
+}
+
+.code-viewer {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+}
+
+.code-line {
+  display: flex;
+  padding: 2px var(--spacing-sm);
+  line-height: 1.4;
+  border-bottom: 1px solid var(--color-border-dim);
+  font-size: var(--font-xs);
+}
+
+.code-line .line-number {
+  color: var(--color-text-dim);
+  min-width: 40px;
+  text-align: right;
+  margin-right: var(--spacing-sm);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.code-line .line-content {
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  white-space: pre;
+  word-break: break-word;
+  flex: 1;
+}
+
+.modal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  color: var(--color-text-secondary);
+}
+
+.modal-footer {
+  padding: var(--spacing-md);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
   .file-browser-content {
@@ -284,5 +467,12 @@
 
   .details-panel {
     min-width: unset;
+  }
+}
+
+@media (max-width: 768px) {
+  .modal-content {
+    max-width: 95vw;
+    max-height: 95vh;
   }
 }
