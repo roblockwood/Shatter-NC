@@ -124,6 +124,40 @@ export const FileBrowser: React.FC = () => {
     }
   };
 
+  const handleDownload = async (program: Program) => {
+    if (!selectedMachineId) return;
+
+    try {
+      const filePath = `${currentPath}${currentPath === '/' ? '' : '/'}${program.name}`;
+      const url = `http://localhost:8000/api/machines/${selectedMachineId}/download?file_path=${encodeURIComponent(filePath)}`;
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        try {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || `HTTP ${response.status}`);
+        } catch {
+          throw new Error(`HTTP ${response.status}`);
+        }
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = program.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error('Download error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Download failed: ${errorMessage}`);
+    }
+  };
+
   // Sort and prepare display list
   const displayPrograms = (() => {
     // Separate directories and files
@@ -228,8 +262,17 @@ export const FileBrowser: React.FC = () => {
                     <div className="col-size">{program.is_directory ? '<DIR>' : formatBytes(program.size)}</div>
                     <div className="col-modified">{formatDate(program.modified)}</div>
                     <div className="col-actions">
-                      <button className="terminal-button-sm">DL</button>
-                      <button className="terminal-button-sm danger">DEL</button>
+                      {!program.is_directory && (
+                        <button
+                          className="terminal-button-sm"
+                          onClick={() => handleDownload(program)}
+                        >
+                          DL
+                        </button>
+                      )}
+                      {program.is_directory && (
+                        <span className="col-action-spacer"></span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -269,9 +312,13 @@ export const FileBrowser: React.FC = () => {
               </div>
 
               <div className="detail-actions">
-                <button className="terminal-button">[ DOWNLOAD ]</button>
+                <button
+                  className="terminal-button"
+                  onClick={() => handleDownload(selectedProgram)}
+                >
+                  [ DOWNLOAD ]
+                </button>
                 <button className="terminal-button">[ VIEW CODE ]</button>
-                <button className="terminal-button danger">[ DELETE ]</button>
               </div>
             </div>
             <div className="panel-footer">
