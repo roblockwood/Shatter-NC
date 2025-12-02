@@ -1,679 +1,93 @@
-# Shatter - Brother CNC Management Platform
+# Machine Card Name Color Issue - Triage Summary
 
-## Project Overview
-**Shatter** is a web-based platform for monitoring and managing multiple Brother CNC machines. Provides real-time status monitoring, historical data analysis, intelligent G-code file transfer, and NC program version control.
+## Problem
+Machine names in the card header are all displaying in bright green (text-glow), regardless of online/operating status.
 
-**Target Deployment:** Isolated local networks (manufacturing shop floors)
-**Distribution:** Open source, Docker-based for easy deployment
-**Multi-Machine:** Single Shatter instance can monitor and manage multiple CNC machines
+Expected behavior:
+- **Green with glow**: Machine is ONLINE AND RUNNING
+- **Grey/muted**: Machine is ONLINE but NOT RUNNING (idle/waiting)
+- **Red**: Machine is OFFLINE (not receiving data)
 
----
+## Steps Taken to Debug
 
-## Architecture
+### 1. Verified Logic Implementation
+- Updated MachineCard.tsx line 222 with ternary condition:
+  ```typescript
+  !machine.is_online ? 'text-error' : (machine.status?.includes('Running') ? 'text-glow' : 'text-muted')
+  ```
+- Logic correctly evaluates: offline → red, online+running → green, online+idle → grey
 
-### Three-Tier Architecture
+### 2. Identified CSS Issue
+- Found that `text-glow` class in terminal.css only adds text-shadow, doesn't change color
+- `text-muted` and `text-error` classes properly define colors but weren't being applied to `.machine-name`
 
-```
-┌─────────────────┐
-│   Frontend      │  React/Vue SPA
-│   (Port 3000)   │  - Real-time monitoring
-└────────┬────────┘  - File manager
-         │           - History viewer
-         │
-┌────────▼────────┐
-│   Backend API   │  Node.js/Python FastAPI
-│   (Port 8000)   │  - CNC communication
-└────────┬────────┘  - G-code parsing
-         │           - Business logic
-         │
-┌────────▼────────┐
-│   PostgreSQL    │  Time-series + relational data
-│   (Port 5432)   │  - Machine history
-└─────────────────┘  - Program versions
-                     - Alarm logs
-```
+### 3. Fixed CSS Selectors
+Added specific CSS rules in MachineCard.css (lines 28-39):
+```css
+.machine-name.text-glow {
+  color: var(--color-success);
+  text-shadow: var(--glow);
+}
 
-### Containerization Strategy
-- **Frontend Container:** Nginx serving built React/Vue app
-- **Backend Container:** API service with CNC protocol libraries
-- **Database Container:** PostgreSQL with TimescaleDB extension
-- **Orchestration:** Docker Compose for single-command deployment
+.machine-name.text-muted {
+  color: var(--color-text-muted);
+}
 
----
-
-## Core Features
-
-### 1. Real-Time Monitoring
-**Data Sources:** HTTP endpoints (primary), FTP files (secondary)
-
-**Multi-Machine Overview:**
-- Grid/list view of all configured machines
-- At-a-glance status indicators (color-coded: green/yellow/red)
-- Quick stats per machine (current program, cycle time, status)
-- Click to drill into individual machine details
-
-**Individual Machine Display Panels:**
-- Machine status (running/stopped/error/alarm)
-- Current program name (from `/running_log`)
-- Cycle progress (current cycle time vs. average)
-- Workpiece counter (4 counters from `/work_counter`)
-- Tool in spindle (from `/tool`)
-- Current position X/Y/Z (from `POSNI1.NC` or parsed HTTP)
-- Active alarms (from `/alarm_log`)
-- Spindle speed, feed rate (if available)
-
-**Polling Strategy:**
-- HTTP endpoints: 2-5 second intervals per machine
-- Concurrent polling of all configured machines
-- WebSocket/SSE from backend to frontend for push updates
-- Automatic reconnection handling
-- Graceful degradation if machine offline
-
-### 2. Historical Data & Analytics
-
-**Production Logs:**
-- Program run history (program name, start time, end time, duration)
-- Cycle time trends and statistics
-- Parts counter over time
-- Machine utilization (operation time / power on time)
-- **Cross-machine comparison:** Compare performance across multiple machines
-- **Fleet-wide statistics:** Total parts, aggregate utilization, etc.
-
-**Alarm History:**
-- Alarm log with timestamps
-- Alarm frequency analysis per machine
-- Downtime tracking
-- **Fleet alarm summary:** Most common alarms across all machines
-
-**Data Storage:**
-- PostgreSQL with TimescaleDB for time-series data
-- Machine-scoped data (all records tagged with machine_id)
-- Retention policies (configurable)
-- Data aggregation for long-term trends
-- Cross-machine queries and reporting
-
-### 3. Smart File Transfer & G-Code Management
-
-**File Browser:**
-- Machine selector dropdown
-- List NC programs on selected machine (via FTP)
-- Upload/download G-code files
-- Preview file contents
-- Search/filter programs
-- **Bulk operations:** Copy programs between machines
-
-**G-Code Intelligence:**
-- Parse uploaded G-code files
-- Extract tool table (T numbers, names, descriptions)
-- Compare with target machine's tool data (from `/tool` or `ATCTL.NC`)
-- Highlight mismatches (missing tools, wrong sizes)
-- Validate before transfer
-- **Machine-specific validation:** Each machine may have different tool setups
-
-**O-Number Management:**
-- Programs uploaded with friendly names (e.g., "bracket_v2.nc")
-- Automatically assigned O-numbers from pool (O2000-O3999)
-- 2000 available O-numbers, rolling allocation
-- When pool exhausted, recycle oldest unused O-number
-- UI shows both friendly name and O-number
-- FTP transfer uses O-number format (O2045.NC)
-- O-number preserved across versions of same program
-
-**Pre-Transfer Checks:**
-- Tool availability verification (per machine)
-- Work offset validation
-- Subprogram dependency checking
-- Warn on potential issues
-- **Multi-machine deployment:** Upload same program to multiple machines with validation for each
-
-### 4. NC Program Version Control
-
-**Version Tracking:**
-- Git-like version history for each NC program
-- Store program content + metadata (upload date, user, notes)
-- Diff view between versions
-- Rollback capability
-- **Machine deployment tracking:** Track which version is deployed on which machine
-
-**Change Management:**
-- Track what changed (compare file hashes)
-- Annotate changes with notes
-- Tag versions (e.g., "production", "tested", "development")
-- **Deployment status:** See which machines are running current vs. outdated versions
-
-**Database Schema:**
-```
-programs
-  - id, name, current_version_id
-
-program_versions
-  - id, program_id, version_number, content_hash
-  - uploaded_at, uploaded_by, notes
-  - file_size, line_count
-  - tool_list (JSONB)
-
-program_diffs
-  - id, from_version_id, to_version_id
-  - diff_content, summary
-
-machine_program_deployments
-  - id, machine_id, program_id, version_id
-  - deployed_at, deployed_by
-  - status (active, archived)
+.machine-name.text-error {
+  color: var(--color-error);
+}
 ```
 
-### 5. Machine Configuration & Management
-
-**Machine Registry:**
-- Add/edit/remove machines from Shatter
-- Machine profile (name, model, IP address, location)
-- Connection settings (FTP credentials, HTTP polling interval)
-- Enable/disable monitoring per machine
-
-**Configuration UI:**
-- Web-based machine setup (no manual .env editing)
-- Test connection before saving
-- Machine grouping/tagging (e.g., "Production Floor A", "R&D")
-
-**Machine Health:**
-- Connection status (online/offline)
-- Last successful poll timestamp
-- Error logs per machine
-- Network latency monitoring
-
----
-
-## Technology Stack
-
-### Frontend
-**Framework Options:**
-- **React** (preferred): Large ecosystem, good for complex state
-- **Vue 3**: Simpler, faster learning curve
-- **Svelte**: Lightweight alternative
-
-**UI Libraries:**
-- Material-UI / Ant Design / Tailwind CSS
-- Chart.js / Recharts for time-series graphs
-- Monaco Editor for G-code viewing/editing
-
-**State Management:**
-- React: Zustand or Redux Toolkit
-- Vue: Pinia
-
-**Real-time Updates:**
-- WebSocket client or EventSource (SSE)
-
-### Backend
-**Framework Options:**
-- **Python FastAPI** (preferred): Fast, async, great for data processing
-- **Node.js Express**: JavaScript consistency, good for I/O-heavy tasks
-
-**Key Libraries:**
-- HTTP client: `httpx` (Python) / `axios` (Node)
-- FTP client: `aioftp` (Python async) / `basic-ftp` (Node)
-- G-code parser: Custom parser or `pygcode` (Python)
-- WebSocket: `fastapi.websockets` / `socket.io`
-
-**Background Tasks:**
-- Celery (Python) or Bull (Node) for scheduled polling
-- APScheduler for simpler periodic tasks
-- **Multi-machine polling:** Async/concurrent polling of multiple machines
-- Task queues for managing polling load across many machines
-
-### Database
-**PostgreSQL + TimescaleDB**
-- TimescaleDB for time-series data (cycle times, counters)
-- Native JSONB for flexible tool data storage
-- Full-text search for G-code content
-
-**Migrations:**
-- Alembic (Python) / Knex.js (Node)
-
-### Deployment
-**Docker Compose:**
-```yaml
-services:
-  frontend:
-    - nginx:alpine serving built static files
-  backend:
-    - Python/Node container
-    - Health checks
-  postgres:
-    - TimescaleDB image
-    - Persistent volume
-  redis: (optional)
-    - For caching and task queue
+### 4. Added Debug Logging
+Added console.log in MachineCard.tsx line 45:
+```typescript
+console.log(`Machine: ${machine.machine_name}, is_online: ${machine.is_online}, status: "${machine.status}"`);
 ```
 
-**Environment Configuration:**
-- `.env` file for basic settings (database, ports)
-- **Machine configs stored in database** (not env file)
-- Web UI for machine management
-- Traefik or nginx reverse proxy (optional)
+### 5. Rebuilt Frontend
+- Ran `npm run build --prefix frontend`
+- Generated new asset files with updated CSS and logic
 
----
+## Remaining Investigation Needed
 
-## Development Phases
+The issue persists despite correct logic and CSS. Possible causes:
+1. **Browser cache not cleared** - User needs hard refresh (Cmd+Shift+R / Ctrl+Shift+R)
+2. **WebSocket data issue** - Check console logs to verify `is_online` and `status` values being received
+3. **Status field undefined** - If `machine.status` is undefined, `.includes('Running')` will fail silently
+4. **Polling not running** - Machines may not have actual polling data yet
+5. **is_online type issue** - Verify `is_online` is boolean, not string "false"
 
-### Phase 1: Foundation (MVP)
-**Goal:** Multi-machine monitoring and file transfer
+## Next Steps for Tomorrow
 
-**Backend:**
-- [x] Machine registry (CRUD API and database)
-- [x] HTTP client for CNC endpoints
-- [x] FTP client for file operations
-- [x] REST API for frontend:
-  - GET /api/machines (list configured machines)
-  - POST /api/machines (add machine)
-  - GET /api/machines/:id/status (machine status)
-  - GET /api/machines/:id/alarms (current alarms)
-  - GET /api/machines/:id/programs (list files)
-  - POST /api/machines/:id/programs/upload (TODO)
-  - GET /api/machines/:id/programs/:name/download (TODO)
-- [x] Database schema and models (machines table)
-- [ ] Concurrent polling service (all active machines, 5-second intervals)
-- [ ] Per-machine polling state management
-- [ ] WebSocket broadcasting for real-time updates
-- [ ] Machine health monitoring
+1. **Check browser console** after hard refresh
+   - Look for debug output: `Machine: BROTHER CNC, is_online: true, status: "..."`
+   - Verify actual values being received from WebSocket
 
-**Frontend:**
-- [ ] Machine management UI (add/edit machines)
-- [ ] Multi-machine overview dashboard (grid/list view)
-- [ ] Real-time status cards per machine
-- [ ] Drill-down to individual machine details
-- [ ] File browser/manager with machine selector
-- [ ] Upload/download functionality
+2. **Verify polling status**
+   - Check if backend polling service is actually running
+   - Verify machines are getting polled and status field is being set
 
-**Deployment:**
-- [x] Docker Compose setup
-- [x] Basic documentation
+3. **Add type guards** if needed
+   - Ensure `is_online` comparison uses strict equality
+   - Add fallback for undefined `status` field
 
-### Phase 2: Historical Data & Analytics
-- [ ] Time-series data collection (cycle times, counters) per machine
-- [ ] Alarm log storage and retrieval (machine-scoped)
-- [ ] Production run tracking per machine
-- [ ] Charts and trend graphs (single machine and cross-machine)
-- [ ] Fleet-wide statistics and comparison views
-- [ ] Data export (CSV/JSON)
+4. **Check WebSocket initial data**
+   - Verify websocket.py properly sends all machines with correct `is_online` values
+   - TEST machine should send `is_online: false` on initial connect
 
-### Phase 3: Smart G-Code Features
-- [x] G-code parser implementation
-  - [x] Tool extraction (number, diameter, corner radius, length)
-  - [x] Posted date parsing
-  - [x] Runtime estimation with configurable rapid feedrate
-  - [x] Stock size extraction
-  - [ ] WCS coordinate system validation (requires CAM post-processor update)
-    - Note: Current post outputs part bounding box, not actual WCS offsets
-    - Need G54/G55/etc. X/Y/Z offset values for validation
-- [ ] Machine tool data comparison (per target machine)
-- [ ] Pre-transfer validation
-- [ ] Tool mismatch warnings
-- [ ] Bulk deployment to multiple machines
-- [ ] Cross-machine tool comparison reports
+## Files Modified
+- `frontend/src/components/MachineCard.tsx` - Added conditional logic and debug logging
+- `frontend/src/components/MachineCard.css` - Added color classes for machine name
+- `frontend/src/pages/Dashboard.tsx` - Fixed online count calculations
+- `backend/app/services/websocket.py` - Query all machines on connect, set is_online correctly
+- `backend/app/clients/http_client.py` - Added response validation
+- `backend/app/clients/ftp_client.py` - Enhanced connection test with current_directory
 
-### Phase 4: Version Control
-- [ ] Program version storage
-- [ ] Diff generation
-- [ ] Version history UI
-- [ ] Rollback functionality
-- [ ] Change annotations
-- [ ] Machine deployment tracking
-- [ ] Version deployment status view (which machines have which versions)
-
-### Phase 5: Polish & Distribution
-- [ ] User authentication (optional)
-- [ ] Role-based permissions (per machine access control)
-- [ ] Advanced configuration UI
-- [ ] Machine grouping/tagging
-- [ ] Comprehensive documentation
-- [ ] Installation scripts
-- [ ] GitHub Actions CI/CD
-- [ ] Demo mode with simulated machines
-
----
-
-## Data Flow Examples
-
-### Real-Time Monitoring Flow (Multi-Machine)
-```
-1. Backend polling service (every 2-5s):
-   - Fetch all active machines from database
-   - Concurrent async polling:
-     For each machine:
-       - HTTP GET to {machine.ip}/running_log
-       - Parse HTML response
-       - Extract: program name, cycle time, status
-       - Store in PostgreSQL with machine_id (if changed)
-   - Aggregate updates and push to WebSocket clients
-
-2. Frontend WebSocket connection:
-   - Receives updates for all machines
-   - Updates React/Vue state (machine-keyed)
-   - Re-renders affected machine cards/panels
-   - Updates overview statistics
-```
-
-### File Upload Flow (Single or Multi-Machine)
-```
-1. User selects G-code file (with friendly name) and target machine(s) in UI
-2. Frontend uploads to backend API
-3. Backend:
-   - Parse G-code
-   - Extract tools (T01, T02, etc.)
-   - Assign O-number (O2000-O3999, rolling allocation)
-     - Check next available O-number from allocation table
-     - If all used, recycle oldest unused O-number
-   - For each target machine:
-     - Fetch machine tool data (GET {machine.ip}/tool or FTP ATCTL.NC)
-     - Compare tool lists
-   - Return validation results per machine + assigned O-number
-4. Frontend shows validation per machine:
-   Machine A (will be saved as O2045.NC):
-     - ✓ All tools available
-   Machine B (will be saved as O2045.NC):
-     - ⚠ T05 not found in machine
-     - ℹ T02 has different length
-5. User confirms upload to selected machines
-6. Backend (for each confirmed machine):
-   - FTP upload to CNC at machine.ip as O####.NC (e.g., O2045.NC)
-   - Create version record in DB (friendly name + O-number mapping)
-   - Create machine_program_deployment record (tracks O-number per machine)
-   - Update O-number allocation table
-   - Log transaction
-7. User sees program in UI with friendly name, O-number shown as metadata
-```
-
-### Historical Query Flow (Single or Multi-Machine)
-```
-1. User selects date range and machine(s) in UI
-2. Frontend: GET /api/history/runs?start=...&end=...&machines=1,2,3
-3. Backend:
-   - Query TimescaleDB with time bucket aggregation
-   - Filter by machine_id(s)
-   - Calculate per-machine and aggregate statistics
-   - Return JSON with breakdown
-4. Frontend:
-   - Render chart with Chart.js (multi-series for multiple machines)
-   - Display summary statistics
-   - Show comparison table if multiple machines selected
-```
-
----
-
-## Configuration & Deployment
-
-### Environment Variables
-```bash
-# Database
-POSTGRES_HOST=postgres
-POSTGRES_DB=shatter
-POSTGRES_USER=cnc_user
-POSTGRES_PASSWORD=<secure_password>
-
-# Backend
-BACKEND_PORT=8000
-LOG_LEVEL=INFO
-DEFAULT_POLL_INTERVAL=5  # seconds (can be overridden per machine)
-
-# Frontend
-REACT_APP_API_URL=http://localhost:8000
-
-# Note: Machine configurations (IP, credentials, etc.) are stored
-# in the database and managed via web UI, not in environment variables
-```
-
-### Quick Start (Target User Experience)
-```bash
-git clone https://github.com/user/shatter
-cd shatter
-cp .env.example .env
-# Edit .env with database password (optional, has default)
-docker-compose up -d
-# Open http://localhost:3000
-# Use web UI to add your CNC machines
-```
-
----
-
-## API Design (Draft)
-
-### REST Endpoints
-
-**Machine Management:**
-- `GET /api/machines` - List all configured machines
-- `GET /api/machines/:id` - Get machine details
-- `POST /api/machines` - Add new machine
-- `PUT /api/machines/:id` - Update machine configuration
-- `DELETE /api/machines/:id` - Remove machine
-- `POST /api/machines/:id/test` - Test connection to machine
-- `GET /api/machines/overview` - Overview status of all machines
-
-**Machine Status (per machine):**
-- `GET /api/machines/:id/status` - Current status, program, cycle time
-- `GET /api/machines/:id/counters` - Workpiece counters
-- `GET /api/machines/:id/alarms` - Current alarms
-- `GET /api/machines/:id/tools` - Tool table
-- `GET /api/machines/:id/position` - Current X/Y/Z position
-
-**Historical Data:**
-- `GET /api/history/runs?start=<iso8601>&end=<iso8601>&machines=1,2,3` - Production runs
-- `GET /api/history/alarms?start=<iso8601>&end=<iso8601>&machines=1,2,3` - Alarm history
-- `GET /api/history/stats?machines=1,2,3` - Summary statistics
-- `GET /api/history/compare?machines=1,2,3&metric=cycle_time` - Cross-machine comparison
-
-**File Management:**
-- `GET /api/machines/:id/programs` - List NC programs on specific machine
-- `GET /api/machines/:id/programs/:name` - Download program from machine
-- `POST /api/machines/:id/programs` - Upload program to specific machine (multipart)
-- `POST /api/programs/deploy` - Deploy program to multiple machines (multipart)
-- `DELETE /api/machines/:id/programs/:name` - Delete program from machine
-- `POST /api/programs/validate` - Validate program against machine(s)
-
-**Version Control:**
-- `GET /api/programs/:name/versions` - Version history
-- `GET /api/programs/:name/versions/:id` - Specific version
-- `GET /api/programs/:name/diff/:v1/:v2` - Diff between versions
-- `POST /api/programs/:name/rollback/:version` - Rollback to version
-- `GET /api/programs/:name/deployments` - See which machines have which versions
-
-**WebSocket:**
-- `WS /api/ws` - Real-time updates stream (all machines)
-
----
-
-## Database Schema (Draft)
-
-```sql
--- Machines registry
-CREATE TABLE machines (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    model VARCHAR(100),  -- e.g., "Brother CNC"
-    ip_address VARCHAR(45) NOT NULL,  -- IPv4 or IPv6
-    ftp_port INT DEFAULT 21,
-    http_port INT DEFAULT 80,
-    ftp_username VARCHAR(255) DEFAULT 'anonymous',
-    ftp_password VARCHAR(255) DEFAULT 'anonymous',
-    location VARCHAR(255),  -- e.g., "Production Floor A"
-    tags JSONB,  -- ["production", "floor-a"]
-    poll_interval_seconds INT DEFAULT 5,
-    enabled BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    last_seen_at TIMESTAMPTZ,
-    connection_status VARCHAR(20) DEFAULT 'unknown'  -- online, offline, unknown
-);
-
--- Machine status snapshots
-CREATE TABLE machine_status (
-    id SERIAL PRIMARY KEY,
-    machine_id INT REFERENCES machines(id) ON DELETE CASCADE,
-    timestamp TIMESTAMPTZ NOT NULL,
-    status VARCHAR(50),  -- running, stopped, error, alarm
-    program_name VARCHAR(255),
-    cycle_time_seconds INT,
-    cutting_time_seconds INT,
-    power_on_hours DECIMAL
-);
-SELECT create_hypertable('machine_status', 'timestamp');
-CREATE INDEX idx_machine_status_machine_id ON machine_status(machine_id, timestamp DESC);
-
--- Alarm events
-CREATE TABLE alarms (
-    id SERIAL PRIMARY KEY,
-    machine_id INT REFERENCES machines(id) ON DELETE CASCADE,
-    timestamp TIMESTAMPTZ NOT NULL,
-    alarm_code VARCHAR(50),
-    alarm_message TEXT,
-    severity VARCHAR(20),
-    cleared_at TIMESTAMPTZ
-);
-SELECT create_hypertable('alarms', 'timestamp');
-CREATE INDEX idx_alarms_machine_id ON alarms(machine_id, timestamp DESC);
-
--- Production runs
-CREATE TABLE production_runs (
-    id SERIAL PRIMARY KEY,
-    machine_id INT REFERENCES machines(id) ON DELETE CASCADE,
-    program_name VARCHAR(255) NOT NULL,
-    started_at TIMESTAMPTZ NOT NULL,
-    completed_at TIMESTAMPTZ,
-    cycle_time_seconds INT,
-    parts_count INT,
-    status VARCHAR(50)  -- completed, aborted, error
-);
-SELECT create_hypertable('production_runs', 'started_at');
-CREATE INDEX idx_production_runs_machine_id ON production_runs(machine_id, started_at DESC);
-
--- NC Programs (metadata)
-CREATE TABLE programs (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) UNIQUE NOT NULL,  -- Friendly name (e.g., "bracket_v2")
-    o_number INT UNIQUE,  -- O-number (2000-3999), assigned from pool
-    current_version_id INT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- O-number allocation pool (O2000-O3999 range)
-CREATE TABLE o_number_allocations (
-    o_number INT PRIMARY KEY CHECK (o_number >= 2000 AND o_number <= 3999),
-    program_id INT REFERENCES programs(id) ON DELETE SET NULL,
-    allocated_at TIMESTAMPTZ,
-    last_used_at TIMESTAMPTZ,
-    is_available BOOLEAN DEFAULT TRUE
-);
-
--- Pre-populate O-number pool (2000 numbers available)
-INSERT INTO o_number_allocations (o_number)
-SELECT generate_series(2000, 3999);
-
--- Program versions
-CREATE TABLE program_versions (
-    id SERIAL PRIMARY KEY,
-    program_id INT REFERENCES programs(id),
-    version_number INT NOT NULL,
-    content TEXT NOT NULL,
-    content_hash CHAR(64) NOT NULL,  -- SHA256
-    file_size INT,
-    line_count INT,
-    tool_list JSONB,  -- [{"tool": "T01", "name": "1/4 END MILL", ...}]
-    uploaded_at TIMESTAMPTZ DEFAULT NOW(),
-    uploaded_by VARCHAR(255),
-    notes TEXT,
-    UNIQUE(program_id, version_number)
-);
-
--- Machine program deployments (tracks which version is on which machine)
-CREATE TABLE machine_program_deployments (
-    id SERIAL PRIMARY KEY,
-    machine_id INT REFERENCES machines(id) ON DELETE CASCADE,
-    program_id INT REFERENCES programs(id) ON DELETE CASCADE,
-    version_id INT REFERENCES program_versions(id) ON DELETE CASCADE,
-    deployed_at TIMESTAMPTZ DEFAULT NOW(),
-    deployed_by VARCHAR(255),
-    status VARCHAR(20) DEFAULT 'active',  -- active, archived
-    UNIQUE(machine_id, program_id, status)  -- Only one active deployment per machine/program
-);
-CREATE INDEX idx_deployments_machine_id ON machine_program_deployments(machine_id);
-CREATE INDEX idx_deployments_program_id ON machine_program_deployments(program_id);
-
--- Tool table snapshots
-CREATE TABLE tool_snapshots (
-    id SERIAL PRIMARY KEY,
-    machine_id INT REFERENCES machines(id) ON DELETE CASCADE,
-    timestamp TIMESTAMPTZ NOT NULL,
-    tool_data JSONB NOT NULL  -- Full tool table from /tool endpoint
-);
-SELECT create_hypertable('tool_snapshots', 'timestamp');
-CREATE INDEX idx_tool_snapshots_machine_id ON tool_snapshots(machine_id, timestamp DESC);
-
--- Workpiece counter history
-CREATE TABLE counter_history (
-    id SERIAL PRIMARY KEY,
-    machine_id INT REFERENCES machines(id) ON DELETE CASCADE,
-    timestamp TIMESTAMPTZ NOT NULL,
-    counter_1 INT,
-    counter_2 INT,
-    counter_3 INT,
-    counter_4 INT
-);
-SELECT create_hypertable('counter_history', 'timestamp');
-CREATE INDEX idx_counter_history_machine_id ON counter_history(machine_id, timestamp DESC);
-```
-
----
-
-## Security Considerations
-
-**Network Isolation:**
-- Dashboard typically runs on isolated shop floor network
-- No internet access required
-- Consider firewall rules between dashboard and CNC
-
-**Authentication (Optional):**
-- Basic auth for multi-user environments
-- Role-based access (operator vs. programmer)
-- Per-machine access control (restrict users to specific machines)
-- Audit log for file uploads and machine configuration changes
-
-**Data Validation:**
-- Sanitize G-code uploads (prevent malicious code injection)
-- File size limits
-- Allowed file extensions (.NC, .nc only)
-
-**Backup:**
-- Regular PostgreSQL backups
-- Export NC program versions to external storage
-
----
-
-## Open Questions / Future Considerations
-
-1. **Mobile responsive:** Tablet/phone access for operators?
-2. **Notifications:** Email/Slack alerts for alarms (per machine or fleet-wide)?
-3. **Machine learning:** Predict cycle time, detect anomalies across fleet?
-4. **3D Smoothing Viewer:** The CNC has a hidden 3D viewer endpoint - integrate?
-5. **MTConnect/FOCAS:** If available, use more robust protocols?
-6. **Edge cases:** Handle CNC reboot, network loss gracefully
-7. **Performance:** How much historical data to keep? Aggregation strategy for large fleets?
-8. **Scalability:** How many machines can one instance handle? Need multiple backend workers?
-9. **Cross-machine program sync:** Automatically keep certain programs in sync across machines?
-10. **Machine groups/hierarchies:** Department → Cell → Machine organization?
-
----
-
-## Resources & References
-
-- **CNC API Documentation:** `webserver_endpoints.md`
-- **Manual Context:** `manual_connectivity_context.json`
-- **HTTP Endpoint Testing:** See Python socket examples in exploration scripts
-
----
-
-## License
-TBD (Likely MIT or Apache 2.0 for open source)
-
----
-
-*This plan is a living document and will evolve as the project develops.*
+## Overall Status
+Machine card editing functionality is working well:
+- ✅ Add new machines
+- ✅ Edit existing machines (in-place)
+- ✅ Delete machines with confirmation modal
+- ✅ Test connections (HTTP/FTP)
+- ✅ Upload & validate G-code files
+- ⚠️ Machine name color indicator (logic correct, display issue TBD)
