@@ -67,7 +67,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
     ftp_password: machine.ftp_password || '',
     ftp_port: machine.ftp_port || 21,
     http_port: machine.http_port || 80,
-    path: machine.path || '/program',
+    path: machine.path !== undefined && machine.path !== null ? machine.path : '/program',
     poll_interval_seconds: machine.poll_interval_seconds || 5,
     enabled: machine.enabled !== false,
   });
@@ -89,7 +89,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
             ftp_password: fullMachineData.ftp_password || '',
             ftp_port: fullMachineData.ftp_port || 21,
             http_port: fullMachineData.http_port || 80,
-            path: fullMachineData.path || '/program',
+            path: fullMachineData.path !== undefined && fullMachineData.path !== null ? fullMachineData.path : '/program',
             poll_interval_seconds: fullMachineData.poll_interval_seconds || 5,
             enabled: fullMachineData.enabled !== false,
           });
@@ -150,7 +150,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
       ftp_password: machine.ftp_password || '',
       ftp_port: machine.ftp_port || 21,
       http_port: machine.http_port || 80,
-      path: machine.path || '/program',
+      path: machine.path !== undefined && machine.path !== null ? machine.path : '/program',
       poll_interval_seconds: machine.poll_interval_seconds || 5,
       enabled: machine.enabled !== false,
     });
