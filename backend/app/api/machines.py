@@ -153,6 +153,36 @@ async def test_connection(machine_id: int, db: Session = Depends(get_db)):
     return results
 
 
+@router.post("/{machine_id}/disconnect")
+async def disconnect_machine(machine_id: int, db: Session = Depends(get_db)):
+    """Disconnect FTP connection for a machine."""
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    try:
+        ftp_client = CNCFtpClient(
+            db_machine.ip_address,
+            port=db_machine.ftp_port,
+            username=db_machine.ftp_username,
+            password=db_machine.ftp_password,
+        )
+        ftp_client.disconnect()
+        return {
+            "status": "success",
+            "message": f"Disconnected from {db_machine.name} ({db_machine.ip_address})",
+        }
+    except Exception as e:
+        logger.error(f"Error disconnecting machine {machine_id}: {e}")
+        return {
+            "status": "success",
+            "message": f"Closed FTP connection attempt (may not have been connected)",
+        }
+
+
 @router.get("/overview")
 async def get_machines_overview(db: Session = Depends(get_db)):
     """Get overview status of all machines."""

@@ -183,9 +183,15 @@ class CNCFtpClient:
                             # Can't get modification date
                             pass
 
+                    # Construct full path: append filename to current path
+                    if path == "/":
+                        full_path = f"/{name}"
+                    else:
+                        full_path = f"{path}/{name}"
+
                     files.append({
                         "name": name,
-                        "path": f"/{name}",
+                        "path": full_path,
                         "is_directory": is_directory,
                         "size": size,
                         "modified": modified,
