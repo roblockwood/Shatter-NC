@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StatusIndicator } from './ui';
 import { ToolListModal } from './ToolListModal';
 import { ValidationResultModal } from './ValidationResultModal';
 import './MachineCard.css';
@@ -9,6 +8,13 @@ interface Tool {
   tool_name?: string;
   diameter?: number;
   length?: number;
+}
+
+interface Alarm {
+  code: string;
+  message: string;
+  severity?: string;
+  level_class?: string;
 }
 
 interface MachineStatus {
@@ -21,7 +27,7 @@ interface MachineStatus {
   counters?: Array<{ counter_number: number; count: number }>;
   tools?: Tool[];
   current_tool?: number;
-  alarms?: Array<{ code: string; message: string }>;
+  alarms?: Alarm[];
   error?: string;
   poll_timestamp: string;
   ip_address?: string;
@@ -65,6 +71,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
     poll_interval_seconds: machine.poll_interval_seconds || 5,
     enabled: machine.enabled !== false,
   });
+  const [editMachineName, setEditMachineName] = useState(machine.machine_name || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch full machine configuration data on mount
@@ -75,6 +82,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
         if (response.ok) {
           const fullMachineData = await response.json();
           // Update form data with fetched configuration
+          setEditMachineName(fullMachineData.name || '');
           setEditFormData({
             ip_address: fullMachineData.ip_address || '',
             ftp_username: fullMachineData.ftp_username || '',
@@ -94,7 +102,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
     fetchMachineConfig();
   }, [machine.machine_id]);
 
-  const editFormValid = editFormData.ip_address && editFormData.ftp_username && editFormData.ftp_password;
+  const editFormValid = editMachineName && editFormData.ip_address && editFormData.ftp_username && editFormData.ftp_password;
 
   const handleEditSave = async () => {
     if (!editFormValid) {
@@ -135,6 +143,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
     setEditError(null);
     setEditSuccess(false);
     setEditTestResult(null);
+    setEditMachineName(machine.machine_name || '');
     setEditFormData({
       ip_address: machine.ip_address || '',
       ftp_username: machine.ftp_username || '',
@@ -237,8 +246,38 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
   return (
     <div className="machine-card">
       <div className="machine-card-header">
-        <span className={`machine-name ${!machine.is_online ? 'text-error' : (machine.status?.includes('Running') ? 'text-glow' : 'text-muted')}`}>{machine.machine_name}</span>
+        {isEditing ? (
+          <input
+            type="text"
+            value={editMachineName}
+            onChange={(e) => setEditMachineName(e.target.value)}
+            className="machine-name-edit"
+            disabled={isEditSaving}
+          />
+        ) : (
+          <span className={`machine-name ${!machine.is_online ? 'text-error' : (machine.status?.includes('Running') ? 'text-glow' : 'text-muted')}`}>{machine.machine_name}</span>
+        )}
         <div className="machine-header-actions">
+          {!isEditing && machine.alarms && machine.alarms.length > 0 && (
+            <div className={`alarm-indicator has-alarms ${!machine.is_online ? 'blink' : ''}`}>
+              <div className="alarm-label">
+                {machine.alarms.length} ALARMS
+              </div>
+              <div className="alarm-tooltip">
+                <div className="alarm-tooltip-title">
+                  {machine.alarms.length} ALARM{machine.alarms.length > 1 ? 'S' : ''}
+                </div>
+                <div className="alarm-tooltip-list">
+                  {machine.alarms.map((alarm, idx) => (
+                    <div key={idx} className="alarm-tooltip-item">
+                      <span className="alarm-tooltip-code">{alarm.code}</span>
+                      <span className="alarm-tooltip-message">{alarm.message}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
           {editMode && !isEditing && (
             <>
               <button
@@ -256,13 +295,6 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
                 [X]
               </button>
             </>
-          )}
-          {!isEditing && (
-            <StatusIndicator
-              status={getStatusType()}
-              label=""
-              blink={!machine.is_online}
-            />
           )}
         </div>
       </div>
@@ -440,24 +472,6 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
               <span className="label">TOOL:</span>
               <span className="value text-info">T{String(machine.current_tool).padStart(2, '0')}</span>
             </div>
-          )}
-
-          {machine.alarms && machine.alarms.length > 0 && (
-            <>
-              <div className="machine-card-divider-thin">
-                {'─'.repeat(32)}
-              </div>
-              <div className="machine-alarms">
-                <div className="alarm-header text-error blink">
-                  ⚠ {machine.alarms.length} ALARM{machine.alarms.length > 1 ? 'S' : ''}
-                </div>
-                {machine.alarms.slice(0, 2).map((alarm, idx) => (
-                  <div key={idx} className="alarm-item text-warning">
-                    {alarm.code}: {alarm.message.substring(0, 20)}
-                  </div>
-                ))}
-              </div>
-            </>
           )}
 
           {machine.tools && machine.tools.length > 0 && (
