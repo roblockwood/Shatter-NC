@@ -17,7 +17,7 @@ class Machine(Base):
     http_port = Column(Integer, default=80)
     ftp_username = Column(String(255), default="anonymous")
     ftp_password = Column(String(255), default="anonymous")
-    location = Column(String(255), nullable=True)
+    path = Column(String(255), default="/program")
     tags = Column(JSON, nullable=True)  # ["production", "floor-a"]
     poll_interval_seconds = Column(Integer, default=5)
     enabled = Column(Boolean, default=True)
