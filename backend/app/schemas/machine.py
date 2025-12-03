@@ -49,7 +49,6 @@ class MachineResponse(MachineBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     last_seen_at: Optional[datetime] = None
-    connection_status: str
 
     class Config:
         from_attributes = True

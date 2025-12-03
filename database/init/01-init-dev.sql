@@ -17,13 +17,11 @@ CREATE TABLE IF NOT EXISTS machines (
     enabled BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ,
-    last_seen_at TIMESTAMPTZ,
-    connection_status VARCHAR(20) DEFAULT 'unknown'
+    last_seen_at TIMESTAMPTZ
 );
 
 -- Create index for faster queries
 CREATE INDEX IF NOT EXISTS idx_machines_enabled ON machines(enabled);
-CREATE INDEX IF NOT EXISTS idx_machines_connection_status ON machines(connection_status);
 
 -- Grant permissions
 GRANT ALL PRIVILEGES ON TABLE machines TO shatter_user;

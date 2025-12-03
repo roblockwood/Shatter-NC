@@ -26,16 +26,16 @@
 }
 
 .machine-name.text-glow {
-  color: var(--color-success);
+  color: #00ff00;
   text-shadow: var(--glow);
 }
 
 .machine-name.text-muted {
-  color: var(--color-text-muted);
+  color: #00ff00;
 }
 
 .machine-name.text-error {
-  color: var(--color-error);
+  color: #bbbbbb;
 }
 
 .machine-header-actions {

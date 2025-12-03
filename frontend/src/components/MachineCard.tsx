@@ -155,6 +155,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
 
     setIsEditTesting(true);
     setEditError(null);
+    setEditTestResult(null);
     try {
       const response = await fetch(`http://localhost:8000/api/machines/${machine.machine_id}/test`, {
         method: 'POST',
@@ -162,7 +163,21 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
 
       if (response.ok) {
         const result = await response.json();
-        setEditTestResult(result);
+
+        // Check if connection actually succeeded
+        if (result.overall_status === 'online') {
+          setEditTestResult(result);
+        } else {
+          // Build error message from failed services
+          const errors = [];
+          if (!result.http?.success) {
+            errors.push(`HTTP: ${result.http?.error || 'Connection failed'}`);
+          }
+          if (!result.ftp?.success) {
+            errors.push(`FTP: ${result.ftp?.error || 'Connection failed'}`);
+          }
+          setEditError(`Connection test failed: ${errors.join(', ')}`);
+        }
       } else {
         const errorData = await response.json().catch(() => ({}));
         setEditError(errorData.detail || 'Connection test failed');

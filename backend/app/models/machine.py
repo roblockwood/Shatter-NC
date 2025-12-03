@@ -24,9 +24,6 @@ class Machine(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
-    connection_status = Column(
-        String(20), default="unknown"
-    )  # online, offline, unknown
 
     def __repr__(self):
         return f"<Machine(id={self.id}, name='{self.name}', ip='{self.ip_address}')>"

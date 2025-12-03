@@ -27,13 +27,19 @@ export const Dashboard = () => {
   const confirmDelete = async () => {
     if (!deletingMachine) return;
     try {
-      const response = await fetch(`${API_BASE}/machines/${deletingMachine.machine_id}`, {
+      const machineId = deletingMachine.machine_id || deletingMachine.id;
+      console.log('Deleting machine:', { deletingMachine, machineId });
+      const response = await fetch(`${API_BASE}/machines/${machineId}`, {
         method: 'DELETE'
       });
       if (response.ok) {
         setShowDeleteConfirm(false);
         setDeletingMachine(null);
         // Machine will be removed from grid when WebSocket updates
+      } else {
+        const error = await response.json().catch(() => ({}));
+        console.error('Delete error response:', error);
+        alert(`Failed to delete machine: ${error.detail || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Delete failed:', error);

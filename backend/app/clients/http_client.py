@@ -241,15 +241,38 @@ class CNCHttpClient:
         """Parse alarm log HTML response."""
         data = {"alarms": []}
 
-        # Extract alarm entries (simplified - actual parsing will depend on HTML structure)
-        # Look for alarm codes and messages
-        alarm_pattern = r"(\d{4})\s+([^<]+)"
-        matches = re.finditer(alarm_pattern, html)
+        # Map alarm level classes to severity levels
+        level_map = {
+            "alarm_level_1": "info",
+            "alarm_level_2": "warning",
+            "alarm_level_3": "error",
+            "alarm_level_4": "critical",
+        }
+
+        # Extract alarm rows from the table
+        # Each alarm is in a <tr> with a class like alarm_level_X
+        # Pattern: <tr bgcolor="#000000" class="alarm_level_X">...<td>CODE</td>...<td>MESSAGE</td>...<td>PROGRAM</td>...<td>BLOCK</td>
+        row_pattern = r'<tr bgcolor="#000000" class="(alarm_level_\d)">.*?<td[^>]*>\s*([A-Za-z0-9\s]+)</td>.*?<td[^>]*>([^<]+)</td>.*?<td[^>]*>([^<]*)</td>.*?<td[^>]*>([^<]*)</td>.*?</tr>'
+        matches = re.finditer(row_pattern, html, re.DOTALL)
 
         for match in matches:
+            level_class = match.group(1)
+            code = match.group(2).strip()
+            message = match.group(3).strip()
+            program = match.group(4).strip()
+            block_no = match.group(5).strip()
+
+            # Skip empty rows (those that have &nbsp; or are blank)
+            if not code or code == "&nbsp;" or code.isspace():
+                continue
+
             alarm = {
-                "code": match.group(1),
-                "message": match.group(2).strip(),
+                "code": code,
+                "message": message,
+                "program": program if program and program != "&nbsp;" else None,
+                "block_no": block_no if block_no and block_no != "&nbsp;" else None,
+                "severity": level_map.get(level_class, "unknown"),
+                "level_class": level_class,
             }
             data["alarms"].append(alarm)
 
@@ -328,28 +351,32 @@ class CNCHttpClient:
 
         Returns:
             Combined status data
+
+        Raises:
+            ConnectionError: If unable to retrieve running log (critical data)
         """
+        # Get running log data (critical - if this fails, machine is unreachable)
+        running_data = self.get_running_log()
+        if "error" in running_data:
+            raise ConnectionError(f"Failed to get running log: {running_data['error']}")
+
         overview = {
             "ip_address": self.ip_address,
             "timestamp": datetime.now().isoformat(),
         }
+        overview.update(running_data)
 
-        # Get running log data
-        running_data = self.get_running_log()
-        if "error" not in running_data:
-            overview.update(running_data)
-
-        # Get counter data
+        # Get counter data (optional - don't fail if this fails)
         counter_data = self.get_work_counter()
         if "error" not in counter_data:
             overview["counters"] = counter_data.get("counters", [])
 
-        # Get alarm data
+        # Get alarm data (optional - don't fail if this fails)
         alarm_data = self.get_alarm_log()
         if "error" not in alarm_data:
             overview["alarms"] = alarm_data.get("alarms", [])
 
-        # Get tool data
+        # Get tool data (optional - don't fail if this fails)
         tool_data = self.get_tool_data()
         if "error" not in tool_data:
             overview["tools"] = tool_data.get("tools", [])
