@@ -166,7 +166,6 @@ async def get_machines_overview(db: Session = Depends(get_db)):
             {
                 "id": machine.id,
                 "name": machine.name,
-                "connection_status": machine.connection_status,
                 "last_seen_at": machine.last_seen_at,
                 # "current_program": None,  # TODO: fetch from polling service
                 # "current_status": None,   # TODO: fetch from polling service

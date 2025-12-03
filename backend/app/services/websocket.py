@@ -29,6 +29,14 @@ class WebSocketManager:
             try:
                 # Get all machines from database
                 all_machines = db.query(Machine).all()
+
+                # Clean up cache for deleted machines
+                all_machine_ids = {m.id for m in all_machines}
+                deleted_ids = [mid for mid in self.last_status.keys() if mid not in all_machine_ids]
+                for mid in deleted_ids:
+                    del self.last_status[mid]
+                    logger.info(f"Cleaned up cache for deleted machine {mid}")
+
                 machines_data = []
 
                 for machine in all_machines:
