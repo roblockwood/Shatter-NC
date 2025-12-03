@@ -38,7 +38,8 @@ export const FileBrowser: React.FC = () => {
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentPath, setCurrentPath] = useState<string>('/');
+  const [currentPath, setCurrentPath] = useState<string | null>(null);
+  const [pathLoading, setPathLoading] = useState(false);
   const [previewLines, setPreviewLines] = useState<string[]>([]);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewModalContent, setViewModalContent] = useState<ViewData | null>(null);
@@ -49,12 +50,13 @@ export const FileBrowser: React.FC = () => {
   const [highlightedFile, setHighlightedFile] = useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Fetch machines on mount
+  // Fetch machines on mount and auto-select first one
   useEffect(() => {
     fetch('http://localhost:8000/api/machines')
       .then(res => res.json())
       .then(data => {
         setMachines(data);
+        // Auto-select first machine, path effect will handle loading the correct path
         if (data.length > 0) {
           setSelectedMachineId(data[0].id);
         }
@@ -62,9 +64,43 @@ export const FileBrowser: React.FC = () => {
       .catch(err => console.error('Error fetching machines:', err));
   }, []);
 
-  // Fetch programs when machine or path changes
+  // Set path when machine changes - fetch fresh machine data to ensure we have latest config
   useEffect(() => {
     if (selectedMachineId === null) return;
+
+    // Immediately clear path and set loading before any async operations
+    setPathLoading(true);
+    setCurrentPath(null);
+
+    // Fetch fresh machine data to ensure we have the latest path configuration
+    const controller = new AbortController();
+    fetch(`http://localhost:8000/api/machines/${selectedMachineId}`, {
+      signal: controller.signal,
+    })
+      .then(res => res.json())
+      .then(machineData => {
+        const newPath = machineData.path || '/';
+        console.log(`[PATH-EFFECT] Machine ${selectedMachineId} fetched. path: '${newPath}'`);
+        setCurrentPath(newPath);
+        setPathLoading(false);
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          console.error(`[PATH-EFFECT] Error fetching machine ${selectedMachineId}:`, err);
+          setCurrentPath('/');
+          setPathLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [selectedMachineId]);
+
+  // Fetch programs when machine or path changes
+  useEffect(() => {
+    // Don't fetch if path is null OR if we're still loading the path
+    if (selectedMachineId === null || currentPath === null || pathLoading) {
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -72,7 +108,12 @@ export const FileBrowser: React.FC = () => {
     setSelectedProgram(null);
 
     const url = `http://localhost:8000/api/machines/${selectedMachineId}/programs?path=${encodeURIComponent(currentPath)}`;
-    fetch(url)
+
+    const controller = new AbortController();
+    const fetchMachineId = selectedMachineId;
+    const fetchPath = currentPath;
+
+    fetch(url, { signal: controller.signal })
       .then(res => {
         if (!res.ok) {
           return res.json().then(data => {
@@ -84,30 +125,30 @@ export const FileBrowser: React.FC = () => {
         return res.json();
       })
       .then(data => {
-        console.log('Programs response:', data);
-        setPrograms(data.programs || []);
-        setLoading(false);
+        // Only update if this fetch is still relevant (machine and path haven't changed)
+        if (fetchMachineId === selectedMachineId && fetchPath === currentPath) {
+          console.log(`[FETCH] Received ${data.programs?.length || 0} programs`);
+          setPrograms(data.programs || []);
+          setLoading(false);
+        }
       })
       .catch(err => {
-        console.error('Error fetching programs:', err);
-        const errorMsg = err.message || 'Unknown error';
-        if (errorMsg.includes('timeout')) {
-          setError('FTP connection timeout - check machine network connectivity');
-        } else if (errorMsg.includes('ConnectionReset') || errorMsg === '') {
-          setError('FTP server connection refused - verify machine FTP service is running');
-        } else {
-          setError(`Error: ${errorMsg}`);
+        if (err.name !== 'AbortError') {
+          console.error('Error fetching programs:', err);
+          const errorMsg = err.message || 'Unknown error';
+          if (errorMsg.includes('timeout')) {
+            setError('FTP connection timeout - check machine network connectivity');
+          } else if (errorMsg.includes('ConnectionReset') || errorMsg === '') {
+            setError('FTP server connection refused - verify machine FTP service is running');
+          } else {
+            setError(`Error: ${errorMsg}`);
+          }
+          setLoading(false);
         }
-        setLoading(false);
       });
-  }, [selectedMachineId, currentPath]);
 
-  // Set path when machine changes
-  useEffect(() => {
-    if (selectedMachineId === null) return;
-    const machine = machines.find(m => m.id === selectedMachineId);
-    setCurrentPath(machine?.path || '/');
-  }, [selectedMachineId, machines]);
+    return () => controller.abort();
+  }, [selectedMachineId, currentPath, pathLoading]);
 
   // Fetch preview and metadata when a .nc file is selected
   useEffect(() => {
@@ -185,11 +226,14 @@ export const FileBrowser: React.FC = () => {
       // Navigate into directory
       if (program.name === '..') {
         // Go up one level
-        const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
+        const parentPath = (currentPath || '/').split('/').slice(0, -1).join('/') || '/';
+        console.log(`[NAVIGATE] Going up: '${currentPath}' -> '${parentPath}'`);
         setCurrentPath(parentPath);
       } else {
         // Navigate into subdirectory
-        const newPath = currentPath === '/' ? `/${program.name}` : `${currentPath}/${program.name}`;
+        const basePath = currentPath || '/';
+        const newPath = basePath === '/' ? `/${program.name}` : `${basePath}/${program.name}`;
+        console.log(`[NAVIGATE] Going down: '${basePath}' + '${program.name}' -> '${newPath}'`);
         setCurrentPath(newPath);
       }
     } else {
@@ -199,7 +243,7 @@ export const FileBrowser: React.FC = () => {
   };
 
   const handleDownload = async (program: Program) => {
-    if (!selectedMachineId) return;
+    if (!selectedMachineId || !currentPath) return;
 
     try {
       const filePath = `${currentPath}${currentPath === '/' ? '' : '/'}${program.name}`;
@@ -233,7 +277,7 @@ export const FileBrowser: React.FC = () => {
   };
 
   const fetchFilePreview = async (program: Program) => {
-    if (!selectedMachineId) return;
+    if (!selectedMachineId || !currentPath) return;
 
     try {
       const filePath = `${currentPath}${currentPath === '/' ? '' : '/'}${program.name}`;
@@ -259,7 +303,7 @@ export const FileBrowser: React.FC = () => {
   };
 
   const fetchFileMetadata = async (program: Program) => {
-    if (!selectedMachineId) return;
+    if (!selectedMachineId || !currentPath) return;
 
     setMetadataLoading(true);
     try {
@@ -287,7 +331,7 @@ export const FileBrowser: React.FC = () => {
   };
 
   const handleViewCode = async (program: Program) => {
-    if (!selectedMachineId) return;
+    if (!selectedMachineId || !currentPath) return;
 
     setViewModalLoading(true);
     try {
@@ -322,7 +366,7 @@ export const FileBrowser: React.FC = () => {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedMachineId) return;
+    if (!file || !selectedMachineId || !currentPath) return;
 
     const uploadPath = currentPath === '/' ? `/${file.name}` : `${currentPath}/${file.name}`;
     const url = `http://localhost:8000/api/machines/${selectedMachineId}/upload?file_path=${encodeURIComponent(uploadPath)}`;
