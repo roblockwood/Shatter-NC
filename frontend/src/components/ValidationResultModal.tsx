@@ -19,9 +19,33 @@ interface ToolValidation {
   warnings: string[];
 }
 
+interface WCSValidation {
+  valid: boolean;
+  work_offset: number;
+  expected: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  actual: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  difference: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  tolerance: number;
+  within_tolerance: boolean;
+  warnings: string[];
+}
+
 interface ValidationResult {
   valid: boolean;
   tools: { [key: number]: ToolValidation };
+  wcs_offset: WCSValidation | null;
   warnings: string[];
   errors: string[];
   metadata: {
@@ -52,6 +76,14 @@ export const ValidationResultModal: React.FC<ValidationResultModalProps> = ({
     return value > 0 ? value.toFixed(4) : '────';
   };
 
+  const formatCoordinate = (value: number) => {
+    return value.toFixed(4);
+  };
+
+  const formatTolerance = (value: number) => {
+    return `±${value.toFixed(4)}`;
+  };
+
   const formatRuntime = (seconds: number | undefined) => {
     if (!seconds) return '──:──:──';
     const hrs = Math.floor(seconds / 3600);
@@ -77,8 +109,34 @@ export const ValidationResultModal: React.FC<ValidationResultModalProps> = ({
       <div className="validation-result">
         {/* Overall Status */}
         <div className={`validation-status ${result.valid ? 'text-success' : 'text-error'}`}>
-          {result.valid ? '✓ VALIDATION PASSED' : '✕ VALIDATION FAILED'}
+          <div className="status-text">
+            {result.valid ? '✓ VALIDATION PASSED' : '✕ VALIDATION FAILED'}
+          </div>
         </div>
+
+        {/* Errors - Display immediately after status */}
+        {(result.errors.length > 0 || (result.wcs_offset && !result.wcs_offset.within_tolerance)) && (
+          <div className="validation-section errors-section">
+            <div className="section-header text-error">ERRORS</div>
+            {result.errors.filter(error => !error.includes('WCS')).map((error, idx) => (
+              <div key={idx} className="error-item text-error">
+                ✕ {error}
+              </div>
+            ))}
+            {result.wcs_offset && !result.wcs_offset.within_tolerance && (
+              <>
+                <div className="error-item text-error">
+                  ✕ WCS OFFSET G{result.wcs_offset.work_offset} OUT OF TOLERANCE
+                </div>
+                {result.wcs_offset.warnings.map((warning, idx) => (
+                  <div key={`wcs-${idx}`} className="error-item text-error wcs-error-detail">
+                    {warning}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Metadata */}
         <div className="validation-section">
@@ -144,14 +202,19 @@ export const ValidationResultModal: React.FC<ValidationResultModalProps> = ({
                         <span className="text-error">NOT LOADED</span>
                       )}
                     </td>
-                    <td className={`validation-result ${getStatusClass(tool)}`}>
+                    <td className="validation-result">
                       {tool.available ? (
                         <>
-                          {tool.diameter_match ? '✓' : '✕'} DIA {' '}
-                          {tool.length_sufficient ? '✓' : '✕'} LEN
+                          <span className={tool.diameter_match ? 'text-success' : 'text-error'}>
+                            {tool.diameter_match ? '✓' : '✕'} DIA
+                          </span>
+                          {' '}
+                          <span className={tool.length_sufficient ? 'text-success' : 'text-error'}>
+                            {tool.length_sufficient ? '✓' : '✕'} LEN
+                          </span>
                         </>
                       ) : (
-                        'MISSING'
+                        <span className="text-error">MISSING</span>
                       )}
                     </td>
                   </tr>
@@ -171,27 +234,52 @@ export const ValidationResultModal: React.FC<ValidationResultModalProps> = ({
           </table>
         </div>
 
-        {/* Errors */}
-        {result.errors.length > 0 && (
+        {/* WCS Offset Validation Results */}
+        {result.wcs_offset && (
           <div className="validation-section">
-            <div className="section-header text-error">ERRORS</div>
-            {result.errors.map((error, idx) => (
-              <div key={idx} className="error-item text-error">
-                ✕ {error}
-              </div>
-            ))}
-          </div>
-        )}
+            <div className="section-header text-success">
+              WCS OFFSET VALIDATION (G{result.wcs_offset.work_offset})
+            </div>
+            <table className="validation-table">
+              <thead>
+                <tr className="validation-table-header">
+                  <th>AXIS</th>
+                  <th>EXPECTED</th>
+                  <th>ACTUAL</th>
+                  <th>DIFF</th>
+                  <th>TOLERANCE</th>
+                  <th>STATUS</th>
+                </tr>
+                <tr className="validation-table-divider">
+                  <td colSpan={6}>├{'─'.repeat(80)}┤</td>
+                </tr>
+              </thead>
+              <tbody>
+                {['x', 'y', 'z'].map((axis) => {
+                  const axisUpper = axis.toUpperCase();
+                  const expected = result.wcs_offset!.expected[axis as keyof typeof result.wcs_offset.expected];
+                  const actual = result.wcs_offset!.actual[axis as keyof typeof result.wcs_offset.actual];
+                  const difference = result.wcs_offset!.difference[axis as keyof typeof result.wcs_offset.difference];
+                  const tolerance = result.wcs_offset!.tolerance;
+                  const withinTol = difference <= tolerance;
 
-        {/* Warnings */}
-        {result.warnings.length > 0 && (
-          <div className="validation-section">
-            <div className="section-header text-warning">WARNINGS</div>
-            {result.warnings.map((warning, idx) => (
-              <div key={idx} className="warning-item text-warning">
-                ⚠ {warning}
-              </div>
-            ))}
+                  return (
+                    <tr key={axis} className="validation-table-row">
+                      <td className="axis-label">{axisUpper}</td>
+                      <td className="coordinate-value">{formatCoordinate(expected)}"</td>
+                      <td className="coordinate-value">{formatCoordinate(actual)}"</td>
+                      <td className={`coordinate-value ${withinTol ? 'text-success' : 'text-error'}`}>
+                        {formatCoordinate(difference)}"
+                      </td>
+                      <td className="coordinate-value">{formatTolerance(tolerance)}</td>
+                      <td className={`validation-result ${withinTol ? 'text-success' : 'text-error'}`}>
+                        {withinTol ? '✓ OK' : '✕ OUT'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

@@ -5,14 +5,26 @@
 .validation-status {
   font-size: 1.1rem;
   font-weight: bold;
-  text-align: center;
   padding: 0.75rem;
   margin-bottom: 1rem;
   border: 1px solid currentColor;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.status-text {
+  flex-shrink: 0;
 }
 
 .validation-section {
   margin-bottom: 1.5rem;
+}
+
+.errors-section {
+  margin-bottom: 2rem;
+  margin-top: 0;
 }
 
 .section-header {
@@ -31,7 +43,7 @@
 
 .metadata-row {
   display: flex;
-  justify-content: space-between;
+  gap: 2rem;
   font-family: var(--font-mono);
 }
 
@@ -115,4 +127,24 @@
 .text-muted {
   color: var(--color-text-muted);
   font-size: 0.85rem;
+}
+
+.axis-label {
+  font-weight: bold;
+  text-align: center;
+  width: 2rem;
+  padding: 0.4rem;
+}
+
+.coordinate-value {
+  font-family: var(--font-mono);
+  text-align: left;
+  padding: 0.4rem;
+  border-bottom: 1px solid var(--color-bg-secondary);
+}
+
+.wcs-error-detail {
+  padding: 0.3rem 0.5rem;
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
 }

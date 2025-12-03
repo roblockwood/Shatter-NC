@@ -138,7 +138,7 @@ async def validate_program(
             wcs_validation = _validate_wcs_offset(parsed["wcs_offset"], position_data)
 
             if not wcs_validation.within_tolerance:
-                warnings.append(
+                errors.append(
                     f"WCS G{wcs_validation.work_offset} offset outside tolerance: "
                     f"X={wcs_validation.difference['x']:.4f}\", "
                     f"Y={wcs_validation.difference['y']:.4f}\", "
@@ -252,14 +252,14 @@ def _validate_tool(
 
 def _validate_wcs_offset(
     program_wcs: Dict[str, Any],
-    machine_position_data: bytes
+    machine_position_data: str
 ) -> WCSValidationResult:
     """
     Validate WCS offset against machine's work coordinate system.
 
     Args:
         program_wcs: Expected WCS offset from G-code
-        machine_position_data: POSNI1.NC file content from machine
+        machine_position_data: POSNI1.NC file content from machine (as string)
 
     Returns:
         WCSValidationResult
@@ -273,7 +273,8 @@ def _validate_wcs_offset(
     tolerance = program_wcs["tolerance"]
 
     # Parse POSNI1.NC to get actual machine offset
-    actual_offset = get_work_offset(machine_position_data, work_offset)
+    # Convert string to bytes for parser
+    actual_offset = get_work_offset(machine_position_data.encode('utf-8'), work_offset)
 
     if not actual_offset:
         return WCSValidationResult(
