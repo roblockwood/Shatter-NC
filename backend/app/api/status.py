@@ -7,6 +7,7 @@ from app.models.machine import Machine
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
 from app.parsers.gcode_parser import parse_gcode
+from app.parsers.posni_parser import parse_posni
 import logging
 import io
 
@@ -196,7 +197,11 @@ async def list_programs(
 
 @router.get("/{machine_id}/position")
 async def get_position(machine_id: int, db: Session = Depends(get_db)):
-    """Get current machine position from POSNI1.NC file."""
+    """
+    Get current machine work offsets from POSNI1.NC file.
+
+    Returns parsed work offsets (G54-G59) and extended offsets (X01-X48).
+    """
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not db_machine:
         raise HTTPException(
@@ -213,11 +218,19 @@ async def get_position(machine_id: int, db: Session = Depends(get_db)):
         )
         position_data = await ftp_client.get_position_data()
 
+        if not position_data:
+            raise Exception("Failed to retrieve POSNI1.NC file")
+
+        # Parse the POSNI1.NC content
+        parsed = parse_posni(position_data.encode('utf-8'))
+
         return {
             "machine_id": machine_id,
             "machine_name": db_machine.name,
-            "position_data": position_data,
-            "note": "Raw POSNI1.NC data - parsing not yet implemented",
+            "work_offsets": parsed.get("work_offsets", {}),
+            "extended_offsets": parsed.get("extended_offsets", {}),
+            "fixture_offsets": parsed.get("fixture_offsets", {}),
+            "rotary_offsets": parsed.get("rotary_offsets", {}),
         }
 
     except Exception as e:

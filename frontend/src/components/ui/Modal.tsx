@@ -26,18 +26,24 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          ╔{'═'.repeat(60)}╗
+          <div className="modal-border-top">
+            ╔{'═'.repeat(30)}╗
+          </div>
           <div className="modal-title">
             {title}
             <button className="modal-close" onClick={onClose}>
               [✕]
             </button>
           </div>
-          ╠{'═'.repeat(60)}╣
+          <div className="modal-border-middle">
+            ╠{'═'.repeat(30)}╣
+          </div>
         </div>
         <div className="modal-body">{children}</div>
         <div className="modal-footer">
-          ╚{'═'.repeat(60)}╝
+          <div className="modal-border-bottom">
+            ╚{'═'.repeat(30)}╝
+          </div>
         </div>
       </div>
     </div>
