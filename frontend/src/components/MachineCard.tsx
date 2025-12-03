@@ -35,7 +35,7 @@ interface MachineStatus {
   ftp_password?: string;
   ftp_port?: number;
   http_port?: number;
-  location?: string;
+  path?: string;
   poll_interval_seconds?: number;
   enabled?: boolean;
 }
@@ -67,7 +67,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
     ftp_password: machine.ftp_password || '',
     ftp_port: machine.ftp_port || 21,
     http_port: machine.http_port || 80,
-    location: machine.location || '',
+    path: machine.path || '/program',
     poll_interval_seconds: machine.poll_interval_seconds || 5,
     enabled: machine.enabled !== false,
   });
@@ -89,7 +89,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
             ftp_password: fullMachineData.ftp_password || '',
             ftp_port: fullMachineData.ftp_port || 21,
             http_port: fullMachineData.http_port || 80,
-            location: fullMachineData.location || '',
+            path: fullMachineData.path || '/program',
             poll_interval_seconds: fullMachineData.poll_interval_seconds || 5,
             enabled: fullMachineData.enabled !== false,
           });
@@ -150,7 +150,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
       ftp_password: machine.ftp_password || '',
       ftp_port: machine.ftp_port || 21,
       http_port: machine.http_port || 80,
-      location: machine.location || '',
+      path: machine.path || '/program',
       poll_interval_seconds: machine.poll_interval_seconds || 5,
       enabled: machine.enabled !== false,
     });
@@ -350,6 +350,17 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
             />
           </div>
 
+          <div className="form-row">
+            <label>FTP PATH:</label>
+            <input
+              type="text"
+              value={editFormData.path}
+              onChange={(e) => setEditFormData({ ...editFormData, path: e.target.value })}
+              placeholder="/program"
+              disabled={isEditSaving}
+            />
+          </div>
+
           <div className="form-row-inline">
             <div>
               <label>FTP PORT:</label>
@@ -373,17 +384,6 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
                 disabled={isEditSaving}
               />
             </div>
-          </div>
-
-          <div className="form-row">
-            <label>LOCATION:</label>
-            <input
-              type="text"
-              value={editFormData.location}
-              onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
-              placeholder="Shop Floor"
-              disabled={isEditSaving}
-            />
           </div>
 
           <div className="form-row-inline">

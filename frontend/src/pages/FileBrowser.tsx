@@ -14,6 +14,7 @@ interface Machine {
   id: number;
   name: string;
   ip_address: string;
+  path?: string;
 }
 
 interface ViewData {
@@ -101,10 +102,12 @@ export const FileBrowser: React.FC = () => {
       });
   }, [selectedMachineId, currentPath]);
 
-  // Reset path when machine changes
+  // Set path when machine changes
   useEffect(() => {
-    setCurrentPath('/');
-  }, [selectedMachineId]);
+    if (selectedMachineId === null) return;
+    const machine = machines.find(m => m.id === selectedMachineId);
+    setCurrentPath(machine?.path || '/');
+  }, [selectedMachineId, machines]);
 
   // Fetch preview and metadata when a .nc file is selected
   useEffect(() => {
@@ -185,7 +188,9 @@ export const FileBrowser: React.FC = () => {
         const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
         setCurrentPath(parentPath);
       } else {
-        setCurrentPath(program.name);
+        // Navigate into subdirectory
+        const newPath = currentPath === '/' ? `/${program.name}` : `${currentPath}/${program.name}`;
+        setCurrentPath(newPath);
       }
     } else {
       // Select file to show details

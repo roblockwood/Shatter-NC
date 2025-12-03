@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS machines (
     http_port INTEGER DEFAULT 80,
     ftp_username VARCHAR(255) DEFAULT 'anonymous',
     ftp_password VARCHAR(255) DEFAULT 'anonymous',
-    location VARCHAR(255),
+    path VARCHAR(255) DEFAULT '/program',
     tags JSONB,
     poll_interval_seconds INTEGER DEFAULT 5,
     enabled BOOLEAN DEFAULT TRUE,
