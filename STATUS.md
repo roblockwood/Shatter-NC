@@ -64,37 +64,37 @@
 ### In Progress 🚧
 
 **Backend:**
-- [ ] Background polling service
-- [ ] WebSocket support for real-time updates
-- [ ] Time-series data storage
+- [x] Background polling service
+- [x] WebSocket support for real-time updates
+- [x] Time-series data storage
 - [ ] Historical data API endpoints
 
 **Frontend:**
-- [ ] Project initialization (React/Vue)
-- [ ] Basic UI layout
-- [ ] Machine management interface
+- [x] Project initialization (React/Vue)
+- [x] Basic UI layout
+- [x] Machine management interface
 
 ### Next Steps 📋
 
 1. **Test Backend API**
-   - Start Docker services
-   - Test machine CRUD endpoints
-   - Verify database connectivity
+   x Start Docker services
+   x Test machine CRUD endpoints
+   x Verify database connectivity
 
 2. **Implement CNC Clients**
-   - HTTP client for endpoint polling
-   - FTP client for file operations
-   - Connection testing functionality
+   x HTTP client for endpoint polling
+   x FTP client for file operations
+   x Connection testing functionality
 
 3. **Frontend Setup**
-   - Initialize React/Vite project
-   - Create basic routing
-   - Build machine management UI
+   x Initialize React/Vite project
+   x Create basic routing
+   x Build machine management UI
 
 4. **Integration**
-   - Connect frontend to backend API
-   - Test end-to-end machine registration
-   - Add first real CNC machine
+   x Connect frontend to backend API
+   x Test end-to-end machine registration
+   x Add first real CNC machine
 
 ## How to Run (Current State)
 
@@ -123,10 +123,16 @@ open http://localhost:8000/docs
 
 ## Known Issues / TODO
 
-- [ ] Connection test endpoint needs implementation
-- [ ] Frontend not yet created
-- [ ] No real-time polling yet
 - [ ] No program management yet
 - [ ] No historical data collection yet
+- [ ] Machine delete refresh issue - modal doesn't close
+- [ ] O#### management - files need to send as O####.nc, which should be scraped from the nc program header
+- [ ] improve machine card display - include program name, current progress estimate, etc
+- [ ] alarms - alarms include notifications, these should be delineated (this was identified in the parser, associated with color)
+- [ ] "upload and validate" does not support file transfer
+- [ ] icon (generic vite/vue) and name (frontend) need customized
+
+
+
 
 Last updated: 2025-11-29
