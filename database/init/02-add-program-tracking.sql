@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS program_deployments (
     -- O-number reuse tracking
     is_current BOOLEAN DEFAULT TRUE,
     replaced_at TIMESTAMPTZ,
-    replaced_by INTEGER REFERENCES program_deployments(id),
+    replaced_by INTEGER REFERENCES program_deployments(id) ON DELETE SET NULL,
 
     CONSTRAINT unique_machine_filename UNIQUE(machine_id, deployed_filename, deployed_at)
 );
