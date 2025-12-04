@@ -6,10 +6,20 @@ from pydantic import BaseModel
 
 from app.db.base import get_db
 from app.models.machine import Machine
+from app.models.program import Program, ProgramDeployment
 from app.parsers.gcode_parser import parse_gcode
 from app.parsers.posni_parser import get_work_offset
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
+from app.schemas.program import (
+    ProgramUploadRequest,
+    ProgramUploadResponse,
+    ProgramResponse,
+    ProgramListItem,
+    ProgramDeploymentCreate,
+    ProgramDeploymentResponse,
+)
+from app.services.program_service import ProgramService
 
 
 router = APIRouter()
@@ -329,3 +339,175 @@ def _validate_wcs_offset(
     )
 
     return result
+
+
+# ========== PROGRAM LIBRARY ENDPOINTS ==========
+
+@router.get("/programs", response_model=List[ProgramListItem])
+async def list_programs(
+    skip: int = 0,
+    limit: int = 100,
+    filename_filter: Optional[str] = None,
+    active_only: bool = True,
+    db: Session = Depends(get_db),
+):
+    """
+    List all programs in the library.
+
+    Query params:
+    - filename_filter: Filter by filename (partial match)
+    - active_only: Only show active versions (default: True)
+    """
+    query = db.query(Program)
+
+    if active_only:
+        query = query.filter(Program.is_active == True)
+
+    if filename_filter:
+        query = query.filter(Program.original_filename.ilike(f"%{filename_filter}%"))
+
+    query = query.order_by(Program.first_seen_at.desc())
+    programs = query.offset(skip).limit(limit).all()
+
+    return programs
+
+
+@router.get("/programs/{program_id}", response_model=ProgramResponse)
+async def get_program(program_id: int, db: Session = Depends(get_db)):
+    """Get detailed program information."""
+    program = db.query(Program).filter(Program.id == program_id).first()
+    if not program:
+        raise HTTPException(status_code=404, detail="Program not found")
+    return program
+
+
+@router.get("/programs/by-filename/{filename}", response_model=List[ProgramResponse])
+async def get_program_versions(filename: str, db: Session = Depends(get_db)):
+    """Get all versions of a program by filename, ordered by version number (newest first)."""
+    programs = db.query(Program).filter(
+        Program.original_filename == filename
+    ).order_by(Program.version_number.desc()).all()
+
+    if not programs:
+        raise HTTPException(status_code=404, detail="No programs found with that filename")
+
+    return programs
+
+
+# ========== PROGRAM UPLOAD ==========
+
+@router.post("/programs/upload", response_model=ProgramUploadResponse)
+async def upload_program(
+    request: ProgramUploadRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Upload a new NC program.
+
+    Flow:
+    1. Parse G-code and extract metadata
+    2. Compute content hash
+    3. Check if program already exists (by hash)
+    4. If new: create Program record with next version number
+    5. If deploying: create deployment record
+
+    Returns:
+        - program: The program record (new or existing)
+        - is_new_version: Whether this is a new version
+        - deployment: Deployment record (if deployed)
+    """
+    try:
+        service = ProgramService(db)
+        result = service.upload_program(
+            gcode_content=request.gcode_content,
+            original_filename=request.original_filename,
+            machine_id=request.machine_id,
+            deployed_filename=request.deployed_filename,
+            validate=request.validate_before_upload
+        )
+
+        return ProgramUploadResponse(
+            program=result["program"],
+            is_new_version=result["is_new_version"],
+            deployment=result["deployment"],
+            validation_results=result["validation_results"]
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+# ========== DEPLOYMENT MANAGEMENT ==========
+
+@router.post("/programs/{program_id}/deploy", response_model=ProgramDeploymentResponse)
+async def deploy_program(
+    program_id: int,
+    request: ProgramDeploymentCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Deploy an existing program to a machine.
+
+    This creates a deployment record linking the program to the machine with the specified O-number.
+    """
+    try:
+        service = ProgramService(db)
+        deployment = service.deploy_program(
+            program_id=program_id,
+            machine_id=request.machine_id,
+            deployed_filename=request.deployed_filename,
+            validate=request.validate_before_upload
+        )
+        return deployment
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Deployment failed: {str(e)}")
+
+
+@router.get("/machines/{machine_id}/deployments", response_model=List[ProgramDeploymentResponse])
+async def list_machine_deployments(
+    machine_id: int,
+    current_only: bool = False,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    List all program deployments for a machine.
+
+    Shows full history of what programs were deployed when.
+    current_only: Only show currently deployed programs (is_current=True)
+    """
+    query = db.query(ProgramDeployment).filter(
+        ProgramDeployment.machine_id == machine_id
+    )
+
+    if current_only:
+        query = query.filter(ProgramDeployment.is_current == True)
+
+    query = query.order_by(ProgramDeployment.deployed_at.desc())
+    deployments = query.offset(skip).limit(limit).all()
+
+    return deployments
+
+
+@router.get("/programs/{program_id}/deployments", response_model=List[ProgramDeploymentResponse])
+async def list_program_deployments(
+    program_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    List all deployments of a specific program.
+
+    Shows where this program has been deployed across all machines.
+    """
+    query = db.query(ProgramDeployment).filter(
+        ProgramDeployment.program_id == program_id
+    ).order_by(ProgramDeployment.deployed_at.desc())
+
+    deployments = query.offset(skip).limit(limit).all()
+    return deployments

@@ -1,6 +1,7 @@
 """Machine model - stores CNC machine configurations."""
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from app.db.base import Base
 
 
@@ -17,13 +18,16 @@ class Machine(Base):
     http_port = Column(Integer, default=80)
     ftp_username = Column(String(255), default="anonymous")
     ftp_password = Column(String(255), default="anonymous")
-    path = Column(String(255), default="/program")
+    path = Column(String(255), default="/PROGRAM")
     tags = Column(JSON, nullable=True)  # ["production", "floor-a"]
     poll_interval_seconds = Column(Integer, default=5)
     enabled = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    program_deployments = relationship("ProgramDeployment", back_populates="machine")
 
     def __repr__(self):
         return f"<Machine(id={self.id}, name='{self.name}', ip='{self.ip_address}')>"
