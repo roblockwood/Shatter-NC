@@ -1,0 +1,150 @@
+.validation-result {
+  padding: 0.5rem 0;
+}
+
+.validation-status {
+  font-size: 1.1rem;
+  font-weight: bold;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  border: 1px solid currentColor;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.status-text {
+  flex-shrink: 0;
+}
+
+.validation-section {
+  margin-bottom: 1.5rem;
+}
+
+.errors-section {
+  margin-bottom: 2rem;
+  margin-top: 0;
+}
+
+.section-header {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.metadata-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+
+.metadata-row {
+  display: flex;
+  gap: 2rem;
+  font-family: var(--font-mono);
+}
+
+.metadata-row .label {
+  color: var(--color-text-muted);
+  margin-right: 1rem;
+}
+
+.metadata-row .value {
+  color: var(--color-text-primary);
+  font-weight: bold;
+}
+
+.validation-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.validation-table-header th {
+  text-align: left;
+  padding: 0.4rem;
+  color: var(--color-text-muted);
+  font-weight: normal;
+}
+
+.validation-table-divider td {
+  padding: 0;
+  color: var(--color-border);
+}
+
+.validation-table-row td {
+  padding: 0.4rem;
+  border-bottom: 1px solid var(--color-bg-secondary);
+}
+
+.validation-status-icon {
+  text-align: center;
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.tool-number {
+  font-weight: bold;
+}
+
+.tool-specs {
+  font-family: var(--font-mono);
+}
+
+.validation-result {
+  font-size: 0.85rem;
+}
+
+.validation-warning-row td {
+  padding: 0.25rem 0.4rem;
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--color-bg-secondary);
+}
+
+.error-item,
+.warning-item {
+  padding: 0.3rem 0.5rem;
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+.text-success {
+  color: var(--color-success);
+}
+
+.text-warning {
+  color: var(--color-warning);
+}
+
+.text-error {
+  color: var(--color-error);
+}
+
+.text-muted {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.axis-label {
+  font-weight: bold;
+  text-align: center;
+  width: 2rem;
+  padding: 0.4rem;
+}
+
+.coordinate-value {
+  font-family: var(--font-mono);
+  text-align: left;
+  padding: 0.4rem;
+  border-bottom: 1px solid var(--color-bg-secondary);
+}
+
+.wcs-error-detail {
+  padding: 0.3rem 0.5rem;
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+}
