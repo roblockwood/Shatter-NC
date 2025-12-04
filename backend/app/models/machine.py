@@ -27,7 +27,7 @@ class Machine(Base):
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    program_deployments = relationship("ProgramDeployment", back_populates="machine")
+    program_deployments = relationship("ProgramDeployment", back_populates="machine", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Machine(id={self.id}, name='{self.name}', ip='{self.ip_address}')>"

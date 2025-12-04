@@ -88,7 +88,7 @@ class ProgramDeployment(Base):
     # O-number reuse tracking
     is_current = Column(Boolean, default=True, index=True)
     replaced_at = Column(DateTime(timezone=True))
-    replaced_by = Column(Integer, ForeignKey("program_deployments.id"))
+    replaced_by = Column(Integer, ForeignKey("program_deployments.id", ondelete="SET NULL"))
 
     # Relationships
     program = relationship("Program", back_populates="deployments")
