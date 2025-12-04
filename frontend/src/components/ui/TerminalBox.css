@@ -1,0 +1,23 @@
+.terminal-box {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  user-select: none;
+}
+
+.terminal-box-header,
+.terminal-box-footer {
+  white-space: pre;
+  line-height: 1;
+}
+
+.terminal-box-content {
+  padding: var(--spacing-sm) var(--spacing-md);
+  user-select: text;
+}
+
+.terminal-box-glow .terminal-box-header,
+.terminal-box-glow .terminal-box-footer {
+  text-shadow: var(--glow);
+}
