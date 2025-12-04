@@ -10,7 +10,7 @@ const WS_URL = 'ws://localhost:8000/api/ws';
 const API_BASE = 'http://localhost:8000/api';
 
 export const Dashboard = () => {
-  const { machines, isConnected } = useWebSocket(WS_URL);
+  const { machines, isConnected, removeMachine, addMachine } = useWebSocket(WS_URL);
   const [editMode, setEditMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingMachine, setDeletingMachine] = useState<any>(null);
@@ -35,7 +35,8 @@ export const Dashboard = () => {
       if (response.ok) {
         setShowDeleteConfirm(false);
         setDeletingMachine(null);
-        // Machine will be removed from grid when WebSocket updates
+        // Remove machine from frontend state immediately
+        removeMachine(machineId);
       } else {
         const error = await response.json().catch(() => ({}));
         console.error('Delete error response:', error);
@@ -99,11 +100,11 @@ export const Dashboard = () => {
         ))}
 
         {editMode && machines.length > 0 && (
-          <AddMachineCard onCancel={() => setEditMode(false)} />
+          <AddMachineCard onCancel={() => setEditMode(false)} onAdd={addMachine} />
         )}
 
         {editMode && machines.length === 0 && isConnected && (
-          <AddMachineCard onCancel={() => setEditMode(false)} />
+          <AddMachineCard onCancel={() => setEditMode(false)} onAdd={addMachine} />
         )}
       </div>
 

@@ -18,9 +18,10 @@ interface MachineData {
 
 interface AddMachineCardProps {
   onCancel?: () => void;
+  onAdd?: (machine: any) => void;
 }
 
-export const AddMachineCard: React.FC<AddMachineCardProps> = () => {
+export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel: onCancelProp }) => {
   const [isActive, setIsActive] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +56,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = () => {
       });
 
       if (response.ok) {
+        const newMachine = await response.json();
         setIsActive(false);
         setFormData({
           name: '',
@@ -68,6 +70,23 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = () => {
           enabled: true,
           model: 'Brother CNC'
         });
+        // Notify parent that machine was added
+        if (onAdd) {
+          onAdd({
+            machine_id: newMachine.id,
+            machine_name: newMachine.name,
+            ip_address: newMachine.ip_address,
+            ftp_username: newMachine.ftp_username,
+            ftp_password: newMachine.ftp_password,
+            ftp_port: newMachine.ftp_port,
+            http_port: newMachine.http_port,
+            poll_interval_seconds: newMachine.poll_interval_seconds,
+            enabled: newMachine.enabled,
+            is_online: false,
+            status: 'offline',
+            poll_timestamp: new Date().toISOString(),
+          });
+        }
       } else {
         const errorData = await response.json().catch(() => ({}));
         setError(errorData.detail || 'Failed to create machine');
@@ -94,6 +113,9 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = () => {
       model: 'Brother CNC'
     });
     setError(null);
+    if (onCancelProp) {
+      onCancelProp();
+    }
   };
 
   if (!isActive) {
