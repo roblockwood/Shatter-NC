@@ -54,6 +54,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [validationResult, setValidationResult] = useState<any>(null);
   const [selectedFilename, setSelectedFilename] = useState('');
+  const [fileContent, setFileContent] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -214,7 +215,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
 
     try {
       const content = await file.text();
-      const response = await fetch(`http://localhost:8000/api/machines/${machine.machine_id}/programs/validate`, {
+      setFileContent(content); // Store for upload
+
+      const response = await fetch(`http://localhost:8000/api/programs/machines/${machine.machine_id}/programs/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gcode_content: content }),
@@ -230,6 +233,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
     } catch (error) {
       console.error('Validation error:', error);
       alert(`Validation failed: ${error}`);
+      setFileContent('');
     } finally {
       setIsValidating(false);
       if (fileInputRef.current) {
@@ -541,9 +545,18 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
 
       <ValidationResultModal
         isOpen={showValidationModal}
-        onClose={() => setShowValidationModal(false)}
+        onClose={() => {
+          setShowValidationModal(false);
+          setFileContent('');
+          setValidationResult(null);
+          setSelectedFilename('');
+        }}
         result={validationResult}
         filename={selectedFilename}
+        machineId={machine.machine_id}
+        machineName={machine.machine_name}
+        machinePath={machine.path || '/PROGRAM'}
+        fileContent={fileContent}
       />
 
       <input

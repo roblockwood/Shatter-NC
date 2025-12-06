@@ -6,9 +6,10 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  footer?: React.ReactNode;
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer }) => {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -41,9 +42,11 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
         </div>
         <div className="modal-body">{children}</div>
         <div className="modal-footer">
-          <div className="modal-border-bottom">
-            ╚{'═'.repeat(30)}╝
-          </div>
+          {footer || (
+            <div className="modal-border-bottom">
+              ╚{'═'.repeat(30)}╝
+            </div>
+          )}
         </div>
       </div>
     </div>
