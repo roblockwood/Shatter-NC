@@ -21,7 +21,8 @@ class ProgramService:
         original_filename: str,
         machine_id: Optional[int] = None,
         deployed_filename: Optional[str] = None,
-        validate: bool = True
+        validate: bool = True,
+        validation_results: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Upload a new NC program and optionally deploy to machine.
@@ -41,6 +42,7 @@ class ProgramService:
             machine_id: Optional machine ID for deployment
             deployed_filename: Optional O-number deployment (e.g., "O2000.nc")
             validate: Whether to validate program before uploading
+            validation_results: Optional validation results dict to store with deployment
 
         Returns:
             Dict containing:
@@ -78,7 +80,8 @@ class ProgramService:
                     program_id=existing_program.id,
                     machine_id=machine_id,
                     deployed_filename=deployed_filename,
-                    validate=validate
+                    validate=validate,
+                    validation_results=validation_results
                 )
                 result["deployment"] = deployment
 
@@ -120,7 +123,8 @@ class ProgramService:
                 program_id=new_program.id,
                 machine_id=machine_id,
                 deployed_filename=deployed_filename,
-                validate=validate
+                validate=validate,
+                validation_results=validation_results
             )
             validation_results = deployment.validation_results
 
@@ -136,7 +140,8 @@ class ProgramService:
         program_id: int,
         machine_id: int,
         deployed_filename: str,
-        validate: bool = True
+        validate: bool = True,
+        validation_results: Optional[Dict[str, Any]] = None
     ) -> ProgramDeployment:
         """
         Deploy a program to a machine with O-number mapping.
@@ -152,6 +157,7 @@ class ProgramService:
             machine_id: Target machine ID
             deployed_filename: O-number format (e.g., "O2000.nc")
             validate: Whether to validate before deployment
+            validation_results: Optional validation results dict to store with deployment
 
         Returns:
             ProgramDeployment object with full details
@@ -165,9 +171,10 @@ class ProgramService:
         if not machine:
             raise ValueError(f"Machine {machine_id} not found")
 
-        # Validation results placeholder (will be filled by API if needed)
-        validation_results = None
-        validation_passed = True
+        # Use provided validation results or set default
+        if validation_results is None:
+            validation_results = {}
+        validation_passed = validation_results.get("valid", True)
 
         # Construct deployment path
         deployed_path = f"{machine.path}/{deployed_filename}"

@@ -511,3 +511,78 @@ async def list_program_deployments(
 
     deployments = query.offset(skip).limit(limit).all()
     return deployments
+
+
+@router.get("/machines/{machine_id}/next-onumber")
+async def get_next_onumber_fifo(
+    machine_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get next available O-number using FIFO allocation (O2000-O3999).
+
+    Returns the next O-number and indicates if it will replace an existing deployment.
+    Uses revolving allocation: O2000-O3999 (2000 capacity), then overwrites oldest.
+    """
+    import re
+
+    MIN_ONUMBER = 2000
+    MAX_ONUMBER = 3999
+    MAX_CAPACITY = 2000
+
+    # Verify machine exists
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+
+    # Get all current deployments, ordered by deployed_at (oldest first)
+    deployments = db.query(ProgramDeployment).filter(
+        ProgramDeployment.machine_id == machine_id,
+        ProgramDeployment.is_current == True
+    ).order_by(ProgramDeployment.deployed_at.asc()).all()
+
+    # Parse existing O-numbers in range
+    existing = {}  # {onumber_int: deployment}
+    for d in deployments:
+        match = re.match(r'O(\d{4})', d.deployed_filename, re.IGNORECASE)
+        if match:
+            o_num = int(match.group(1))
+            if MIN_ONUMBER <= o_num <= MAX_ONUMBER:
+                existing[o_num] = d
+
+    # Find next O-number
+    if len(existing) < MAX_CAPACITY:
+        # Pool not full - find first available
+        for o in range(MIN_ONUMBER, MAX_ONUMBER + 1):
+            if o not in existing:
+                return {
+                    "next_onumber": f"O{o}.nc",
+                    "onumber_int": o,
+                    "is_replacing": False,
+                    "replacement_info": None
+                }
+
+    # Pool full - FIFO replacement (oldest deployment)
+    oldest = deployments[0]
+    match = re.match(r'O(\d{4})', oldest.deployed_filename, re.IGNORECASE)
+    if match:
+        o_num = int(match.group(1))
+        if MIN_ONUMBER <= o_num <= MAX_ONUMBER:
+            return {
+                "next_onumber": f"O{o_num}.nc",
+                "onumber_int": o_num,
+                "is_replacing": True,
+                "replacement_info": {
+                    "onumber": str(o_num),
+                    "deployed_at": oldest.deployed_at.isoformat(),
+                    "original_filename": oldest.program.original_filename if oldest.program else "Unknown"
+                }
+            }
+
+    # Fallback
+    return {
+        "next_onumber": f"O{MIN_ONUMBER}.nc",
+        "onumber_int": MIN_ONUMBER,
+        "is_replacing": False,
+        "replacement_info": None
+    }
