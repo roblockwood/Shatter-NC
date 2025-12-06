@@ -18,6 +18,13 @@ class MachineBase(BaseModel):
     tags: Optional[List[str]] = Field(default_factory=list)
     poll_interval_seconds: int = Field(default=5, ge=1, le=300)
     enabled: bool = Field(default=True)
+    # Validation tolerances (in inches)
+    diameter_tolerance: float = Field(default=0.010, ge=0, description="Tool diameter tolerance (±)")
+    length_tolerance_plus: float = Field(default=0.02, ge=0, description="Tool length tolerance positive direction (+)")
+    length_tolerance_minus: float = Field(default=0.0, ge=0, description="Tool length tolerance negative direction (-)")
+    tolerance_x: float = Field(default=0.0394, ge=0, description="WCS X offset tolerance (±)")
+    tolerance_y: float = Field(default=0.0394, ge=0, description="WCS Y offset tolerance (±)")
+    tolerance_z: float = Field(default=0.0394, ge=0, description="WCS Z offset tolerance (±)")
 
 
 class MachineCreate(MachineBase):
@@ -40,6 +47,13 @@ class MachineUpdate(BaseModel):
     tags: Optional[List[str]] = None
     poll_interval_seconds: Optional[int] = Field(None, ge=1, le=300)
     enabled: Optional[bool] = None
+    # Validation tolerances (in inches)
+    diameter_tolerance: Optional[float] = Field(None, ge=0, description="Tool diameter tolerance (±)")
+    length_tolerance_plus: Optional[float] = Field(None, ge=0, description="Tool length tolerance positive direction (+)")
+    length_tolerance_minus: Optional[float] = Field(None, ge=0, description="Tool length tolerance negative direction (-)")
+    tolerance_x: Optional[float] = Field(None, ge=0, description="WCS X offset tolerance (±)")
+    tolerance_y: Optional[float] = Field(None, ge=0, description="WCS Y offset tolerance (±)")
+    tolerance_z: Optional[float] = Field(None, ge=0, description="WCS Z offset tolerance (±)")
 
 
 class MachineResponse(MachineBase):
