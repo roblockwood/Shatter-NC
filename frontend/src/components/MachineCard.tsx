@@ -217,7 +217,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
       const content = await file.text();
       setFileContent(content); // Store for upload
 
-      const response = await fetch(`http://localhost:8000/api/machines/${machine.machine_id}/programs/validate`, {
+      const response = await fetch(`http://localhost:8000/api/programs/machines/${machine.machine_id}/programs/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gcode_content: content }),
@@ -548,6 +548,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
         onClose={() => {
           setShowValidationModal(false);
           setFileContent('');
+          setValidationResult(null);
+          setSelectedFilename('');
         }}
         result={validationResult}
         filename={selectedFilename}

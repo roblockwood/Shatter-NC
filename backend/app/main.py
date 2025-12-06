@@ -55,7 +55,7 @@ async def health():
 # Include routers
 app.include_router(machines.router, prefix="/api/machines", tags=["machines"])
 app.include_router(status.router, prefix="/api/machines", tags=["status"])
-app.include_router(programs.router, prefix="/api/machines", tags=["programs"])
+app.include_router(programs.router, prefix="/api/programs", tags=["programs"])
 app.include_router(history.router, prefix="/api", tags=["history"])
 app.include_router(websocket.router, prefix="/api", tags=["websocket"])
 
