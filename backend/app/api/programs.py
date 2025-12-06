@@ -149,6 +149,9 @@ async def validate_program(
             )
             position_data = await ftp_client.get_position_data()
 
+            if not position_data:
+                raise Exception("Could not retrieve POSNI1.NC from machine (file may not exist or FTP connection failed)")
+
             wcs_validation = _validate_wcs_offset(
                 parsed["wcs_offset"],
                 position_data,
@@ -157,6 +160,7 @@ async def validate_program(
                 tolerance_z=machine.tolerance_z
             )
 
+            # Always return WCS validation result (even if not within tolerance)
             if not wcs_validation.within_tolerance:
                 errors.append(
                     f"WCS G{wcs_validation.work_offset} offset outside tolerance: "
@@ -166,7 +170,13 @@ async def validate_program(
                 )
 
         except Exception as e:
-            warnings.append(f"Could not validate WCS offset: {str(e)}")
+            # Log FTP error but don't prevent other validation
+            import traceback
+            error_msg = f"Could not validate WCS offset (FTP error): {str(e)}"
+            warnings.append(error_msg)
+            # Print traceback for debugging
+            print(f"WCS Validation Error: {error_msg}")
+            print(traceback.format_exc())
 
     # Overall validation status
     is_valid = len(errors) == 0
@@ -297,8 +307,15 @@ def _validate_wcs_offset(
         "y": program_wcs["y"],
         "z": program_wcs["z"],
     }
-    # Use program tolerance if specified, otherwise use machine tolerance
-    tolerance = program_wcs.get("tolerance", max(tolerance_x, tolerance_y, tolerance_z))
+    # Use program tolerance (E parameter) if specified, otherwise use machine per-axis tolerances
+    # Program E parameter applies uniformly to all axes if specified
+    program_tolerance = program_wcs.get("tolerance")
+    if program_tolerance:
+        # Program specifies a uniform tolerance (E parameter)
+        tolerance_x = tolerance_y = tolerance_z = program_tolerance
+
+    # Store the primary tolerance for display (use max if different per-axis)
+    tolerance = max(tolerance_x, tolerance_y, tolerance_z)
 
     # Parse POSNI1.NC to get actual machine offset
     # Convert string to bytes for parser
@@ -329,21 +346,21 @@ def _validate_wcs_offset(
         "z": abs(actual["z"] - expected["z"]),
     }
 
-    # Check if within tolerance
+    # Check if within tolerance (per-axis tolerances)
     within_tolerance = (
-        difference["x"] <= tolerance and
-        difference["y"] <= tolerance and
-        difference["z"] <= tolerance
+        difference["x"] <= tolerance_x and
+        difference["y"] <= tolerance_y and
+        difference["z"] <= tolerance_z
     )
 
     warnings = []
     if not within_tolerance:
-        if difference["x"] > tolerance:
-            warnings.append(f"X axis difference {difference['x']:.4f}\" exceeds tolerance ±{tolerance}\"")
-        if difference["y"] > tolerance:
-            warnings.append(f"Y axis difference {difference['y']:.4f}\" exceeds tolerance ±{tolerance}\"")
-        if difference["z"] > tolerance:
-            warnings.append(f"Z axis difference {difference['z']:.4f}\" exceeds tolerance ±{tolerance}\"")
+        if difference["x"] > tolerance_x:
+            warnings.append(f"X axis difference {difference['x']:.4f}\" exceeds tolerance ±{tolerance_x}\"")
+        if difference["y"] > tolerance_y:
+            warnings.append(f"Y axis difference {difference['y']:.4f}\" exceeds tolerance ±{tolerance_y}\"")
+        if difference["z"] > tolerance_z:
+            warnings.append(f"Z axis difference {difference['z']:.4f}\" exceeds tolerance ±{tolerance_z}\"")
 
     result = WCSValidationResult(
         valid=within_tolerance,
