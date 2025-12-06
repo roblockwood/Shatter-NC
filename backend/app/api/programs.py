@@ -1,6 +1,6 @@
 """Program validation and upload endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 
@@ -444,21 +444,36 @@ async def upload_program(
     2. Compute content hash
     3. Check if program already exists (by hash)
     4. If new: create Program record with next version number
-    5. If deploying: create deployment record
+    5. If deploying: create deployment record with validation
 
     Returns:
         - program: The program record (new or existing)
         - is_new_version: Whether this is a new version
         - deployment: Deployment record (if deployed)
+        - validation_results: Validation results if validation was performed
     """
     try:
         service = ProgramService(db)
+
+        # Perform validation if requested and machine specified
+        # Otherwise use validation_results passed in request (pre-computed by frontend)
+        validation_results = request.validation_results
+        if request.validate_before_upload and request.machine_id and not validation_results:
+            # Call the validation endpoint to get full validation results
+            validate_request = ProgramValidateRequest(gcode_content=request.gcode_content)
+            validation_results = await validate_program(
+                machine_id=request.machine_id,
+                request=validate_request,
+                db=db
+            )
+
         result = service.upload_program(
             gcode_content=request.gcode_content,
             original_filename=request.original_filename,
             machine_id=request.machine_id,
             deployed_filename=request.deployed_filename,
-            validate=request.validate_before_upload
+            validate=request.validate_before_upload,
+            validation_results=validation_results
         )
 
         return ProgramUploadResponse(
@@ -546,6 +561,144 @@ async def list_program_deployments(
 
     deployments = query.offset(skip).limit(limit).all()
     return deployments
+
+
+@router.get("/machines/{machine_id}/deployments/by-onumber/{onumber}")
+async def get_deployment_by_onumber(
+    machine_id: int,
+    onumber: str,  # Accept "2000", "O2000", or "O2000.nc"
+    include_program: bool = True,
+    include_history: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Get current deployment info for an O-number file with full program details.
+
+    Accepts flexible O-number formats: "2000", "O2000", "O2000.nc" (case-insensitive).
+    Returns deployment record with full program details and validation results.
+
+    If include_history=true, also returns all previous deployments for this O-number.
+    """
+    import re
+
+    # Extract numeric part: "2000", "O2000", "O2000.nc" -> 2000
+    onumber_match = re.search(r'(\d{4})', onumber)
+    if not onumber_match:
+        raise HTTPException(status_code=400, detail="Invalid O-number format")
+
+    onumber_int = int(onumber_match.group(1))
+    deployed_filename_pattern = f"O{onumber_int}.nc"
+
+    # Query current deployment with program join
+    query = db.query(ProgramDeployment).filter(
+        ProgramDeployment.machine_id == machine_id,
+        ProgramDeployment.deployed_filename.ilike(deployed_filename_pattern),
+        ProgramDeployment.is_current == True
+    )
+
+    if include_program:
+        query = query.options(joinedload(ProgramDeployment.program))
+
+    deployment = query.first()
+
+    if not deployment:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No deployment found for {deployed_filename_pattern}"
+        )
+
+    # Build response
+    response = {
+        "deployment": {
+            "id": deployment.id,
+            "deployed_filename": deployment.deployed_filename,
+            "deployed_path": deployment.deployed_path,
+            "deployed_at": deployment.deployed_at,
+            "validation_passed": deployment.validation_passed,
+            "validation_results": deployment.validation_results,
+        }
+    }
+
+    if include_program and deployment.program:
+        program = deployment.program
+        response["program"] = {
+            "id": program.id,
+            "original_filename": program.original_filename,
+            "version_number": program.version_number,
+            "posted_date": program.posted_date,
+            "estimated_runtime_seconds": program.estimated_runtime_seconds,
+            "program_metadata": program.program_metadata,
+            "file_size_bytes": program.file_size_bytes,
+            "line_count": program.line_count,
+        }
+
+    # Get deployment history if requested
+    if include_history:
+        history = db.query(ProgramDeployment).filter(
+            ProgramDeployment.machine_id == machine_id,
+            ProgramDeployment.deployed_filename.ilike(deployed_filename_pattern)
+        ).order_by(ProgramDeployment.deployed_at.desc()).all()
+
+        response["history"] = [
+            {
+                "id": h.id,
+                "deployed_at": h.deployed_at,
+                "validation_passed": h.validation_passed,
+                "replaced_at": h.replaced_at,
+                "is_current": h.is_current,
+                "program_version": h.program.version_number if h.program else None,
+                "original_filename": h.program.original_filename if h.program else None,
+            }
+            for h in history
+        ]
+
+    return response
+
+
+@router.get("/deployments/{deployment_id}")
+async def get_deployment_by_id(
+    deployment_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get full deployment details by deployment ID."""
+
+    deployment = db.query(ProgramDeployment).options(
+        joinedload(ProgramDeployment.program)
+    ).filter(
+        ProgramDeployment.id == deployment_id
+    ).first()
+
+    if not deployment:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Deployment {deployment_id} not found"
+        )
+
+    response = {
+        "deployment": {
+            "id": deployment.id,
+            "deployed_filename": deployment.deployed_filename,
+            "deployed_path": deployment.deployed_path,
+            "deployed_at": deployment.deployed_at,
+            "validation_passed": deployment.validation_passed,
+            "validation_results": deployment.validation_results,
+        }
+    }
+
+    if deployment.program:
+        program = deployment.program
+        response["program"] = {
+            "id": program.id,
+            "original_filename": program.original_filename,
+            "version_number": program.version_number,
+            "posted_date": program.posted_date,
+            "estimated_runtime_seconds": program.estimated_runtime_seconds,
+            "program_metadata": program.program_metadata,
+            "file_size_bytes": program.file_size_bytes,
+            "line_count": program.line_count,
+        }
+
+    return response
 
 
 @router.get("/machines/{machine_id}/next-onumber")
