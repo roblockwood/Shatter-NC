@@ -4,8 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 
 # Import routers
-from app.api import machines, status, programs, websocket
-# from app.api import programs, history
+from app.api import machines, status, programs, websocket, history
 
 # Import services
 from app.services import WebSocketManager, PollingService
@@ -56,10 +55,9 @@ async def health():
 # Include routers
 app.include_router(machines.router, prefix="/api/machines", tags=["machines"])
 app.include_router(status.router, prefix="/api/machines", tags=["status"])
-app.include_router(programs.router, prefix="/api/machines", tags=["programs"])
+app.include_router(programs.router, prefix="/api/programs", tags=["programs"])
+app.include_router(history.router, prefix="/api", tags=["history"])
 app.include_router(websocket.router, prefix="/api", tags=["websocket"])
-# app.include_router(programs.router, prefix="/api/programs", tags=["programs"])
-# app.include_router(history.router, prefix="/api/history", tags=["history"])
 
 # Inject websocket manager into websocket router
 websocket.set_websocket_manager(websocket_manager)

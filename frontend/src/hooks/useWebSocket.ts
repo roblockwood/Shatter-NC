@@ -103,8 +103,26 @@ export const useWebSocket = (url: string) => {
     };
   }, [url]);
 
+  const removeMachine = (machineId: number) => {
+    setMachines((prev) => {
+      const updated = new Map(prev);
+      updated.delete(machineId);
+      return updated;
+    });
+  };
+
+  const addMachine = (machine: MachineStatus) => {
+    setMachines((prev) => {
+      const updated = new Map(prev);
+      updated.set(machine.machine_id, machine);
+      return updated;
+    });
+  };
+
   return {
     machines: Array.from(machines.values()),
     isConnected,
+    removeMachine,
+    addMachine,
   };
 };

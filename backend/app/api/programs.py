@@ -6,10 +6,20 @@ from pydantic import BaseModel
 
 from app.db.base import get_db
 from app.models.machine import Machine
+from app.models.program import Program, ProgramDeployment
 from app.parsers.gcode_parser import parse_gcode
 from app.parsers.posni_parser import get_work_offset
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
+from app.schemas.program import (
+    ProgramUploadRequest,
+    ProgramUploadResponse,
+    ProgramResponse,
+    ProgramListItem,
+    ProgramDeploymentCreate,
+    ProgramDeploymentResponse,
+)
+from app.services.program_service import ProgramService
 
 
 router = APIRouter()
@@ -56,7 +66,7 @@ class ProgramValidationResponse(BaseModel):
     metadata: Dict[str, Any]
 
 
-@router.post("/{machine_id}/programs/validate", response_model=ProgramValidationResponse)
+@router.post("/machines/{machine_id}/programs/validate", response_model=ProgramValidationResponse)
 async def validate_program(
     machine_id: int,
     request: ProgramValidateRequest,
@@ -329,3 +339,280 @@ def _validate_wcs_offset(
     )
 
     return result
+
+
+# ========== PROGRAM LIBRARY ENDPOINTS ==========
+
+@router.get("", response_model=List[ProgramListItem])
+async def list_programs(
+    skip: int = 0,
+    limit: int = 100,
+    filename_filter: Optional[str] = None,
+    active_only: bool = True,
+    db: Session = Depends(get_db),
+):
+    """
+    List all programs in the library.
+
+    Query params:
+    - filename_filter: Filter by filename (partial match)
+    - active_only: Only show active versions (default: True)
+    """
+    query = db.query(Program)
+
+    if active_only:
+        query = query.filter(Program.is_active == True)
+
+    if filename_filter:
+        query = query.filter(Program.original_filename.ilike(f"%{filename_filter}%"))
+
+    query = query.order_by(Program.first_seen_at.desc())
+    programs = query.offset(skip).limit(limit).all()
+
+    return programs
+
+
+@router.get("/{program_id}", response_model=ProgramResponse)
+async def get_program(program_id: int, db: Session = Depends(get_db)):
+    """Get detailed program information."""
+    program = db.query(Program).filter(Program.id == program_id).first()
+    if not program:
+        raise HTTPException(status_code=404, detail="Program not found")
+    return program
+
+
+@router.get("/by-filename/{filename}", response_model=List[ProgramResponse])
+async def get_program_versions(filename: str, db: Session = Depends(get_db)):
+    """Get all versions of a program by filename, ordered by version number (newest first)."""
+    programs = db.query(Program).filter(
+        Program.original_filename == filename
+    ).order_by(Program.version_number.desc()).all()
+
+    if not programs:
+        raise HTTPException(status_code=404, detail="No programs found with that filename")
+
+    return programs
+
+
+# ========== PROGRAM UPLOAD ==========
+
+@router.post("/upload", response_model=ProgramUploadResponse)
+async def upload_program(
+    request: ProgramUploadRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Upload a new NC program.
+
+    Flow:
+    1. Parse G-code and extract metadata
+    2. Compute content hash
+    3. Check if program already exists (by hash)
+    4. If new: create Program record with next version number
+    5. If deploying: create deployment record
+
+    Returns:
+        - program: The program record (new or existing)
+        - is_new_version: Whether this is a new version
+        - deployment: Deployment record (if deployed)
+    """
+    try:
+        service = ProgramService(db)
+        result = service.upload_program(
+            gcode_content=request.gcode_content,
+            original_filename=request.original_filename,
+            machine_id=request.machine_id,
+            deployed_filename=request.deployed_filename,
+            validate=request.validate_before_upload
+        )
+
+        return ProgramUploadResponse(
+            program=result["program"],
+            is_new_version=result["is_new_version"],
+            deployment=result["deployment"],
+            validation_results=result["validation_results"]
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+# ========== DEPLOYMENT MANAGEMENT ==========
+
+@router.post("/{program_id}/deploy", response_model=ProgramDeploymentResponse)
+async def deploy_program(
+    program_id: int,
+    request: ProgramDeploymentCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Deploy an existing program to a machine.
+
+    This creates a deployment record linking the program to the machine with the specified O-number.
+    """
+    try:
+        service = ProgramService(db)
+        deployment = service.deploy_program(
+            program_id=program_id,
+            machine_id=request.machine_id,
+            deployed_filename=request.deployed_filename,
+            validate=request.validate_before_upload
+        )
+        return deployment
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Deployment failed: {str(e)}")
+
+
+@router.get("/machines/{machine_id}/deployments", response_model=List[ProgramDeploymentResponse])
+async def list_machine_deployments(
+    machine_id: int,
+    current_only: bool = False,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    List all program deployments for a machine.
+
+    Shows full history of what programs were deployed when.
+    current_only: Only show currently deployed programs (is_current=True)
+    """
+    query = db.query(ProgramDeployment).filter(
+        ProgramDeployment.machine_id == machine_id
+    )
+
+    if current_only:
+        query = query.filter(ProgramDeployment.is_current == True)
+
+    query = query.order_by(ProgramDeployment.deployed_at.desc())
+    deployments = query.offset(skip).limit(limit).all()
+
+    return deployments
+
+
+@router.get("/{program_id}/deployments", response_model=List[ProgramDeploymentResponse])
+async def list_program_deployments(
+    program_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    List all deployments of a specific program.
+
+    Shows where this program has been deployed across all machines.
+    """
+    query = db.query(ProgramDeployment).filter(
+        ProgramDeployment.program_id == program_id
+    ).order_by(ProgramDeployment.deployed_at.desc())
+
+    deployments = query.offset(skip).limit(limit).all()
+    return deployments
+
+
+@router.get("/machines/{machine_id}/next-onumber")
+async def get_next_onumber_fifo(
+    machine_id: int,
+    filename: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get next available O-number using FIFO allocation (O2000-O3999).
+
+    If filename is provided, check if that file already has an O-number on this machine.
+    If yes, return that O-number. If no, allocate a new one.
+
+    Returns the next O-number and indicates if it will replace an existing deployment.
+    Uses revolving allocation: O2000-O3999 (2000 capacity), then overwrites oldest.
+    """
+    import re
+
+    MIN_ONUMBER = 2000
+    MAX_ONUMBER = 3999
+    MAX_CAPACITY = 2000
+
+    # Verify machine exists
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+
+    # Check if file already has a deployment on this machine
+    if filename:
+        existing_deployment = db.query(ProgramDeployment).join(
+            Program, ProgramDeployment.program_id == Program.id
+        ).filter(
+            ProgramDeployment.machine_id == machine_id,
+            ProgramDeployment.is_current == True,
+            Program.original_filename == filename
+        ).first()
+
+        if existing_deployment:
+            # File already deployed - return its O-number
+            match = re.match(r'O(\d{4})', existing_deployment.deployed_filename, re.IGNORECASE)
+            if match:
+                o_num = int(match.group(1))
+                return {
+                    "next_onumber": f"O{o_num}.nc",
+                    "onumber_int": o_num,
+                    "is_replacing": False,
+                    "replacement_info": None,
+                    "is_redeployment": True
+                }
+
+    # Get all current deployments, ordered by deployed_at (oldest first)
+    deployments = db.query(ProgramDeployment).filter(
+        ProgramDeployment.machine_id == machine_id,
+        ProgramDeployment.is_current == True
+    ).order_by(ProgramDeployment.deployed_at.asc()).all()
+
+    # Parse existing O-numbers in range
+    existing = {}  # {onumber_int: deployment}
+    for d in deployments:
+        match = re.match(r'O(\d{4})', d.deployed_filename, re.IGNORECASE)
+        if match:
+            o_num = int(match.group(1))
+            if MIN_ONUMBER <= o_num <= MAX_ONUMBER:
+                existing[o_num] = d
+
+    # Find next O-number
+    if len(existing) < MAX_CAPACITY:
+        # Pool not full - find first available
+        for o in range(MIN_ONUMBER, MAX_ONUMBER + 1):
+            if o not in existing:
+                return {
+                    "next_onumber": f"O{o}.nc",
+                    "onumber_int": o,
+                    "is_replacing": False,
+                    "replacement_info": None,
+                    "is_redeployment": False
+                }
+
+    # Pool full - FIFO replacement (oldest deployment)
+    oldest = deployments[0]
+    match = re.match(r'O(\d{4})', oldest.deployed_filename, re.IGNORECASE)
+    if match:
+        o_num = int(match.group(1))
+        if MIN_ONUMBER <= o_num <= MAX_ONUMBER:
+            return {
+                "next_onumber": f"O{o_num}.nc",
+                "onumber_int": o_num,
+                "is_replacing": True,
+                "replacement_info": {
+                    "onumber": str(o_num),
+                    "deployed_at": oldest.deployed_at.isoformat(),
+                    "original_filename": oldest.program.original_filename if oldest.program else "Unknown"
+                },
+                "is_redeployment": False
+            }
+
+    # Fallback
+    return {
+        "next_onumber": f"O{MIN_ONUMBER}.nc",
+        "onumber_int": MIN_ONUMBER,
+        "is_replacing": False,
+        "replacement_info": None,
+        "is_redeployment": False
+    }
