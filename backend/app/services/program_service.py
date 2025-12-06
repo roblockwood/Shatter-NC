@@ -116,7 +116,7 @@ class ProgramService:
 
         # Step 6: If deploying to machine, handle deployment
         deployment = None
-        validation_results = None
+        result_validation = validation_results
 
         if machine_id and deployed_filename:
             deployment = self.deploy_program(
@@ -126,13 +126,13 @@ class ProgramService:
                 validate=validate,
                 validation_results=validation_results
             )
-            validation_results = deployment.validation_results
+            result_validation = deployment.validation_results
 
         return {
             "program": new_program,
             "is_new_version": True,
             "deployment": deployment,
-            "validation_results": validation_results
+            "validation_results": result_validation
         }
 
     def deploy_program(
@@ -171,10 +171,14 @@ class ProgramService:
         if not machine:
             raise ValueError(f"Machine {machine_id} not found")
 
-        # Use provided validation results or set default
-        if validation_results is None:
+        # Determine if validation passed
+        # If validation_results is provided, use the "valid" field (default to True if not present)
+        # If validation_results is None, assume no validation was performed (validation_passed = None)
+        if validation_results is not None:
+            validation_passed = validation_results.get("valid", True)
+        else:
             validation_results = {}
-        validation_passed = validation_results.get("valid", True)
+            validation_passed = None  # No validation performed
 
         # Construct deployment path
         deployed_path = f"{machine.path}/{deployed_filename}"

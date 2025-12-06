@@ -126,6 +126,7 @@ class ProgramUploadRequest(BaseModel):
     machine_id: Optional[int] = None  # If provided, deploy to this machine
     deployed_filename: Optional[str] = None  # O-number if deploying
     validate_before_upload: bool = True
+    validation_results: Optional[Dict[str, Any]] = None  # Pre-computed validation results to store
 
 
 class ProgramUploadResponse(BaseModel):
