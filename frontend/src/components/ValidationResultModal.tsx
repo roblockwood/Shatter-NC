@@ -5,11 +5,9 @@ import './ValidationResultModal.css';
 interface ToolValidation {
   tool_number: number;
   required_diameter: number;
-  required_corner_radius: number;
   required_length: number;
   available: boolean;
   diameter_match: boolean;
-  corner_radius_match: boolean;
   length_sufficient: boolean;
   machine_tool_data: {
     tool_name?: string;
@@ -377,12 +375,7 @@ export const ValidationResultModal: React.FC<ValidationResultModalProps> = ({
                 onClick={handleUploadClick}
                 disabled={isUploading || isLoadingONumber || !customONumber}
               >
-                {isUploading
-                  ? '[ UPLOADING... ]'
-                  : result?.valid
-                    ? '[ UPLOAD TO CONTROL ]'
-                    : '[ UPLOAD ANYWAY ]'
-                }
+                {isUploading ? '[ UPLOADING... ]' : '[ UPLOAD ]'}
               </button>
             </>
           )}

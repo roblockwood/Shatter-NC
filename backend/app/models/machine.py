@@ -1,5 +1,5 @@
 """Machine model - stores CNC machine configurations."""
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON, Float
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.base import Base
@@ -22,6 +22,15 @@ class Machine(Base):
     tags = Column(JSON, nullable=True)  # ["production", "floor-a"]
     poll_interval_seconds = Column(Integer, default=5)
     enabled = Column(Boolean, default=True)
+
+    # Validation tolerances (in inches)
+    diameter_tolerance = Column(Float, default=0.010)      # ±0.010" for diameter
+    length_tolerance_plus = Column(Float, default=0.02)    # +0.02" for length
+    length_tolerance_minus = Column(Float, default=0.0)    # -0mm
+    tolerance_x = Column(Float, default=0.0394)            # ±1mm = ±0.0394 inches
+    tolerance_y = Column(Float, default=0.0394)            # ±1mm = ±0.0394 inches
+    tolerance_z = Column(Float, default=0.0394)            # ±1mm = ±0.0394 inches
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     last_seen_at = Column(DateTime(timezone=True), nullable=True)

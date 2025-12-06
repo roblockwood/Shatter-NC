@@ -215,6 +215,14 @@
   color: var(--color-text-primary);
 }
 
+/* Fix autofill styling */
+.form-row-inline input:-webkit-autofill,
+.form-row-inline input:-webkit-autofill:hover,
+.form-row-inline input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 30px var(--color-bg-secondary) inset !important;
+  -webkit-text-fill-color: var(--color-text-primary) !important;
+}
+
 /* Style number input spinners for form-row-inline */
 .form-row-inline input[type="number"]::-webkit-outer-spin-button,
 .form-row-inline input[type="number"]::-webkit-inner-spin-button {
@@ -504,6 +512,134 @@
 .upload-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Tolerance Settings Section */
+.tolerances-section {
+  margin: var(--spacing-md) 0;
+  padding: var(--spacing-md);
+  background: rgba(0, 255, 0, 0.05);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-warning);
+}
+
+.tolerances-header {
+  font-weight: bold;
+  color: var(--color-warning);
+  font-size: var(--font-sm);
+  margin-bottom: var(--spacing-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tolerances-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+}
+
+.tolerance-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
+}
+
+.tolerance-group-label {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-bottom: 2px;
+}
+
+.tolerance-group-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.tolerance-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 calc(50% - 2px);
+  min-width: 0;
+}
+
+.tolerance-field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+.tolerance-field-inline label {
+  flex-shrink: 0;
+  min-width: fit-content;
+  white-space: nowrap;
+}
+
+.tolerance-field-inline input {
+  flex: 1;
+  min-width: 0;
+}
+
+.tolerance-field label {
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.tolerance-field input {
+  padding: 3px 6px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  transition: all 0.2s ease;
+  height: 24px;
+}
+
+.tolerance-field input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 30px rgba(0, 255, 0, 0.05) inset, 0 0 10px rgba(0, 255, 0, 0.2);
+}
+
+.tolerance-field input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Hide number input spinners */
+.tolerance-field input[type="number"]::-webkit-outer-spin-button,
+.tolerance-field input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.tolerance-field input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Network Configuration Section */
+.network-config-section {
+  margin: var(--spacing-md) 0;
+  padding: var(--spacing-md);
+  background: rgba(0, 255, 0, 0.05);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-warning);
+}
+
+.network-config-header {
+  font-weight: bold;
+  color: var(--color-warning);
+  font-size: var(--font-sm);
+  margin-bottom: var(--spacing-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 /* Hover effect */
