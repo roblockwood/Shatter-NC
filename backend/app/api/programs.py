@@ -66,7 +66,7 @@ class ProgramValidationResponse(BaseModel):
     metadata: Dict[str, Any]
 
 
-@router.post("/{machine_id}/programs/validate", response_model=ProgramValidationResponse)
+@router.post("/machines/{machine_id}/programs/validate", response_model=ProgramValidationResponse)
 async def validate_program(
     machine_id: int,
     request: ProgramValidateRequest,
@@ -343,7 +343,7 @@ def _validate_wcs_offset(
 
 # ========== PROGRAM LIBRARY ENDPOINTS ==========
 
-@router.get("/programs", response_model=List[ProgramListItem])
+@router.get("", response_model=List[ProgramListItem])
 async def list_programs(
     skip: int = 0,
     limit: int = 100,
@@ -372,7 +372,7 @@ async def list_programs(
     return programs
 
 
-@router.get("/programs/{program_id}", response_model=ProgramResponse)
+@router.get("/{program_id}", response_model=ProgramResponse)
 async def get_program(program_id: int, db: Session = Depends(get_db)):
     """Get detailed program information."""
     program = db.query(Program).filter(Program.id == program_id).first()
@@ -381,7 +381,7 @@ async def get_program(program_id: int, db: Session = Depends(get_db)):
     return program
 
 
-@router.get("/programs/by-filename/{filename}", response_model=List[ProgramResponse])
+@router.get("/by-filename/{filename}", response_model=List[ProgramResponse])
 async def get_program_versions(filename: str, db: Session = Depends(get_db)):
     """Get all versions of a program by filename, ordered by version number (newest first)."""
     programs = db.query(Program).filter(
@@ -396,7 +396,7 @@ async def get_program_versions(filename: str, db: Session = Depends(get_db)):
 
 # ========== PROGRAM UPLOAD ==========
 
-@router.post("/programs/upload", response_model=ProgramUploadResponse)
+@router.post("/upload", response_model=ProgramUploadResponse)
 async def upload_program(
     request: ProgramUploadRequest,
     db: Session = Depends(get_db)
@@ -440,7 +440,7 @@ async def upload_program(
 
 # ========== DEPLOYMENT MANAGEMENT ==========
 
-@router.post("/programs/{program_id}/deploy", response_model=ProgramDeploymentResponse)
+@router.post("/{program_id}/deploy", response_model=ProgramDeploymentResponse)
 async def deploy_program(
     program_id: int,
     request: ProgramDeploymentCreate,
@@ -493,7 +493,7 @@ async def list_machine_deployments(
     return deployments
 
 
-@router.get("/programs/{program_id}/deployments", response_model=List[ProgramDeploymentResponse])
+@router.get("/{program_id}/deployments", response_model=List[ProgramDeploymentResponse])
 async def list_program_deployments(
     program_id: int,
     skip: int = 0,
@@ -516,10 +516,14 @@ async def list_program_deployments(
 @router.get("/machines/{machine_id}/next-onumber")
 async def get_next_onumber_fifo(
     machine_id: int,
+    filename: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
     Get next available O-number using FIFO allocation (O2000-O3999).
+
+    If filename is provided, check if that file already has an O-number on this machine.
+    If yes, return that O-number. If no, allocate a new one.
 
     Returns the next O-number and indicates if it will replace an existing deployment.
     Uses revolving allocation: O2000-O3999 (2000 capacity), then overwrites oldest.
@@ -534,6 +538,29 @@ async def get_next_onumber_fifo(
     machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not machine:
         raise HTTPException(status_code=404, detail="Machine not found")
+
+    # Check if file already has a deployment on this machine
+    if filename:
+        existing_deployment = db.query(ProgramDeployment).join(
+            Program, ProgramDeployment.program_id == Program.id
+        ).filter(
+            ProgramDeployment.machine_id == machine_id,
+            ProgramDeployment.is_current == True,
+            Program.original_filename == filename
+        ).first()
+
+        if existing_deployment:
+            # File already deployed - return its O-number
+            match = re.match(r'O(\d{4})', existing_deployment.deployed_filename, re.IGNORECASE)
+            if match:
+                o_num = int(match.group(1))
+                return {
+                    "next_onumber": f"O{o_num}.nc",
+                    "onumber_int": o_num,
+                    "is_replacing": False,
+                    "replacement_info": None,
+                    "is_redeployment": True
+                }
 
     # Get all current deployments, ordered by deployed_at (oldest first)
     deployments = db.query(ProgramDeployment).filter(
@@ -559,7 +586,8 @@ async def get_next_onumber_fifo(
                     "next_onumber": f"O{o}.nc",
                     "onumber_int": o,
                     "is_replacing": False,
-                    "replacement_info": None
+                    "replacement_info": None,
+                    "is_redeployment": False
                 }
 
     # Pool full - FIFO replacement (oldest deployment)
@@ -576,7 +604,8 @@ async def get_next_onumber_fifo(
                     "onumber": str(o_num),
                     "deployed_at": oldest.deployed_at.isoformat(),
                     "original_filename": oldest.program.original_filename if oldest.program else "Unknown"
-                }
+                },
+                "is_redeployment": False
             }
 
     # Fallback
@@ -584,5 +613,6 @@ async def get_next_onumber_fifo(
         "next_onumber": f"O{MIN_ONUMBER}.nc",
         "onumber_int": MIN_ONUMBER,
         "is_replacing": False,
-        "replacement_info": None
+        "replacement_info": None,
+        "is_redeployment": False
     }
