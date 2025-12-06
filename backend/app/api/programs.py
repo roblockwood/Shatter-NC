@@ -34,11 +34,9 @@ class ToolValidationResult(BaseModel):
     """Validation result for a single tool."""
     tool_number: int
     required_diameter: float
-    required_corner_radius: float
     required_length: float
     available: bool
     diameter_match: bool = False
-    corner_radius_match: bool = False
     length_sufficient: bool = False
     machine_tool_data: Dict[str, Any] = {}
     warnings: List[str] = []
@@ -116,10 +114,16 @@ async def validate_program(
             http_client = CNCHttpClient(machine.ip_address, machine.http_port)
             machine_tool_data = http_client.get_tool_data()
 
-            # Validate each tool
+            # Validate each tool using machine tolerances
             for tool in parsed["tools"]:
                 tool_num = tool["tool_number"]
-                result = _validate_tool(tool, machine_tool_data)
+                result = _validate_tool(
+                    tool,
+                    machine_tool_data,
+                    diameter_tolerance=machine.diameter_tolerance,
+                    length_tolerance_plus=machine.length_tolerance_plus,
+                    length_tolerance_minus=machine.length_tolerance_minus
+                )
                 tools_validation[tool_num] = result
 
                 if not result.available:
@@ -145,7 +149,13 @@ async def validate_program(
             )
             position_data = await ftp_client.get_position_data()
 
-            wcs_validation = _validate_wcs_offset(parsed["wcs_offset"], position_data)
+            wcs_validation = _validate_wcs_offset(
+                parsed["wcs_offset"],
+                position_data,
+                tolerance_x=machine.tolerance_x,
+                tolerance_y=machine.tolerance_y,
+                tolerance_z=machine.tolerance_z
+            )
 
             if not wcs_validation.within_tolerance:
                 errors.append(
@@ -179,7 +189,10 @@ async def validate_program(
 
 def _validate_tool(
     program_tool: Dict[str, Any],
-    machine_tool_data: Dict[str, Any]
+    machine_tool_data: Dict[str, Any],
+    diameter_tolerance: float = 0.00025,
+    length_tolerance_plus: float = 0.0079,
+    length_tolerance_minus: float = 0.0
 ) -> ToolValidationResult:
     """
     Validate a single tool against machine tool table.
@@ -187,13 +200,14 @@ def _validate_tool(
     Args:
         program_tool: Tool requirements from G-code
         machine_tool_data: Tool data from machine
+        diameter_tolerance: Machine diameter tolerance (±)
+        length_tolerance_plus: Machine length tolerance in positive direction (+)
+        length_tolerance_minus: Machine length tolerance in negative direction (-)
 
     Returns:
         ToolValidationResult
     """
     tool_num = program_tool["tool_number"]
-    tolerance_diameter = 0.001  # ±0.001" for diameter
-    tolerance_length = 0.01     # ±0.01" for length
 
     # Find tool in machine tool table
     machine_tools = machine_tool_data.get("tools", [])
@@ -208,11 +222,9 @@ def _validate_tool(
         return ToolValidationResult(
             tool_number=tool_num,
             required_diameter=program_tool["diameter"],
-            required_corner_radius=program_tool["corner_radius"],
             required_length=program_tool["length_total"],
             available=False,
             diameter_match=False,
-            corner_radius_match=False,
             length_sufficient=False,
             machine_tool_data={},
             warnings=[f"Tool T{tool_num:02d} not found in machine tool table"]
@@ -221,35 +233,34 @@ def _validate_tool(
     # Validate diameter (within tolerance)
     machine_diameter = machine_tool.get("diameter", 0)
     diameter_diff = abs(machine_diameter - program_tool["diameter"])
-    diameter_match = diameter_diff <= tolerance_diameter
+    diameter_match = diameter_diff <= diameter_tolerance
 
-    # Validate length (machine tool must be >= required length)
+    # Validate length (machine tool must be within tolerance range)
+    # Allows: required - length_tolerance_minus <= machine_length <= required + length_tolerance_plus
     machine_length = machine_tool.get("length", 0)
-    length_sufficient = machine_length >= program_tool["length_total"]
-
-    # TODO: Corner radius validation requires additional machine data
-    corner_radius_match = True  # Assume OK for now
+    required_length = program_tool["length_total"]
+    length_min = required_length - length_tolerance_minus
+    length_max = required_length + length_tolerance_plus
+    length_sufficient = length_min <= machine_length <= length_max
 
     warnings = []
     if not diameter_match:
         warnings.append(
             f"Diameter mismatch: need {program_tool['diameter']:.4f}\", "
-            f"have {machine_diameter:.4f}\" (diff: {diameter_diff:.4f}\")"
+            f"have {machine_diameter:.4f}\" (diff: {diameter_diff:.4f}\", tolerance: ±{diameter_tolerance:.5f}\")"
         )
     if not length_sufficient:
         warnings.append(
-            f"Tool too short: need {program_tool['length_total']:.4f}\", "
-            f"have {machine_length:.4f}\""
+            f"Tool length out of tolerance: need {required_length:.4f}\", "
+            f"have {machine_length:.4f}\" (acceptable: {length_min:.4f}\" to {length_max:.4f}\")"
         )
 
     return ToolValidationResult(
         tool_number=tool_num,
         required_diameter=program_tool["diameter"],
-        required_corner_radius=program_tool["corner_radius"],
         required_length=program_tool["length_total"],
         available=True,
         diameter_match=diameter_match,
-        corner_radius_match=corner_radius_match,
         length_sufficient=length_sufficient,
         machine_tool_data={
             "tool_name": machine_tool.get("tool_name", ""),
@@ -262,7 +273,10 @@ def _validate_tool(
 
 def _validate_wcs_offset(
     program_wcs: Dict[str, Any],
-    machine_position_data: str
+    machine_position_data: str,
+    tolerance_x: float = 0.0394,
+    tolerance_y: float = 0.0394,
+    tolerance_z: float = 0.0394
 ) -> WCSValidationResult:
     """
     Validate WCS offset against machine's work coordinate system.
@@ -270,6 +284,9 @@ def _validate_wcs_offset(
     Args:
         program_wcs: Expected WCS offset from G-code
         machine_position_data: POSNI1.NC file content from machine (as string)
+        tolerance_x: Machine X tolerance (±)
+        tolerance_y: Machine Y tolerance (±)
+        tolerance_z: Machine Z tolerance (±)
 
     Returns:
         WCSValidationResult
@@ -280,7 +297,8 @@ def _validate_wcs_offset(
         "y": program_wcs["y"],
         "z": program_wcs["z"],
     }
-    tolerance = program_wcs["tolerance"]
+    # Use program tolerance if specified, otherwise use machine tolerance
+    tolerance = program_wcs.get("tolerance", max(tolerance_x, tolerance_y, tolerance_z))
 
     # Parse POSNI1.NC to get actual machine offset
     # Convert string to bytes for parser
