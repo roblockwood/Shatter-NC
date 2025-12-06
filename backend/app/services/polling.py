@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 from app.models.machine import Machine
+from app.models.event import MachineStatusEvent, AlarmEvent, ProductionRun
 from app.clients.http_client import CNCHttpClient
 from app.db.base import SessionLocal
 
@@ -20,6 +21,7 @@ class MachinePoller:
         self.last_poll_time: Optional[datetime] = None
         self.consecutive_failures = 0
         self.is_online = False
+        self.last_status: Optional[str] = None  # Track status transitions in-memory
 
     async def poll(self) -> Dict[str, Any]:
         """Poll machine status and return data."""
@@ -47,6 +49,10 @@ class MachinePoller:
             self.last_poll_time = datetime.utcnow()
 
             logger.debug(f"Successfully polled machine {self.machine.id} ({self.machine.name})")
+
+            # Log events to database (non-blocking, in background)
+            asyncio.create_task(self._log_events_async(status_data))
+
             return status_data
 
         except Exception as e:
@@ -66,6 +72,149 @@ class MachinePoller:
                 "error": str(e),
                 "consecutive_failures": self.consecutive_failures,
             }
+
+    async def _log_events_async(self, status_data: Dict[str, Any]):
+        """
+        Log events to database in background (non-blocking).
+
+        Events logged:
+        - Status transitions (running → stopped, etc.)
+        - Alarms (only when status == 'alarm')
+        - Production run start/end
+        """
+        db = SessionLocal()
+        try:
+            current_status = status_data.get("status")
+
+            # Log status transition (Option A: in-memory tracking)
+            if self.last_status != current_status:
+                await self._log_status_event(db, status_data, current_status)
+                self.last_status = current_status
+
+            # Log alarms only when status indicates alarm (Q3)
+            if current_status == "alarm":
+                await self._log_alarms(db, status_data)
+
+            # Log production run start/end (Q4)
+            await self._log_production_run(db, status_data)
+
+            db.commit()
+        except Exception as e:
+            logger.error(f"Error logging events for machine {self.machine.id}: {e}")
+            db.rollback()
+        finally:
+            db.close()
+
+    async def _log_status_event(self, db: Session, status_data: Dict[str, Any], current_status: str):
+        """Log machine status change event."""
+        try:
+            event = MachineStatusEvent(
+                time=datetime.utcnow(),
+                machine_id=self.machine.id,
+                status=current_status,
+                previous_status=self.last_status,
+                program_name=status_data.get("program_name"),
+                o_number=status_data.get("o_number"),
+                metrics={
+                    "cycle_time_seconds": status_data.get("cycle_time_seconds"),
+                    "cutting_time_seconds": status_data.get("cutting_time_seconds"),
+                    "power_on_hours": status_data.get("power_on_hours"),
+                }
+            )
+            db.add(event)
+            logger.debug(f"Logged status event for machine {self.machine.id}: {self.last_status} → {current_status}")
+        except Exception as e:
+            logger.error(f"Failed to log status event: {e}")
+            raise
+
+    async def _log_alarms(self, db: Session, status_data: Dict[str, Any]):
+        """
+        Log alarm events.
+
+        Fetches active alarms from machine and logs any new ones to database.
+        """
+        try:
+            # Get alarms from machine
+            http_client = CNCHttpClient(
+                self.machine.ip_address,
+                port=self.machine.http_port,
+                timeout=5,
+            )
+            alarms = http_client.get_alarms()
+
+            if not alarms:
+                logger.debug(f"No alarms found for machine {self.machine.id}")
+                return
+
+            # Log each alarm that isn't already in the database
+            for alarm in alarms:
+                alarm_code = alarm.get("code", "UNKNOWN")
+
+                # Check if this alarm is already logged and still active
+                existing = db.query(AlarmEvent).filter(
+                    AlarmEvent.machine_id == self.machine.id,
+                    AlarmEvent.alarm_code == alarm_code,
+                    AlarmEvent.cleared_at.is_(None)
+                ).first()
+
+                if not existing:
+                    # New alarm - log it
+                    event = AlarmEvent(
+                        time=datetime.utcnow(),
+                        machine_id=self.machine.id,
+                        alarm_code=alarm_code,
+                        alarm_message=alarm.get("message", ""),
+                        alarm_type=alarm.get("type"),
+                        severity=alarm.get("severity"),
+                    )
+                    db.add(event)
+                    logger.info(f"Logged alarm for machine {self.machine.id}: {alarm_code} - {alarm.get('message', '')}")
+
+        except Exception as e:
+            logger.error(f"Failed to log alarms for machine {self.machine.id}: {e}")
+            # Don't raise - alarm logging shouldn't block production run tracking
+
+    async def _log_production_run(self, db: Session, status_data: Dict[str, Any]):
+        """
+        Track production run start/end.
+
+        - Detects when program starts running (status == 'running')
+        - Detects when program stops running (status in ['stopped', 'idle', 'alarm'])
+        """
+        try:
+            current_status = status_data.get("status")
+            program_name = status_data.get("program_name")
+
+            # Check for active production run
+            active_run = db.query(ProductionRun).filter(
+                ProductionRun.machine_id == self.machine.id,
+                ProductionRun.ended_at.is_(None)
+            ).first()
+
+            # Start new production run
+            if current_status == "running" and program_name and program_name != "----":
+                if not active_run:
+                    run = ProductionRun(
+                        machine_id=self.machine.id,
+                        program_name=program_name,
+                        o_number=status_data.get("o_number"),
+                        started_at=datetime.utcnow(),
+                    )
+                    db.add(run)
+                    logger.debug(f"Started production run for machine {self.machine.id}: {program_name}")
+
+            # End active production run
+            elif current_status in ["stopped", "idle", "alarm"] and active_run:
+                active_run.ended_at = datetime.utcnow()
+                active_run.duration_seconds = int(
+                    (active_run.ended_at - active_run.started_at).total_seconds()
+                )
+                active_run.completion_status = "completed" if current_status == "stopped" else current_status
+                logger.debug(f"Ended production run for machine {self.machine.id}: {active_run.program_name}")
+
+        except Exception as e:
+            logger.error(f"Failed to log production run for machine {self.machine.id}: {e}")
+            # Don't raise - production run logging shouldn't block other events
 
 
 class PollingService:

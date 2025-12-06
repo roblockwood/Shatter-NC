@@ -32,15 +32,15 @@ Open http://localhost:3000 and add your CNC machines through the web UI.
 
 ## Documentation
 
-- [Project Plan](.plan) - Comprehensive development roadmap
-- [API Endpoints](docs/api.md) - REST API documentation
+- [Project Plan](STATUS.md - Comprehensive development roadmap
+- [API Endpoints](API_QUICK_REFERENCE.md) - REST API documentation
 - [CNC Communication](webserver_endpoints.md) - Brother CNC protocol details
 
 ## Development Status
 
 🚧 **In Active Development** - Phase 1: MVP Foundation
 
-See [.plan](.plan) for detailed development phases and progress.
+See [STATUS.md](STATUS.md) for detailed development phases and progress.
 
 ## License
 
