@@ -3,6 +3,7 @@ import { MachineCard } from '../components/MachineCard';
 import { StatusIndicator } from '../components/ui';
 import { AddMachineCard } from '../components/AddMachineCard';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
+import { SummaryModal } from '../components/modals/SummaryModal';
 import './Dashboard.css';
 import { useState } from 'react';
 import { WS_URL, API_BASE } from '../config/api';
@@ -12,6 +13,10 @@ export const Dashboard = () => {
   const [editMode, setEditMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingMachine, setDeletingMachine] = useState<any>(null);
+  const [summaryModal, setSummaryModal] = useState<{
+    isOpen: boolean;
+    type: 'running' | 'online' | 'offline' | null;
+  }>({ isOpen: false, type: null });
 
   const onlineCount = machines.filter(m => m.is_online === true).length;
   const runningCount = machines.filter(m => m.is_online === true && m.status?.includes('Running')).length;
@@ -58,11 +63,26 @@ export const Dashboard = () => {
           {editMode && <span className="text-warning"> [EDIT MODE]</span>}
         </span>
         <span className="separator">│</span>
-        <span>RUNNING: <span className="text-success">{runningCount}</span></span>
+        <span
+          className="clickable"
+          onClick={() => setSummaryModal({ isOpen: true, type: 'running' })}
+        >
+          RUNNING: <span className="text-success">{runningCount}</span>
+        </span>
         <span className="separator">│</span>
-        <span>ONLINE: <span className="text-info">{onlineCount}</span></span>
+        <span
+          className="clickable"
+          onClick={() => setSummaryModal({ isOpen: true, type: 'online' })}
+        >
+          ONLINE: <span className="text-info">{onlineCount}</span>
+        </span>
         <span className="separator">│</span>
-        <span>OFFLINE: <span className="text-error">{offlineCount}</span></span>
+        <span
+          className="clickable"
+          onClick={() => setSummaryModal({ isOpen: true, type: 'offline' })}
+        >
+          OFFLINE: <span className="text-error">{offlineCount}</span>
+        </span>
         <span className="separator">│</span>
         <StatusIndicator
           status={isConnected ? 'online' : 'offline'}
@@ -113,6 +133,15 @@ export const Dashboard = () => {
         onConfirm={confirmDelete}
         machineName={deletingMachine?.machine_name || ''}
       />
+
+      {/* Summary Modal */}
+      {summaryModal.isOpen && summaryModal.type && (
+        <SummaryModal
+          isOpen={summaryModal.isOpen}
+          onClose={() => setSummaryModal({ isOpen: false, type: null })}
+          summaryType={summaryModal.type}
+        />
+      )}
 
       {/* Footer/Command Line */}
       <div className="dashboard-footer">
