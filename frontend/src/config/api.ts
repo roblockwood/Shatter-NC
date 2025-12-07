@@ -2,10 +2,12 @@
  * API Configuration
  *
  * This file centralizes all API endpoint configuration.
- * The API URL is determined at build time from environment variables.
+ * The API URL is determined dynamically based on the browser's hostname.
  *
- * For development: Uses VITE_API_URL or defaults to http://localhost:8000
- * For production: Must be set during build with VITE_API_URL
+ * Behavior:
+ * - If VITE_API_URL is set, uses that value (for manual override)
+ * - Otherwise, auto-detects: http://{window.location.hostname}:8000
+ * - This allows network access from any device without configuration
  */
 
 // Get API URL from environment variable or use default
@@ -17,13 +19,9 @@ const getApiUrl = (): string => {
     return envApiUrl;
   }
 
-  // Development fallback
-  if (import.meta.env.DEV) {
-    return 'http://localhost:8000';
-  }
-
-  // Production fallback - use window.location to build URL dynamically
+  // Use window.location to build URL dynamically
   // This allows the frontend to work when accessed from any device
+  // Works in both development and production modes
   const protocol = window.location.protocol;
   const hostname = window.location.hostname;
   const apiPort = '8000'; // Backend always runs on 8000
