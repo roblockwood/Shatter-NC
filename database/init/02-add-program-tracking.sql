@@ -120,6 +120,12 @@ SELECT create_hypertable('machine_status_events', 'time', if_not_exists => TRUE)
 -- Retention policy: keep 1 year
 SELECT add_retention_policy('machine_status_events', INTERVAL '1 year', if_not_exists => TRUE);
 
+-- Enable compression on hypertable
+ALTER TABLE machine_status_events SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'machine_id'
+);
+
 -- Compression policy: compress after 7 days
 SELECT add_compression_policy('machine_status_events', INTERVAL '7 days', if_not_exists => TRUE);
 
@@ -157,6 +163,12 @@ SELECT create_hypertable('alarm_events', 'time', if_not_exists => TRUE);
 
 -- Retention policy: keep 2 years
 SELECT add_retention_policy('alarm_events', INTERVAL '2 years', if_not_exists => TRUE);
+
+-- Enable compression on hypertable
+ALTER TABLE alarm_events SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'machine_id'
+);
 
 -- Compression policy: compress after 30 days
 SELECT add_compression_policy('alarm_events', INTERVAL '30 days', if_not_exists => TRUE);
@@ -207,6 +219,12 @@ SELECT create_hypertable('production_runs', 'started_at', if_not_exists => TRUE)
 
 -- Retention policy: keep 5 years
 SELECT add_retention_policy('production_runs', INTERVAL '5 years', if_not_exists => TRUE);
+
+-- Enable compression on hypertable
+ALTER TABLE production_runs SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'machine_id'
+);
 
 -- Compression policy: compress after 90 days
 SELECT add_compression_policy('production_runs', INTERVAL '90 days', if_not_exists => TRUE);
