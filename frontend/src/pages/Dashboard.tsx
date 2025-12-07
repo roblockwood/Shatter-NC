@@ -4,8 +4,9 @@ import { StatusIndicator } from '../components/ui';
 import { AddMachineCard } from '../components/AddMachineCard';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { SummaryModal } from '../components/modals/SummaryModal';
+import { SummaryPopup } from '../components/modals/SummaryPopup';
 import './Dashboard.css';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { WS_URL, API_BASE } from '../config/api';
 
 export const Dashboard = () => {
@@ -17,6 +18,13 @@ export const Dashboard = () => {
     isOpen: boolean;
     type: 'running' | 'online' | 'offline' | null;
   }>({ isOpen: false, type: null });
+  const [summaryPopup, setSummaryPopup] = useState<{
+    isOpen: boolean;
+    type: 'online' | 'offline' | null;
+  }>({ isOpen: false, type: null });
+
+  const onlineRef = useRef<HTMLSpanElement>(null);
+  const offlineRef = useRef<HTMLSpanElement>(null);
 
   const onlineCount = machines.filter(m => m.is_online === true).length;
   const runningCount = machines.filter(m => m.is_online === true && m.status?.includes('Running')).length;
@@ -71,15 +79,19 @@ export const Dashboard = () => {
         </span>
         <span className="separator">│</span>
         <span
+          ref={onlineRef}
           className="clickable"
-          onClick={() => setSummaryModal({ isOpen: true, type: 'online' })}
+          onMouseEnter={() => setSummaryPopup({ isOpen: true, type: 'online' })}
+          onMouseLeave={() => setSummaryPopup({ isOpen: false, type: null })}
         >
           ONLINE: <span className="text-info">{onlineCount}</span>
         </span>
         <span className="separator">│</span>
         <span
+          ref={offlineRef}
           className="clickable"
-          onClick={() => setSummaryModal({ isOpen: true, type: 'offline' })}
+          onMouseEnter={() => setSummaryPopup({ isOpen: true, type: 'offline' })}
+          onMouseLeave={() => setSummaryPopup({ isOpen: false, type: null })}
         >
           OFFLINE: <span className="text-error">{offlineCount}</span>
         </span>
@@ -134,12 +146,21 @@ export const Dashboard = () => {
         machineName={deletingMachine?.machine_name || ''}
       />
 
-      {/* Summary Modal */}
-      {summaryModal.isOpen && summaryModal.type && (
+      {/* Summary Modal (for Running only) */}
+      {summaryModal.isOpen && summaryModal.type === 'running' && (
         <SummaryModal
           isOpen={summaryModal.isOpen}
           onClose={() => setSummaryModal({ isOpen: false, type: null })}
           summaryType={summaryModal.type}
+        />
+      )}
+
+      {/* Summary Popup (for Online/Offline) */}
+      {summaryPopup.isOpen && summaryPopup.type && (
+        <SummaryPopup
+          summaryType={summaryPopup.type}
+          anchorRef={summaryPopup.type === 'online' ? onlineRef : offlineRef}
+          onClose={() => setSummaryPopup({ isOpen: false, type: null })}
         />
       )}
 
