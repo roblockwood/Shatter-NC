@@ -4,9 +4,10 @@ import './SummaryRow.css';
 
 interface OnlineSummaryRowProps {
   machine: OnlineSummaryMachine;
+  compact?: boolean;
 }
 
-export const OnlineSummaryRow: React.FC<OnlineSummaryRowProps> = ({ machine }) => {
+export const OnlineSummaryRow: React.FC<OnlineSummaryRowProps> = ({ machine, compact = false }) => {
   const getHealthIcon = () => {
     switch (machine.connection_health) {
       case 'healthy':
@@ -59,6 +60,35 @@ export const OnlineSummaryRow: React.FC<OnlineSummaryRowProps> = ({ machine }) =
     return `${diffHours}h ago`;
   };
 
+  if (compact) {
+    // Compact layout for popup (4 columns: machine, online duration, health, services)
+    return (
+      <div className="summary-row">
+        <div className="summary-cell machine-name">
+          <span className="text-success">{machine.machine_name}</span>
+        </div>
+        <div className="summary-cell online-duration">
+          {machine.online_duration_formatted}
+        </div>
+        <div className="summary-cell health">
+          <span className={getHealthClass()}>
+            {getHealthIcon()}
+          </span>
+        </div>
+        <div className="summary-cell services">
+          <span className={getServiceClass(machine.services.http.status)}>
+            H{getServiceIcon(machine.services.http.status)}
+          </span>
+          {' '}
+          <span className={getServiceClass(machine.services.ftp.status)}>
+            F{getServiceIcon(machine.services.ftp.status)}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Full layout for modal (5 columns)
   return (
     <div className="summary-row">
       <div className="summary-cell machine-name">

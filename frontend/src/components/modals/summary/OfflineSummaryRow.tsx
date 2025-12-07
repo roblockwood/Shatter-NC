@@ -4,9 +4,10 @@ import './SummaryRow.css';
 
 interface OfflineSummaryRowProps {
   machine: OfflineSummaryMachine;
+  compact?: boolean;
 }
 
-export const OfflineSummaryRow: React.FC<OfflineSummaryRowProps> = ({ machine }) => {
+export const OfflineSummaryRow: React.FC<OfflineSummaryRowProps> = ({ machine, compact = false }) => {
   const formatOfflineSince = () => {
     if (!machine.offline_since) return 'Unknown';
 
@@ -22,6 +23,38 @@ export const OfflineSummaryRow: React.FC<OfflineSummaryRowProps> = ({ machine })
     return service.status === 'not_responding' ? 'Not responding' : 'Unknown';
   };
 
+  const getServiceStatus = (serviceType: 'http' | 'ftp') => {
+    const service = machine.services[serviceType];
+    return service.status === 'not_responding' ? '○' : '?';
+  };
+
+  if (compact) {
+    // Compact layout for popup (4 columns: machine, offline duration, since, services)
+    return (
+      <div className="summary-row">
+        <div className="summary-cell machine-name">
+          <span className="text-error">{machine.machine_name}</span>
+        </div>
+        <div className="summary-cell offline-duration">
+          {machine.offline_duration_formatted}
+        </div>
+        <div className="summary-cell offline-since">
+          {formatOfflineSince().split(',')[0]}
+        </div>
+        <div className="summary-cell services">
+          <span className="text-error">
+            H{getServiceStatus('http')}
+          </span>
+          {' '}
+          <span className="text-error">
+            F{getServiceStatus('ftp')}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Full layout for modal (5 columns)
   return (
     <div className="summary-row">
       <div className="summary-cell machine-name">
