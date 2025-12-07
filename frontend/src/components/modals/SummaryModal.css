@@ -4,7 +4,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(0, 0, 0, 0.90);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -14,13 +14,13 @@
 
 .summary-modal {
   background: var(--color-bg);
-  border: 2px solid var(--color-border-light);
+  border: 2px solid var(--color-text-primary);
   max-width: 90vw;
   max-height: 85vh;
   width: 100%;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+  box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
 }
 
 .summary-modal-header {
@@ -28,37 +28,42 @@
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--color-border-light);
-  background: var(--color-bg-lighter);
+  border-bottom: 2px solid var(--color-text-dim);
+  background: var(--color-bg-darker);
 }
 
 .summary-modal-title {
   font-family: var(--font-mono);
   font-size: 1.25rem;
   font-weight: 700;
-  color: var(--color-info);
+  color: var(--color-text-primary);
   margin: 0;
   letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-shadow: var(--glow);
 }
 
 .summary-modal-close {
   background: none;
-  border: none;
+  border: 1px solid var(--color-text-dim);
   color: var(--color-text-secondary);
-  font-size: 1.5rem;
+  font-size: 1rem;
+  font-family: var(--font-mono);
   cursor: pointer;
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem 0.75rem;
   line-height: 1;
-  transition: color 0.2s;
+  transition: all 0.2s;
 }
 
 .summary-modal-close:hover {
   color: var(--color-error);
+  border-color: var(--color-error);
+  background: rgba(255, 0, 0, 0.1);
 }
 
 .summary-modal-controls {
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--color-border-darker);
+  border-bottom: 1px solid var(--color-text-dim);
   background: var(--color-bg-darker);
 }
 
@@ -66,13 +71,14 @@
   display: grid;
   gap: 1rem;
   padding: 0.75rem;
-  border-bottom: 2px solid var(--color-border-light);
-  background: var(--color-bg-lighter);
+  border-bottom: 1px solid var(--color-text-dim);
+  background: var(--color-bg-darker);
   font-family: var(--font-mono);
   font-size: 0.75rem;
   font-weight: 700;
-  color: var(--color-text-dim);
+  color: var(--color-text-secondary);
   letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 /* Match grid layouts from SummaryRow.css */
@@ -101,20 +107,21 @@
 
 /* Scrollbar styling */
 .summary-modal-content::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
 }
 
 .summary-modal-content::-webkit-scrollbar-track {
   background: var(--color-bg-darker);
+  border-left: 1px solid var(--color-text-dim);
 }
 
 .summary-modal-content::-webkit-scrollbar-thumb {
-  background: var(--color-border-light);
-  border-radius: 4px;
+  background: var(--color-text-dim);
+  border: 1px solid var(--color-text-dim);
 }
 
 .summary-modal-content::-webkit-scrollbar-thumb:hover {
-  background: var(--color-info);
+  background: var(--color-text-secondary);
 }
 
 /* Loading State */
@@ -124,13 +131,14 @@
   justify-content: center;
   padding: 3rem;
   font-family: var(--font-mono);
-  color: var(--color-info);
+  color: var(--color-text-primary);
 }
 
 .loading-text {
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: 0.1em;
+  text-shadow: var(--glow);
 }
 
 .loading-dots {
@@ -190,8 +198,10 @@
   justify-content: center;
   padding: 3rem;
   font-family: var(--font-mono);
-  color: var(--color-text-dim);
+  color: var(--color-text-muted);
   font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 /* Responsive Design */
