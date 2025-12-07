@@ -12,12 +12,16 @@ interface SummaryPopupProps {
   summaryType: 'online' | 'offline';
   anchorRef: React.RefObject<HTMLElement | null>;
   onClose: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
 export const SummaryPopup: React.FC<SummaryPopupProps> = ({
   summaryType,
   anchorRef,
   onClose,
+  onMouseEnter,
+  onMouseLeave,
 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -149,7 +153,12 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
   };
 
   return (
-    <div ref={popupRef} className="summary-popup">
+    <div
+      ref={popupRef}
+      className="summary-popup"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       {/* Header */}
       <div className="summary-popup-header">
         <h3 className="summary-popup-title">{getTitle()}</h3>

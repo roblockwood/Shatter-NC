@@ -25,6 +25,21 @@ export const Dashboard = () => {
 
   const onlineRef = useRef<HTMLSpanElement>(null);
   const offlineRef = useRef<HTMLSpanElement>(null);
+  const popupCloseTimerRef = useRef<number | null>(null);
+
+  const handlePopupMouseEnter = (type: 'online' | 'offline') => {
+    if (popupCloseTimerRef.current) {
+      clearTimeout(popupCloseTimerRef.current);
+      popupCloseTimerRef.current = null;
+    }
+    setSummaryPopup({ isOpen: true, type });
+  };
+
+  const handlePopupMouseLeave = () => {
+    popupCloseTimerRef.current = setTimeout(() => {
+      setSummaryPopup({ isOpen: false, type: null });
+    }, 200);
+  };
 
   const onlineCount = machines.filter(m => m.is_online === true).length;
   const runningCount = machines.filter(m => m.is_online === true && m.status?.includes('Running')).length;
@@ -81,8 +96,8 @@ export const Dashboard = () => {
         <span
           ref={onlineRef}
           className="clickable"
-          onMouseEnter={() => setSummaryPopup({ isOpen: true, type: 'online' })}
-          onMouseLeave={() => setSummaryPopup({ isOpen: false, type: null })}
+          onMouseEnter={() => handlePopupMouseEnter('online')}
+          onMouseLeave={handlePopupMouseLeave}
         >
           ONLINE: <span className="text-info">{onlineCount}</span>
         </span>
@@ -90,8 +105,8 @@ export const Dashboard = () => {
         <span
           ref={offlineRef}
           className="clickable"
-          onMouseEnter={() => setSummaryPopup({ isOpen: true, type: 'offline' })}
-          onMouseLeave={() => setSummaryPopup({ isOpen: false, type: null })}
+          onMouseEnter={() => handlePopupMouseEnter('offline')}
+          onMouseLeave={handlePopupMouseLeave}
         >
           OFFLINE: <span className="text-error">{offlineCount}</span>
         </span>
@@ -161,6 +176,8 @@ export const Dashboard = () => {
           summaryType={summaryPopup.type}
           anchorRef={summaryPopup.type === 'online' ? onlineRef : offlineRef}
           onClose={() => setSummaryPopup({ isOpen: false, type: null })}
+          onMouseEnter={() => handlePopupMouseEnter(summaryPopup.type!)}
+          onMouseLeave={handlePopupMouseLeave}
         />
       )}
 
