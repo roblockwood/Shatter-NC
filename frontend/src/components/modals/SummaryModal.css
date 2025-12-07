@@ -1,0 +1,225 @@
+.summary-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.summary-modal {
+  background: var(--color-bg);
+  border: 2px solid var(--color-border-light);
+  max-width: 90vw;
+  max-height: 85vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+}
+
+.summary-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--color-border-light);
+  background: var(--color-bg-lighter);
+}
+
+.summary-modal-title {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-info);
+  margin: 0;
+  letter-spacing: 0.1em;
+}
+
+.summary-modal-close {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.summary-modal-close:hover {
+  color: var(--color-error);
+}
+
+.summary-modal-controls {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--color-border-darker);
+  background: var(--color-bg-darker);
+}
+
+.summary-headers {
+  display: grid;
+  gap: 1rem;
+  padding: 0.75rem;
+  border-bottom: 2px solid var(--color-border-light);
+  background: var(--color-bg-lighter);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-text-dim);
+  letter-spacing: 0.05em;
+}
+
+/* Match grid layouts from SummaryRow.css */
+.summary-modal:has(.time-range-selector) .summary-headers {
+  grid-template-columns: 2fr 1fr 2fr 1.5fr 1fr;
+}
+
+.summary-modal:has([class*="online"]) .summary-headers {
+  grid-template-columns: 2fr 1fr 1.5fr 2fr 1fr;
+}
+
+.summary-modal:has([class*="offline"]) .summary-headers {
+  grid-template-columns: 2fr 1fr 2fr 3fr 1fr;
+}
+
+.summary-header {
+  display: flex;
+  align-items: center;
+}
+
+.summary-modal-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+/* Scrollbar styling */
+.summary-modal-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.summary-modal-content::-webkit-scrollbar-track {
+  background: var(--color-bg-darker);
+}
+
+.summary-modal-content::-webkit-scrollbar-thumb {
+  background: var(--color-border-light);
+  border-radius: 4px;
+}
+
+.summary-modal-content::-webkit-scrollbar-thumb:hover {
+  background: var(--color-info);
+}
+
+/* Loading State */
+.summary-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  font-family: var(--font-mono);
+  color: var(--color-info);
+}
+
+.loading-text {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.loading-dots {
+  animation: loading-dots 1.5s infinite;
+}
+
+@keyframes loading-dots {
+  0%, 20% {
+    content: '.';
+  }
+  40% {
+    content: '..';
+  }
+  60%, 100% {
+    content: '...';
+  }
+}
+
+/* Error State */
+.summary-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  gap: 1rem;
+}
+
+.error-message {
+  font-family: var(--font-mono);
+  color: var(--color-error);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.retry-button {
+  background: var(--color-error);
+  border: 1px solid var(--color-error);
+  color: var(--color-bg);
+  padding: 0.5rem 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.retry-button:hover {
+  background: var(--color-bg);
+  color: var(--color-error);
+}
+
+/* Empty State */
+.summary-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  font-family: var(--font-mono);
+  color: var(--color-text-dim);
+  font-size: 1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .summary-modal {
+    max-width: 95vw;
+    max-height: 90vh;
+  }
+
+  .summary-modal-title {
+    font-size: 1rem;
+  }
+
+  .summary-headers {
+    font-size: 0.625rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .summary-modal-overlay {
+    padding: 0.5rem;
+  }
+
+  .summary-modal-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .summary-modal-controls {
+    padding: 0.75rem 1rem;
+  }
+}
