@@ -13,7 +13,6 @@ function Navigation() {
       <div className="app-header">
         <div className="app-title">
           <span className="text-glow-strong">SHATTER v0.1.0</span>
-          <span className="app-subtitle">│ CNC MACHINE MONITOR</span>
         </div>
         <nav className="app-nav">
           <Link

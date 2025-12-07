@@ -1,0 +1,24 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Base of light tower -->
+  <rect x="24" y="54" width="16" height="8" fill="#333" rx="1"/>
+
+  <!-- Tower body -->
+  <rect x="26" y="14" width="12" height="40" fill="#444" rx="1"/>
+
+  <!-- Red light (top) -->
+  <circle cx="32" cy="18" r="5" fill="#e74c3c" opacity="0.9"/>
+  <circle cx="32" cy="18" r="6.5" fill="#e74c3c" opacity="0.3"/>
+
+  <!-- Yellow light (middle) -->
+  <circle cx="32" cy="32" r="5" fill="#f39c12" opacity="0.9"/>
+  <circle cx="32" cy="32" r="6.5" fill="#f39c12" opacity="0.3"/>
+
+  <!-- Green light (bottom) -->
+  <circle cx="32" cy="46" r="5" fill="#27ae60" opacity="0.9"/>
+  <circle cx="32" cy="46" r="6.5" fill="#27ae60" opacity="0.3"/>
+
+  <!-- Light reflections -->
+  <circle cx="30" cy="17" r="1.5" fill="#fff" opacity="0.6"/>
+  <circle cx="30" cy="31" r="1.5" fill="#fff" opacity="0.6"/>
+  <circle cx="30" cy="45" r="1.5" fill="#fff" opacity="0.6"/>
+</svg>
