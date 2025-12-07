@@ -5,9 +5,7 @@ import { AddMachineCard } from '../components/AddMachineCard';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import './Dashboard.css';
 import { useState } from 'react';
-
-const WS_URL = 'ws://localhost:8000/api/ws';
-const API_BASE = 'http://localhost:8000/api';
+import { WS_URL, API_BASE } from '../config/api';
 
 export const Dashboard = () => {
   const { machines, isConnected, removeMachine, addMachine } = useWebSocket(WS_URL);
@@ -86,7 +84,7 @@ export const Dashboard = () => {
         {machines.length === 0 && !isConnected && (
           <div className="no-machines">
             <p className="text-warning pulse">CONNECTING TO SERVER...</p>
-            <p className="text-dim text-sm">ws://localhost:8000/api/ws</p>
+            <p className="text-dim text-sm">{WS_URL}</p>
           </div>
         )}
 
