@@ -20,14 +20,15 @@ export const Dashboard = () => {
   }>({ isOpen: false, type: null });
   const [summaryPopup, setSummaryPopup] = useState<{
     isOpen: boolean;
-    type: 'online' | 'offline' | null;
+    type: 'online' | 'offline' | 'running' | null;
   }>({ isOpen: false, type: null });
 
+  const runningRef = useRef<HTMLSpanElement>(null);
   const onlineRef = useRef<HTMLSpanElement>(null);
   const offlineRef = useRef<HTMLSpanElement>(null);
   const popupCloseTimerRef = useRef<number | null>(null);
 
-  const handlePopupMouseEnter = (type: 'online' | 'offline') => {
+  const handlePopupMouseEnter = (type: 'online' | 'offline' | 'running') => {
     if (popupCloseTimerRef.current) {
       clearTimeout(popupCloseTimerRef.current);
       popupCloseTimerRef.current = null;
@@ -87,8 +88,11 @@ export const Dashboard = () => {
         </span>
         <span className="separator">│</span>
         <span
+          ref={runningRef}
           className="clickable"
           onClick={() => setSummaryModal({ isOpen: true, type: 'running' })}
+          onMouseEnter={() => handlePopupMouseEnter('running')}
+          onMouseLeave={handlePopupMouseLeave}
         >
           RUNNING: <span className="text-success">{runningCount}</span>
         </span>
@@ -170,11 +174,15 @@ export const Dashboard = () => {
         />
       )}
 
-      {/* Summary Popup (for Online/Offline) */}
+      {/* Summary Popup (for Online/Offline/Running hover) */}
       {summaryPopup.isOpen && summaryPopup.type && (
         <SummaryPopup
           summaryType={summaryPopup.type}
-          anchorRef={summaryPopup.type === 'online' ? onlineRef : offlineRef}
+          anchorRef={
+            summaryPopup.type === 'online' ? onlineRef :
+            summaryPopup.type === 'offline' ? offlineRef :
+            runningRef
+          }
           onClose={() => setSummaryPopup({ isOpen: false, type: null })}
           onMouseEnter={() => handlePopupMouseEnter(summaryPopup.type!)}
           onMouseLeave={handlePopupMouseLeave}

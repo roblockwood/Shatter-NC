@@ -3,13 +3,15 @@ import { summaryApi } from '../../api/summary';
 import type {
   OnlineSummary,
   OfflineSummary,
+  RunningSummary,
 } from '../../api/summary';
 import { OnlineSummaryRow } from './summary/OnlineSummaryRow';
 import { OfflineSummaryRow } from './summary/OfflineSummaryRow';
+import { RunningSummaryRow } from './summary/RunningSummaryRow';
 import './SummaryPopup.css';
 
 interface SummaryPopupProps {
-  summaryType: 'online' | 'offline';
+  summaryType: 'online' | 'offline' | 'running';
   anchorRef: React.RefObject<HTMLElement | null>;
   onClose: () => void;
   onMouseEnter?: () => void;
@@ -27,6 +29,7 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [onlineData, setOnlineData] = useState<OnlineSummary | null>(null);
   const [offlineData, setOfflineData] = useState<OfflineSummary | null>(null);
+  const [runningData, setRunningData] = useState<RunningSummary | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
 
   // Fetch data based on summary type
@@ -44,6 +47,10 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
           case 'offline':
             const offlineResponse = await summaryApi.getOffline();
             setOfflineData(offlineResponse);
+            break;
+          case 'running':
+            const runningResponse = await summaryApi.getRunning('24h');
+            setRunningData(runningResponse);
             break;
         }
       } catch (err) {
@@ -103,6 +110,8 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
         return 'ONLINE MACHINES';
       case 'offline':
         return 'OFFLINE MACHINES';
+      case 'running':
+        return 'RUNNING MACHINES (24H)';
     }
   };
 
@@ -112,6 +121,8 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
         return ['MACHINE', 'ONLINE', 'HEALTH', 'SERVICES'];
       case 'offline':
         return ['MACHINE', 'OFFLINE', 'SINCE', 'SERVICES'];
+      case 'running':
+        return ['MACHINE', 'RUN TIME', 'PERCENTAGE', 'LAST ACTIVE'];
     }
   };
 
@@ -148,6 +159,14 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
         }
         return offlineData.machines.slice(0, 10).map((machine) => (
           <OfflineSummaryRow key={machine.machine_id} machine={machine} compact={true} />
+        ));
+
+      case 'running':
+        if (!runningData || runningData.machines.length === 0) {
+          return <div className="summary-popup-empty">No running data (24h)</div>;
+        }
+        return runningData.machines.slice(0, 10).map((machine) => (
+          <RunningSummaryRow key={machine.machine_id} machine={machine} compact={true} />
         ));
     }
   };

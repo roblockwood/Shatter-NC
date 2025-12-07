@@ -4,9 +4,10 @@ import './SummaryRow.css';
 
 interface RunningSummaryRowProps {
   machine: RunningSummaryMachine;
+  compact?: boolean;
 }
 
-export const RunningSummaryRow: React.FC<RunningSummaryRowProps> = ({ machine }) => {
+export const RunningSummaryRow: React.FC<RunningSummaryRowProps> = ({ machine, compact = false }) => {
   const getStatusClass = () => {
     if (!machine.current_status) return 'text-dim';
     if (machine.current_status.toLowerCase().includes('running')) return 'text-success';
@@ -38,6 +39,27 @@ export const RunningSummaryRow: React.FC<RunningSummaryRowProps> = ({ machine })
     return `${diffDays}d ago`;
   };
 
+  if (compact) {
+    // Compact layout for popup (4 columns: machine, run time, percentage, last active)
+    return (
+      <div className="summary-row">
+        <div className="summary-cell machine-name">
+          <span className={getStatusClass()}>{machine.machine_name}</span>
+        </div>
+        <div className="summary-cell run-time">
+          {machine.total_run_time_formatted}
+        </div>
+        <div className="summary-cell percentage">
+          {machine.run_percentage.toFixed(1)}%
+        </div>
+        <div className="summary-cell last-active">
+          {getLastActive()}
+        </div>
+      </div>
+    );
+  }
+
+  // Full layout for modal (5 columns)
   return (
     <div className="summary-row">
       <div className="summary-cell machine-name">
