@@ -35,7 +35,13 @@ class Settings(BaseSettings):
     ENABLE_AUTH: bool = False
 
     # CORS
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",      # Development - Vite/React
+        "http://localhost:5173",      # Development - Vite alternative port
+        "http://localhost",           # Production - Nginx on port 80
+        "http://localhost:80",        # Production - Nginx explicit port
+        "*",                          # Allow all origins (use for testing/internal networks)
+    ]
 
     @property
     def database_url(self) -> str:
