@@ -5,23 +5,43 @@
 - Docker Desktop installed and running
 - Git (for cloning the repository)
 
-## Step 1: Start Database Services
+## Quick Start (Recommended)
 
-The PostgreSQL/TimescaleDB image is large (~225MB) and may take a few minutes to download on first run.
+Start all services with Docker Compose:
 
 ```bash
-# Start just the database and Redis (faster initial setup)
-docker compose -f docker-compose.simple.yml up -d
+# Clone the repository
+git clone https://github.com/user/shatter
+cd shatter
 
-# Wait for services to be healthy
-docker compose -f docker-compose.simple.yml ps
+# Copy environment file
+cp .env.example .env
+
+# Start all services (database, backend, frontend, Redis)
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Check service status
+docker compose ps
 ```
 
-## Step 2: Run Backend Locally (Development)
+The application will be available at:
+- http://localhost:3000 - Frontend web application
+- http://localhost:8000 - Backend API
+- http://localhost:8000/docs - Interactive API documentation (Swagger UI)
+- http://localhost:8000/health - Health check
 
-While we build out the full containerized setup, you can run the backend locally:
+## Alternative: Local Backend Development
+
+If you prefer to run the backend locally for development:
 
 ```bash
+# Start just the database and Redis
+docker compose -f docker-compose.simple.yml up -d
+
+# In a new terminal, run the backend locally
 cd backend
 
 # Create virtual environment
@@ -35,12 +55,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The API will be available at:
-- http://localhost:8000 - API root
-- http://localhost:8000/docs - Interactive API documentation (Swagger UI)
-- http://localhost:8000/health - Health check
-
-## Step 3: Test the API
+## Test the API
 
 ### Using the Browser
 
@@ -69,43 +84,37 @@ curl -X POST http://localhost:8000/api/machines \
 curl http://localhost:8000/api/machines/1
 ```
 
-## Step 4: Full Docker Setup (When Ready)
-
-Once all images are downloaded:
+## Stopping Services
 
 ```bash
-# Start all services (backend, frontend, database, redis)
-docker compose up -d
-
-# View logs
-docker compose logs -f
-
 # Stop all services
 docker compose down
+
+# Stop and remove volumes (deletes all data)
+docker compose down -v
 ```
 
 ## Troubleshooting
 
-### Docker image still downloading
-Check progress:
+### Services won't start
+Check if Docker Desktop is running and healthy:
 ```bash
-docker images
-```
-
-You should see `timescale/timescaledb` and `redis` images.
-
-### Backend won't start
-Make sure PostgreSQL is running and healthy:
-```bash
-docker compose -f docker-compose.simple.yml ps
+docker compose ps
+docker compose logs
 ```
 
 ### Database connection errors
-Check your `.env` file or use the defaults:
-- POSTGRES_HOST=localhost
+If running the backend locally, ensure the database is accessible:
+- Check `.env` file has `POSTGRES_HOST=localhost`
+- Verify database is running: `docker compose -f docker-compose.simple.yml ps`
+
+Default database credentials:
 - POSTGRES_DB=shatter
 - POSTGRES_USER=shatter_user
 - POSTGRES_PASSWORD=changeme
+
+### Port conflicts
+If ports 3000, 8000, or 5432 are already in use, modify the ports in `docker-compose.yml` or stop the conflicting services
 
 ## Next Steps
 
