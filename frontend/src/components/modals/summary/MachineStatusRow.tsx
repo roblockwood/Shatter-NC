@@ -55,7 +55,7 @@ export const MachineStatusRow: React.FC<MachineStatusRowProps> = ({ machine, com
     }
   };
 
-  const pollingGraph = generatePollingGraph(machine.polling_history_8h, 20);
+  const pollingGraph = generatePollingGraph(machine.polling_history_8h, 30);
   const uptimePercent = machine.uptime_8h_percent;
 
   if (compact) {

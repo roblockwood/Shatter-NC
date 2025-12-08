@@ -1,7 +1,7 @@
 import type { PollingDataPoint } from '../api/summary';
 
 /**
- * Generate an ASCII line graph representing polling history
+ * Generate an ASCII line graph representing polling history (trailing 1 hour)
  *
  * Uses characters to show communication success/failure:
  * - Online (success): '-' (horizontal line, top position)
@@ -9,20 +9,20 @@ import type { PollingDataPoint } from '../api/summary';
  * - Transition down (online→offline): '\' (going offline)
  * - Transition up (offline→online): '/' (coming online)
  *
- * @param history - Polling history data points
- * @param width - Width of the graph in characters (default 20)
+ * @param history - Polling history data points (1-hour window)
+ * @param width - Width of the graph in characters (default 30 for 1-hour, ~2 min per char)
  * @returns ASCII graph string
  *
  * @example
- * // Returns "----------" for 100% uptime
- * generatePollingGraph(allSuccessful, 10)
+ * // Returns "------------------------------" for 100% uptime (1 hour)
+ * generatePollingGraph(allSuccessful, 30)
  *
  * // Returns "-----\____/-----" for brief outage
- * generatePollingGraph(withOutage, 16)
+ * generatePollingGraph(withOutage, 30)
  */
 export function generatePollingGraph(
   history: PollingDataPoint[],
-  width: number = 20
+  width: number = 30
 ): string {
   if (history.length === 0) {
     return '-'.repeat(width);

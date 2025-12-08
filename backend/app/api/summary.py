@@ -466,11 +466,14 @@ def get_machines_summary(db: Session = Depends(get_db)):
         else:
             offline_count += 1
 
-        # Get polling history
-        polling_history = get_polling_history(machine.id, db, hours=8)
+        # Get polling history (trailing 1 hour for detailed graph, but calculate stats over 8 hours)
+        polling_history = get_polling_history(machine.id, db, hours=1)
 
-        # Calculate polling stats
-        polling_stats = calculate_polling_stats(polling_history)
+        # Also get 8-hour history for calculating full stats
+        polling_history_8h = get_polling_history(machine.id, db, hours=8)
+
+        # Calculate polling stats from full 8-hour history
+        polling_stats = calculate_polling_stats(polling_history_8h)
 
         # Calculate uptime percentage (same as success rate for 8h window)
         uptime_8h_percent = polling_stats.success_rate
