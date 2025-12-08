@@ -1,15 +1,9 @@
 import { API_BASE_URL } from '../config/api';
 
-export type ServiceStatus = {
-  status: string;
-  port: number;
-  last_check?: string;
-  last_error?: string;
-};
-
-export type MachineServices = {
-  http: ServiceStatus;
-  ftp: ServiceStatus;
+export type PollingDataPoint = {
+  time: string;
+  success: boolean;
+  response_time_ms?: number;
 };
 
 export type RunningSummaryMachine = {
@@ -39,7 +33,7 @@ export type OnlineSummaryMachine = {
   online_duration_formatted: string;
   last_seen_at?: string;
   connection_health: string;
-  services: MachineServices;
+  polling_history_8h: PollingDataPoint[];
 };
 
 export type OnlineSummary = {
@@ -55,9 +49,9 @@ export type OfflineSummaryMachine = {
   offline_duration_seconds: number;
   offline_duration_formatted: string;
   last_seen_at?: string;
-  services: MachineServices;
   last_known_status?: string;
   enabled: boolean;
+  polling_history_8h: PollingDataPoint[];
 };
 
 export type OfflineSummary = {

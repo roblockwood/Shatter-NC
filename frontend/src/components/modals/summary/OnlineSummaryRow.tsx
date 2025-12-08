@@ -34,12 +34,35 @@ export const OnlineSummaryRow: React.FC<OnlineSummaryRowProps> = ({ machine, com
     }
   };
 
-  const getServiceIcon = (status: string) => {
-    return status === 'connected' ? '●' : '○';
+  const getPollingSuccessRate = () => {
+    if (!machine.polling_history_8h || machine.polling_history_8h.length === 0) {
+      return 'N/A';
+    }
+    const successCount = machine.polling_history_8h.filter(p => p.success).length;
+    const rate = Math.round((successCount / machine.polling_history_8h.length) * 100);
+    return `${rate}%`;
   };
 
-  const getServiceClass = (status: string) => {
-    return status === 'connected' ? 'text-success' : 'text-error';
+  const getAverageResponseTime = () => {
+    if (!machine.polling_history_8h || machine.polling_history_8h.length === 0) {
+      return 'N/A';
+    }
+    const times = machine.polling_history_8h.filter(p => p.response_time_ms);
+    if (times.length === 0) return 'N/A';
+    const avg = Math.round(times.reduce((sum, p) => sum + (p.response_time_ms || 0), 0) / times.length);
+    return `${avg}ms`;
+  };
+
+  const getPollingTrendIndicator = () => {
+    if (!machine.polling_history_8h || machine.polling_history_8h.length < 2) {
+      return '';
+    }
+    // Simple trend: check if recent polls are successful
+    const recentPolls = machine.polling_history_8h.slice(-3);
+    const recentSuccess = recentPolls.filter(p => p.success).length;
+    if (recentSuccess === recentPolls.length) return '↗'; // All recent successful
+    if (recentSuccess === 0) return '↘'; // All recent failed
+    return '→'; // Mixed
   };
 
   const formatLastSeen = () => {
@@ -61,7 +84,7 @@ export const OnlineSummaryRow: React.FC<OnlineSummaryRowProps> = ({ machine, com
   };
 
   if (compact) {
-    // Compact layout for popup (4 columns: machine, online duration, health, services)
+    // Compact layout for popup (4 columns: machine, online duration, health, polling)
     return (
       <div className="summary-row">
         <div className="summary-cell machine-name">
@@ -75,13 +98,9 @@ export const OnlineSummaryRow: React.FC<OnlineSummaryRowProps> = ({ machine, com
             {getHealthIcon()}
           </span>
         </div>
-        <div className="summary-cell services">
-          <span className={getServiceClass(machine.services.http.status)}>
-            H{getServiceIcon(machine.services.http.status)}
-          </span>
-          {' '}
-          <span className={getServiceClass(machine.services.ftp.status)}>
-            F{getServiceIcon(machine.services.ftp.status)}
+        <div className="summary-cell polling">
+          <span className="text-info">
+            {getPollingSuccessRate()} {getPollingTrendIndicator()}
           </span>
         </div>
       </div>
@@ -102,13 +121,13 @@ export const OnlineSummaryRow: React.FC<OnlineSummaryRowProps> = ({ machine, com
           {getHealthIcon()} {machine.connection_health}
         </span>
       </div>
-      <div className="summary-cell services">
-        <span className={getServiceClass(machine.services.http.status)}>
-          HTTP {getServiceIcon(machine.services.http.status)}
+      <div className="summary-cell polling">
+        <span className="text-info">
+          {getAverageResponseTime()}
         </span>
-        {' '}
-        <span className={getServiceClass(machine.services.ftp.status)}>
-          FTP {getServiceIcon(machine.services.ftp.status)}
+        <span className="text-dim"> | </span>
+        <span className="text-info">
+          {getPollingSuccessRate()} {getPollingTrendIndicator()}
         </span>
       </div>
       <div className="summary-cell last-seen">
