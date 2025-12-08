@@ -101,7 +101,7 @@ export const Dashboard = () => {
           onMouseEnter={() => handlePopupMouseEnter('machines')}
           onMouseLeave={handlePopupMouseLeave}
         >
-          MACHINES: <span className="text-info">{onlineCount}</span><span className="text-dim">/</span><span className="text-info">{machines.length}</span>
+          ONLINE: <span className="text-info">{onlineCount}</span><span className="text-dim">/</span><span className="text-info">{machines.length}</span>
         </span>
         <span className="separator">│</span>
         <StatusIndicator

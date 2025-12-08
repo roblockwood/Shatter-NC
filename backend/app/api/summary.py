@@ -300,6 +300,8 @@ def get_running_summary(
 @router.get("/summary/online", response_model=OnlineSummary)
 def get_online_summary(db: Session = Depends(get_db)):
     """
+    DEPRECATED: Use /summary/machines instead for unified machine status view.
+
     Get online summary showing all currently online machines with connection health and service status.
 
     Returns machines with online duration, connection health indicators, and service availability.
@@ -367,6 +369,8 @@ def get_online_summary(db: Session = Depends(get_db)):
 @router.get("/summary/offline", response_model=OfflineSummary)
 def get_offline_summary(db: Session = Depends(get_db)):
     """
+    DEPRECATED: Use /summary/machines instead for unified machine status view.
+
     Get offline summary showing all currently offline machines with downtime and service errors.
 
     Returns machines that are offline with offline duration, service failure reasons,
