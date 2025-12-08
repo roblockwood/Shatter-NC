@@ -63,6 +63,9 @@ app.include_router(websocket.router, prefix="/api", tags=["websocket"])
 # Inject websocket manager into websocket router
 websocket.set_websocket_manager(websocket_manager)
 
+# Inject polling service into summary router
+summary.set_polling_service(polling_service)
+
 
 @app.on_event("startup")
 async def startup_event():

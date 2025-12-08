@@ -11,8 +11,15 @@ from app.models.event import ProductionRun, MachineStatusEvent
 
 router = APIRouter()
 
-# WebSocket manager will be injected from main.py (same pattern as websocket.py)
+# Polling service and WebSocket manager will be injected from main.py
+# These are initialized in main.py and accessed as globals
 from app.api.websocket import websocket_manager
+polling_service = None
+
+def set_polling_service(service):
+    """Inject the polling service from main.py"""
+    global polling_service
+    polling_service = service
 
 # Pydantic models for responses
 
@@ -224,6 +231,7 @@ def get_online_summary(db: Session = Depends(get_db)):
     Get online summary showing all currently online machines with connection health and service status.
 
     Returns machines with online duration, connection health indicators, and service availability.
+    Uses the polling service as the source of truth for online status.
     """
     # Get all enabled machines
     machines_query = db.query(Machine).filter(Machine.enabled == True).all()
@@ -231,11 +239,14 @@ def get_online_summary(db: Session = Depends(get_db)):
     online_machines = []
 
     for machine in machines_query:
-        # Get cached status from WebSocket manager
-        cached_status = websocket_manager.get_machine_status(machine.id) if websocket_manager else None
+        # Use polling service as source of truth for online status
+        is_online = False
+        if polling_service:
+            poller_status = polling_service.get_machine_status(machine.id)
+            is_online = poller_status.get("is_online", False) if poller_status else False
 
         # Only include online machines
-        if not cached_status or not cached_status.get("is_online"):
+        if not is_online:
             continue
 
         # Calculate online duration
@@ -288,6 +299,7 @@ def get_offline_summary(db: Session = Depends(get_db)):
 
     Returns machines that are offline with offline duration, service failure reasons,
     and last known status.
+    Uses the polling service as the source of truth for online status.
     """
     # Get all enabled machines
     machines_query = db.query(Machine).filter(Machine.enabled == True).all()
@@ -295,24 +307,14 @@ def get_offline_summary(db: Session = Depends(get_db)):
     offline_machines = []
 
     for machine in machines_query:
-        # Get cached status from WebSocket manager
-        cached_status = websocket_manager.get_machine_status(machine.id) if websocket_manager else None
-
-        # Determine if machine is offline
-        is_offline = False
-        if not cached_status or not cached_status.get("is_online"):
-            is_offline = True
-        elif machine.last_seen_at:
-            # Check if last_seen_at is more than 5 minutes ago
-            now = datetime.utcnow()
-            last_seen_naive = machine.last_seen_at.replace(tzinfo=None) if machine.last_seen_at.tzinfo else machine.last_seen_at
-            if (now - last_seen_naive).total_seconds() > 300:
-                is_offline = True
-        else:
-            is_offline = True
+        # Use polling service as source of truth for online status
+        is_online = False
+        if polling_service:
+            poller_status = polling_service.get_machine_status(machine.id)
+            is_online = poller_status.get("is_online", False) if poller_status else False
 
         # Only include offline machines
-        if not is_offline:
+        if is_online:
             continue
 
         # Get last known status from machine_status_events
