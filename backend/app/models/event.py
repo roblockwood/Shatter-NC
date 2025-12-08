@@ -122,3 +122,24 @@ class ProductionRun(Base):
 
     def __repr__(self):
         return f"<ProductionRun(id={self.id}, machine_id={self.machine_id}, program='{self.program_name}')>"
+
+
+class PollingEvent(Base):
+    """HTTP polling attempt tracking (TimescaleDB hypertable)."""
+
+    __tablename__ = "polling_events"
+
+    # TimescaleDB time column (must be part of primary key)
+    time = Column(DateTime(timezone=True), primary_key=True, nullable=False)
+    machine_id = Column(Integer, ForeignKey("machines.id", ondelete="CASCADE"), primary_key=True, nullable=False, index=True)
+
+    # Poll result
+    success = Column(Boolean, nullable=False, index=True)
+    response_time_ms = Column(Integer)  # Milliseconds
+    error_message = Column(String(500))
+
+    # Relationships
+    machine = relationship("Machine")
+
+    def __repr__(self):
+        return f"<PollingEvent(machine_id={self.machine_id}, time={self.time}, success={self.success})>"

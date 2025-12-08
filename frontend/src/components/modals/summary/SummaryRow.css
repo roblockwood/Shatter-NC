@@ -98,6 +98,21 @@
   gap: 0.25rem;
 }
 
+/* Polling Graph */
+.summary-cell.graph code {
+  letter-spacing: 0.1em;
+  font-family: var(--font-mono);
+}
+
+/* Color individual characters based on poll status */
+.summary-cell.graph code .polling-success {
+  color: var(--color-success) !important;
+}
+
+.summary-cell.graph code .polling-failure {
+  color: var(--color-error) !important;
+}
+
 /* Responsive Design */
 @media (max-width: 1024px) {
   .summary-row {
