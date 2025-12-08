@@ -140,6 +140,12 @@
   white-space: nowrap;
 }
 
+/* Polling graph - fixed width, no scrolling */
+.summary-popup .summary-cell.graph {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 .summary-popup .service-error {
   font-size: 11px;
   margin: 2px 0;

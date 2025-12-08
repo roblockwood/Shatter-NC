@@ -35,8 +35,10 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    const fetchData = async () => {
-      setLoading(true);
+    const fetchData = async (isInitial: boolean = false) => {
+      if (isInitial) {
+        setLoading(true);
+      }
       setError(null);
 
       try {
@@ -57,11 +59,19 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch summary data');
       } finally {
-        setLoading(false);
+        if (isInitial) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchData();
+    // Fetch immediately
+    fetchData(true);
+
+    // Set up polling to refresh data every 2 seconds (without showing loading state)
+    const pollInterval = setInterval(() => fetchData(false), 2000);
+
+    return () => clearInterval(pollInterval);
   }, [isOpen, summaryType, timeRange]);
 
   // Handle time range change (only for running summary)

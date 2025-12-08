@@ -231,7 +231,7 @@ export const ValidationResultModal: React.FC<ValidationResultModalProps> = ({
       });
 
       // Step 2: Store in database with validation results
-      const dbResponse = await fetch('${API_BASE_URL}/api/programs/upload', {
+      const dbResponse = await fetch(`${API_BASE_URL}/api/programs/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

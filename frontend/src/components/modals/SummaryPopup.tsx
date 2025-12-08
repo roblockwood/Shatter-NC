@@ -4,14 +4,16 @@ import type {
   OnlineSummary,
   OfflineSummary,
   RunningSummary,
+  MachinesSummary,
 } from '../../api/summary';
 import { OnlineSummaryRow } from './summary/OnlineSummaryRow';
 import { OfflineSummaryRow } from './summary/OfflineSummaryRow';
 import { RunningSummaryRow } from './summary/RunningSummaryRow';
+import { MachineStatusRow } from './summary/MachineStatusRow';
 import './SummaryPopup.css';
 
 interface SummaryPopupProps {
-  summaryType: 'online' | 'offline' | 'running';
+  summaryType: 'online' | 'offline' | 'running' | 'machines';
   anchorRef: React.RefObject<HTMLElement | null>;
   onClose: () => void;
   onMouseEnter?: () => void;
@@ -30,12 +32,15 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
   const [onlineData, setOnlineData] = useState<OnlineSummary | null>(null);
   const [offlineData, setOfflineData] = useState<OfflineSummary | null>(null);
   const [runningData, setRunningData] = useState<RunningSummary | null>(null);
+  const [machinesData, setMachinesData] = useState<MachinesSummary | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
 
   // Fetch data based on summary type
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    const fetchData = async (isInitial: boolean = false) => {
+      if (isInitial) {
+        setLoading(true);
+      }
       setError(null);
 
       try {
@@ -52,15 +57,27 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
             const runningResponse = await summaryApi.getRunning('24h');
             setRunningData(runningResponse);
             break;
+          case 'machines':
+            const machinesResponse = await summaryApi.getMachines();
+            setMachinesData(machinesResponse);
+            break;
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch summary data');
       } finally {
-        setLoading(false);
+        if (isInitial) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchData();
+    // Fetch immediately
+    fetchData(true);
+
+    // Set up polling to refresh data every 2 seconds (without showing loading state)
+    const pollInterval = setInterval(() => fetchData(false), 2000);
+
+    return () => clearInterval(pollInterval);
   }, [summaryType]);
 
   // Position popup near anchor element
@@ -112,6 +129,11 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
         return 'OFFLINE MACHINES';
       case 'running':
         return 'RUNNING MACHINES (24H)';
+      case 'machines':
+        if (machinesData) {
+          return `MACHINE STATUS (${machinesData.online_count}/${machinesData.total_machines} ONLINE)`;
+        }
+        return 'MACHINE STATUS';
     }
   };
 
@@ -123,6 +145,8 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
         return ['MACHINE', 'OFFLINE', 'SINCE', 'SERVICES'];
       case 'running':
         return ['MACHINE', 'RUN TIME', 'PERCENTAGE', 'LAST ACTIVE'];
+      case 'machines':
+        return ['MACHINE', 'DURATION', 'POLLING (1H)', 'UPTIME (8H)', 'HEALTH', 'POLLS'];
     }
   };
 
@@ -167,6 +191,14 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
         }
         return runningData.machines.slice(0, 10).map((machine) => (
           <RunningSummaryRow key={machine.machine_id} machine={machine} compact={true} />
+        ));
+
+      case 'machines':
+        if (!machinesData || machinesData.machines.length === 0) {
+          return <div className="summary-popup-empty">No machines</div>;
+        }
+        return machinesData.machines.map((machine) => (
+          <MachineStatusRow key={machine.machine_id} machine={machine} compact={true} />
         ));
     }
   };

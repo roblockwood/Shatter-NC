@@ -26,6 +26,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: production
     container_name: shatter-backend
     restart: unless-stopped
     environment:
@@ -44,9 +45,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-    volumes:
-      - ./backend:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
   # Frontend web application
   frontend:

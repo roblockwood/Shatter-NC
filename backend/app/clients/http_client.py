@@ -53,13 +53,28 @@ class CNCHttpClient:
             request = f"GET {endpoint} HTTP/1.0\r\n\r\n".encode()
             sock.send(request)
 
-            # Receive response
+            # Receive response with special handling for Brother CNC
+            # The machine may close connection abruptly, so we need longer initial timeout
             response = b""
-            while True:
-                chunk = sock.recv(4096)
-                if not chunk:
-                    break
-                response += chunk
+            sock.settimeout(2)  # Give it 2 seconds to start responding
+            try:
+                # Try to get initial data
+                first_chunk = sock.recv(4096)
+                if first_chunk:
+                    response += first_chunk
+                    # Now try to get remaining data with shorter timeout
+                    sock.settimeout(0.2)
+                    while True:
+                        try:
+                            chunk = sock.recv(4096)
+                            if not chunk:
+                                break
+                            response += chunk
+                        except socket.timeout:
+                            break
+            except socket.timeout:
+                # No response within timeout
+                pass
 
             # Decode response
             response_str = response.decode("utf-8", errors="replace")

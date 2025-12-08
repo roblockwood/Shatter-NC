@@ -1,11 +1,12 @@
 """Background polling service for CNC machines."""
 import asyncio
 import logging
+import time
 from datetime import datetime
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 from app.models.machine import Machine
-from app.models.event import MachineStatusEvent, AlarmEvent, ProductionRun
+from app.models.event import MachineStatusEvent, AlarmEvent, ProductionRun, PollingEvent
 from app.clients.http_client import CNCHttpClient
 from app.db.base import SessionLocal
 
@@ -25,7 +26,11 @@ class MachinePoller:
 
     async def poll(self) -> Dict[str, Any]:
         """Poll machine status and return data."""
+        poll_start_time = time.time()
+        poll_timestamp = datetime.utcnow()
+
         try:
+            logger.debug(f"Polling machine {self.machine.id} ({self.machine.name}) at {self.machine.ip_address}")
             http_client = CNCHttpClient(
                 self.machine.ip_address,
                 port=self.machine.http_port,
@@ -35,23 +40,27 @@ class MachinePoller:
             # Get comprehensive status
             status_data = http_client.get_status_overview()
 
+            # Calculate response time
+            response_time_ms = int((time.time() - poll_start_time) * 1000)
+
             # Add metadata
             status_data.update({
                 "machine_id": self.machine.id,
                 "machine_name": self.machine.name,
-                "poll_timestamp": datetime.utcnow().isoformat(),
+                "poll_timestamp": poll_timestamp.isoformat(),
                 "is_online": True,
+                "response_time_ms": response_time_ms,
             })
 
             # Update machine health
             self.is_online = True
             self.consecutive_failures = 0
-            self.last_poll_time = datetime.utcnow()
+            self.last_poll_time = poll_timestamp
 
-            logger.debug(f"Successfully polled machine {self.machine.id} ({self.machine.name})")
+            logger.debug(f"Successfully polled machine {self.machine.id} ({self.machine.name}) in {response_time_ms}ms")
 
             # Log events to database (non-blocking, in background)
-            asyncio.create_task(self._log_events_async(status_data))
+            asyncio.create_task(self._log_events_async(status_data, poll_timestamp, response_time_ms, success=True))
 
             return status_data
 
@@ -59,31 +68,60 @@ class MachinePoller:
             self.consecutive_failures += 1
             self.is_online = False
 
+            # Calculate response time (or error time)
+            response_time_ms = int((time.time() - poll_start_time) * 1000)
+
             logger.error(
                 f"Error polling machine {self.machine.id} ({self.machine.name}): {e} "
                 f"(failures: {self.consecutive_failures})"
             )
 
+            # Log polling event for failed poll
+            asyncio.create_task(self._log_polling_event(
+                poll_timestamp,
+                success=False,
+                response_time_ms=response_time_ms,
+                error_message=str(e)
+            ))
+
             return {
                 "machine_id": self.machine.id,
                 "machine_name": self.machine.name,
-                "poll_timestamp": datetime.utcnow().isoformat(),
+                "poll_timestamp": poll_timestamp.isoformat(),
                 "is_online": False,
                 "error": str(e),
                 "consecutive_failures": self.consecutive_failures,
+                "response_time_ms": response_time_ms,
             }
 
-    async def _log_events_async(self, status_data: Dict[str, Any]):
+    async def _log_events_async(self, status_data: Dict[str, Any], poll_timestamp: datetime, response_time_ms: int, success: bool):
         """
         Log events to database in background (non-blocking).
 
         Events logged:
+        - Polling event (success/failure with response time)
         - Status transitions (running → stopped, etc.)
         - Alarms (only when status == 'alarm')
         - Production run start/end
+        - Updates machine.last_seen_at to track successful polls
         """
         db = SessionLocal()
         try:
+            # Log polling event
+            polling_event = PollingEvent(
+                time=poll_timestamp,
+                machine_id=self.machine.id,
+                success=success,
+                response_time_ms=response_time_ms,
+            )
+            db.add(polling_event)
+
+            # Update last_seen_at to track successful polling
+            machine = db.query(Machine).filter(Machine.id == self.machine.id).first()
+            if machine:
+                machine.last_seen_at = poll_timestamp
+                db.add(machine)
+
             current_status = status_data.get("status")
 
             # Log status transition (Option A: in-memory tracking)
@@ -216,6 +254,25 @@ class MachinePoller:
             logger.error(f"Failed to log production run for machine {self.machine.id}: {e}")
             # Don't raise - production run logging shouldn't block other events
 
+    async def _log_polling_event(self, poll_timestamp: datetime, success: bool, response_time_ms: int, error_message: Optional[str] = None):
+        """Log a polling event (success or failure)."""
+        db = SessionLocal()
+        try:
+            polling_event = PollingEvent(
+                time=poll_timestamp,
+                machine_id=self.machine.id,
+                success=success,
+                response_time_ms=response_time_ms,
+                error_message=error_message,
+            )
+            db.add(polling_event)
+            db.commit()
+        except Exception as e:
+            logger.error(f"Failed to log polling event for machine {self.machine.id}: {e}")
+            db.rollback()
+        finally:
+            db.close()
+
 
 class PollingService:
     """Manages background polling for all machines."""
@@ -288,8 +345,12 @@ class PollingService:
                     self.pollers[machine.id] = MachinePoller(machine, self.websocket_manager)
                     logger.info(f"Added poller for machine {machine.id} ({machine.name})")
                 else:
-                    # Update machine reference in case config changed
+                    # Always update machine reference with fresh DB data to catch config changes
+                    # (e.g., IP address updates)
+                    old_ip = self.pollers[machine.id].machine.ip_address
                     self.pollers[machine.id].machine = machine
+                    if old_ip != machine.ip_address:
+                        logger.info(f"Updated machine {machine.id} ({machine.name}) IP: {old_ip} -> {machine.ip_address}")
 
             # Poll all machines concurrently
             poll_tasks = [
