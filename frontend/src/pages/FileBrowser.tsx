@@ -107,6 +107,7 @@ interface DeploymentDetail {
 }
 
 export const FileBrowser: React.FC = () => {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -119,16 +120,20 @@ export const FileBrowser: React.FC = () => {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewModalContent, setViewModalContent] = useState<ViewData | null>(null);
   const [viewModalLoading, setViewModalLoading] = useState(false);
+  // @ts-ignore - reserved for future use
   const [fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [deploymentDetail, setDeploymentDetail] = useState<DeploymentDetail | null>(null);
   const [deploymentLoading, setDeploymentLoading] = useState(false);
   const [deploymentError, setDeploymentError] = useState<string | null>(null);
   const [selectedDeploymentId, setSelectedDeploymentId] = useState<number | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ fileName: string; percent: number } | null>(null);
+  // @ts-ignore - reserved for future use
+  const [highlightedFile, setHighlightedFile] = useState<string | null>(null);
 
   // Fetch machines on mount and auto-select first one
   useEffect(() => {
-    fetch('${API_BASE_URL}/api/machines')
+    fetch(`${API_BASE_URL}/api/machines`)
       .then(res => res.json())
       .then(data => {
         setMachines(data);
@@ -308,6 +313,7 @@ export const FileBrowser: React.FC = () => {
   };
 
   // Get the currently displayed deployment (either selected from history or current)
+  // @ts-ignore - reserved for future use
   const getCurrentDisplayedDeployment = () => {
     if (!deploymentDetail) return null;
 
@@ -480,7 +486,7 @@ export const FileBrowser: React.FC = () => {
     setDeploymentError(null);
 
     try {
-      const url = `http://localhost:8000/api/programs/machines/${selectedMachineId}/deployments/by-onumber/${onumber}?include_history=true`;
+      const url = `${API_BASE_URL}/api/programs/machines/${selectedMachineId}/deployments/by-onumber/${onumber}?include_history=true`;
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -516,7 +522,7 @@ export const FileBrowser: React.FC = () => {
 
     try {
       // Query to get full deployment details by ID
-      const response = await fetch(`http://localhost:8000/api/programs/deployments/${deploymentId}`);
+      const response = await fetch(`${API_BASE_URL}/api/programs/deployments/${deploymentId}`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -567,6 +573,7 @@ export const FileBrowser: React.FC = () => {
     }
   };
 
+  // @ts-ignore - reserved for future use
   const handleUploadClick = () => {
     fileInputRef.current?.click();
   };
@@ -802,7 +809,7 @@ export const FileBrowser: React.FC = () => {
                         <option value="">
                           {deploymentDetail.program?.original_filename} ({formatDate(deploymentDetail.deployment.deployed_at)}) - CURRENT
                         </option>
-                        {deploymentDetail.history.slice(1).map((entry, idx) => (
+                        {deploymentDetail.history.slice(1).map((entry) => (
                           <option key={entry.id} value={entry.id}>
                             {entry.original_filename} ({formatDate(entry.deployed_at)})
                           </option>
@@ -1058,6 +1065,21 @@ export const FileBrowser: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Hidden file input for uploads */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        onChange={handleFileSelect}
+      />
+
+      {/* Upload progress indicator */}
+      {uploadProgress && (
+        <div className="upload-progress-indicator">
+          <span>{uploadProgress.fileName}: {uploadProgress.percent}%</span>
         </div>
       )}
     </div>
