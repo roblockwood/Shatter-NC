@@ -3,8 +3,10 @@ import { MachineCard } from '../components/MachineCard';
 import { StatusIndicator } from '../components/ui';
 import { AddMachineCard } from '../components/AddMachineCard';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
+import { SummaryModal } from '../components/modals/SummaryModal';
+import { SummaryPopup } from '../components/modals/SummaryPopup';
 import './Dashboard.css';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { WS_URL, API_BASE } from '../config/api';
 
 export const Dashboard = () => {
@@ -12,6 +14,33 @@ export const Dashboard = () => {
   const [editMode, setEditMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingMachine, setDeletingMachine] = useState<any>(null);
+  const [summaryModal, setSummaryModal] = useState<{
+    isOpen: boolean;
+    type: 'running' | 'online' | 'offline' | null;
+  }>({ isOpen: false, type: null });
+  const [summaryPopup, setSummaryPopup] = useState<{
+    isOpen: boolean;
+    type: 'online' | 'offline' | 'running' | null;
+  }>({ isOpen: false, type: null });
+
+  const runningRef = useRef<HTMLSpanElement>(null);
+  const onlineRef = useRef<HTMLSpanElement>(null);
+  const offlineRef = useRef<HTMLSpanElement>(null);
+  const popupCloseTimerRef = useRef<number | null>(null);
+
+  const handlePopupMouseEnter = (type: 'online' | 'offline' | 'running') => {
+    if (popupCloseTimerRef.current) {
+      clearTimeout(popupCloseTimerRef.current);
+      popupCloseTimerRef.current = null;
+    }
+    setSummaryPopup({ isOpen: true, type });
+  };
+
+  const handlePopupMouseLeave = () => {
+    popupCloseTimerRef.current = setTimeout(() => {
+      setSummaryPopup({ isOpen: false, type: null });
+    }, 200);
+  };
 
   const onlineCount = machines.filter(m => m.is_online === true).length;
   const runningCount = machines.filter(m => m.is_online === true && m.status?.includes('Running')).length;
@@ -58,11 +87,33 @@ export const Dashboard = () => {
           {editMode && <span className="text-warning"> [EDIT MODE]</span>}
         </span>
         <span className="separator">│</span>
-        <span>RUNNING: <span className="text-success">{runningCount}</span></span>
+        <span
+          ref={runningRef}
+          className="clickable"
+          onClick={() => setSummaryModal({ isOpen: true, type: 'running' })}
+          onMouseEnter={() => handlePopupMouseEnter('running')}
+          onMouseLeave={handlePopupMouseLeave}
+        >
+          RUNNING: <span className="text-success">{runningCount}</span>
+        </span>
         <span className="separator">│</span>
-        <span>ONLINE: <span className="text-info">{onlineCount}</span></span>
+        <span
+          ref={onlineRef}
+          className="clickable"
+          onMouseEnter={() => handlePopupMouseEnter('online')}
+          onMouseLeave={handlePopupMouseLeave}
+        >
+          ONLINE: <span className="text-info">{onlineCount}</span>
+        </span>
         <span className="separator">│</span>
-        <span>OFFLINE: <span className="text-error">{offlineCount}</span></span>
+        <span
+          ref={offlineRef}
+          className="clickable"
+          onMouseEnter={() => handlePopupMouseEnter('offline')}
+          onMouseLeave={handlePopupMouseLeave}
+        >
+          OFFLINE: <span className="text-error">{offlineCount}</span>
+        </span>
         <span className="separator">│</span>
         <StatusIndicator
           status={isConnected ? 'online' : 'offline'}
@@ -113,6 +164,30 @@ export const Dashboard = () => {
         onConfirm={confirmDelete}
         machineName={deletingMachine?.machine_name || ''}
       />
+
+      {/* Summary Modal (for Running only) */}
+      {summaryModal.isOpen && summaryModal.type === 'running' && (
+        <SummaryModal
+          isOpen={summaryModal.isOpen}
+          onClose={() => setSummaryModal({ isOpen: false, type: null })}
+          summaryType={summaryModal.type}
+        />
+      )}
+
+      {/* Summary Popup (for Online/Offline/Running hover) */}
+      {summaryPopup.isOpen && summaryPopup.type && (
+        <SummaryPopup
+          summaryType={summaryPopup.type}
+          anchorRef={
+            summaryPopup.type === 'online' ? onlineRef :
+            summaryPopup.type === 'offline' ? offlineRef :
+            runningRef
+          }
+          onClose={() => setSummaryPopup({ isOpen: false, type: null })}
+          onMouseEnter={() => handlePopupMouseEnter(summaryPopup.type!)}
+          onMouseLeave={handlePopupMouseLeave}
+        />
+      )}
 
       {/* Footer/Command Line */}
       <div className="dashboard-footer">
