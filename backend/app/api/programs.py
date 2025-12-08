@@ -1,6 +1,6 @@
 """Program validation and upload endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 
@@ -34,11 +34,9 @@ class ToolValidationResult(BaseModel):
     """Validation result for a single tool."""
     tool_number: int
     required_diameter: float
-    required_corner_radius: float
     required_length: float
     available: bool
     diameter_match: bool = False
-    corner_radius_match: bool = False
     length_sufficient: bool = False
     machine_tool_data: Dict[str, Any] = {}
     warnings: List[str] = []
@@ -116,10 +114,16 @@ async def validate_program(
             http_client = CNCHttpClient(machine.ip_address, machine.http_port)
             machine_tool_data = http_client.get_tool_data()
 
-            # Validate each tool
+            # Validate each tool using machine tolerances
             for tool in parsed["tools"]:
                 tool_num = tool["tool_number"]
-                result = _validate_tool(tool, machine_tool_data)
+                result = _validate_tool(
+                    tool,
+                    machine_tool_data,
+                    diameter_tolerance=machine.diameter_tolerance,
+                    length_tolerance_plus=machine.length_tolerance_plus,
+                    length_tolerance_minus=machine.length_tolerance_minus
+                )
                 tools_validation[tool_num] = result
 
                 if not result.available:
@@ -145,8 +149,18 @@ async def validate_program(
             )
             position_data = await ftp_client.get_position_data()
 
-            wcs_validation = _validate_wcs_offset(parsed["wcs_offset"], position_data)
+            if not position_data:
+                raise Exception("Could not retrieve POSNI1.NC from machine (file may not exist or FTP connection failed)")
 
+            wcs_validation = _validate_wcs_offset(
+                parsed["wcs_offset"],
+                position_data,
+                tolerance_x=machine.tolerance_x,
+                tolerance_y=machine.tolerance_y,
+                tolerance_z=machine.tolerance_z
+            )
+
+            # Always return WCS validation result (even if not within tolerance)
             if not wcs_validation.within_tolerance:
                 errors.append(
                     f"WCS G{wcs_validation.work_offset} offset outside tolerance: "
@@ -156,7 +170,13 @@ async def validate_program(
                 )
 
         except Exception as e:
-            warnings.append(f"Could not validate WCS offset: {str(e)}")
+            # Log FTP error but don't prevent other validation
+            import traceback
+            error_msg = f"Could not validate WCS offset (FTP error): {str(e)}"
+            warnings.append(error_msg)
+            # Print traceback for debugging
+            print(f"WCS Validation Error: {error_msg}")
+            print(traceback.format_exc())
 
     # Overall validation status
     is_valid = len(errors) == 0
@@ -179,7 +199,10 @@ async def validate_program(
 
 def _validate_tool(
     program_tool: Dict[str, Any],
-    machine_tool_data: Dict[str, Any]
+    machine_tool_data: Dict[str, Any],
+    diameter_tolerance: float = 0.00025,
+    length_tolerance_plus: float = 0.0079,
+    length_tolerance_minus: float = 0.0
 ) -> ToolValidationResult:
     """
     Validate a single tool against machine tool table.
@@ -187,13 +210,14 @@ def _validate_tool(
     Args:
         program_tool: Tool requirements from G-code
         machine_tool_data: Tool data from machine
+        diameter_tolerance: Machine diameter tolerance (±)
+        length_tolerance_plus: Machine length tolerance in positive direction (+)
+        length_tolerance_minus: Machine length tolerance in negative direction (-)
 
     Returns:
         ToolValidationResult
     """
     tool_num = program_tool["tool_number"]
-    tolerance_diameter = 0.001  # ±0.001" for diameter
-    tolerance_length = 0.01     # ±0.01" for length
 
     # Find tool in machine tool table
     machine_tools = machine_tool_data.get("tools", [])
@@ -208,11 +232,9 @@ def _validate_tool(
         return ToolValidationResult(
             tool_number=tool_num,
             required_diameter=program_tool["diameter"],
-            required_corner_radius=program_tool["corner_radius"],
             required_length=program_tool["length_total"],
             available=False,
             diameter_match=False,
-            corner_radius_match=False,
             length_sufficient=False,
             machine_tool_data={},
             warnings=[f"Tool T{tool_num:02d} not found in machine tool table"]
@@ -221,35 +243,34 @@ def _validate_tool(
     # Validate diameter (within tolerance)
     machine_diameter = machine_tool.get("diameter", 0)
     diameter_diff = abs(machine_diameter - program_tool["diameter"])
-    diameter_match = diameter_diff <= tolerance_diameter
+    diameter_match = diameter_diff <= diameter_tolerance
 
-    # Validate length (machine tool must be >= required length)
+    # Validate length (machine tool must be within tolerance range)
+    # Allows: required - length_tolerance_minus <= machine_length <= required + length_tolerance_plus
     machine_length = machine_tool.get("length", 0)
-    length_sufficient = machine_length >= program_tool["length_total"]
-
-    # TODO: Corner radius validation requires additional machine data
-    corner_radius_match = True  # Assume OK for now
+    required_length = program_tool["length_total"]
+    length_min = required_length - length_tolerance_minus
+    length_max = required_length + length_tolerance_plus
+    length_sufficient = length_min <= machine_length <= length_max
 
     warnings = []
     if not diameter_match:
         warnings.append(
             f"Diameter mismatch: need {program_tool['diameter']:.4f}\", "
-            f"have {machine_diameter:.4f}\" (diff: {diameter_diff:.4f}\")"
+            f"have {machine_diameter:.4f}\" (diff: {diameter_diff:.4f}\", tolerance: ±{diameter_tolerance:.5f}\")"
         )
     if not length_sufficient:
         warnings.append(
-            f"Tool too short: need {program_tool['length_total']:.4f}\", "
-            f"have {machine_length:.4f}\""
+            f"Tool length out of tolerance: need {required_length:.4f}\", "
+            f"have {machine_length:.4f}\" (acceptable: {length_min:.4f}\" to {length_max:.4f}\")"
         )
 
     return ToolValidationResult(
         tool_number=tool_num,
         required_diameter=program_tool["diameter"],
-        required_corner_radius=program_tool["corner_radius"],
         required_length=program_tool["length_total"],
         available=True,
         diameter_match=diameter_match,
-        corner_radius_match=corner_radius_match,
         length_sufficient=length_sufficient,
         machine_tool_data={
             "tool_name": machine_tool.get("tool_name", ""),
@@ -262,7 +283,10 @@ def _validate_tool(
 
 def _validate_wcs_offset(
     program_wcs: Dict[str, Any],
-    machine_position_data: str
+    machine_position_data: str,
+    tolerance_x: float = 0.0394,
+    tolerance_y: float = 0.0394,
+    tolerance_z: float = 0.0394
 ) -> WCSValidationResult:
     """
     Validate WCS offset against machine's work coordinate system.
@@ -270,6 +294,9 @@ def _validate_wcs_offset(
     Args:
         program_wcs: Expected WCS offset from G-code
         machine_position_data: POSNI1.NC file content from machine (as string)
+        tolerance_x: Machine X tolerance (±)
+        tolerance_y: Machine Y tolerance (±)
+        tolerance_z: Machine Z tolerance (±)
 
     Returns:
         WCSValidationResult
@@ -280,7 +307,15 @@ def _validate_wcs_offset(
         "y": program_wcs["y"],
         "z": program_wcs["z"],
     }
-    tolerance = program_wcs["tolerance"]
+    # Use program tolerance (E parameter) if specified, otherwise use machine per-axis tolerances
+    # Program E parameter applies uniformly to all axes if specified
+    program_tolerance = program_wcs.get("tolerance")
+    if program_tolerance:
+        # Program specifies a uniform tolerance (E parameter)
+        tolerance_x = tolerance_y = tolerance_z = program_tolerance
+
+    # Store the primary tolerance for display (use max if different per-axis)
+    tolerance = max(tolerance_x, tolerance_y, tolerance_z)
 
     # Parse POSNI1.NC to get actual machine offset
     # Convert string to bytes for parser
@@ -311,21 +346,21 @@ def _validate_wcs_offset(
         "z": abs(actual["z"] - expected["z"]),
     }
 
-    # Check if within tolerance
+    # Check if within tolerance (per-axis tolerances)
     within_tolerance = (
-        difference["x"] <= tolerance and
-        difference["y"] <= tolerance and
-        difference["z"] <= tolerance
+        difference["x"] <= tolerance_x and
+        difference["y"] <= tolerance_y and
+        difference["z"] <= tolerance_z
     )
 
     warnings = []
     if not within_tolerance:
-        if difference["x"] > tolerance:
-            warnings.append(f"X axis difference {difference['x']:.4f}\" exceeds tolerance ±{tolerance}\"")
-        if difference["y"] > tolerance:
-            warnings.append(f"Y axis difference {difference['y']:.4f}\" exceeds tolerance ±{tolerance}\"")
-        if difference["z"] > tolerance:
-            warnings.append(f"Z axis difference {difference['z']:.4f}\" exceeds tolerance ±{tolerance}\"")
+        if difference["x"] > tolerance_x:
+            warnings.append(f"X axis difference {difference['x']:.4f}\" exceeds tolerance ±{tolerance_x}\"")
+        if difference["y"] > tolerance_y:
+            warnings.append(f"Y axis difference {difference['y']:.4f}\" exceeds tolerance ±{tolerance_y}\"")
+        if difference["z"] > tolerance_z:
+            warnings.append(f"Z axis difference {difference['z']:.4f}\" exceeds tolerance ±{tolerance_z}\"")
 
     result = WCSValidationResult(
         valid=within_tolerance,
@@ -409,21 +444,36 @@ async def upload_program(
     2. Compute content hash
     3. Check if program already exists (by hash)
     4. If new: create Program record with next version number
-    5. If deploying: create deployment record
+    5. If deploying: create deployment record with validation
 
     Returns:
         - program: The program record (new or existing)
         - is_new_version: Whether this is a new version
         - deployment: Deployment record (if deployed)
+        - validation_results: Validation results if validation was performed
     """
     try:
         service = ProgramService(db)
+
+        # Perform validation if requested and machine specified
+        # Otherwise use validation_results passed in request (pre-computed by frontend)
+        validation_results = request.validation_results
+        if request.validate_before_upload and request.machine_id and not validation_results:
+            # Call the validation endpoint to get full validation results
+            validate_request = ProgramValidateRequest(gcode_content=request.gcode_content)
+            validation_results = await validate_program(
+                machine_id=request.machine_id,
+                request=validate_request,
+                db=db
+            )
+
         result = service.upload_program(
             gcode_content=request.gcode_content,
             original_filename=request.original_filename,
             machine_id=request.machine_id,
             deployed_filename=request.deployed_filename,
-            validate=request.validate_before_upload
+            validate=request.validate_before_upload,
+            validation_results=validation_results
         )
 
         return ProgramUploadResponse(
@@ -511,6 +561,144 @@ async def list_program_deployments(
 
     deployments = query.offset(skip).limit(limit).all()
     return deployments
+
+
+@router.get("/machines/{machine_id}/deployments/by-onumber/{onumber}")
+async def get_deployment_by_onumber(
+    machine_id: int,
+    onumber: str,  # Accept "2000", "O2000", or "O2000.nc"
+    include_program: bool = True,
+    include_history: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Get current deployment info for an O-number file with full program details.
+
+    Accepts flexible O-number formats: "2000", "O2000", "O2000.nc" (case-insensitive).
+    Returns deployment record with full program details and validation results.
+
+    If include_history=true, also returns all previous deployments for this O-number.
+    """
+    import re
+
+    # Extract numeric part: "2000", "O2000", "O2000.nc" -> 2000
+    onumber_match = re.search(r'(\d{4})', onumber)
+    if not onumber_match:
+        raise HTTPException(status_code=400, detail="Invalid O-number format")
+
+    onumber_int = int(onumber_match.group(1))
+    deployed_filename_pattern = f"O{onumber_int}.nc"
+
+    # Query current deployment with program join
+    query = db.query(ProgramDeployment).filter(
+        ProgramDeployment.machine_id == machine_id,
+        ProgramDeployment.deployed_filename.ilike(deployed_filename_pattern),
+        ProgramDeployment.is_current == True
+    )
+
+    if include_program:
+        query = query.options(joinedload(ProgramDeployment.program))
+
+    deployment = query.first()
+
+    if not deployment:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No deployment found for {deployed_filename_pattern}"
+        )
+
+    # Build response
+    response = {
+        "deployment": {
+            "id": deployment.id,
+            "deployed_filename": deployment.deployed_filename,
+            "deployed_path": deployment.deployed_path,
+            "deployed_at": deployment.deployed_at,
+            "validation_passed": deployment.validation_passed,
+            "validation_results": deployment.validation_results,
+        }
+    }
+
+    if include_program and deployment.program:
+        program = deployment.program
+        response["program"] = {
+            "id": program.id,
+            "original_filename": program.original_filename,
+            "version_number": program.version_number,
+            "posted_date": program.posted_date,
+            "estimated_runtime_seconds": program.estimated_runtime_seconds,
+            "program_metadata": program.program_metadata,
+            "file_size_bytes": program.file_size_bytes,
+            "line_count": program.line_count,
+        }
+
+    # Get deployment history if requested
+    if include_history:
+        history = db.query(ProgramDeployment).filter(
+            ProgramDeployment.machine_id == machine_id,
+            ProgramDeployment.deployed_filename.ilike(deployed_filename_pattern)
+        ).order_by(ProgramDeployment.deployed_at.desc()).all()
+
+        response["history"] = [
+            {
+                "id": h.id,
+                "deployed_at": h.deployed_at,
+                "validation_passed": h.validation_passed,
+                "replaced_at": h.replaced_at,
+                "is_current": h.is_current,
+                "program_version": h.program.version_number if h.program else None,
+                "original_filename": h.program.original_filename if h.program else None,
+            }
+            for h in history
+        ]
+
+    return response
+
+
+@router.get("/deployments/{deployment_id}")
+async def get_deployment_by_id(
+    deployment_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get full deployment details by deployment ID."""
+
+    deployment = db.query(ProgramDeployment).options(
+        joinedload(ProgramDeployment.program)
+    ).filter(
+        ProgramDeployment.id == deployment_id
+    ).first()
+
+    if not deployment:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Deployment {deployment_id} not found"
+        )
+
+    response = {
+        "deployment": {
+            "id": deployment.id,
+            "deployed_filename": deployment.deployed_filename,
+            "deployed_path": deployment.deployed_path,
+            "deployed_at": deployment.deployed_at,
+            "validation_passed": deployment.validation_passed,
+            "validation_results": deployment.validation_results,
+        }
+    }
+
+    if deployment.program:
+        program = deployment.program
+        response["program"] = {
+            "id": program.id,
+            "original_filename": program.original_filename,
+            "version_number": program.version_number,
+            "posted_date": program.posted_date,
+            "estimated_runtime_seconds": program.estimated_runtime_seconds,
+            "program_metadata": program.program_metadata,
+            "file_size_bytes": program.file_size_bytes,
+            "line_count": program.line_count,
+        }
+
+    return response
 
 
 @router.get("/machines/{machine_id}/next-onumber")
