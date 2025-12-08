@@ -72,6 +72,12 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
     path: machine.path !== undefined && machine.path !== null ? machine.path : '/program',
     poll_interval_seconds: machine.poll_interval_seconds || 5,
     enabled: machine.enabled !== false,
+    diameter_tolerance: (machine as any).diameter_tolerance || 0.010,
+    length_tolerance_plus: (machine as any).length_tolerance_plus || 0.02,
+    length_tolerance_minus: (machine as any).length_tolerance_minus || 0.0,
+    tolerance_x: (machine as any).tolerance_x || 0.0394,
+    tolerance_y: (machine as any).tolerance_y || 0.0394,
+    tolerance_z: (machine as any).tolerance_z || 0.0394,
   });
   const [editMachineName, setEditMachineName] = useState(machine.machine_name || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -94,6 +100,12 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
             path: fullMachineData.path !== undefined && fullMachineData.path !== null ? fullMachineData.path : '/program',
             poll_interval_seconds: fullMachineData.poll_interval_seconds || 5,
             enabled: fullMachineData.enabled !== false,
+            diameter_tolerance: fullMachineData.diameter_tolerance || 0.010,
+            length_tolerance_plus: fullMachineData.length_tolerance_plus || 0.02,
+            length_tolerance_minus: fullMachineData.length_tolerance_minus || 0.0,
+            tolerance_x: fullMachineData.tolerance_x || 0.0394,
+            tolerance_y: fullMachineData.tolerance_y || 0.0394,
+            tolerance_z: fullMachineData.tolerance_z || 0.0394,
           });
         }
       } catch (error) {
@@ -155,6 +167,12 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
       path: machine.path !== undefined && machine.path !== null ? machine.path : '/program',
       poll_interval_seconds: machine.poll_interval_seconds || 5,
       enabled: machine.enabled !== false,
+      diameter_tolerance: (machine as any).diameter_tolerance || 0.010,
+      length_tolerance_plus: (machine as any).length_tolerance_plus || 0.02,
+      length_tolerance_minus: (machine as any).length_tolerance_minus || 0.0,
+      tolerance_x: (machine as any).tolerance_x || 0.0394,
+      tolerance_y: (machine as any).tolerance_y || 0.0394,
+      tolerance_z: (machine as any).tolerance_z || 0.0394,
     });
   };
 
@@ -322,8 +340,12 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
             </div>
           )}
 
-          <div className="form-row">
-            <label>IP:</label>
+          {/* Network Configuration Section */}
+          <div className="network-config-section">
+            <div className="network-config-header">NETWORK CONFIGURATION</div>
+
+            <div className="form-row">
+              <label>IP:</label>
             <input
               type="text"
               value={editFormData.ip_address}
@@ -413,6 +435,91 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
                 disabled={isEditSaving}
               />
               <label htmlFor={`enabled-${machine.machine_id}`}>ENABLED</label>
+            </div>
+          </div>
+          </div>
+
+          {/* Tolerances Section */}
+          <div className="tolerances-section">
+            <div className="tolerances-header">VALIDATION TOLERANCES (inches)</div>
+
+            {/* Tool Diameter Group */}
+            <div className="tolerance-group">
+              <div className="tolerance-group-label">TOOL DIAMETER</div>
+              <div className="tolerance-field tolerance-field-inline">
+                <label>(±):</label>
+                <input
+                  type="number"
+                  step="0.00001"
+                  value={editFormData.diameter_tolerance}
+                  onChange={(e) => setEditFormData({ ...editFormData, diameter_tolerance: parseFloat(e.target.value) })}
+                  disabled={isEditSaving}
+                />
+              </div>
+            </div>
+
+            {/* Tool Length Group */}
+            <div className="tolerance-group">
+              <div className="tolerance-group-label">TOOL LENGTH</div>
+              <div className="tolerance-group-row">
+                <div className="tolerance-field tolerance-field-inline">
+                  <label>(+):</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={editFormData.length_tolerance_plus}
+                    onChange={(e) => setEditFormData({ ...editFormData, length_tolerance_plus: parseFloat(e.target.value) })}
+                    disabled={isEditSaving}
+                  />
+                </div>
+                <div className="tolerance-field tolerance-field-inline">
+                  <label>(-):</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={editFormData.length_tolerance_minus}
+                    onChange={(e) => setEditFormData({ ...editFormData, length_tolerance_minus: parseFloat(e.target.value) })}
+                    disabled={isEditSaving}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* WCS Offset Group */}
+            <div className="tolerance-group">
+              <div className="tolerance-group-label">WCS OFFSET</div>
+              <div className="tolerance-group-row">
+                <div className="tolerance-field tolerance-field-inline">
+                  <label>X (±):</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={editFormData.tolerance_x}
+                    onChange={(e) => setEditFormData({ ...editFormData, tolerance_x: parseFloat(e.target.value) })}
+                    disabled={isEditSaving}
+                  />
+                </div>
+                <div className="tolerance-field tolerance-field-inline">
+                  <label>Y (±):</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={editFormData.tolerance_y}
+                    onChange={(e) => setEditFormData({ ...editFormData, tolerance_y: parseFloat(e.target.value) })}
+                    disabled={isEditSaving}
+                  />
+                </div>
+                <div className="tolerance-field tolerance-field-inline">
+                  <label>Z (±):</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={editFormData.tolerance_z}
+                    onChange={(e) => setEditFormData({ ...editFormData, tolerance_z: parseFloat(e.target.value) })}
+                    disabled={isEditSaving}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
