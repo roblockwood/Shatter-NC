@@ -107,6 +107,7 @@ interface DeploymentDetail {
 }
 
 export const FileBrowser: React.FC = () => {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -125,10 +126,12 @@ export const FileBrowser: React.FC = () => {
   const [deploymentLoading, setDeploymentLoading] = useState(false);
   const [deploymentError, setDeploymentError] = useState<string | null>(null);
   const [selectedDeploymentId, setSelectedDeploymentId] = useState<number | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ fileName: string; percent: number } | null>(null);
+  const [highlightedFile, setHighlightedFile] = useState<string | null>(null);
 
   // Fetch machines on mount and auto-select first one
   useEffect(() => {
-    fetch('${API_BASE_URL}/api/machines')
+    fetch(`${API_BASE_URL}/api/machines`)
       .then(res => res.json())
       .then(data => {
         setMachines(data);
@@ -480,7 +483,7 @@ export const FileBrowser: React.FC = () => {
     setDeploymentError(null);
 
     try {
-      const url = `http://localhost:8000/api/programs/machines/${selectedMachineId}/deployments/by-onumber/${onumber}?include_history=true`;
+      const url = `${API_BASE_URL}/api/programs/machines/${selectedMachineId}/deployments/by-onumber/${onumber}?include_history=true`;
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -516,7 +519,7 @@ export const FileBrowser: React.FC = () => {
 
     try {
       // Query to get full deployment details by ID
-      const response = await fetch(`http://localhost:8000/api/programs/deployments/${deploymentId}`);
+      const response = await fetch(`${API_BASE_URL}/api/programs/deployments/${deploymentId}`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -1058,6 +1061,21 @@ export const FileBrowser: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Hidden file input for uploads */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        onChange={handleFileSelect}
+      />
+
+      {/* Upload progress indicator */}
+      {uploadProgress && (
+        <div className="upload-progress-indicator">
+          <span>{uploadProgress.fileName}: {uploadProgress.percent}%</span>
         </div>
       )}
     </div>
