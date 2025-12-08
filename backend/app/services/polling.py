@@ -26,6 +26,7 @@ class MachinePoller:
     async def poll(self) -> Dict[str, Any]:
         """Poll machine status and return data."""
         try:
+            logger.debug(f"Polling machine {self.machine.id} ({self.machine.name}) at {self.machine.ip_address}")
             http_client = CNCHttpClient(
                 self.machine.ip_address,
                 port=self.machine.http_port,
@@ -81,9 +82,16 @@ class MachinePoller:
         - Status transitions (running → stopped, etc.)
         - Alarms (only when status == 'alarm')
         - Production run start/end
+        - Updates machine.last_seen_at to track successful polls
         """
         db = SessionLocal()
         try:
+            # Update last_seen_at to track successful polling
+            machine = db.query(Machine).filter(Machine.id == self.machine.id).first()
+            if machine:
+                machine.last_seen_at = datetime.utcnow()
+                db.add(machine)
+
             current_status = status_data.get("status")
 
             # Log status transition (Option A: in-memory tracking)
@@ -288,8 +296,12 @@ class PollingService:
                     self.pollers[machine.id] = MachinePoller(machine, self.websocket_manager)
                     logger.info(f"Added poller for machine {machine.id} ({machine.name})")
                 else:
-                    # Update machine reference in case config changed
+                    # Always update machine reference with fresh DB data to catch config changes
+                    # (e.g., IP address updates)
+                    old_ip = self.pollers[machine.id].machine.ip_address
                     self.pollers[machine.id].machine = machine
+                    if old_ip != machine.ip_address:
+                        logger.info(f"Updated machine {machine.id} ({machine.name}) IP: {old_ip} -> {machine.ip_address}")
 
             # Poll all machines concurrently
             poll_tasks = [
