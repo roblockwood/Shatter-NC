@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StatusIndicator } from '../components/ui';
 import './FileBrowser.css';
+import { API_BASE_URL } from '../config/api';
 
 interface Program {
   name: string;
@@ -127,7 +128,7 @@ export const FileBrowser: React.FC = () => {
 
   // Fetch machines on mount and auto-select first one
   useEffect(() => {
-    fetch('http://localhost:8000/api/machines')
+    fetch('${API_BASE_URL}/api/machines')
       .then(res => res.json())
       .then(data => {
         setMachines(data);
@@ -149,7 +150,7 @@ export const FileBrowser: React.FC = () => {
 
     // Fetch fresh machine data to ensure we have the latest path configuration
     const controller = new AbortController();
-    fetch(`http://localhost:8000/api/machines/${selectedMachineId}`, {
+    fetch(`${API_BASE_URL}/api/machines/${selectedMachineId}`, {
       signal: controller.signal,
     })
       .then(res => res.json())
@@ -182,7 +183,7 @@ export const FileBrowser: React.FC = () => {
     setPrograms([]);
     setSelectedProgram(null);
 
-    const url = `http://localhost:8000/api/machines/${selectedMachineId}/programs?path=${encodeURIComponent(currentPath)}`;
+    const url = `${API_BASE_URL}/api/machines/${selectedMachineId}/programs?path=${encodeURIComponent(currentPath)}`;
 
     const controller = new AbortController();
     const fetchMachineId = selectedMachineId;
@@ -383,7 +384,7 @@ export const FileBrowser: React.FC = () => {
 
     try {
       const filePath = `${currentPath}${currentPath === '/' ? '' : '/'}${program.name}`;
-      const url = `http://localhost:8000/api/machines/${selectedMachineId}/download?file_path=${encodeURIComponent(filePath)}`;
+      const url = `${API_BASE_URL}/api/machines/${selectedMachineId}/download?file_path=${encodeURIComponent(filePath)}`;
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -417,7 +418,7 @@ export const FileBrowser: React.FC = () => {
 
     try {
       const filePath = `${currentPath}${currentPath === '/' ? '' : '/'}${program.name}`;
-      const url = `http://localhost:8000/api/machines/${selectedMachineId}/view?file_path=${encodeURIComponent(filePath)}`;
+      const url = `${API_BASE_URL}/api/machines/${selectedMachineId}/view?file_path=${encodeURIComponent(filePath)}`;
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -444,7 +445,7 @@ export const FileBrowser: React.FC = () => {
     setMetadataLoading(true);
     try {
       const filePath = `${currentPath}${currentPath === '/' ? '' : '/'}${program.name}`;
-      const url = `http://localhost:8000/api/machines/${selectedMachineId}/metadata?file_path=${encodeURIComponent(filePath)}`;
+      const url = `${API_BASE_URL}/api/machines/${selectedMachineId}/metadata?file_path=${encodeURIComponent(filePath)}`;
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -542,7 +543,7 @@ export const FileBrowser: React.FC = () => {
     setViewModalLoading(true);
     try {
       const filePath = `${currentPath}${currentPath === '/' ? '' : '/'}${program.name}`;
-      const url = `http://localhost:8000/api/machines/${selectedMachineId}/view?file_path=${encodeURIComponent(filePath)}`;
+      const url = `${API_BASE_URL}/api/machines/${selectedMachineId}/view?file_path=${encodeURIComponent(filePath)}`;
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -566,7 +567,81 @@ export const FileBrowser: React.FC = () => {
     }
   };
 
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedMachineId || !currentPath) return;
+
+    const uploadPath = currentPath === '/' ? `/${file.name}` : `${currentPath}/${file.name}`;
+    const url = `${API_BASE_URL}/api/machines/${selectedMachineId}/upload?file_path=${encodeURIComponent(uploadPath)}`;
+
+    // Show upload progress entry in the file list
+    setUploadProgress({ fileName: file.name, percent: 0 });
+    setError(null);
+
+    const xhr = new XMLHttpRequest();
+
+    // Track upload progress
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const percentComplete = Math.round((e.loaded / e.total) * 100);
+        setUploadProgress({ fileName: file.name, percent: percentComplete });
+      }
+    });
+
+    // Handle completion
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        setUploadProgress(null);
+        setError(null);
+        // Highlight the uploaded file for 5 seconds
+        setHighlightedFile(file.name);
+        setTimeout(() => setHighlightedFile(null), 5000);
+        // Refresh the file list
+        const programsUrl = `${API_BASE_URL}/api/machines/${selectedMachineId}/programs?path=${encodeURIComponent(currentPath)}`;
+        fetch(programsUrl)
+          .then(res => res.json())
+          .then(data => {
+            setPrograms(data.programs || []);
+          })
+          .catch(err => console.error('Error refreshing programs:', err));
+      } else {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          const errorMsg = response.detail || `HTTP ${xhr.status}`;
+          setError(`Upload failed: ${errorMsg}`);
+        } catch {
+          setError(`Upload failed: HTTP ${xhr.status}`);
+        }
+        setUploadProgress(null);
+      }
+    });
+
+    // Handle errors
+    xhr.addEventListener('error', () => {
+      setError('Upload failed: Network error');
+      setUploadProgress(null);
+    });
+
+    xhr.addEventListener('abort', () => {
+      setError('Upload cancelled');
+      setUploadProgress(null);
+    });
+
+    // Send the file
+    const formData = new FormData();
+    formData.append('file', file);
+    xhr.open('POST', url);
+    xhr.send(formData);
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   // Sort and prepare display list
   const displayPrograms = (() => {
