@@ -122,26 +122,29 @@ def get_connection_health(last_seen_at: Optional[datetime]) -> str:
         return "stale"
 
 def get_machine_service_status(machine_id: int) -> MachineServices:
-    """Get service status from WebSocket manager's cached status"""
-    # Get cached machine status from WebSocket manager
-    cached_status = websocket_manager.get_machine_status(machine_id) if websocket_manager else None
+    """Get service status from polling service.
 
+    HTTP status reflects actual polling success.
+    FTP status is not actively tested, so marked as unknown.
+    """
     now = datetime.utcnow()
 
     # Default service status
     http_status = ServiceStatus(status="unknown", port=80, last_check=now)
     ftp_status = ServiceStatus(status="unknown", port=21, last_check=now)
 
-    if cached_status:
-        # If machine is online, services are connected
-        if cached_status.get("is_online"):
-            http_status = ServiceStatus(status="connected", port=80, last_check=now)
-            ftp_status = ServiceStatus(status="connected", port=21, last_check=now)
-        else:
-            # If offline, services are not responding
-            error_msg = cached_status.get("error", "Not responding")
-            http_status = ServiceStatus(status="not_responding", port=80, last_check=now, last_error=error_msg)
-            ftp_status = ServiceStatus(status="not_responding", port=21, last_check=now, last_error=error_msg)
+    # Get actual polling status from polling service
+    if polling_service:
+        poller_status = polling_service.get_machine_status(machine_id)
+        if poller_status:
+            # HTTP status reflects whether polling is succeeding
+            if poller_status.get("is_online"):
+                http_status = ServiceStatus(status="connected", port=80, last_check=now)
+            else:
+                # If polling is failing, HTTP is not responding
+                http_status = ServiceStatus(status="not_responding", port=80, last_check=now)
+            # FTP is not actively tested, keep as unknown
+            ftp_status = ServiceStatus(status="unknown", port=21, last_check=now)
 
     return MachineServices(http=http_status, ftp=ftp_status)
 
