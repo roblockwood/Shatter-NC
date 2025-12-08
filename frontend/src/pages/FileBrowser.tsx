@@ -120,6 +120,7 @@ export const FileBrowser: React.FC = () => {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewModalContent, setViewModalContent] = useState<ViewData | null>(null);
   const [viewModalLoading, setViewModalLoading] = useState(false);
+  // @ts-ignore - reserved for future use
   const [fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [deploymentDetail, setDeploymentDetail] = useState<DeploymentDetail | null>(null);
@@ -127,6 +128,7 @@ export const FileBrowser: React.FC = () => {
   const [deploymentError, setDeploymentError] = useState<string | null>(null);
   const [selectedDeploymentId, setSelectedDeploymentId] = useState<number | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ fileName: string; percent: number } | null>(null);
+  // @ts-ignore - reserved for future use
   const [highlightedFile, setHighlightedFile] = useState<string | null>(null);
 
   // Fetch machines on mount and auto-select first one
@@ -311,6 +313,7 @@ export const FileBrowser: React.FC = () => {
   };
 
   // Get the currently displayed deployment (either selected from history or current)
+  // @ts-ignore - reserved for future use
   const getCurrentDisplayedDeployment = () => {
     if (!deploymentDetail) return null;
 
@@ -570,6 +573,7 @@ export const FileBrowser: React.FC = () => {
     }
   };
 
+  // @ts-ignore - reserved for future use
   const handleUploadClick = () => {
     fileInputRef.current?.click();
   };
@@ -805,7 +809,7 @@ export const FileBrowser: React.FC = () => {
                         <option value="">
                           {deploymentDetail.program?.original_filename} ({formatDate(deploymentDetail.deployment.deployed_at)}) - CURRENT
                         </option>
-                        {deploymentDetail.history.slice(1).map((entry, idx) => (
+                        {deploymentDetail.history.slice(1).map((entry) => (
                           <option key={entry.id} value={entry.id}>
                             {entry.original_filename} ({formatDate(entry.deployed_at)})
                           </option>
