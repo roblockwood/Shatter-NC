@@ -32,6 +32,80 @@ interface FileMetadata {
   has_errors: boolean;
 }
 
+interface ToolDetail {
+  tool_number: number;
+  diameter: number;
+  corner_radius: number;
+  description: string;
+  length_total: number;
+}
+
+interface ToolValidation {
+  tool_number: number;
+  required_diameter: number;
+  required_length: number;
+  available: boolean;
+  diameter_match: boolean;
+  length_sufficient: boolean;
+  machine_tool_data: any;
+  warnings: string[];
+}
+
+interface WCSValidation {
+  valid: boolean;
+  work_offset: number;
+  expected: { x: number; y: number; z: number };
+  actual: { x: number; y: number; z: number };
+  difference: { x: number; y: number; z: number };
+  tolerance: number;
+  within_tolerance: boolean;
+  warnings: string[];
+}
+
+interface ValidationResults {
+  valid: boolean;
+  tools: { [key: number]: ToolValidation };
+  wcs_offset?: WCSValidation;
+  warnings: string[];
+  errors: string[];
+}
+
+interface DeploymentHistoryEntry {
+  id: number;
+  deployed_at: string;
+  validation_passed: boolean | null;
+  replaced_at: string | null;
+  is_current: boolean;
+  program_version: number | null;
+  original_filename: string | null;
+}
+
+interface DeploymentDetail {
+  deployment: {
+    id: number;
+    deployed_filename: string;
+    deployed_path: string;
+    deployed_at: string;
+    validation_passed: boolean | null;
+    validation_results: ValidationResults | null;
+  };
+  program: {
+    id: number;
+    original_filename: string;
+    version_number: number;
+    posted_date: string | null;
+    estimated_runtime_seconds: number;
+    program_metadata: {
+      tools: ToolDetail[];
+      wcs_offset?: any;
+      stock_size?: any;
+    };
+    file_size_bytes: number;
+    line_count: number;
+  } | null;
+  history?: DeploymentHistoryEntry[];
+}
+
 export const FileBrowser: React.FC = () => {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
@@ -47,9 +121,10 @@ export const FileBrowser: React.FC = () => {
   const [viewModalLoading, setViewModalLoading] = useState(false);
   const [fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ fileName: string; percent: number } | null>(null);
-  const [highlightedFile, setHighlightedFile] = useState<string | null>(null);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [deploymentDetail, setDeploymentDetail] = useState<DeploymentDetail | null>(null);
+  const [deploymentLoading, setDeploymentLoading] = useState(false);
+  const [deploymentError, setDeploymentError] = useState<string | null>(null);
+  const [selectedDeploymentId, setSelectedDeploymentId] = useState<number | null>(null);
 
   // Fetch machines on mount and auto-select first one
   useEffect(() => {
@@ -156,11 +231,39 @@ export const FileBrowser: React.FC = () => {
     if (selectedProgram && selectedProgram.name.toUpperCase().endsWith('.NC') && !selectedProgram.is_directory) {
       fetchFilePreview(selectedProgram);
       fetchFileMetadata(selectedProgram);
+
+      // Fetch deployment detail for O-number files
+      if (isONumberFile(selectedProgram.name)) {
+        setSelectedDeploymentId(null);  // Reset to current deployment
+        fetchDeploymentDetail(selectedProgram);
+      } else {
+        setDeploymentDetail(null);
+        setDeploymentError(null);
+        setSelectedDeploymentId(null);
+      }
     } else {
       setPreviewLines([]);
       setFileMetadata(null);
+      setDeploymentDetail(null);
+      setDeploymentError(null);
+      setSelectedDeploymentId(null);
     }
   }, [selectedProgram]);
+
+  // Handle deployment selection change from history dropdown
+  useEffect(() => {
+    if (selectedDeploymentId && deploymentDetail) {
+      // User selected a historical deployment - fetch its details
+      fetchSelectedDeploymentDetails(selectedDeploymentId);
+    } else if (selectedDeploymentId === null && deploymentDetail) {
+      // User selected current deployment (empty option) - fetch the current deployment
+      // Find the current deployment entry in history (is_current = true)
+      const currentEntry = deploymentDetail.history?.find(h => h.is_current);
+      if (currentEntry) {
+        fetchSelectedDeploymentDetails(currentEntry.id);
+      }
+    }
+  }, [selectedDeploymentId, deploymentDetail?.history]);
 
   const selectedMachine = machines.find(m => m.id === selectedMachineId);
 
@@ -193,6 +296,39 @@ export const FileBrowser: React.FC = () => {
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
     return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const extractONumber = (filename: string): string | null => {
+    const match = filename.match(/^O(\d{4})\.nc$/i);
+    return match ? match[1] : null;
+  };
+
+  const isONumberFile = (filename: string): boolean => {
+    return extractONumber(filename) !== null;
+  };
+
+  // Get the currently displayed deployment (either selected from history or current)
+  const getCurrentDisplayedDeployment = () => {
+    if (!deploymentDetail) return null;
+
+    // If a specific deployment is selected from history, find and return it
+    if (selectedDeploymentId && deploymentDetail.history) {
+      const selected = deploymentDetail.history.find(h => h.id === selectedDeploymentId);
+      if (selected) {
+        // Return a combined object with the selected history entry merged with full details
+        // For now, we'll reconstruct from the history entry
+        return {
+          deployment: selected,
+          isHistorical: true
+        };
+      }
+    }
+
+    // Otherwise return current deployment
+    return {
+      deployment: deploymentDetail.deployment,
+      isHistorical: false
+    };
   };
 
   // Animated ASCII progress bar during metadata parsing
@@ -331,6 +467,76 @@ export const FileBrowser: React.FC = () => {
     }
   };
 
+  const fetchDeploymentDetail = async (program: Program) => {
+    if (!selectedMachineId) return;
+
+    const onumber = extractONumber(program.name);
+    if (!onumber) {
+      setDeploymentDetail(null);
+      return;
+    }
+
+    setDeploymentLoading(true);
+    setDeploymentError(null);
+
+    try {
+      const url = `http://localhost:8000/api/programs/machines/${selectedMachineId}/deployments/by-onumber/${onumber}?include_history=true`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          setDeploymentDetail(null);
+          setDeploymentError('No deployment record found');
+          return;
+        }
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data: DeploymentDetail = await response.json();
+      setDeploymentDetail(data);
+    } catch (err) {
+      console.error('Deployment detail error:', err);
+      setDeploymentError(err instanceof Error ? err.message : 'Failed to load');
+      setDeploymentDetail(null);
+    } finally {
+      setDeploymentLoading(false);
+    }
+  };
+
+  // Fetch full deployment details by ID from history
+  const fetchSelectedDeploymentDetails = async (deploymentId: number) => {
+    if (!deploymentDetail || !deploymentDetail.history) return;
+
+    // Find the deployment in history
+    const historyEntry = deploymentDetail.history.find(h => h.id === deploymentId);
+    if (!historyEntry) return;
+
+    setDeploymentLoading(true);
+    setDeploymentError(null);
+
+    try {
+      // Query to get full deployment details by ID
+      const response = await fetch(`http://localhost:8000/api/programs/deployments/${deploymentId}`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const deploymentData = await response.json();
+
+      // Update deploymentDetail with selected deployment while keeping history
+      setDeploymentDetail({
+        ...deploymentDetail,
+        deployment: deploymentData.deployment || deploymentData
+      });
+    } catch (err) {
+      console.error('Error fetching selected deployment:', err);
+      setDeploymentError('Failed to load selected deployment');
+    } finally {
+      setDeploymentLoading(false);
+    }
+  };
+
   const handleViewCode = async (program: Program) => {
     if (!selectedMachineId || !currentPath) return;
 
@@ -459,22 +665,7 @@ export const FileBrowser: React.FC = () => {
         <div className="header-title">
           <span className="text-glow-strong">FILE MANAGER</span>
         </div>
-        <div className="header-actions">
-          <button
-            className="terminal-button primary"
-            onClick={handleUploadClick}
-            disabled={uploadProgress !== null || !selectedMachineId}
-          >
-            [ UPLOAD ]
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".nc"
-            style={{ display: 'none' }}
-            onChange={handleFileSelect}
-          />
-        </div>
+        <div className="header-actions"></div>
       </div>
 
       <div className="file-browser-divider">
@@ -539,28 +730,10 @@ export const FileBrowser: React.FC = () => {
                 ├{'─'.repeat(80)}┤
               </div>
               <div className="table-body">
-                {uploadProgress && (
-                  <div className="table-row upload-progress-row">
-                    <div className="col-name">
-                      {uploadProgress.fileName}
-                    </div>
-                    <div className="col-size"></div>
-                    <div className="col-modified">
-                      <div className="upload-progress-bar-container">
-                        <div
-                          className="upload-progress-bar-fill"
-                          style={{ width: `${uploadProgress.percent}%` }}
-                        ></div>
-                      </div>
-                      <span className="upload-progress-text">{uploadProgress.percent}%</span>
-                    </div>
-                    <div className="col-actions"></div>
-                  </div>
-                )}
                 {displayPrograms.map((program, idx) => (
                   <div
                     key={idx}
-                    className={`table-row ${selectedProgram?.name === program.name ? 'selected' : ''} ${highlightedFile === program.name ? 'uploaded' : ''}`}
+                    className={`table-row ${selectedProgram?.name === program.name ? 'selected' : ''}`}
                     onClick={() => handleItemClick(program)}
                   >
                     <div className="col-name">
@@ -601,30 +774,189 @@ export const FileBrowser: React.FC = () => {
             <div className="panel-header">
               ┌─ SELECTED: {selectedProgram.name} {'─'.repeat(30)}┐
             </div>
-            <div className="details-content">
-              <div className="detail-row">
-                <span className="label">SIZE:</span>
-                <span className="value">{formatBytes(selectedProgram.size)}</span>
-              </div>
-              <div className="detail-row">
-                <span className="label">MODIFIED:</span>
-                <span className="value">{formatDate(selectedProgram.modified)}</span>
-              </div>
-              <div className="detail-row">
-                <span className="label">TOOLS:</span>
-                <span className={`value ${metadataLoading ? 'text-muted' : fileMetadata?.tools && fileMetadata.tools.length > 0 ? '' : 'text-muted'}`}>
-                  {metadataLoading ? renderProgressBar() : fileMetadata?.tools && fileMetadata.tools.length > 0
-                    ? fileMetadata.tools.join(', ')
-                    : '─ none detected ─'}
-                </span>
-              </div>
-              <div className="detail-row">
-                <span className="label">RUNTIME:</span>
-                <span className={`value ${metadataLoading ? 'text-muted' : fileMetadata?.runtime_seconds ? '' : 'text-muted'}`}>
-                  {metadataLoading ? renderProgressBar() : formatRuntime(fileMetadata?.runtime_seconds || 0)}
-                </span>
+            <div className="details-content" style={{ overflow: 'auto' }}>
+              {/* FILE INFO SECTION */}
+              <div className="detail-section">
+                <div className="section-title">FILE INFO</div>
+                <div className="detail-row">
+                  <span className="label">SIZE:</span>
+                  <span className="value">{formatBytes(selectedProgram.size)}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="label">MODIFIED:</span>
+                  <span className="value">{formatDate(selectedProgram.modified)}</span>
+                </div>
               </div>
 
+              {/* DEPLOYMENT INFO SECTION (O-number files only) */}
+              {isONumberFile(selectedProgram.name) && (
+                <div className="detail-section">
+                  <div className="deployment-info-header">
+                    <div className="section-title">DEPLOYMENT INFO</div>
+                    {deploymentDetail?.history && deploymentDetail.history.length > 1 && (
+                      <select
+                        className="deployment-selector"
+                        value={selectedDeploymentId || ''}
+                        onChange={(e) => setSelectedDeploymentId(e.target.value ? parseInt(e.target.value) : null)}
+                      >
+                        <option value="">
+                          {deploymentDetail.program?.original_filename} ({formatDate(deploymentDetail.deployment.deployed_at)}) - CURRENT
+                        </option>
+                        {deploymentDetail.history.slice(1).map((entry, idx) => (
+                          <option key={entry.id} value={entry.id}>
+                            {entry.original_filename} ({formatDate(entry.deployed_at)})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {deploymentLoading && (
+                    <div className="detail-row">
+                      <span className="value">{renderProgressBar()}</span>
+                    </div>
+                  )}
+                  {deploymentError && (
+                    <div className="detail-row">
+                      <span className="value text-error">{deploymentError}</span>
+                    </div>
+                  )}
+                  {deploymentDetail && (
+                    <>
+                      <div className="detail-row">
+                        <span className="label">DEPLOYED:</span>
+                        <span className="value">
+                          {formatDate(deploymentDetail.deployment.deployed_at)}
+                        </span>
+                      </div>
+                      <div className="detail-row">
+                        <span className="label">POSTED DATE:</span>
+                        <span className="value">
+                          {deploymentDetail.program?.posted_date ? formatDate(deploymentDetail.program.posted_date) : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="detail-row">
+                        <span className="label">RUNTIME:</span>
+                        <span className="value">
+                          {formatRuntime(deploymentDetail.program?.estimated_runtime_seconds || 0)}
+                        </span>
+                      </div>
+                      <div className="detail-row">
+                        <span className="label">VALIDATION:</span>
+                        <span className={`value ${
+                          deploymentDetail.deployment.validation_passed === null ? 'text-muted' :
+                          deploymentDetail.deployment.validation_passed ? 'text-success' : 'text-error'
+                        }`}>
+                          {deploymentDetail.deployment.validation_passed === null ? '─ not validated ─' :
+                           deploymentDetail.deployment.validation_passed ? '✓ PASSED' : '✕ FAILED'}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+
+              {/* TOOL DETAILS TABLE (O-number files with deployment) */}
+              {deploymentDetail && deploymentDetail.deployment?.validation_results?.tools && Object.keys(deploymentDetail.deployment.validation_results.tools).length > 0 && (
+                <div className="detail-section">
+                  <div className="section-title">TOOL DETAILS</div>
+                  <div className="tools-table">
+                    <table className="detail-table">
+                      <thead>
+                        <tr>
+                          <th>T#</th>
+                          <th>REQ DIA</th>
+                          <th>REQ LEN</th>
+                          <th>AVAIL</th>
+                          <th>STATUS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(deploymentDetail.deployment.validation_results.tools || {}).map(([toolKey, validation]: [string, any]) => {
+                          const toolNumber = parseInt(toolKey) || toolKey;
+
+                          // Determine status
+                          const statusClass = !validation.available ? 'text-error' :
+                            !validation.diameter_match || !validation.length_sufficient ? 'text-warning' :
+                            'text-success';
+                          const statusText = !validation.available ? '✕ MISSING' :
+                            !validation.diameter_match || !validation.length_sufficient ? '⚠ WARN' :
+                            '✓ OK';
+
+                          return (
+                            <tr key={toolNumber}>
+                              <td>T{String(toolNumber).padStart(2, '0')}</td>
+                              <td>Ø{(validation.required_diameter || 0).toFixed(3)}"</td>
+                              <td>{(validation.required_length || 0).toFixed(3)}"</td>
+                              <td className={validation.available ? 'text-success' : 'text-error'}>
+                                {validation.available ? '✓' : '✕'}
+                              </td>
+                              <td className={statusClass}>{statusText}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* WCS VALIDATION TABLE */}
+              {deploymentDetail?.deployment?.validation_results?.wcs_offset && (
+                <div className="detail-section">
+                  <div className="section-title">WCS OFFSET (G{deploymentDetail.deployment.validation_results.wcs_offset.work_offset})</div>
+                  <div className="wcs-validation">
+                    <table className="detail-table">
+                      <thead>
+                        <tr>
+                          <th>AXIS</th>
+                          <th>EXPECTED</th>
+                          <th>ACTUAL</th>
+                          <th>DIFF</th>
+                          <th>STATUS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {['x', 'y', 'z'].map((axis) => {
+                          const wcs = deploymentDetail.deployment.validation_results?.wcs_offset;
+                          if (!wcs) return null;
+                          const expected = (wcs.expected as any)[axis];
+                          const actual = (wcs.actual as any)[axis];
+                          const difference = (wcs.difference as any)[axis];
+                          const diff = Math.abs(difference || 0);
+                          const withinTol = diff <= (wcs.tolerance || 0.1);
+
+                          if (expected === undefined || actual === undefined) {
+                            return (
+                              <tr key={axis}>
+                                <td>{axis.toUpperCase()}</td>
+                                <td colSpan={4} className="text-muted">─ no data ─</td>
+                              </tr>
+                            );
+                          }
+
+                          return (
+                            <tr key={axis}>
+                              <td>{axis.toUpperCase()}</td>
+                              <td>{(expected || 0).toFixed(4)}"</td>
+                              <td>{(actual || 0).toFixed(4)}"</td>
+                              <td className={withinTol ? 'text-success' : 'text-warning'}>
+                                {diff.toFixed(4)}"
+                              </td>
+                              <td className={withinTol ? 'text-success' : 'text-warning'}>
+                                {withinTol ? '✓' : '⚠'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ACTIONS SECTION */}
               <div className="detail-actions">
                 <button
                   className="terminal-button"
@@ -642,6 +974,7 @@ export const FileBrowser: React.FC = () => {
                 )}
               </div>
 
+              {/* CODE PREVIEW SECTION */}
               {previewLines.length > 0 && selectedProgram.name.toUpperCase().endsWith('.NC') && (
                 <div className="code-preview">
                   <div className="preview-header">┌─ PREVIEW (First 50 Lines) ─────────────┐</div>
