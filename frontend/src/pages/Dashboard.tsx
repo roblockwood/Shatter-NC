@@ -20,15 +20,14 @@ export const Dashboard = () => {
   }>({ isOpen: false, type: null });
   const [summaryPopup, setSummaryPopup] = useState<{
     isOpen: boolean;
-    type: 'online' | 'offline' | 'running' | null;
+    type: 'online' | 'offline' | 'running' | 'machines' | null;
   }>({ isOpen: false, type: null });
 
   const runningRef = useRef<HTMLSpanElement>(null);
-  const onlineRef = useRef<HTMLSpanElement>(null);
-  const offlineRef = useRef<HTMLSpanElement>(null);
+  const machinesRef = useRef<HTMLSpanElement>(null);
   const popupCloseTimerRef = useRef<number | null>(null);
 
-  const handlePopupMouseEnter = (type: 'online' | 'offline' | 'running') => {
+  const handlePopupMouseEnter = (type: 'machines' | 'running') => {
     if (popupCloseTimerRef.current) {
       clearTimeout(popupCloseTimerRef.current);
       popupCloseTimerRef.current = null;
@@ -44,7 +43,6 @@ export const Dashboard = () => {
 
   const onlineCount = machines.filter(m => m.is_online === true).length;
   const runningCount = machines.filter(m => m.is_online === true && m.status?.includes('Running')).length;
-  const offlineCount = machines.filter(m => m.is_online !== true).length;
 
   const handleDeleteMachine = (machine: any) => {
     setDeletingMachine(machine);
@@ -98,21 +96,12 @@ export const Dashboard = () => {
         </span>
         <span className="separator">│</span>
         <span
-          ref={onlineRef}
+          ref={machinesRef}
           className="clickable"
-          onMouseEnter={() => handlePopupMouseEnter('online')}
+          onMouseEnter={() => handlePopupMouseEnter('machines')}
           onMouseLeave={handlePopupMouseLeave}
         >
-          ONLINE: <span className="text-info">{onlineCount}</span>
-        </span>
-        <span className="separator">│</span>
-        <span
-          ref={offlineRef}
-          className="clickable"
-          onMouseEnter={() => handlePopupMouseEnter('offline')}
-          onMouseLeave={handlePopupMouseLeave}
-        >
-          OFFLINE: <span className="text-error">{offlineCount}</span>
+          MACHINES: <span className="text-info">{onlineCount}</span><span className="text-dim">/</span><span className="text-info">{machines.length}</span>
         </span>
         <span className="separator">│</span>
         <StatusIndicator
@@ -174,17 +163,16 @@ export const Dashboard = () => {
         />
       )}
 
-      {/* Summary Popup (for Online/Offline/Running hover) */}
+      {/* Summary Popup (for Machines/Running hover) */}
       {summaryPopup.isOpen && summaryPopup.type && (
         <SummaryPopup
           summaryType={summaryPopup.type}
           anchorRef={
-            summaryPopup.type === 'online' ? onlineRef :
-            summaryPopup.type === 'offline' ? offlineRef :
+            summaryPopup.type === 'machines' ? machinesRef :
             runningRef
           }
           onClose={() => setSummaryPopup({ isOpen: false, type: null })}
-          onMouseEnter={() => handlePopupMouseEnter(summaryPopup.type!)}
+          onMouseEnter={() => handlePopupMouseEnter(summaryPopup.type as 'machines' | 'running')}
           onMouseLeave={handlePopupMouseLeave}
         />
       )}
