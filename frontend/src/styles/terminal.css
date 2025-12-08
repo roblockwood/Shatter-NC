@@ -5,13 +5,20 @@
 :root {
   /* Colors - CRT Phosphor Scheme */
   --color-bg-primary: #0a0a0a;
+  --color-bg: #0a0a0a;
+  --color-bg-darker: #050505;
+  --color-bg-lighter: #1a1a1a;
   --color-bg-surface: #1a1a1a;
   --color-bg-elevated: #2a2a2a;
   --color-border: #2a2a2a;
+  --color-border-dark: #1a1a1a;
+  --color-border-darker: #0f0f0f;
+  --color-border-light: #3a3a3a;
   --color-border-bright: #3a3a3a;
 
   /* Text Colors - Green Phosphor */
   --color-text-primary: #00ff00;
+  --color-text: #00ff00;
   --color-text-secondary: #33ff33;
   --color-text-muted: #66ff66;
   --color-text-dim: #446644;
@@ -197,6 +204,17 @@ body {
 
 .crt-effect-flicker {
   animation: flicker 8s linear infinite;
+}
+
+/* Interactive Elements */
+.clickable {
+  cursor: pointer;
+  transition: opacity 0.2s ease, text-decoration 0.2s ease;
+}
+
+.clickable:hover {
+  opacity: 0.7;
+  text-decoration: underline;
 }
 
 /* Responsive */

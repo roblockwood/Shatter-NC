@@ -1,0 +1,110 @@
+.summary-row {
+  display: grid;
+  gap: 1rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--color-border-darker);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+}
+
+.summary-row:hover {
+  background: var(--color-bg-lighter);
+}
+
+.summary-row:last-child {
+  border-bottom: none;
+}
+
+/* Running Summary Layout */
+.summary-row:has(.run-time) {
+  grid-template-columns: 2fr 1fr 2fr 1.5fr 1fr;
+}
+
+/* Online Summary Layout */
+.summary-row:has(.online-duration) {
+  grid-template-columns: 2fr 1fr 1.5fr 2fr 1fr;
+}
+
+/* Offline Summary Layout */
+.summary-row:has(.offline-duration) {
+  grid-template-columns: 2fr 1fr 2fr 3fr 1fr;
+}
+
+.summary-cell {
+  display: flex;
+  align-items: center;
+}
+
+.machine-name {
+  font-weight: 600;
+}
+
+/* Percentage Bar */
+.percentage-bar-container {
+  position: relative;
+  width: 100%;
+  height: 1.5rem;
+  background: var(--color-bg-darker);
+  border: 1px solid var(--color-text-dim);
+  overflow: hidden;
+}
+
+.percentage-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--color-text-primary);
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.5);
+  transition: width 0.3s ease;
+}
+
+.percentage-text {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-bg);
+  text-shadow: none;
+  mix-blend-mode: difference;
+}
+
+/* Service Errors */
+.service-errors {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.service-error {
+  font-size: 0.75rem;
+}
+
+.service-label {
+  font-weight: 600;
+  color: var(--color-text-dim);
+}
+
+/* Health and Service Icons */
+.health span,
+.services span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .summary-row {
+    font-size: 0.75rem;
+  }
+
+  .percentage-text {
+    font-size: 0.625rem;
+  }
+}

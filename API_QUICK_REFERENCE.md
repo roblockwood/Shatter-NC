@@ -52,6 +52,96 @@ GET /api/machines/{id}/position       # X/Y/Z position
 GET /api/machines/{id}/programs       # List NC programs (FTP)
 ```
 
+## Machine Summary (Historical Insights)
+
+```bash
+# Running Summary - Machine run time analysis
+GET /api/summary/running?time_range=24h
+# Params: time_range (1h, 4h, 24h, 7d, 30d) - default: 24h
+# Returns: machines sorted by total run time with percentages
+
+# Online Summary - Connection health monitoring
+GET /api/summary/online
+# Returns: currently online machines with connection health, service status
+
+# Offline Summary - Offline machine diagnostics
+GET /api/summary/offline
+# Returns: offline machines with downtime duration, service errors
+```
+
+### Running Summary Response
+```json
+{
+  "time_range": "24h",
+  "total_machines": 3,
+  "machines": [
+    {
+      "machine_id": 1,
+      "machine_name": "CNC-001",
+      "current_status": "running",
+      "total_run_time_seconds": 43200,
+      "total_run_time_formatted": "12h 0m",
+      "run_percentage": 50.0,
+      "active_runs_count": 3,
+      "last_run_start": "2025-12-06T10:30:00Z",
+      "current_program": "O1234"
+    }
+  ]
+}
+```
+
+### Online Summary Response
+```json
+{
+  "total_online": 2,
+  "machines": [
+    {
+      "machine_id": 1,
+      "machine_name": "CNC-001",
+      "is_online": true,
+      "online_since": "2025-12-06T08:00:00Z",
+      "online_duration_seconds": 14400,
+      "online_duration_formatted": "4h 0m",
+      "last_seen_at": "2025-12-06T12:00:00Z",
+      "connection_health": "healthy",
+      "services": {
+        "http": {"status": "connected", "port": 80},
+        "ftp": {"status": "connected", "port": 21}
+      }
+    }
+  ]
+}
+```
+
+**Connection Health Levels:**
+- `healthy`: Last seen < 30 seconds ago
+- `degraded`: Last seen < 5 minutes ago
+- `stale`: Last seen > 5 minutes ago
+
+### Offline Summary Response
+```json
+{
+  "total_offline": 1,
+  "machines": [
+    {
+      "machine_id": 5,
+      "machine_name": "CNC-005",
+      "is_online": false,
+      "offline_since": "2025-12-06T06:00:00Z",
+      "offline_duration_seconds": 21600,
+      "offline_duration_formatted": "6h 0m",
+      "last_seen_at": "2025-12-06T05:59:45Z",
+      "services": {
+        "http": {"status": "not_responding", "port": 80, "last_error": "Connection timeout"},
+        "ftp": {"status": "not_responding", "port": 21, "last_error": "Connection refused"}
+      },
+      "last_known_status": "stopped",
+      "enabled": true
+    }
+  ]
+}
+```
+
 ## Examples
 
 ### Add Your CNC
