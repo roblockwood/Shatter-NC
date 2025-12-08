@@ -204,6 +204,12 @@
   letter-spacing: 0.1em;
 }
 
+/* Polling graph - fixed width, no scrolling */
+.summary-modal .summary-cell.graph {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 /* Responsive Design */
 @media (max-width: 1024px) {
   .summary-modal {
