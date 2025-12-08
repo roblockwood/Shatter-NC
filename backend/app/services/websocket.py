@@ -78,12 +78,14 @@ class WebSocketManager:
 
     async def broadcast_status(self, status_data: Dict[str, Any]):
         """Broadcast machine status to all connected clients."""
-        if not self.active_connections:
-            return
-
+        # Always cache the status, even if there are no active connections
+        # This ensures the status is available for API queries
         machine_id = status_data.get("machine_id")
         if machine_id:
             self.last_status[machine_id] = status_data
+
+        if not self.active_connections:
+            return
 
         message = {
             "type": "status_update",
