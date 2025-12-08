@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from './ui/Modal';
 import './ValidationResultModal.css';
+import { API_BASE_URL } from '../config/api';
 
 interface ToolValidation {
   tool_number: number;
@@ -154,7 +155,7 @@ export const ValidationResultModal: React.FC<ValidationResultModalProps> = ({
 
     setIsLoadingONumber(true);
     try {
-      const url = new URL(`http://localhost:8000/api/programs/machines/${machineId}/next-onumber`);
+      const url = new URL(`${API_BASE_URL}/api/programs/machines/${machineId}/next-onumber`);
       if (filename) {
         url.searchParams.append('filename', filename);
       }
@@ -201,7 +202,7 @@ export const ValidationResultModal: React.FC<ValidationResultModalProps> = ({
     try {
       // Step 1: Upload via FTP
       const uploadPath = `${machinePath}/${customONumber}`;
-      const uploadUrl = `http://localhost:8000/api/machines/${machineId}/upload?file_path=${encodeURIComponent(uploadPath)}`;
+      const uploadUrl = `${API_BASE_URL}/api/machines/${machineId}/upload?file_path=${encodeURIComponent(uploadPath)}`;
 
       const blob = new Blob([fileContent], { type: 'text/plain' });
       const formData = new FormData();
@@ -230,7 +231,7 @@ export const ValidationResultModal: React.FC<ValidationResultModalProps> = ({
       });
 
       // Step 2: Store in database with validation results
-      const dbResponse = await fetch('http://localhost:8000/api/programs/upload', {
+      const dbResponse = await fetch('${API_BASE_URL}/api/programs/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
