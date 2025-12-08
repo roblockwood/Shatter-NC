@@ -23,15 +23,11 @@ def set_polling_service(service):
 
 # Pydantic models for responses
 
-class ServiceStatus(BaseModel):
-    status: str
-    port: int
-    last_check: Optional[datetime] = None
-    last_error: Optional[str] = None
-
-class MachineServices(BaseModel):
-    http: ServiceStatus
-    ftp: ServiceStatus
+class PollingDataPoint(BaseModel):
+    """Single polling history data point."""
+    time: datetime
+    success: bool
+    response_time_ms: Optional[int] = None
 
 class RunningSummaryMachine(BaseModel):
     machine_id: int
@@ -58,7 +54,7 @@ class OnlineSummaryMachine(BaseModel):
     online_duration_formatted: str
     last_seen_at: Optional[datetime] = None
     connection_health: str
-    services: MachineServices
+    polling_history_8h: List[PollingDataPoint]
 
 class OnlineSummary(BaseModel):
     total_online: int
@@ -72,9 +68,9 @@ class OfflineSummaryMachine(BaseModel):
     offline_duration_seconds: int
     offline_duration_formatted: str
     last_seen_at: Optional[datetime] = None
-    services: MachineServices
     last_known_status: Optional[str] = None
     enabled: bool
+    polling_history_8h: List[PollingDataPoint]
 
 class OfflineSummary(BaseModel):
     total_offline: int
@@ -121,32 +117,26 @@ def get_connection_health(last_seen_at: Optional[datetime]) -> str:
     else:
         return "stale"
 
-def get_machine_service_status(machine_id: int) -> MachineServices:
-    """Get service status from polling service.
+def get_polling_history(machine_id: int, db: Session, hours: int = 8) -> List[PollingDataPoint]:
+    """Get polling history for a machine over the trailing N hours."""
+    from app.models.event import PollingEvent
 
-    HTTP status reflects actual polling success.
-    FTP status is not actively tested, so marked as unknown.
-    """
     now = datetime.utcnow()
+    time_ago = now - timedelta(hours=hours)
 
-    # Default service status
-    http_status = ServiceStatus(status="unknown", port=80, last_check=now)
-    ftp_status = ServiceStatus(status="unknown", port=21, last_check=now)
+    events = db.query(PollingEvent).filter(
+        PollingEvent.machine_id == machine_id,
+        PollingEvent.time >= time_ago
+    ).order_by(PollingEvent.time).all()
 
-    # Get actual polling status from polling service
-    if polling_service:
-        poller_status = polling_service.get_machine_status(machine_id)
-        if poller_status:
-            # HTTP status reflects whether polling is succeeding
-            if poller_status.get("is_online"):
-                http_status = ServiceStatus(status="connected", port=80, last_check=now)
-            else:
-                # If polling is failing, HTTP is not responding
-                http_status = ServiceStatus(status="not_responding", port=80, last_check=now)
-            # FTP is not actively tested, keep as unknown
-            ftp_status = ServiceStatus(status="unknown", port=21, last_check=now)
-
-    return MachineServices(http=http_status, ftp=ftp_status)
+    return [
+        PollingDataPoint(
+            time=event.time,
+            success=event.success,
+            response_time_ms=event.response_time_ms
+        )
+        for event in events
+    ]
 
 # API Endpoints
 
@@ -272,8 +262,8 @@ def get_online_summary(db: Session = Depends(get_db)):
         # Get connection health
         connection_health = get_connection_health(machine.last_seen_at)
 
-        # Get service status
-        services = get_machine_service_status(machine.id)
+        # Get polling history for the trailing 8 hours
+        polling_history = get_polling_history(machine.id, db, hours=8)
 
         online_machines.append(OnlineSummaryMachine(
             machine_id=machine.id,
@@ -284,7 +274,7 @@ def get_online_summary(db: Session = Depends(get_db)):
             online_duration_formatted=format_duration(duration_seconds),
             last_seen_at=machine.last_seen_at,
             connection_health=connection_health,
-            services=services
+            polling_history_8h=polling_history
         ))
 
     # Sort by online duration descending
@@ -339,8 +329,8 @@ def get_offline_summary(db: Session = Depends(get_db)):
         else:
             duration_seconds = 0
 
-        # Get service status with errors
-        services = get_machine_service_status(machine.id)
+        # Get polling history for the trailing 8 hours
+        polling_history = get_polling_history(machine.id, db, hours=8)
 
         offline_machines.append(OfflineSummaryMachine(
             machine_id=machine.id,
@@ -350,9 +340,9 @@ def get_offline_summary(db: Session = Depends(get_db)):
             offline_duration_seconds=duration_seconds,
             offline_duration_formatted=format_duration(duration_seconds),
             last_seen_at=machine.last_seen_at,
-            services=services,
             last_known_status=last_known_status,
-            enabled=machine.enabled
+            enabled=machine.enabled,
+            polling_history_8h=polling_history
         ))
 
     # Sort by offline duration descending
