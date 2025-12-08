@@ -59,6 +59,36 @@ export type OfflineSummary = {
   machines: OfflineSummaryMachine[];
 };
 
+export type PollingStatsSummary = {
+  total_polls: number;
+  successful_polls: number;
+  failed_polls: number;
+  success_rate: number; // 0-100%
+  avg_response_time_ms?: number;
+  current_streak: number; // positive = successes, negative = failures
+};
+
+export type MachineStatusSummary = {
+  machine_id: number;
+  machine_name: string;
+  is_online: boolean;
+  uptime_8h_percent: number; // % of successful polls in 8h
+  current_status?: string; // "running", "idle", "alarm", etc.
+  connection_health: string; // "healthy", "degraded", "stale"
+  online_duration_formatted: string; // If online
+  offline_duration_formatted: string; // If offline
+  status_changed_at?: string; // When status last changed
+  polling_history_8h: PollingDataPoint[];
+  polling_summary: PollingStatsSummary;
+};
+
+export type MachinesSummary = {
+  total_machines: number;
+  online_count: number;
+  offline_count: number;
+  machines: MachineStatusSummary[];
+};
+
 export const summaryApi = {
   getRunning: async (timeRange: string = '24h'): Promise<RunningSummary> => {
     const response = await fetch(`${API_BASE_URL}/api/summary/running?time_range=${timeRange}`);
@@ -80,6 +110,14 @@ export const summaryApi = {
     const response = await fetch(`${API_BASE_URL}/api/summary/offline`);
     if (!response.ok) {
       throw new Error(`Failed to fetch offline summary: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  getMachines: async (): Promise<MachinesSummary> => {
+    const response = await fetch(`${API_BASE_URL}/api/summary/machines`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch machines summary: ${response.statusText}`);
     }
     return response.json();
   },
