@@ -115,3 +115,7 @@ class WebSocketManager:
     def get_connection_count(self) -> int:
         """Get the number of active connections."""
         return len(self.active_connections)
+
+    def get_machine_status(self, machine_id: int) -> Dict[str, Any]:
+        """Get cached status for a specific machine."""
+        return self.last_status.get(machine_id, {})

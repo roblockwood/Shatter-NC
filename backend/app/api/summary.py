@@ -1,0 +1,359 @@
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from sqlalchemy import func, case, extract, text
+from typing import List, Optional
+from datetime import datetime, timedelta
+from pydantic import BaseModel
+
+from app.db.base import get_db
+from app.models.machine import Machine
+from app.models.event import ProductionRun, MachineStatusEvent
+
+router = APIRouter()
+
+# WebSocket manager will be injected from main.py (same pattern as websocket.py)
+from app.api.websocket import websocket_manager
+
+# Pydantic models for responses
+
+class ServiceStatus(BaseModel):
+    status: str
+    port: int
+    last_check: Optional[datetime] = None
+    last_error: Optional[str] = None
+
+class MachineServices(BaseModel):
+    http: ServiceStatus
+    ftp: ServiceStatus
+
+class RunningSummaryMachine(BaseModel):
+    machine_id: int
+    machine_name: str
+    current_status: Optional[str] = None
+    total_run_time_seconds: float
+    total_run_time_formatted: str
+    run_percentage: float
+    active_runs_count: int
+    last_run_start: Optional[datetime] = None
+    current_program: Optional[str] = None
+
+class RunningSummary(BaseModel):
+    time_range: str
+    total_machines: int
+    machines: List[RunningSummaryMachine]
+
+class OnlineSummaryMachine(BaseModel):
+    machine_id: int
+    machine_name: str
+    is_online: bool
+    online_since: Optional[datetime] = None
+    online_duration_seconds: int
+    online_duration_formatted: str
+    last_seen_at: Optional[datetime] = None
+    connection_health: str
+    services: MachineServices
+
+class OnlineSummary(BaseModel):
+    total_online: int
+    machines: List[OnlineSummaryMachine]
+
+class OfflineSummaryMachine(BaseModel):
+    machine_id: int
+    machine_name: str
+    is_online: bool
+    offline_since: Optional[datetime] = None
+    offline_duration_seconds: int
+    offline_duration_formatted: str
+    last_seen_at: Optional[datetime] = None
+    services: MachineServices
+    last_known_status: Optional[str] = None
+    enabled: bool
+
+class OfflineSummary(BaseModel):
+    total_offline: int
+    machines: List[OfflineSummaryMachine]
+
+# Helper functions
+
+def format_duration(seconds: int) -> str:
+    """Format duration in seconds to human readable format (e.g., '12h 30m')"""
+    if seconds < 0:
+        return "0m"
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    else:
+        return f"{minutes}m"
+
+def parse_time_range(time_range: str) -> timedelta:
+    """Parse time range string to timedelta"""
+    time_range_map = {
+        '1h': timedelta(hours=1),
+        '4h': timedelta(hours=4),
+        '24h': timedelta(hours=24),
+        '7d': timedelta(days=7),
+        '30d': timedelta(days=30),
+    }
+    if time_range not in time_range_map:
+        raise HTTPException(status_code=400, detail=f"Invalid time_range. Must be one of: {', '.join(time_range_map.keys())}")
+    return time_range_map[time_range]
+
+def get_connection_health(last_seen_at: Optional[datetime]) -> str:
+    """Determine connection health based on last_seen_at timestamp"""
+    if last_seen_at is None:
+        return "stale"
+
+    now = datetime.utcnow()
+    seconds_since = (now - last_seen_at.replace(tzinfo=None) if last_seen_at.tzinfo else now - last_seen_at).total_seconds()
+
+    if seconds_since < 30:
+        return "healthy"
+    elif seconds_since < 300:  # 5 minutes
+        return "degraded"
+    else:
+        return "stale"
+
+def get_machine_service_status(machine_id: int) -> MachineServices:
+    """Get service status from WebSocket manager's cached status"""
+    # Get cached machine status from WebSocket manager
+    cached_status = websocket_manager.get_machine_status(machine_id) if websocket_manager else None
+
+    now = datetime.utcnow()
+
+    # Default service status
+    http_status = ServiceStatus(status="unknown", port=80, last_check=now)
+    ftp_status = ServiceStatus(status="unknown", port=21, last_check=now)
+
+    if cached_status:
+        # If machine is online, services are connected
+        if cached_status.get("is_online"):
+            http_status = ServiceStatus(status="connected", port=80, last_check=now)
+            ftp_status = ServiceStatus(status="connected", port=21, last_check=now)
+        else:
+            # If offline, services are not responding
+            error_msg = cached_status.get("error", "Not responding")
+            http_status = ServiceStatus(status="not_responding", port=80, last_check=now, last_error=error_msg)
+            ftp_status = ServiceStatus(status="not_responding", port=21, last_check=now, last_error=error_msg)
+
+    return MachineServices(http=http_status, ftp=ftp_status)
+
+# API Endpoints
+
+@router.get("/summary/running", response_model=RunningSummary)
+def get_running_summary(
+    time_range: str = Query(default="24h", regex="^(1h|4h|24h|7d|30d)$"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get running summary showing machines sorted by total run time within the specified time range.
+
+    Query Parameters:
+    - time_range: One of '1h', '4h', '24h', '7d', '30d' (default: '24h')
+
+    Returns machines sorted by total run time (descending) with run percentages and current status.
+    """
+    # Parse time range
+    time_delta = parse_time_range(time_range)
+    start_time = datetime.utcnow() - time_delta
+
+    # Query production runs within time range
+    # Calculate total run time per machine
+    query = db.query(
+        Machine.id.label('machine_id'),
+        Machine.name.label('machine_name'),
+        func.coalesce(
+            func.sum(
+                case(
+                    # If run is still active (ended_at is NULL and started_at is in range)
+                    (ProductionRun.ended_at.is_(None),
+                     extract('epoch', func.now() - ProductionRun.started_at)),
+                    # If run ended within range
+                    else_=ProductionRun.duration_seconds
+                )
+            ),
+            0
+        ).label('total_run_time_seconds'),
+        func.count(ProductionRun.id).label('runs_count'),
+        func.max(ProductionRun.started_at).label('last_run_start'),
+        func.max(ProductionRun.program_name).label('current_program')
+    ).outerjoin(
+        ProductionRun,
+        (ProductionRun.machine_id == Machine.id) &
+        (ProductionRun.started_at >= start_time)
+    ).group_by(
+        Machine.id, Machine.name
+    ).order_by(
+        text('total_run_time_seconds DESC')
+    ).all()
+
+    # Calculate time range in seconds for percentage calculation
+    time_range_seconds = time_delta.total_seconds()
+
+    # Build response
+    machines = []
+    for row in query:
+        total_run_time = float(row.total_run_time_seconds)
+        run_percentage = (total_run_time / time_range_seconds * 100) if time_range_seconds > 0 else 0.0
+
+        # Get current status from WebSocket cache
+        cached_status = websocket_manager.get_machine_status(row.machine_id) if websocket_manager else None
+        current_status = cached_status.get("status") if cached_status else None
+
+        machines.append(RunningSummaryMachine(
+            machine_id=row.machine_id,
+            machine_name=row.machine_name,
+            current_status=current_status,
+            total_run_time_seconds=total_run_time,
+            total_run_time_formatted=format_duration(int(total_run_time)),
+            run_percentage=round(run_percentage, 1),
+            active_runs_count=row.runs_count or 0,
+            last_run_start=row.last_run_start,
+            current_program=row.current_program
+        ))
+
+    return RunningSummary(
+        time_range=time_range,
+        total_machines=len(machines),
+        machines=machines
+    )
+
+@router.get("/summary/online", response_model=OnlineSummary)
+def get_online_summary(db: Session = Depends(get_db)):
+    """
+    Get online summary showing all currently online machines with connection health and service status.
+
+    Returns machines with online duration, connection health indicators, and service availability.
+    """
+    # Get all enabled machines
+    machines_query = db.query(Machine).filter(Machine.enabled == True).all()
+
+    online_machines = []
+
+    for machine in machines_query:
+        # Get cached status from WebSocket manager
+        cached_status = websocket_manager.get_machine_status(machine.id) if websocket_manager else None
+
+        # Only include online machines
+        if not cached_status or not cached_status.get("is_online"):
+            continue
+
+        # Calculate online duration
+        # Find most recent status change to online in machine_status_events
+        online_since_query = db.query(MachineStatusEvent.time).filter(
+            MachineStatusEvent.machine_id == machine.id,
+            MachineStatusEvent.status.notin_(['error', 'alarm'])
+        ).order_by(MachineStatusEvent.time.desc()).first()
+
+        online_since = online_since_query.time if online_since_query else machine.last_seen_at
+
+        # Calculate duration
+        now = datetime.utcnow()
+        if online_since:
+            online_since_naive = online_since.replace(tzinfo=None) if online_since.tzinfo else online_since
+            duration_seconds = int((now - online_since_naive).total_seconds())
+        else:
+            duration_seconds = 0
+
+        # Get connection health
+        connection_health = get_connection_health(machine.last_seen_at)
+
+        # Get service status
+        services = get_machine_service_status(machine.id)
+
+        online_machines.append(OnlineSummaryMachine(
+            machine_id=machine.id,
+            machine_name=machine.name,
+            is_online=True,
+            online_since=online_since,
+            online_duration_seconds=duration_seconds,
+            online_duration_formatted=format_duration(duration_seconds),
+            last_seen_at=machine.last_seen_at,
+            connection_health=connection_health,
+            services=services
+        ))
+
+    # Sort by online duration descending
+    online_machines.sort(key=lambda x: x.online_duration_seconds, reverse=True)
+
+    return OnlineSummary(
+        total_online=len(online_machines),
+        machines=online_machines
+    )
+
+@router.get("/summary/offline", response_model=OfflineSummary)
+def get_offline_summary(db: Session = Depends(get_db)):
+    """
+    Get offline summary showing all currently offline machines with downtime and service errors.
+
+    Returns machines that are offline with offline duration, service failure reasons,
+    and last known status.
+    """
+    # Get all enabled machines
+    machines_query = db.query(Machine).filter(Machine.enabled == True).all()
+
+    offline_machines = []
+
+    for machine in machines_query:
+        # Get cached status from WebSocket manager
+        cached_status = websocket_manager.get_machine_status(machine.id) if websocket_manager else None
+
+        # Determine if machine is offline
+        is_offline = False
+        if not cached_status or not cached_status.get("is_online"):
+            is_offline = True
+        elif machine.last_seen_at:
+            # Check if last_seen_at is more than 5 minutes ago
+            now = datetime.utcnow()
+            last_seen_naive = machine.last_seen_at.replace(tzinfo=None) if machine.last_seen_at.tzinfo else machine.last_seen_at
+            if (now - last_seen_naive).total_seconds() > 300:
+                is_offline = True
+        else:
+            is_offline = True
+
+        # Only include offline machines
+        if not is_offline:
+            continue
+
+        # Get last known status from machine_status_events
+        last_status_query = db.query(
+            MachineStatusEvent.time,
+            MachineStatusEvent.status
+        ).filter(
+            MachineStatusEvent.machine_id == machine.id
+        ).order_by(MachineStatusEvent.time.desc()).first()
+
+        offline_since = last_status_query.time if last_status_query else machine.last_seen_at
+        last_known_status = last_status_query.status if last_status_query else None
+
+        # Calculate offline duration
+        now = datetime.utcnow()
+        if offline_since:
+            offline_since_naive = offline_since.replace(tzinfo=None) if offline_since.tzinfo else offline_since
+            duration_seconds = int((now - offline_since_naive).total_seconds())
+        else:
+            duration_seconds = 0
+
+        # Get service status with errors
+        services = get_machine_service_status(machine.id)
+
+        offline_machines.append(OfflineSummaryMachine(
+            machine_id=machine.id,
+            machine_name=machine.name,
+            is_online=False,
+            offline_since=offline_since,
+            offline_duration_seconds=duration_seconds,
+            offline_duration_formatted=format_duration(duration_seconds),
+            last_seen_at=machine.last_seen_at,
+            services=services,
+            last_known_status=last_known_status,
+            enabled=machine.enabled
+        ))
+
+    # Sort by offline duration descending
+    offline_machines.sort(key=lambda x: x.offline_duration_seconds, reverse=True)
+
+    return OfflineSummary(
+        total_offline=len(offline_machines),
+        machines=offline_machines
+    )
