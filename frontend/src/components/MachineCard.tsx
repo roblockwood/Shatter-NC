@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ToolListModal } from './ToolListModal';
 import { ValidationResultModal } from './ValidationResultModal';
 import './MachineCard.css';
+import { API_BASE_URL } from '../config/api';
 
 interface Tool {
   tool_number: number;
@@ -85,7 +86,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
   useEffect(() => {
     const fetchMachineConfig = async () => {
       try {
-        const response = await fetch(`http://localhost:8000/api/machines/${machine.machine_id}`);
+        const response = await fetch(`${API_BASE_URL}/api/machines/${machine.machine_id}`);
         if (response.ok) {
           const fullMachineData = await response.json();
           // Update form data with fetched configuration
@@ -128,7 +129,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
     setEditSuccess(false);
 
     try {
-      const response = await fetch(`http://localhost:8000/api/machines/${machine.machine_id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/machines/${machine.machine_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editFormData),
@@ -185,7 +186,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
     setEditError(null);
     setEditTestResult(null);
     try {
-      const response = await fetch(`http://localhost:8000/api/machines/${machine.machine_id}/test`, {
+      const response = await fetch(`${API_BASE_URL}/api/machines/${machine.machine_id}/test`, {
         method: 'POST',
       });
 
@@ -235,7 +236,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
       const content = await file.text();
       setFileContent(content); // Store for upload
 
-      const response = await fetch(`http://localhost:8000/api/programs/machines/${machine.machine_id}/programs/validate`, {
+      const response = await fetch(`${API_BASE_URL}/api/programs/machines/${machine.machine_id}/programs/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gcode_content: content }),
