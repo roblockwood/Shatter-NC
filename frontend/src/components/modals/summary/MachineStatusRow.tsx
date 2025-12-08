@@ -1,6 +1,6 @@
 import React from 'react';
 import type { MachineStatusSummary } from '../../../api/summary';
-import { generatePollingGraph, getUptimeClass, formatUptimePercent } from '../../../utils/pollingGraphGenerator';
+import { getUptimeClass, formatUptimePercent } from '../../../utils/pollingGraphGenerator';
 import './SummaryRow.css';
 
 interface MachineStatusRowProps {
@@ -55,8 +55,25 @@ export const MachineStatusRow: React.FC<MachineStatusRowProps> = ({ machine, com
     }
   };
 
-  const pollingGraph = generatePollingGraph(machine.polling_history_8h, 30);
   const uptimePercent = machine.uptime_8h_percent;
+
+  // Render polling graph with colored characters
+  // Show only the most recent ~13 polls (roughly 2 minutes at 5-second intervals)
+  const renderPollingGraph = () => {
+    const recentPolls = machine.polling_history_8h.slice(-13);
+    return (
+      <code>
+        {recentPolls.map((poll, i) => (
+          <span
+            key={`${poll.time}-${i}`}
+            className={poll.success ? 'polling-success' : 'polling-failure'}
+          >
+            {poll.success ? '-' : '_'}
+          </span>
+        ))}
+      </code>
+    );
+  };
 
   if (compact) {
     // Compact layout for popup (4 columns: machine, status, duration, graph)
@@ -71,9 +88,9 @@ export const MachineStatusRow: React.FC<MachineStatusRowProps> = ({ machine, com
           {getDurationText()}
         </div>
         <div className="summary-cell graph">
-          <code className={getUptimeClass(uptimePercent)}>
-            {pollingGraph}
-          </code>
+          <div className={getUptimeClass(uptimePercent)}>
+            {renderPollingGraph()}
+          </div>
         </div>
         <div className="summary-cell uptime">
           <span className={getUptimeClass(uptimePercent)}>
@@ -96,9 +113,9 @@ export const MachineStatusRow: React.FC<MachineStatusRowProps> = ({ machine, com
         {getDurationText()}
       </div>
       <div className="summary-cell graph">
-        <code className={getUptimeClass(uptimePercent)}>
-          {pollingGraph}
-        </code>
+        <div className={getUptimeClass(uptimePercent)}>
+          {renderPollingGraph()}
+        </div>
       </div>
       <div className="summary-cell uptime">
         <span className={getUptimeClass(uptimePercent)}>

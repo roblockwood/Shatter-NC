@@ -1,90 +1,35 @@
 import type { PollingDataPoint } from '../api/summary';
 
 /**
- * Generate an ASCII line graph representing polling history (trailing 1 hour)
+ * Generate a live ASCII polling status line (one character per poll)
  *
- * Uses characters to show communication success/failure:
- * - Online (success): '-' (horizontal line, top position)
- * - Offline (failure): '_' (horizontal line, bottom position)
- * - Transition down (online→offline): '\' (going offline)
- * - Transition up (offline→online): '/' (coming online)
+ * Shows real-time polling activity with no sampling - each character represents
+ * a single poll result. Most recent polls are rightmost, oldest leftmost.
  *
- * @param history - Polling history data points (1-hour window)
- * @param width - Width of the graph in characters (default 30 for 1-hour, ~2 min per char)
- * @returns ASCII graph string
+ * Uses characters:
+ * - '-' for successful poll
+ * - '_' for failed poll
+ *
+ * @param history - Polling history data points (each = 1 poll)
+ * @returns ASCII status string showing recent poll activity
  *
  * @example
- * // Returns "------------------------------" for 100% uptime (1 hour)
- * generatePollingGraph(allSuccessful, 30)
+ * // Returns "-----_--------" for recent outage
+ * generatePollingGraph(polls14)
  *
- * // Returns "-----\____/-----" for brief outage
- * generatePollingGraph(withOutage, 30)
+ * // Returns "------------------------------" for all successful
+ * generatePollingGraph(polls30)
  */
 export function generatePollingGraph(
-  history: PollingDataPoint[],
-  width: number = 30
+  history: PollingDataPoint[]
 ): string {
   if (history.length === 0) {
-    return '-'.repeat(width);
+    return '------';
   }
 
-  // Sample the history to fit the width
-  const sampled = sampleEvenly(history, width);
-
-  // Build graph with transition detection
-  let graph = '';
-  for (let i = 0; i < sampled.length; i++) {
-    const current = sampled[i].success;
-    const prev = i > 0 ? sampled[i - 1].success : current;
-
-    if (current && prev) {
-      // Online → Online
-      graph += '-';
-    } else if (!current && !prev) {
-      // Offline → Offline
-      graph += '_';
-    } else if (!current && prev) {
-      // Online → Offline (transition down)
-      graph += '\\';
-    } else {
-      // Offline → Online (transition up)
-      graph += '/';
-    }
-  }
-
-  return graph;
-}
-
-/**
- * Sample polling history evenly to fit a target width
- *
- * @param history - Full polling history
- * @param targetWidth - Desired number of samples
- * @returns Evenly sampled polling data points
- */
-function sampleEvenly(
-  history: PollingDataPoint[],
-  targetWidth: number
-): PollingDataPoint[] {
-  if (history.length <= targetWidth) {
-    return history;
-  }
-
-  const sampled: PollingDataPoint[] = [];
-  const step = history.length / targetWidth;
-
-  for (let i = 0; i < targetWidth; i++) {
-    const index = Math.floor(i * step);
-    sampled.push(history[Math.min(index, history.length - 1)]);
-  }
-
-  // Ensure we include the last data point
-  const lastIndex = history.length - 1;
-  if (sampled[sampled.length - 1] !== history[lastIndex]) {
-    sampled[sampled.length - 1] = history[lastIndex];
-  }
-
-  return sampled;
+  // Show each poll as one character - no sampling, no transitions
+  // Just map success → '-' and failure → '_'
+  return history.map(poll => (poll.success ? '-' : '_')).join('');
 }
 
 /**

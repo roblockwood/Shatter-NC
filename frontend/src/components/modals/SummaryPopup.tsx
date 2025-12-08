@@ -37,8 +37,10 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
 
   // Fetch data based on summary type
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    const fetchData = async (isInitial: boolean = false) => {
+      if (isInitial) {
+        setLoading(true);
+      }
       setError(null);
 
       try {
@@ -63,11 +65,19 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch summary data');
       } finally {
-        setLoading(false);
+        if (isInitial) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchData();
+    // Fetch immediately
+    fetchData(true);
+
+    // Set up polling to refresh data every 2 seconds (without showing loading state)
+    const pollInterval = setInterval(() => fetchData(false), 2000);
+
+    return () => clearInterval(pollInterval);
   }, [summaryType]);
 
   // Position popup near anchor element
