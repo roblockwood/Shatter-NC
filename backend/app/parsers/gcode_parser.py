@@ -39,8 +39,22 @@ class GCodeParser:
                 - line_count: Number of lines
                 - file_size: Content size in bytes
         """
+        # Extract tool metadata from header
+        tools = self.extract_tools()
+
+        # Extract operation data
+        tool_operations = self.extract_tool_operations()
+
+        # Merge operation data into tool metadata
+        for tool in tools:
+            tool_num = tool["tool_number"]
+            if tool_num in tool_operations:
+                tool["operations"] = tool_operations[tool_num]
+            else:
+                tool["operations"] = []
+
         return {
-            "tools": self.extract_tools(),
+            "tools": tools,
             "posted_date": self.extract_posted_date(),
             "estimated_runtime_seconds": self.estimate_runtime(),
             "wcs_offset": self.extract_wcs_offset(),  # Actual WCS validation data
@@ -85,6 +99,171 @@ class GCodeParser:
                 })
 
         return tools
+
+    def extract_tool_operations(self) -> Dict[int, List[Dict[str, Any]]]:
+        """
+        Extract tool operation data (spindle speeds and feedrates).
+
+        Scans G-code for operation patterns:
+        1. Operation name from comments: (OPERATION_NAME)
+        2. Tool call lines: N## G100 T## ... S#### M3
+        3. Feedrate macros: #500=39.4 (CUTTING)
+
+        Handles both:
+        - Operations with explicit tool calls (creates operation on G100)
+        - Operations without tool calls (creates operation when feedrate macros found)
+
+        Returns:
+            Dict mapping tool_number to list of operation dicts:
+            {
+                1: [
+                    {
+                        "operation_name": "ADAPTIVE1",
+                        "spindle_speed": 5000,
+                        "feedrate_cutting": 39.4,
+                        ...
+                    }
+                ]
+            }
+        """
+        # Pattern definitions
+        OPERATION_NAME_PATTERN = r'^\(([A-Z0-9_\s]+)\)$'
+        TOOL_CALL_PATTERN = r'N\d+\s+G100\s+T(\d+)(?:.*S(\d+))?'
+        FEEDRATE_MACRO_PATTERN = r'#(50[0-9])=([\d.]+)'
+
+        # Macro to field mapping
+        FEEDRATE_MACROS = {
+            '500': 'feedrate_cutting',
+            '502': 'feedrate_finish',
+            '503': 'feedrate_entry',
+            '504': 'feedrate_exit',
+            '505': 'feedrate_direct',
+            '507': 'feedrate_plunge',
+            '508': 'feedrate_plunge',
+            '509': 'feedrate_transition'
+        }
+
+        tool_operations: Dict[int, List[Dict[str, Any]]] = {}
+
+        # Track modal state
+        tool_modal_spindle: Dict[int, Optional[int]] = {}
+        current_tool: Optional[int] = None  # Track active tool
+        current_operation_name: Optional[str] = None
+        i = 0
+
+        while i < len(self.lines):
+            line = self.lines[i].strip()
+
+            # Check for operation name comment
+            op_match = re.match(OPERATION_NAME_PATTERN, line)
+            if op_match:
+                current_operation_name = op_match.group(1).strip()
+                i += 1
+                continue
+
+            # Check for tool call line
+            tool_match = re.search(TOOL_CALL_PATTERN, line)
+            if tool_match:
+                tool_number = int(tool_match.group(1))
+                current_tool = tool_number  # Update active tool
+
+                # Handle modal spindle speed
+                if tool_match.group(2):
+                    # New spindle speed specified - update modal value
+                    spindle_speed = int(tool_match.group(2))
+                    tool_modal_spindle[tool_number] = spindle_speed
+                else:
+                    # No spindle speed specified - use modal value for this tool
+                    spindle_speed = tool_modal_spindle.get(tool_number, None)
+
+                # Initialize operation dict
+                operation = {
+                    "operation_name": current_operation_name,
+                    "spindle_speed": spindle_speed,
+                    "feedrate_cutting": None,
+                    "feedrate_finish": None,
+                    "feedrate_entry": None,
+                    "feedrate_exit": None,
+                    "feedrate_direct": None,
+                    "feedrate_plunge": None,
+                    "feedrate_transition": None
+                }
+
+                # Scan next 30 lines for feedrate macros
+                scan_end = min(i + 30, len(self.lines))
+                for j in range(i + 1, scan_end):
+                    macro_line = self.lines[j].strip()
+                    macro_match = re.search(FEEDRATE_MACRO_PATTERN, macro_line)
+                    if macro_match:
+                        macro_num = macro_match.group(1)
+                        macro_value = float(macro_match.group(2))
+
+                        if macro_num in FEEDRATE_MACROS:
+                            field_name = FEEDRATE_MACROS[macro_num]
+                            operation[field_name] = macro_value
+
+                    # Stop scanning if we hit another operation or tool call
+                    if re.match(OPERATION_NAME_PATTERN, macro_line) or \
+                       re.search(TOOL_CALL_PATTERN, macro_line):
+                        break
+
+                # Add operation to tool's list
+                if tool_number not in tool_operations:
+                    tool_operations[tool_number] = []
+                tool_operations[tool_number].append(operation)
+
+                # Reset operation name (operations are one-time use)
+                current_operation_name = None
+                i += 1
+                continue
+
+            # Check for feedrate macros (operation without tool call)
+            # This handles cases where the tool is modal and operation just has feedrates
+            macro_match = re.search(FEEDRATE_MACRO_PATTERN, line)
+            if macro_match and current_operation_name and current_tool is not None:
+                # Found feedrate macro with pending operation name and active tool
+                # Create operation for the current modal tool
+                operation = {
+                    "operation_name": current_operation_name,
+                    "spindle_speed": tool_modal_spindle.get(current_tool, None),
+                    "feedrate_cutting": None,
+                    "feedrate_finish": None,
+                    "feedrate_entry": None,
+                    "feedrate_exit": None,
+                    "feedrate_direct": None,
+                    "feedrate_plunge": None,
+                    "feedrate_transition": None
+                }
+
+                # Collect all feedrate macros for this operation
+                scan_end = min(i + 30, len(self.lines))
+                for j in range(i, scan_end):
+                    scan_line = self.lines[j].strip()
+                    scan_macro = re.search(FEEDRATE_MACRO_PATTERN, scan_line)
+                    if scan_macro:
+                        macro_num = scan_macro.group(1)
+                        macro_value = float(scan_macro.group(2))
+
+                        if macro_num in FEEDRATE_MACROS:
+                            field_name = FEEDRATE_MACROS[macro_num]
+                            operation[field_name] = macro_value
+
+                    # Stop if we hit another operation or tool call
+                    if re.match(OPERATION_NAME_PATTERN, scan_line) or \
+                       re.search(TOOL_CALL_PATTERN, scan_line):
+                        break
+
+                # Add operation to tool's list
+                if current_tool not in tool_operations:
+                    tool_operations[current_tool] = []
+                tool_operations[current_tool].append(operation)
+
+                # Reset operation name
+                current_operation_name = None
+
+            i += 1
+
+        return tool_operations
 
     def extract_posted_date(self) -> Optional[datetime]:
         """

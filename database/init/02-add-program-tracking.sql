@@ -185,7 +185,7 @@ GRANT ALL PRIVILEGES ON TABLE alarm_events TO shatter_user;
 
 -- Production runs: Track program execution
 CREATE TABLE IF NOT EXISTS production_runs (
-    id SERIAL PRIMARY KEY,
+    id SERIAL,
 
     started_at TIMESTAMPTZ NOT NULL,
     ended_at TIMESTAMPTZ,
@@ -211,7 +211,8 @@ CREATE TABLE IF NOT EXISTS production_runs (
     alarm_count INTEGER DEFAULT 0,
     total_downtime_seconds INTEGER DEFAULT 0,
 
-    CONSTRAINT valid_time_range CHECK (ended_at IS NULL OR ended_at >= started_at)
+    CONSTRAINT valid_time_range CHECK (ended_at IS NULL OR ended_at >= started_at),
+    PRIMARY KEY (id, started_at)
 );
 
 -- Convert to TimescaleDB hypertable

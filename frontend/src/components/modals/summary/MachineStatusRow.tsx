@@ -68,7 +68,7 @@ export const MachineStatusRow: React.FC<MachineStatusRowProps> = ({ machine, com
             key={`${poll.time}-${i}`}
             className={poll.success ? 'polling-success' : 'polling-failure'}
           >
-            {poll.success ? '-' : '_'}
+            {poll.success ? '█' : '░'}
           </span>
         ))}
       </code>
