@@ -1,5 +1,5 @@
 """Program validation and upload endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
@@ -62,6 +62,19 @@ class ProgramValidationResponse(BaseModel):
     warnings: List[str]
     errors: List[str]
     metadata: Dict[str, Any]
+
+
+class ProgramValidationWithContentResponse(BaseModel):
+    """Validation results with the validated content."""
+    validation: ProgramValidationResponse
+    gcode_content: str
+
+
+class DeployValidatedRequest(BaseModel):
+    """Request to deploy a file that's already on the machine."""
+    deployed_filename: str
+    gcode_content: str
+    validation_results: dict
 
 
 @router.post("/machines/{machine_id}/programs/validate", response_model=ProgramValidationResponse)
@@ -194,6 +207,67 @@ async def validate_program(
             "line_count": parsed["line_count"],
             "file_size": parsed["file_size"],
         }
+    )
+
+
+@router.post("/machines/{machine_id}/programs/validate-file", response_model=ProgramValidationWithContentResponse)
+async def validate_file_on_machine(
+    machine_id: int,
+    file_path: str = Query(..., description="Path to file on machine"),
+    db: Session = Depends(get_db)
+):
+    """
+    Validate a file already on the machine by downloading and validating it.
+    Returns both validation results AND file content for subsequent deployment.
+
+    Args:
+        machine_id: Target machine ID
+        file_path: Path to file on machine (e.g., "/O2000.NC")
+        db: Database session
+
+    Returns:
+        Validation results with the validated content
+    """
+    # Get machine from database
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not machine:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Machine {machine_id} not found"
+        )
+
+    # Download file via FTP
+    try:
+        ftp_client = CNCFtpClient(
+            machine.ip_address,
+            machine.ftp_port,
+            machine.ftp_username,
+            machine.ftp_password
+        )
+        file_bytes = await ftp_client.download_file(file_path)
+        if not file_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"File not found on machine: {file_path}"
+            )
+
+        gcode_content = file_bytes.decode('utf-8', errors='replace')
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to download file from machine: {str(e)}"
+        )
+
+    # Call existing validate_program logic to ensure identical validation
+    request = ProgramValidateRequest(gcode_content=gcode_content)
+    validation_result = await validate_program(machine_id, request, db)
+
+    # Return validation results WITH content for deployment
+    return ProgramValidationWithContentResponse(
+        validation=validation_result,
+        gcode_content=gcode_content
     )
 
 
@@ -486,6 +560,47 @@ async def upload_program(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+@router.post("/machines/{machine_id}/programs/deploy-validated")
+async def deploy_validated_program(
+    machine_id: int,
+    request: DeployValidatedRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a deployment record for a file already on the machine.
+
+    The file is ALREADY on the machine - we're just creating a database record
+    with validation results. This is different from upload which does FTP transfer.
+
+    Args:
+        machine_id: Target machine ID
+        request: Deployment request with filename, content, and validation results
+        db: Database session
+
+    Returns:
+        Deployment record
+    """
+    try:
+        service = ProgramService(db)
+
+        # Upload/get program record (creates or retrieves by content hash)
+        # Note: No FTP upload happens here - file is already on machine
+        result = service.upload_program(
+            gcode_content=request.gcode_content,
+            original_filename=request.deployed_filename,
+            machine_id=machine_id,
+            deployed_filename=request.deployed_filename,
+            validate=False,  # Already validated
+            validation_results=request.validation_results
+        )
+
+        return result["deployment"]
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Deployment failed: {str(e)}")
 
 
 # ========== DEPLOYMENT MANAGEMENT ==========
