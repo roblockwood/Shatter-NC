@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Make startup scripts executable
+RUN chmod +x /app/scripts/*.sh
+
 # Create non-root user
 RUN useradd -m -u 1000 shatter && chown -R shatter:shatter /app
 
@@ -30,5 +33,5 @@ FROM base AS production
 USER shatter
 EXPOSE 8000
 
-# Use multiple workers for production
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# Use startup script that runs migrations first
+CMD ["/app/scripts/start.sh"]
