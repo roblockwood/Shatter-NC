@@ -5,6 +5,8 @@ import { AddMachineCard } from '../components/AddMachineCard';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { SummaryModal } from '../components/modals/SummaryModal';
 import { SummaryPopup } from '../components/modals/SummaryPopup';
+import { AsciiLoadingScreen } from '../components/AsciiLoadingScreen';
+import { AsciiEmptyState } from '../components/AsciiEmptyState';
 import './Dashboard.css';
 import { useState, useRef } from 'react';
 import { WS_URL, API_BASE } from '../config/api';
@@ -112,20 +114,12 @@ export const Dashboard = () => {
 
       {/* Machine Grid */}
       <div className="machine-grid">
-        {machines.length === 0 && isConnected && (
-          <div className="no-machines">
-            <p className="text-muted">NO MACHINES CONFIGURED</p>
-            <p className="text-dim text-sm">
-              {editMode ? 'Click [ ADD MACHINE ] to get started' : 'Click "MACHINES: 0" to add a machine'}
-            </p>
-          </div>
+        {machines.length === 0 && isConnected && !editMode && (
+          <AsciiEmptyState onAddMachine={() => setEditMode(true)} />
         )}
 
         {machines.length === 0 && !isConnected && (
-          <div className="no-machines">
-            <p className="text-warning pulse">CONNECTING TO SERVER...</p>
-            <p className="text-dim text-sm">{WS_URL}</p>
-          </div>
+          <AsciiLoadingScreen />
         )}
 
         {machines.map((machine) => (
@@ -142,7 +136,7 @@ export const Dashboard = () => {
         )}
 
         {editMode && machines.length === 0 && isConnected && (
-          <AddMachineCard onCancel={() => setEditMode(false)} onAdd={addMachine} />
+          <AddMachineCard onCancel={() => setEditMode(false)} onAdd={addMachine} fullWidth />
         )}
       </div>
 
