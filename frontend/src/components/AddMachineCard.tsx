@@ -9,7 +9,7 @@ interface MachineData {
   ftp_password: string;
   ftp_port?: number;
   http_port?: number;
-  location?: string;
+  path?: string;
   poll_interval_seconds?: number;
   enabled?: boolean;
   model?: string;
@@ -18,9 +18,10 @@ interface MachineData {
 interface AddMachineCardProps {
   onCancel?: () => void;
   onAdd?: (machine: any) => void;
+  fullWidth?: boolean;
 }
 
-export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel: onCancelProp }) => {
+export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel: onCancelProp, fullWidth = false }) => {
   const [isActive, setIsActive] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +32,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
     ftp_password: 'anonymous',
     ftp_port: 21,
     http_port: 80,
-    location: '',
+    path: '/PROGRAM',
     poll_interval_seconds: 5,
     enabled: true,
     model: 'Brother CNC'
@@ -64,7 +65,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
           ftp_password: 'anonymous',
           ftp_port: 21,
           http_port: 80,
-          location: '',
+          path: '/PROGRAM',
           poll_interval_seconds: 5,
           enabled: true,
           model: 'Brother CNC'
@@ -106,7 +107,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
       ftp_password: 'anonymous',
       ftp_port: 21,
       http_port: 80,
-      location: '',
+      path: '/PROGRAM',
       poll_interval_seconds: 5,
       enabled: true,
       model: 'Brother CNC'
@@ -120,7 +121,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
   if (!isActive) {
     return (
       <div
-        className="add-machine-card"
+        className={`add-machine-card ${fullWidth ? 'full-width' : ''}`}
         onClick={() => setIsActive(true)}
       >
         <div className="add-machine-content">
@@ -132,7 +133,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
   }
 
   return (
-    <div className="machine-card add-machine-editing">
+    <div className={`machine-card add-machine-editing ${fullWidth ? 'full-width' : ''}`}>
       <div className="machine-card-header">
         <input
           className="machine-name-input"
@@ -231,12 +232,12 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
         </div>
 
         <div className="form-row">
-          <label>LOCATION:</label>
+          <label>FTP PATH:</label>
           <input
             type="text"
-            value={formData.location}
-            onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-            placeholder="Shop Floor"
+            value={formData.path}
+            onChange={(e) => setFormData({ ...formData, path: e.target.value })}
+            placeholder="/PROGRAM"
             disabled={isSaving}
           />
         </div>
