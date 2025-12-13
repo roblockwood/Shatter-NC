@@ -70,6 +70,12 @@ interface ValidationResults {
   errors: string[];
 }
 
+interface FreshValidationState {
+  validation: ValidationResults;
+  gcode_content: string;
+  timestamp: number;
+}
+
 interface DeploymentHistoryEntry {
   id: number;
   deployed_at: string;
@@ -108,6 +114,7 @@ interface DeploymentDetail {
 
 export const FileBrowser: React.FC = () => {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const deploymentSectionRef = React.useRef<HTMLDivElement>(null);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -127,6 +134,9 @@ export const FileBrowser: React.FC = () => {
   const [deploymentLoading, setDeploymentLoading] = useState(false);
   const [deploymentError, setDeploymentError] = useState<string | null>(null);
   const [selectedDeploymentId, setSelectedDeploymentId] = useState<number | null>(null);
+  const [freshValidation, setFreshValidation] = useState<FreshValidationState | null>(null);
+  const [validationLoading, setValidationLoading] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ fileName: string; percent: number } | null>(null);
   // @ts-ignore - reserved for future use
   const [highlightedFile, setHighlightedFile] = useState<string | null>(null);
@@ -233,6 +243,10 @@ export const FileBrowser: React.FC = () => {
 
   // Fetch preview and metadata when a .nc file is selected
   useEffect(() => {
+    // Clear fresh validation state when file selection changes
+    setFreshValidation(null);
+    setValidationError(null);
+
     if (selectedProgram && selectedProgram.name.toUpperCase().endsWith('.NC') && !selectedProgram.is_directory) {
       fetchFilePreview(selectedProgram);
       fetchFileMetadata(selectedProgram);
@@ -299,7 +313,7 @@ export const FileBrowser: React.FC = () => {
     if (!seconds) return '─ unknown ─';
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
@@ -573,6 +587,76 @@ export const FileBrowser: React.FC = () => {
     }
   };
 
+  const handleValidate = async (program: Program) => {
+    if (!selectedMachineId || !currentPath) return;
+
+    setValidationLoading(true);
+    setValidationError(null);
+    setFreshValidation(null);
+
+    try {
+      // Step 1: Validate the file
+      const filePath = `${currentPath}${currentPath === '/' ? '' : '/'}${program.name}`;
+      const validateUrl = `${API_BASE_URL}/api/programs/machines/${selectedMachineId}/programs/validate-file?file_path=${encodeURIComponent(filePath)}`;
+
+      const validateResponse = await fetch(validateUrl, { method: 'POST' });
+      if (!validateResponse.ok) {
+        try {
+          const errorData = await validateResponse.json();
+          throw new Error(errorData.detail || `HTTP ${validateResponse.status}`);
+        } catch {
+          throw new Error(`HTTP ${validateResponse.status}`);
+        }
+      }
+
+      const validationData = await validateResponse.json();
+
+      // Show fresh validation results temporarily
+      setFreshValidation({
+        validation: validationData.validation,
+        gcode_content: validationData.gcode_content,
+        timestamp: Date.now()
+      });
+
+      // Step 2: Automatically save validation to database
+      const deployUrl = `${API_BASE_URL}/api/programs/machines/${selectedMachineId}/programs/deploy-validated`;
+      const deployResponse = await fetch(deployUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deployed_filename: program.name,
+          gcode_content: validationData.gcode_content,
+          validation_results: validationData.validation
+        })
+      });
+
+      if (!deployResponse.ok) {
+        console.warn('Failed to save validation to database');
+      }
+
+      // Step 3: Refresh deployment details to show the new record
+      await fetchDeploymentDetail(program);
+
+      // Clear fresh validation state after saving
+      setFreshValidation(null);
+
+      // Step 4: Scroll to deployment section to show updated validation
+      setTimeout(() => {
+        deploymentSectionRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }, 100);
+
+    } catch (err) {
+      console.error('Validation error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setValidationError(`Validation failed: ${errorMessage}`);
+    } finally {
+      setValidationLoading(false);
+    }
+  };
+
   // @ts-ignore - reserved for future use
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -797,10 +881,21 @@ export const FileBrowser: React.FC = () => {
 
               {/* DEPLOYMENT INFO SECTION (O-number files only) */}
               {isONumberFile(selectedProgram.name) && (
-                <div className="detail-section">
+                <div className="detail-section" ref={deploymentSectionRef}>
                   <div className="deployment-info-header">
-                    <div className="section-title">DEPLOYMENT INFO</div>
-                    {deploymentDetail?.history && deploymentDetail.history.length > 1 && (
+                    <div className="section-title">
+                      {freshValidation ? (
+                        <span style={{ color: '#4ade80' }}>*FRESH* VALIDATION RESULTS</span>
+                      ) : (
+                        'DEPLOYMENT INFO'
+                      )}
+                    </div>
+                    {freshValidation && (
+                      <span className="validation-timestamp text-muted">
+                        Validated: {new Date(freshValidation.timestamp).toLocaleTimeString()}
+                      </span>
+                    )}
+                    {!freshValidation && deploymentDetail?.history && deploymentDetail.history.length > 1 && (
                       <select
                         className="deployment-selector"
                         value={selectedDeploymentId || ''}
@@ -818,46 +913,115 @@ export const FileBrowser: React.FC = () => {
                     )}
                   </div>
 
-                  {deploymentLoading && (
-                    <div className="detail-row">
-                      <span className="value">{renderProgressBar()}</span>
+                  {validationError && (
+                    <div className="validation-error">
+                      <div className="detail-row">
+                        <span className="value text-error">X {validationError}</span>
+                      </div>
+                      <div className="error-actions">
+                        <button
+                          className="terminal-button-sm"
+                          onClick={() => handleValidate(selectedProgram)}
+                        >
+                          [ RETRY ]
+                        </button>
+                        <button
+                          className="terminal-button-sm"
+                          onClick={() => setValidationError(null)}
+                        >
+                          [ DISMISS ]
+                        </button>
+                      </div>
                     </div>
                   )}
-                  {deploymentError && (
-                    <div className="detail-row">
-                      <span className="value text-error">{deploymentError}</span>
-                    </div>
-                  )}
-                  {deploymentDetail && (
+
+                  {freshValidation ? (
                     <>
                       <div className="detail-row">
-                        <span className="label">DEPLOYED:</span>
-                        <span className="value">
-                          {formatDate(deploymentDetail.deployment.deployed_at)}
+                        <span className="label">STATUS:</span>
+                        <span className={`value ${freshValidation.validation.valid ? 'text-success' : 'text-error'}`}>
+                          {freshValidation.validation.valid ? '✓ PASSED' : '✕ FAILED'}
                         </span>
                       </div>
-                      <div className="detail-row">
-                        <span className="label">POSTED DATE:</span>
-                        <span className="value">
-                          {deploymentDetail.program?.posted_date ? formatDate(deploymentDetail.program.posted_date) : 'N/A'}
-                        </span>
-                      </div>
-                      <div className="detail-row">
-                        <span className="label">RUNTIME:</span>
-                        <span className="value">
-                          {formatRuntime(deploymentDetail.program?.estimated_runtime_seconds || 0)}
-                        </span>
-                      </div>
-                      <div className="detail-row">
-                        <span className="label">VALIDATION:</span>
-                        <span className={`value ${
-                          deploymentDetail.deployment.validation_passed === null ? 'text-muted' :
-                          deploymentDetail.deployment.validation_passed ? 'text-success' : 'text-error'
-                        }`}>
-                          {deploymentDetail.deployment.validation_passed === null ? '─ not validated ─' :
-                           deploymentDetail.deployment.validation_passed ? '✓ PASSED' : '✕ FAILED'}
-                        </span>
-                      </div>
+
+                      {(() => {
+                        const age = Date.now() - freshValidation.timestamp;
+                        const STALE_MS = 5 * 60 * 1000;
+                        return age > STALE_MS && (
+                          <div className="detail-row">
+                            <span className="value text-warning">
+                              ! Validation is {Math.floor(age / 60000)} minutes old. Machine state may have changed.
+                            </span>
+                          </div>
+                        );
+                      })()}
+
+                      {freshValidation.validation.errors && freshValidation.validation.errors.length > 0 && (
+                        <div className="detail-row">
+                          <span className="label">ERRORS:</span>
+                          <div className="value text-error">
+                            {freshValidation.validation.errors.map((err, i) => (
+                              <div key={i}>- {err}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {freshValidation.validation.warnings && freshValidation.validation.warnings.length > 0 && (
+                        <div className="detail-row">
+                          <span className="label">WARNINGS:</span>
+                          <div className="value text-warning">
+                            {freshValidation.validation.warnings.map((warn, i) => (
+                              <div key={i}>- {warn}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {deploymentLoading && (
+                        <div className="detail-row">
+                          <span className="value">{renderProgressBar()}</span>
+                        </div>
+                      )}
+                      {deploymentError && (
+                        <div className="detail-row">
+                          <span className="value text-error">{deploymentError}</span>
+                        </div>
+                      )}
+                      {deploymentDetail && (
+                        <>
+                          <div className="detail-row">
+                            <span className="label">DEPLOYED:</span>
+                            <span className="value">
+                              {formatDate(deploymentDetail.deployment.deployed_at)}
+                            </span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="label">POSTED DATE:</span>
+                            <span className="value">
+                              {deploymentDetail.program?.posted_date ? formatDate(deploymentDetail.program.posted_date) : 'N/A'}
+                            </span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="label">RUNTIME:</span>
+                            <span className="value">
+                              {formatRuntime(deploymentDetail.program?.estimated_runtime_seconds || 0)}
+                            </span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="label">VALIDATION:</span>
+                            <span className={`value ${
+                              deploymentDetail.deployment.validation_passed === null ? 'text-muted' :
+                              deploymentDetail.deployment.validation_passed ? 'text-success' : 'text-error'
+                            }`}>
+                              {deploymentDetail.deployment.validation_passed === null ? '─ not validated ─' :
+                               deploymentDetail.deployment.validation_passed ? '✓ PASSED' : '✕ FAILED'}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
                 </div>
@@ -865,7 +1029,8 @@ export const FileBrowser: React.FC = () => {
 
 
               {/* TOOL DETAILS TABLE (O-number files with deployment) */}
-              {deploymentDetail && deploymentDetail.deployment?.validation_results?.tools && Object.keys(deploymentDetail.deployment.validation_results.tools).length > 0 && (
+              {((deploymentDetail?.deployment?.validation_results?.tools && !freshValidation) ||
+                (freshValidation?.validation?.tools)) && (
                 <div className="detail-section">
                   <div className="section-title">TOOL DETAILS</div>
                   <div className="tools-table">
@@ -880,7 +1045,7 @@ export const FileBrowser: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {Object.entries(deploymentDetail.deployment.validation_results.tools || {}).map(([toolKey, validation]: [string, any]) => {
+                        {Object.entries((freshValidation?.validation?.tools || deploymentDetail?.deployment?.validation_results?.tools || {})).map(([toolKey, validation]: [string, any]) => {
                           const toolNumber = parseInt(toolKey) || toolKey;
 
                           // Determine status
@@ -910,9 +1075,10 @@ export const FileBrowser: React.FC = () => {
               )}
 
               {/* WCS VALIDATION TABLE */}
-              {deploymentDetail?.deployment?.validation_results?.wcs_offset && (
+              {((deploymentDetail?.deployment?.validation_results?.wcs_offset && !freshValidation) ||
+                (freshValidation?.validation?.wcs_offset)) && (
                 <div className="detail-section">
-                  <div className="section-title">WCS OFFSET (G{deploymentDetail.deployment.validation_results.wcs_offset.work_offset})</div>
+                  <div className="section-title">WCS OFFSET (G{(freshValidation?.validation?.wcs_offset?.work_offset || deploymentDetail?.deployment?.validation_results?.wcs_offset?.work_offset)})</div>
                   <div className="wcs-validation">
                     <table className="detail-table">
                       <thead>
@@ -926,7 +1092,7 @@ export const FileBrowser: React.FC = () => {
                       </thead>
                       <tbody>
                         {['x', 'y', 'z'].map((axis) => {
-                          const wcs = deploymentDetail.deployment.validation_results?.wcs_offset;
+                          const wcs = freshValidation?.validation?.wcs_offset || deploymentDetail?.deployment?.validation_results?.wcs_offset;
                           if (!wcs) return null;
                           const expected = (wcs.expected as any)[axis];
                           const actual = (wcs.actual as any)[axis];
@@ -978,6 +1144,21 @@ export const FileBrowser: React.FC = () => {
                   >
                     [ VIEW CODE ]
                   </button>
+                )}
+                {selectedProgram.name.match(/^O\d{4}\.NC$/i) && (
+                  validationLoading ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>{renderProgressBar()}</span>
+                      <span className="text-muted">Downloading and validating...</span>
+                    </div>
+                  ) : (
+                    <button
+                      className="terminal-button"
+                      onClick={() => handleValidate(selectedProgram)}
+                    >
+                      [ VALIDATE ]
+                    </button>
+                  )
                 )}
               </div>
 
