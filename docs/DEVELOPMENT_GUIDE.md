@@ -95,10 +95,10 @@ cd shatter
 cp .env.example .env
 
 # 3. Start all services
-docker-compose up -d
+docker compose -f docker-compose.dev.yml up -d
 
 # 4. Verify services
-docker-compose ps
+docker compose -f docker-compose.dev.yml ps
 # Should see 4 services running:
 # - shatter-db (postgres)
 # - shatter-redis
@@ -172,7 +172,8 @@ git clone https://github.com/your-org/shatter.git
 cd shatter
 
 # 2. Start only database services
-docker-compose -f docker-compose.simple.yml up -d
+# Note: Use full dev environment with docker-compose.dev.yml instead
+docker-compose -f docker-compose.dev.yml up -d
 
 # 3. Set up Python virtual environment
 cd backend
@@ -438,9 +439,7 @@ shatter/
 │   ├── BRANDING.md
 │   └── DASHBOARD_SUMMARIES.md
 │
-├── docker-compose.yml            # Full stack development
-├── docker-compose.dev.yml        # Lightweight dev (no TimescaleDB)
-├── docker-compose.simple.yml     # Database services only
+├── docker-compose.dev.yml        # Full stack development
 ├── docker-compose.prod.yml       # Production deployment
 ├── .env.example                  # Development env template
 ├── .env.production.example       # Production env template
@@ -1168,18 +1167,18 @@ curl http://localhost:8000/openapi.json > api_spec.json
 
 ```bash
 # Start development
-docker-compose up -d
-docker-compose logs -f
+docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml logs -f
 
 # View logs
-docker-compose logs -f backend
-docker-compose logs -f frontend
+docker compose logs -f backend
+docker compose logs -f frontend
 
 # Restart service
-docker-compose restart backend
+docker compose restart backend
 
 # Stop everything
-docker-compose down
+docker compose down
 
 # Access database
 docker exec -it shatter-db psql -U shatter_user shatter
