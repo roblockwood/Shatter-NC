@@ -146,7 +146,7 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
       case 'running':
         return ['MACHINE', 'RUN TIME', 'PERCENTAGE', 'LAST ACTIVE'];
       case 'machines':
-        return ['MACHINE', 'DURATION', 'POLLING (1H)', 'UPTIME (8H)', 'HEALTH', 'POLLS'];
+        return ['', 'DURATION', 'POLLING (1H)', 'UPTIME (8H)'];
     }
   };
 
