@@ -1,0 +1,94 @@
+/* ASCII Loading Screen with Acid Animation */
+
+.ascii-loading-screen {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 400px;
+  padding: var(--spacing-xl);
+}
+
+.ascii-logo {
+  position: relative;
+  margin-bottom: var(--spacing-lg);
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.ascii-art {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  line-height: 1.2;
+  color: var(--color-text-primary);
+  white-space: pre;
+  margin: 0;
+  display: inline-block;
+  animation: acid-glow 4s ease-in-out infinite;
+}
+
+/* Acid ASCII Animation - Pure glow cycling, no filters */
+@keyframes acid-glow {
+  0%, 100% {
+    text-shadow: 0 0 8px var(--color-text-primary);
+    color: var(--color-text-primary);
+  }
+  33% {
+    text-shadow: 0 0 12px var(--color-info);
+    color: var(--color-info);
+  }
+  66% {
+    text-shadow: 0 0 12px var(--color-warning);
+    color: var(--color-warning);
+  }
+}
+
+.loading-spinner {
+  font-family: var(--font-mono);
+  font-size: var(--font-lg);
+  color: var(--color-text-secondary);
+  text-align: center;
+  letter-spacing: 0.2em;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.empty-state-message {
+  font-family: var(--font-mono);
+  font-size: var(--font-lg);
+  color: var(--color-text-secondary);
+  text-align: center;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: var(--spacing-md);
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+
+.empty-state-message:hover {
+  color: var(--color-text-primary);
+  text-shadow: var(--glow);
+  border-color: var(--color-text-primary);
+  transform: scale(1.05);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .ascii-art {
+    font-size: 8px;
+  }
+
+  .loading-spinner {
+    font-size: var(--font-md);
+  }
+}
+
+/* Very small screens - make ASCII logo even smaller */
+@media (max-width: 480px) {
+  .ascii-art {
+    font-size: 6px;
+  }
+}

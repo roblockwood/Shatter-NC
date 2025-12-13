@@ -12,6 +12,13 @@
   min-height: 300px;
 }
 
+.add-machine-card.full-width {
+  grid-column: 1 / -1;
+  max-width: none;
+  justify-self: center;
+  width: 400px;
+}
+
 .add-machine-card:hover {
   border-color: var(--color-text-primary);
   background: var(--color-bg-elevated);
