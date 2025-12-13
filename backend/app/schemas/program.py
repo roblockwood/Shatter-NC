@@ -6,6 +6,20 @@ from datetime import datetime
 
 # ========== Metadata Schemas ==========
 
+class ToolOperationData(BaseModel):
+    """Operation data for a single tool operation."""
+
+    operation_name: Optional[str] = None
+    spindle_speed: Optional[int] = None
+    feedrate_cutting: Optional[float] = None
+    feedrate_finish: Optional[float] = None
+    feedrate_entry: Optional[float] = None
+    feedrate_exit: Optional[float] = None
+    feedrate_direct: Optional[float] = None
+    feedrate_plunge: Optional[float] = None
+    feedrate_transition: Optional[float] = None
+
+
 class ToolMetadata(BaseModel):
     """Tool information extracted from G-code."""
 
@@ -14,6 +28,7 @@ class ToolMetadata(BaseModel):
     corner_radius: float
     description: str
     length_total: float
+    operations: Optional[List[ToolOperationData]] = None
 
 
 class WCSOffsetMetadata(BaseModel):
