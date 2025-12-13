@@ -7,29 +7,29 @@ import type { PollingDataPoint } from '../api/summary';
  * a single poll result. Most recent polls are rightmost, oldest leftmost.
  *
  * Uses characters:
- * - '-' for successful poll
- * - '_' for failed poll
+ * - '█' (full block) for successful poll
+ * - '░' (light shade) for failed poll
  *
  * @param history - Polling history data points (each = 1 poll)
  * @returns ASCII status string showing recent poll activity
  *
  * @example
- * // Returns "-----_--------" for recent outage
+ * // Returns "█████░████████" for recent outage
  * generatePollingGraph(polls14)
  *
- * // Returns "------------------------------" for all successful
+ * // Returns "██████████████████████████████" for all successful
  * generatePollingGraph(polls30)
  */
 export function generatePollingGraph(
   history: PollingDataPoint[]
 ): string {
   if (history.length === 0) {
-    return '------';
+    return '██████';
   }
 
   // Show each poll as one character - no sampling, no transitions
-  // Just map success → '-' and failure → '_'
-  return history.map(poll => (poll.success ? '-' : '_')).join('');
+  // Just map success → '█' and failure → '░'
+  return history.map(poll => (poll.success ? '█' : '░')).join('');
 }
 
 /**
