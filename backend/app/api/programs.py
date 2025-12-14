@@ -41,6 +41,10 @@ class ToolValidationResult(BaseModel):
     length_sufficient: bool = False
     machine_tool_data: Dict[str, Any] = {}
     warnings: List[str] = []
+    # Tolerance values from machine settings (not from NC file)
+    diameter_tolerance: Optional[float] = None
+    length_tolerance_plus: Optional[float] = None
+    length_tolerance_minus: Optional[float] = None
 
 
 class WCSValidationResult(BaseModel):
@@ -133,17 +137,21 @@ async def validate_program(
 
     # Validate tools
     if parsed["tools"]:
-        # Validate each tool using machine tolerances
-        for tool in parsed["tools"]:
-            tool_num = tool["tool_number"]
-            result = _validate_tool(
-                tool,
-                machine_tool_data,
-                diameter_tolerance=machine.diameter_tolerance,
-                length_tolerance_plus=machine.length_tolerance_plus,
-                length_tolerance_minus=machine.length_tolerance_minus
-            )
-            tools_validation[tool_num] = result
+            # Validate each tool using machine tolerances
+            for tool in parsed["tools"]:
+                tool_num = tool["tool_number"]
+                result = _validate_tool(
+                    tool,
+                    machine_tool_data,
+                    diameter_tolerance=machine.diameter_tolerance,
+                    length_tolerance_plus=machine.length_tolerance_plus,
+                    length_tolerance_minus=machine.length_tolerance_minus
+                )
+                # Add tolerance values to result for display
+                result.diameter_tolerance = machine.diameter_tolerance
+                result.length_tolerance_plus = machine.length_tolerance_plus
+                result.length_tolerance_minus = machine.length_tolerance_minus
+                tools_validation[tool_num] = result
 
             if not result.available:
                 errors.append(f"Tool T{tool_num:02d} not found in machine tool table")
@@ -168,7 +176,10 @@ async def validate_program(
                     diameter_match=False,  # N/A - not specified in NC
                     length_sufficient=False,  # N/A - not specified in NC
                     machine_tool_data=tool_data,
-                    warnings=["Tool not referenced in NC program"]
+                    warnings=["Tool not referenced in NC program"],
+                    diameter_tolerance=machine.diameter_tolerance,
+                    length_tolerance_plus=machine.length_tolerance_plus,
+                    length_tolerance_minus=machine.length_tolerance_minus
                 )
         elif machine_tool_fetch_failed:
             # Machine unreachable - add warning
