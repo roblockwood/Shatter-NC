@@ -112,6 +112,43 @@
   border-bottom: 1px solid var(--color-bg-secondary);
 }
 
+/* Collapsable Tool and WCS Rows */
+.tool-summary-row {
+  cursor: pointer;
+}
+
+.tool-summary-row:hover {
+  background-color: var(--color-bg-secondary);
+}
+
+.tool-detail-row {
+  background-color: var(--color-bg-tertiary);
+}
+
+.wcs-summary-row {
+  cursor: pointer;
+}
+
+.wcs-summary-row:hover {
+  background-color: var(--color-bg-secondary);
+}
+
+.wcs-detail-row {
+  background-color: var(--color-bg-tertiary);
+}
+
+.expand-icon {
+  display: inline-block;
+  width: 1rem;
+  text-align: center;
+  margin-right: 0.25rem;
+}
+
+.detail-label {
+  padding-left: 1rem !important;
+  color: var(--color-text-muted);
+}
+
 /* Error and Warning Items */
 .error-item {
   padding: 0.3rem 0.5rem;
