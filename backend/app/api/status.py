@@ -173,7 +173,7 @@ async def list_programs(
 
     try:
         ftp_client = CNCFtpClient(
-            db_machine.ip_address,
+            ip_address=db_machine.ip_address,
             port=db_machine.ftp_port,
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
@@ -211,7 +211,7 @@ async def get_position(machine_id: int, db: Session = Depends(get_db)):
 
     try:
         ftp_client = CNCFtpClient(
-            db_machine.ip_address,
+            ip_address=db_machine.ip_address,
             port=db_machine.ftp_port,
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
@@ -263,7 +263,7 @@ async def download_file(
 
     try:
         ftp_client = CNCFtpClient(
-            db_machine.ip_address,
+            ip_address=db_machine.ip_address,
             port=db_machine.ftp_port,
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
@@ -316,7 +316,7 @@ async def get_file_metadata(
 
     try:
         ftp_client = CNCFtpClient(
-            db_machine.ip_address,
+            ip_address=db_machine.ip_address,
             port=db_machine.ftp_port,
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
@@ -381,7 +381,7 @@ async def view_file(
 
     try:
         ftp_client = CNCFtpClient(
-            db_machine.ip_address,
+            ip_address=db_machine.ip_address,
             port=db_machine.ftp_port,
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
@@ -450,7 +450,7 @@ async def upload_file(
         file_content = await file.read()
 
         ftp_client = CNCFtpClient(
-            db_machine.ip_address,
+            ip_address=db_machine.ip_address,
             port=db_machine.ftp_port,
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
@@ -476,3 +476,5 @@ async def upload_file(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
+
+

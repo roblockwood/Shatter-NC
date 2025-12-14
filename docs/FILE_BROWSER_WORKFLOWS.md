@@ -283,14 +283,15 @@ Validation is only available for files matching pattern: `O####.NC` (e.g., `O200
    - WCS offset number (from `G54-G59` commands)
    - WCS coordinates (from comments/parameters)
    - Estimated runtime
-3. **Query Machine** - Fetch current state:
-   - Tool list from `/CURRENT/TOOL`
-   - WCS offsets from `/CURRENT/WKOFS`
+3. **Query Machine** - Always fetch current state (even if not in NC):
+   - Tool list from HTTP endpoint (all available tools)
+   - WCS offsets from POSNI1.NC file via FTP (all work offsets)
 4. **Validate** - Compare program requirements against machine state:
    - **Tools** - All tools exist? Diameters match? Lengths sufficient?
    - **WCS Offsets** - WCS offset set? Coordinates within tolerance?
+   - **Missing Data** - If tool/WCS not in NC, show machine data with "N/A" or "XYZ NOT PARSED" status
 5. **Auto-Save** - Save validation results to database
-6. **Display** - Show ValidationResultModal OR scroll to deployment panel
+6. **Display** - Show collapsable validation tables in file details panel
 7. **Scroll to Results** - Auto-scroll to deployment section
 
 **Performance:**
@@ -347,61 +348,65 @@ const handleValidate = async (program: Program) => {
 
 ---
 
-### Validation Results Modal
+### Validation Results Display
 
-**Triggered by:** Upload & Validate from Dashboard
+**Upload Flow:** Displayed in UploadConfirmationModal  
+**File Browser:** Displayed inline in file details panel
 
-**Visual:**
+**Visual (Collapsable Design):**
 
 ```
 ╔════════════════════════════════════════════════════════════════╗
-║  VALIDATION - TOP_COVER.NC                                 [✕] ║
+║  TOP_COVER.NC                                    ✓ PASS  [✕]   ║
 ╠════════════════════════════════════════════════════════════════╣
 ║                                                                ║
-║  ✓ VALIDATION PASSED                                           ║
-║                                                                ║
-║  ┌─ PROGRAM INFO ──────────────────────────────────────────┐   ║
-║  │ LINES:    523         SIZE:    15.2 KB                  │   ║
-║  │ TOOLS:    8           RUNTIME: 02:15:30                 │   ║
-║  └──────────────────────────────────────────────────────────┘   ║
-║                                                                ║
-║  ┌─ TOOL VALIDATION ────────────────────────────────────────┐  ║
-║  │ ST │ T# │ REQUIRED         │ AVAILABLE       │ STATUS   │  ║
+║  ┌─ TOOLS ─────────────────────────────────────────────────┐  ║
+║  │ ST │ TOOL# │ ACTUAL │ EXPECTED │ DIFF │ TOL │ RESULT    │  ║
 ║  ├────────────────────────────────────────────────────────────┤ ║
-║  │ ✓  │T01│Ø0.5000" L3.2500" │Ø0.5000" L3.2500"│✓DIA ✓LEN │  ║
-║  │ ✓  │T02│Ø0.2500" L2.7500" │Ø0.2500" L2.7510"│✓DIA ✓LEN │  ║
-║  │ ⚠  │T05│Ø0.3750" L3.0000" │Ø0.3755" L2.9950"│⚠DIA ⚠LEN │  ║
-║  │    │   │                  │                 │          │  ║
-║  │    │   │⚠ Diameter 0.0005" over tolerance               │  ║
-║  │    │   │⚠ Length 0.0050" under tolerance                │  ║
-║  │ ✕  │T10│Ø0.1250" L2.5000" │NOT LOADED       │MISSING   │  ║
+║  │ ✓  │▶T01  │ Tool Name                    │ PASS        │  ║
+║  │    │  Length  │ 3.25" │ 3.25" │ 0.00" │ - │ ✓         │  ║
+║  │    │  Diameter│ 0.50" │ 0.50" │ 0.00" │ - │ ✓         │  ║
+║  │ ⚠  │▶T05  │ Tool Name                    │ FAIL        │  ║
+║  │ ✕  │  T10  │ NOT AVAILABLE               │ FAIL        │  ║
+║  │ ─  │  T15  │ Ø0.25" L2.00" │ ──── │ ──── │ ─ │ N/A      │  ║
 ║  └────────────────────────────────────────────────────────────┘  ║
 ║                                                                ║
-║  ┌─ WCS OFFSET VALIDATION (G54) ───────────────────────────┐   ║
-║  │ AXIS│EXPECTED │ACTUAL   │DIFF     │TOLERANCE│STATUS    │   ║
+║  ┌─ WCS OFFSET ─────────────────────────────────────────────┐   ║
+║  │ ST │ OFFSET │ ACTUAL │ EXPECTED │ DIFF │ TOL │ RESULT   │   ║
 ║  ├────────────────────────────────────────────────────────────┤ ║
-║  │ X   │10.0000" │10.0000" │0.0000"  │±0.0394" │✓ OK      │   ║
-║  │ Y   │-5.0000" │-4.9998" │0.0002"  │±0.0394" │✓ OK      │   ║
-║  │ Z   │2.0000"  │2.0005"  │0.0005"  │±0.0394" │✓ OK      │   ║
+║  │ ✓  │▶G54   │ X/Y/Z Coordinates          │ PASS        │   ║
+║  │    │  X     │ 10.0000"│ 10.0000"│ 0.0000"│±0.0394"│ ✓ │   ║
+║  │    │  Y     │ -5.0000"│ -4.9998"│ 0.0002"│±0.0394"│ ✓ │   ║
+║  │    │  Z     │ 2.0000" │ 2.0005" │ 0.0005"│±0.0394"│ ✓ │   ║
 ║  └────────────────────────────────────────────────────────────┘  ║
 ║                                                                ║
 ╠════════════════════════════════════════════════════════════════╣
-║  MACHINE: HAAS-VF2  │  PATH: /PROGRAM/  │  O-NUMBER: O2000.nc║
-║                                                                ║
 ║  [ CANCEL ]                                      [ UPLOAD ]   ║
 ╚════════════════════════════════════════════════════════════════╝
 ```
 
-**Location:** [ValidationResultModal.tsx](../frontend/src/components/ValidationResultModal.tsx)
+**Location:** 
+- Upload: [UploadConfirmationModal.tsx](../frontend/src/components/UploadConfirmationModal.tsx)
+- File Browser: [FileBrowser.tsx](../frontend/src/pages/FileBrowser.tsx#L1121-L1368)
 
 **Sections:**
 
-1. **Overall Status** - ✓ PASSED or ✕ FAILED
-2. **Errors** (if any) - Red text, listed immediately after status
-3. **Program Info** - Lines, size, tools, runtime
-4. **Tool Validation** - Table with required vs available tools
-5. **WCS Offset Validation** - Table with expected vs actual coordinates
-6. **Upload Footer** - Machine, path, O-number, buttons
+1. **Overall Status** - ✓ PASS or ✕ FAIL badge in header
+2. **Program Info** - Lines, size, tools, runtime (upload flow only)
+3. **Tool Validation** - Collapsable table:
+   - Summary row with expand icon (▶/▼) - click to expand
+   - Expanded rows show Length and Diameter breakdowns
+   - Tools not in NC show "N/A" with machine actual values
+4. **WCS Offset Validation** - Collapsable table:
+   - Summary row with expand icon - click to expand
+   - Expanded rows show X/Y/Z axis details
+   - WCS not in NC shows "XYZ NOT PARSED" with machine G54 values
+5. **Upload Footer** - Machine, path, O-number, buttons (upload flow only)
+
+**Interaction:**
+- Click summary rows (with ▶ icon) to expand/collapse detailed breakdowns
+- Hover over clickable rows for visual feedback
+- Expand icon changes: ▶ (collapsed) → ▼ (expanded)
 
 ---
 
@@ -419,6 +424,7 @@ const handleValidate = async (program: Program) => {
 - `✓` - Green - All checks passed
 - `⚠` - Yellow - Tool exists but diameter/length mismatch
 - `✕` - Red - Tool not loaded in machine
+- `─` - Gray - Tool available on machine but not referenced in NC program
 
 **Example Validations:**
 
@@ -449,7 +455,9 @@ Tools wear down (get shorter) over time. A shorter tool may not reach the workpi
 - Machine reports: 3.015" → **PASS** (within +0.02")
 - Machine reports: 2.995" → **FAIL** (exceeds -0.0", too short)
 
-**Location:** [ValidationResultModal.tsx:451-522](../frontend/src/components/ValidationResultModal.tsx#L451-L522)
+**Location:** 
+- Upload: [UploadConfirmationModal.tsx:305-432](../frontend/src/components/UploadConfirmationModal.tsx#L305-L432)
+- File Browser: [FileBrowser.tsx:1121-1253](../frontend/src/pages/FileBrowser.tsx#L1121-L1253)
 
 ---
 
@@ -469,17 +477,20 @@ G-code programs reference workpiece coordinates (WCS) instead of machine coordin
 
 **Validation Process:**
 
-1. **Parse G-code** - Detect WCS offset number (e.g., `G54`)
-2. **Extract Expected Coordinates** - From comments or parameters:
+1. **Parse G-code** - Detect WCS offset number (e.g., `G54`) and expected coordinates
+2. **Always Query Machine** - Fetch actual WCS offsets from POSNI1.NC file via FTP:
+   - If WCS found in NC: Compare expected vs actual
+   - If WCS NOT in NC: Display machine G54 data with "XYZ NOT PARSED" status
+3. **Extract Expected Coordinates** - From comments or parameters:
    ```gcode
    (WCS G54: X10.0000 Y-5.0000 Z2.0000)
    ```
-3. **Query Machine** - Fetch actual WCS offsets from `/CURRENT/WKOFS`
-4. **Compare** - Calculate difference per axis:
+   - If not found: Show `────` for expected values, display machine actual values
+4. **Compare** - Calculate difference per axis (if both available):
    ```
    difference_x = abs(expected_x - actual_x)
    ```
-5. **Check Tolerance** - Difference must be within tolerance
+5. **Check Tolerance** - Difference must be within tolerance (if validation applicable)
 
 **Validation Table:**
 
@@ -518,7 +529,9 @@ ERRORS:
   Z-axis difference 0.0500" exceeds tolerance ±0.0394"
 ```
 
-**Location:** [ValidationResultModal.tsx:524-571](../frontend/src/components/ValidationResultModal.tsx#L524-L571)
+**Location:**
+- Upload: [UploadConfirmationModal.tsx:434-625](../frontend/src/components/UploadConfirmationModal.tsx#L434-L625)
+- File Browser: [FileBrowser.tsx:1255-1368](../frontend/src/pages/FileBrowser.tsx#L1255-L1368)
 
 **Design Decision:**
 
@@ -542,25 +555,21 @@ WCS offset mismatches are considered **errors** (not warnings) because they can 
 
 **How It Works:**
 
-1. **User initiates upload/deployment**
-2. **Backend queries database** - Find next available O-number:
-   ```sql
-   SELECT MIN(o_number) AS next_onumber
-   FROM generate_series(2000, 3999) AS o_number
-   WHERE NOT EXISTS (
-     SELECT 1 FROM program_deployments
-     WHERE machine_id = ? AND deployed_filename = 'O' || o_number || '.nc'
-   )
-   ```
-3. **If all O-numbers in use** - Find oldest O-number to replace:
-   ```sql
-   SELECT deployed_filename, deployed_at
-   FROM program_deployments
-   WHERE machine_id = ? AND deployed_filename LIKE 'O%.nc'
-   ORDER BY deployed_at ASC
-   LIMIT 1
-   ```
+1. **User initiates upload/deployment** with filename
+2. **Check for existing deployment** - If same filename already deployed on this machine:
+   - Find most recent deployment for this filename
+   - **Reuse existing O-number** (FIFO association)
+   - Return `is_redeployment: true`
+3. **If no existing deployment** - Find next available O-number:
+   - Query for first unused O-number in range O2000-O3999
+   - If pool not full: Return first available
+   - If pool full: Return oldest O-number (FIFO replacement)
 4. **Return O-number** to frontend with replacement info
+
+**FIFO Association:**
+- Same filename → Same O-number (reuses last deployment)
+- Different filename → New O-number assignment
+- Ensures consistent O-number mapping per filename per machine
 
 **API:** `GET /api/programs/machines/{id}/next-onumber?filename={name}`
 
@@ -569,7 +578,22 @@ WCS offset mismatches are considered **errors** (not warnings) because they can 
 ```json
 {
   "next_onumber": "O2005.nc",
-  "is_replacing": false
+  "onumber_int": 2005,
+  "is_replacing": false,
+  "replacement_info": null,
+  "is_redeployment": false
+}
+```
+
+**Response (reusing existing O-number for same filename):**
+
+```json
+{
+  "next_onumber": "O2002.nc",
+  "onumber_int": 2002,
+  "is_replacing": false,
+  "replacement_info": null,
+  "is_redeployment": true
 }
 ```
 
