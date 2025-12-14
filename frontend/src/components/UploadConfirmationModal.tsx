@@ -17,6 +17,10 @@ interface ToolValidation {
     length?: number;
   };
   warnings: string[];
+  // Tolerance values from machine settings (not from NC file)
+  diameter_tolerance?: number;
+  length_tolerance_plus?: number;
+  length_tolerance_minus?: number;
 }
 
 interface WCSValidation {
@@ -422,7 +426,11 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
                       <td className={lengthPassed ? 'text-success' : 'text-error'}>
                         {lengthDiff.toFixed(2)}"
                       </td>
-                      <td>-</td>
+                      <td>
+                        {tool.length_tolerance_plus !== undefined && tool.length_tolerance_minus !== undefined
+                          ? `+${tool.length_tolerance_plus.toFixed(4)}"/-${tool.length_tolerance_minus.toFixed(4)}"`
+                          : '-'}
+                      </td>
                       <td className={lengthPassed ? 'text-success' : 'text-error'}>
                         {lengthPassed ? '✓' : '✕'}
                       </td>
@@ -439,7 +447,11 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
                       <td className={diameterPassed ? 'text-success' : 'text-error'}>
                         {diameterDiff.toFixed(3)}"
                       </td>
-                      <td>-</td>
+                      <td>
+                        {tool.diameter_tolerance !== undefined
+                          ? `±${tool.diameter_tolerance.toFixed(4)}"`
+                          : '-'}
+                      </td>
                       <td className={diameterPassed ? 'text-success' : 'text-error'}>
                         {diameterPassed ? '✓' : '✕'}
                       </td>

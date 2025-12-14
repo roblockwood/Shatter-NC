@@ -50,6 +50,10 @@ interface ToolValidation {
   length_sufficient: boolean;
   machine_tool_data: any;
   warnings: string[];
+  // Tolerance values from machine settings (not from NC file)
+  diameter_tolerance?: number;
+  length_tolerance_plus?: number;
+  length_tolerance_minus?: number;
 }
 
 interface WCSValidation {
@@ -1138,7 +1142,8 @@ export const FileBrowser: React.FC = () => {
                       </thead>
                       <tbody>
                         {Object.entries((freshValidation?.validation?.tools || deploymentDetail?.deployment?.validation_results?.tools || {})).map(([toolKey, validation]: [string, any]) => {
-                          const toolNumber = parseInt(toolKey) || toolKey;
+                          const toolNumber = parseInt(toolKey, 10);
+                          if (isNaN(toolNumber)) return null;
                           const isExpanded = expandedTools.has(toolNumber);
 
                           // Check if tool is not referenced in NC (required values are 0)
@@ -1220,7 +1225,11 @@ export const FileBrowser: React.FC = () => {
                                   <td className={validation.length_sufficient ? 'text-success' : 'text-error'}>
                                     {lengthDiff.toFixed(2)}"
                                   </td>
-                                  <td>-</td>
+                                  <td>
+                                    {validation.length_tolerance_plus !== undefined && validation.length_tolerance_minus !== undefined
+                                      ? `+${validation.length_tolerance_plus.toFixed(4)}"/-${validation.length_tolerance_minus.toFixed(4)}"`
+                                      : '-'}
+                                  </td>
                                   <td className={validation.length_sufficient ? 'text-success' : 'text-error'}>
                                     {validation.length_sufficient ? '✓' : '✕'}
                                   </td>
@@ -1237,7 +1246,11 @@ export const FileBrowser: React.FC = () => {
                                   <td className={validation.diameter_match ? 'text-success' : 'text-error'}>
                                     {diameterDiff.toFixed(3)}"
                                   </td>
-                                  <td>-</td>
+                                  <td>
+                                    {validation.diameter_tolerance !== undefined
+                                      ? `±${validation.diameter_tolerance.toFixed(4)}"`
+                                      : '-'}
+                                  </td>
                                   <td className={validation.diameter_match ? 'text-success' : 'text-error'}>
                                     {validation.diameter_match ? '✓' : '✕'}
                                   </td>
