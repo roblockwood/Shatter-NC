@@ -34,7 +34,8 @@ The Shatter backend is built on FastAPI, a modern Python web framework optimized
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │ Routers (API Endpoints)                                  │   │
 │  │  - machines.py    - status.py      - programs.py         │   │
-│  │  - history.py     - summary.py     - websocket.py        │   │
+│  │  - history.py     - summary.py     - tools.py            │   │
+│  │  - websocket.py                                           │   │
 │  └──────────────┬───────────────────────────────────────────┘   │
 │                 │                                                │
 │  ┌──────────────▼───────────────────────────────────────────┐   │
@@ -43,6 +44,10 @@ The Shatter backend is built on FastAPI, a modern Python web framework optimized
 │  │  │ PollingService  │  │ ProgramService  │  │ WS Mgr   │ │   │
 │  │  │ (Background)    │  │ (Versioning)    │  │(Real-time│ │   │
 │  │  └────────┬────────┘  └────────┬────────┘  └────┬─────┘ │   │
+│  │  ┌─────────────────┐                                     │   │
+│  │  │ ToolService     │                                     │   │
+│  │  │ (Analytics)     │                                     │   │
+│  │  └────────┬────────┘                                     │   │
 │  │           │                    │                 │       │   │
 │  └───────────┼────────────────────┼─────────────────┼───────┘   │
 │              │                    │                 │           │
@@ -841,6 +846,198 @@ def deploy_program(
 **Deployment Path:** Combines machine.path + deployed_filename (e.g., "/PROGRAM/O2000.nc")
 
 **Validation Storage:** Validation results stored in JSONB column for later review. See [PROGRAM_VALIDATION.md](PROGRAM_VALIDATION.md) for validation workflow details.
+
+### ToolService
+
+The ToolService aggregates tool usage data across programs and provides detailed speed/feed analysis for machining operations.
+
+**Location:** [tool_service.py:12-220](../backend/app/services/tool_service.py#L12-L220)
+
+#### Tool Summary Aggregation
+
+```python
+@staticmethod
+def get_tool_summary(db: Session) -> ToolSummaryResponse:
+    """
+    Get aggregated summary of all tools across all programs.
+
+    Aggregation Logic:
+    1. Query program_metadata JSONB for all tools
+    2. Group by tool_number and aggregate:
+       - Count unique programs using each tool
+       - Sum estimated runtime across programs
+       - Collect unique operation names
+       - Track machines where tool was used
+    3. Enrich with tool descriptions from ATC data
+    """
+    query = text("""
+        SELECT DISTINCT
+            (tool_data->>'tool_number')::int as tool_number,
+            (tool_data->>'diameter')::float as diameter,
+            tool_data->>'description' as description
+        FROM programs,
+             jsonb_array_elements(program_metadata->'tools') as tool_data
+        WHERE is_active = TRUE
+        ORDER BY tool_number
+    """)
+```
+
+**Location:** [tool_service.py:15-75](../backend/app/services/tool_service.py#L15-L75)
+
+**Data Sources:**
+- `program_metadata->tools`: JSONB array containing tool data per program
+- `production_runs`: Count of actual machine runs using each tool
+- `deployments`: Machine usage tracking
+
+**Key Aggregations:**
+- `programs_using`: Count of programs using tool
+- `estimated_runtime_seconds`: Sum of runtime across all programs
+- `operation_types`: Unique operation names (e.g., "ADAPTIVE1", "2D CONTOUR1")
+- `machines_used`: Array of machine IDs where tool was deployed
+
+#### Tool Detail with Per-Program Operations
+
+```python
+@staticmethod
+def get_tool_detail(db: Session, tool_number: int) -> ToolDetail:
+    """
+    Get detailed analysis for a specific tool with per-program operations.
+
+    Critical Design: Operations are NOT aggregated across programs.
+
+    Data Structure:
+    {
+      "programs": [
+        {
+          "program_id": 5,
+          "operations": [
+            {
+              "operation_name": "ADAPTIVE1",
+              "spindle_speed": 5000.0,
+              "feedrate_cutting": 39.4,
+              "feedrate_plunge": 25.0,
+              "feedrate_finish": 50.0,
+              "feedrate_entry": 39.4,
+              "feedrate_exit": 39.4,
+              "feedrate_direct": 787.4,
+              "feedrate_transition": 100.0
+            }
+          ]
+        }
+      ]
+    }
+
+    Rationale: Same operation name (e.g., "ADAPTIVE1") may have different
+    speed/feed values in different programs. Aggregating would lose this
+    critical per-program context.
+    """
+```
+
+**Location:** [tool_service.py:78-150](../backend/app/services/tool_service.py#L78-L150)
+
+**Per-Program Operation Extraction:**
+```python
+# Extract operations for this tool from each program's metadata
+operations = []
+if row.program_metadata and 'tools' in row.program_metadata:
+    for tool in row.program_metadata['tools']:
+        if tool.get('tool_number') == tool_number:
+            tool_operations = tool.get('operations', [])
+            for op in tool_operations:
+                operations.append(OperationStats(
+                    operation_name=op.get('operation_name'),
+                    spindle_speed=op.get('spindle_speed'),
+                    feedrate_cutting=op.get('feedrate_cutting'),
+                    feedrate_plunge=op.get('feedrate_plunge'),
+                    feedrate_finish=op.get('feedrate_finish'),
+                    feedrate_entry=op.get('feedrate_entry'),
+                    feedrate_exit=op.get('feedrate_exit'),
+                    feedrate_direct=op.get('feedrate_direct'),
+                    feedrate_transition=op.get('feedrate_transition')
+                ))
+```
+
+**All 8 Feedrate Types Captured:**
+1. `feedrate_cutting` - Primary cutting feedrate (IPM)
+2. `feedrate_plunge` - Z-axis plunge rate (IPM)
+3. `feedrate_finish` - Finish pass feedrate (IPM)
+4. `feedrate_entry` - Entry move feedrate (IPM)
+5. `feedrate_exit` - Exit move feedrate (IPM)
+6. `feedrate_direct` - Direct/rapid traverse feedrate (IPM)
+7. `feedrate_transition` - Transition feedrate between moves (IPM)
+8. `spindle_speed` - Spindle RPM
+
+**Null Handling:** Operations may have `null` values for unused feedrate types (e.g., finish pass not always used).
+
+#### Tool-Related Alarms
+
+```python
+@staticmethod
+def _get_tool_alarms(db: Session, tool_number: int) -> List[ToolAlarm]:
+    """
+    Get alarm history for a specific tool.
+
+    Queries alarm_events table for alarms starting with 'T' code
+    and correlates with program deployments to identify tool-related issues.
+    """
+```
+
+**Location:** [tool_service.py:183-215](../backend/app/services/tool_service.py#L183-215)
+
+**Alarm Correlation:**
+- Filters for alarm codes matching `T*` pattern (tool alarms)
+- Groups by program to show alarm frequency per program
+- Provides last occurrence timestamp for each alarm type
+
+#### Export Utilities
+
+The service integrates with export utilities for CSV/JSON generation:
+
+```python
+# Backend generates flattened CSV structure
+flattened = flatten_tool_data_for_csv(
+    tool_number=tool.tool_number,
+    diameter=tool.diameter,
+    description=tool.description,
+    total_runtime_seconds=tool.estimated_runtime_seconds,
+    total_programs=tool.programs_using,
+    total_runs=tool.total_runs,
+    programs=programs  # Contains nested operations
+)
+```
+
+**CSV Structure:**
+- One row per program operation
+- Tool summary repeated for each row
+- Program context (ID, filename, version) included
+- All 8 feedrate columns
+
+**Location:** [export_utils.py:49-155](../backend/app/utils/export_utils.py#L49-L155)
+
+#### Future: Physical Tool Tracking
+
+The `tool_instances` table is prepared for future physical tool lifecycle tracking:
+
+```sql
+CREATE TABLE tool_instances (
+    id SERIAL PRIMARY KEY,
+    tool_number INTEGER NOT NULL,
+    serial_number VARCHAR(100),
+    purchase_date DATE,
+    install_date TIMESTAMPTZ,
+    total_runtime_hours FLOAT,
+    total_parts_produced INTEGER,
+    is_active BOOLEAN DEFAULT TRUE,
+    retirement_date TIMESTAMPTZ,
+    retirement_reason VARCHAR(500)
+);
+```
+
+**Planned Features:**
+- Track individual tool lifecycle (purchase → retirement)
+- Monitor tool wear and replacement intervals
+- Correlate tool quality with machining outcomes
+- Predictive maintenance based on usage patterns
 
 ### WebSocketManager
 

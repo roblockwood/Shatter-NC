@@ -1521,6 +1521,408 @@ curl http://localhost:8000/api/programs/1/production-runs
 
 ---
 
+## Tool Management API
+
+Track tool usage across programs, analyze speed/feed data, and export tool reports.
+
+**Base Path:** `/api/tools`
+
+### Get Tool Summary
+
+Get aggregated summary of all tools across all programs with usage statistics.
+
+**Endpoint:** `GET /api/tools/summary`
+
+**Response (200 OK):**
+```json
+{
+  "total_unique_tools": 15,
+  "total_programs": 42,
+  "total_production_runs": 156,
+  "tools": [
+    {
+      "tool_number": 1,
+      "diameter": 0.25,
+      "description": "FLAT END MILL",
+      "programs_using": 12,
+      "estimated_runtime_seconds": 18750.5,
+      "total_runs": 45,
+      "machines_used": [1, 2],
+      "operation_types": ["2D CONTOUR1", "ADAPTIVE1", "FACE2"]
+    },
+    {
+      "tool_number": 3,
+      "diameter": 0.5,
+      "description": "1/2 ENDMILL",
+      "programs_using": 8,
+      "estimated_runtime_seconds": 12340.0,
+      "total_runs": 28,
+      "machines_used": [1],
+      "operation_types": ["FACE1", "ADAPTIVE2"]
+    }
+  ]
+}
+```
+
+**Fields:**
+- `total_unique_tools` - Count of unique tool numbers across all programs
+- `total_programs` - Total programs in library
+- `total_production_runs` - Total production runs recorded
+- `tools` - Array of tools sorted by tool number
+  - `tool_number` - Tool number from ATC
+  - `diameter` - Tool diameter in inches
+  - `description` - Tool description from ATC
+  - `programs_using` - Number of programs using this tool
+  - `estimated_runtime_seconds` - Total estimated runtime across all programs
+  - `total_runs` - Number of production runs using this tool
+  - `machines_used` - Array of machine IDs where tool was used
+  - `operation_types` - Unique operation names using this tool
+
+**Example:**
+```bash
+curl http://localhost:8000/api/tools/summary
+```
+
+**Implementation:** [tools.py:28-45](../backend/app/api/tools.py#L28-L45)
+
+---
+
+### Get Tool Detail
+
+Get detailed analysis for a specific tool including per-program operations with speed/feed data.
+
+**Endpoint:** `GET /api/tools/{tool_number}`
+
+**Path Parameters:**
+- `tool_number` (int): Tool number
+
+**Response (200 OK):**
+```json
+{
+  "tool_number": 1,
+  "diameter": 0.25,
+  "description": "FLAT END MILL",
+  "total_programs": 3,
+  "estimated_runtime_seconds": 18750.5,
+  "total_runs": 12,
+  "machines_used": [1, 2],
+  "programs": [
+    {
+      "program_id": 5,
+      "filename": "PART_123_OP1.NC",
+      "version": 2,
+      "production_runs": 8,
+      "last_run": "2025-01-15T14:00:00Z",
+      "operations": [
+        {
+          "operation_name": "ADAPTIVE1",
+          "spindle_speed": 5000.0,
+          "feedrate_cutting": 39.4,
+          "feedrate_plunge": 25.0,
+          "feedrate_finish": 50.0,
+          "feedrate_entry": 39.4,
+          "feedrate_exit": 39.4,
+          "feedrate_direct": 787.4,
+          "feedrate_transition": 100.0
+        },
+        {
+          "operation_name": "2D CONTOUR1",
+          "spindle_speed": 5000.0,
+          "feedrate_cutting": 35.0,
+          "feedrate_plunge": 20.0,
+          "feedrate_finish": 45.0,
+          "feedrate_entry": 35.0,
+          "feedrate_exit": 35.0,
+          "feedrate_direct": 787.4,
+          "feedrate_transition": 100.0
+        }
+      ]
+    },
+    {
+      "program_id": 8,
+      "filename": "PART_456_OP2.NC",
+      "version": 1,
+      "production_runs": 4,
+      "last_run": "2025-01-14T10:30:00Z",
+      "operations": [
+        {
+          "operation_name": "ADAPTIVE1",
+          "spindle_speed": 4500.0,
+          "feedrate_cutting": 35.0,
+          "feedrate_plunge": 22.0,
+          "feedrate_finish": null,
+          "feedrate_entry": 35.0,
+          "feedrate_exit": 35.0,
+          "feedrate_direct": 787.4,
+          "feedrate_transition": 95.0
+        }
+      ]
+    }
+  ],
+  "alarms": [
+    {
+      "program_id": 5,
+      "filename": "PART_123_OP1.NC",
+      "alarm_count": 2,
+      "last_alarm": "2025-01-15T12:00:00Z",
+      "alarm_codes": ["T101", "T102"]
+    }
+  ]
+}
+```
+
+**Data Structure:**
+- Operations are **grouped by program** - each program contains its specific operations
+- Same operation name (e.g., "ADAPTIVE1") may appear in multiple programs with different speed/feed values
+- Operations are **not aggregated** across programs to preserve per-program context
+- All 8 feedrate types are included:
+  - `feedrate_cutting` - Cutting feedrate (IPM)
+  - `feedrate_plunge` - Plunge feedrate (IPM)
+  - `feedrate_finish` - Finish pass feedrate (IPM)
+  - `feedrate_entry` - Entry move feedrate (IPM)
+  - `feedrate_exit` - Exit move feedrate (IPM)
+  - `feedrate_direct` - Direct/rapid feedrate (IPM)
+  - `feedrate_transition` - Transition feedrate (IPM)
+  - `spindle_speed` - Spindle speed (RPM)
+
+**Null Values:**
+Operations may have `null` values for feedrates not used in that specific operation.
+
+**Error Responses:**
+- `404 Not Found` - Tool not found in any program
+
+**Example:**
+```bash
+curl http://localhost:8000/api/tools/1
+```
+
+**Implementation:** [tools.py:48-70](../backend/app/api/tools.py#L48-L70)
+
+**Use Cases:**
+- Analyze tool usage patterns across different programs
+- Compare speed/feed settings between programs
+- Identify programs with tool-related alarms
+- Audit machining parameters for consistency
+
+---
+
+### Get Tool Usage History
+
+Get production run history for a specific tool.
+
+**Endpoint:** `GET /api/tools/{tool_number}/history`
+
+**Path Parameters:**
+- `tool_number` (int): Tool number
+
+**Query Parameters:**
+- `start_time` (datetime, optional): Filter from datetime (ISO 8601)
+- `end_time` (datetime, optional): Filter until datetime (ISO 8601)
+- `limit` (int, optional): Max records (default: 100, max: 1000)
+
+**Response (200 OK):**
+```json
+{
+  "tool_number": 1,
+  "total_runs": 45,
+  "runs": [
+    {
+      "id": 123,
+      "started_at": "2025-01-15T10:00:00Z",
+      "ended_at": "2025-01-15T11:04:05Z",
+      "duration_seconds": 3845,
+      "machine_id": 1,
+      "machine_name": "Mill 1",
+      "program_id": 5,
+      "filename": "PART_123_OP1.NC",
+      "version": 2,
+      "o_number": "2045",
+      "parts_produced": 12,
+      "completion_status": "completed",
+      "alarm_count": 0
+    }
+  ]
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/api/tools/1/history
+curl "http://localhost:8000/api/tools/1/history?start_time=2025-01-14T00:00:00Z&limit=50"
+```
+
+**Implementation:** [tools.py:73-114](../backend/app/api/tools.py#L73-L114)
+
+---
+
+### Export Tool Data
+
+Export tool data and analysis in CSV or JSON format.
+
+**Endpoint:** `POST /api/tools/export`
+
+**Request Body:**
+```json
+{
+  "format": "csv",
+  "filters": {
+    "tool_numbers": [1, 3, 5],
+    "start_date": "2025-01-01T00:00:00Z",
+    "end_date": "2025-01-31T23:59:59Z",
+    "machine_ids": [1, 2]
+  },
+  "include_operations": true,
+  "include_programs": true
+}
+```
+
+**Fields:**
+- `format` (str, required): Export format - "csv" or "json"
+- `filters` (object, optional): Filter criteria
+  - `tool_numbers` (array, optional): Specific tools to export
+  - `start_date` (datetime, optional): Filter production runs from date
+  - `end_date` (datetime, optional): Filter production runs to date
+  - `machine_ids` (array, optional): Filter by machines
+- `include_operations` (bool, optional): Include operation-level data (default: true)
+- `include_programs` (bool, optional): Include program usage details (default: false)
+
+**Response (200 OK):** File download with appropriate MIME type
+
+**CSV Format:**
+```csv
+tool_number,diameter,description,total_runtime_seconds,total_programs,total_runs,program_id,program_filename,program_version,program_runs,operation_name,spindle_speed,feedrate_cutting,feedrate_plunge,feedrate_finish,feedrate_entry,feedrate_exit,feedrate_direct,feedrate_transition
+1,0.25,"FLAT END MILL",18750.5,3,12,5,"PART_123_OP1.NC",2,8,"ADAPTIVE1",5000.0,39.4,25.0,50.0,39.4,39.4,787.4,100.0
+1,0.25,"FLAT END MILL",18750.5,3,12,5,"PART_123_OP1.NC",2,8,"2D CONTOUR1",5000.0,35.0,20.0,45.0,35.0,35.0,787.4,100.0
+1,0.25,"FLAT END MILL",18750.5,3,12,8,"PART_456_OP2.NC",1,4,"ADAPTIVE1",4500.0,35.0,22.0,,,35.0,35.0,787.4,95.0
+```
+
+**CSV Structure:**
+- One row per program operation
+- Tool summary data repeated for each row
+- Program data repeated for operations within same program
+- Null values exported as empty cells
+
+**JSON Format:**
+```json
+{
+  "export_date": "2025-01-15T14:30:00Z",
+  "total_tools": 3,
+  "filters": {
+    "tool_numbers": [1, 3, 5],
+    "start_date": "2025-01-01T00:00:00Z"
+  },
+  "tools": [
+    {
+      "tool_number": 1,
+      "diameter": 0.25,
+      "description": "FLAT END MILL",
+      "estimated_runtime_seconds": 18750.5,
+      "total_runs": 12,
+      "programs": [
+        {
+          "program_id": 5,
+          "filename": "PART_123_OP1.NC",
+          "version": 2,
+          "production_runs": 8,
+          "operations": [
+            {
+              "operation_name": "ADAPTIVE1",
+              "spindle_speed": 5000.0,
+              "feedrate_cutting": 39.4,
+              "feedrate_plunge": 25.0,
+              "feedrate_finish": 50.0,
+              "feedrate_entry": 39.4,
+              "feedrate_exit": 39.4,
+              "feedrate_direct": 787.4,
+              "feedrate_transition": 100.0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Example:**
+```bash
+# Export all tools to CSV
+curl -X POST http://localhost:8000/api/tools/export \
+  -H "Content-Type: application/json" \
+  -d '{"format": "csv", "include_operations": true}' \
+  -o tools_export.csv
+
+# Export specific tools to JSON
+curl -X POST http://localhost:8000/api/tools/export \
+  -H "Content-Type: application/json" \
+  -d '{
+    "format": "json",
+    "filters": {"tool_numbers": [1, 3, 5]},
+    "include_operations": true,
+    "include_programs": true
+  }' -o tools_export.json
+```
+
+**Implementation:** [tools.py:117-234](../backend/app/api/tools.py#L117-L234)
+
+**Use Cases:**
+- Export tool data for external analysis (Excel, databases)
+- Generate tool usage reports
+- Archive historical tool data
+- Integration with tool management systems
+
+---
+
+### Get Tool Instances
+
+Get physical tool instance tracking data (future feature).
+
+**Endpoint:** `GET /api/tools/instances`
+
+**Query Parameters:**
+- `tool_number` (int, optional): Filter by tool number
+- `active_only` (bool, optional): Only active instances (default: false)
+- `limit` (int, optional): Max records (default: 100)
+
+**Response (200 OK):**
+```json
+{
+  "total_instances": 5,
+  "instances": [
+    {
+      "id": 1,
+      "tool_number": 1,
+      "serial_number": "ABC123",
+      "purchase_date": "2024-12-01",
+      "install_date": "2025-01-01T08:00:00Z",
+      "total_runtime_hours": 45.5,
+      "total_parts_produced": 1250,
+      "is_active": true,
+      "retirement_date": null,
+      "retirement_reason": null
+    }
+  ]
+}
+```
+
+**Note:** This endpoint is reserved for future physical tool tracking functionality. Currently returns empty array.
+
+**Example:**
+```bash
+curl http://localhost:8000/api/tools/instances
+curl "http://localhost:8000/api/tools/instances?tool_number=1&active_only=true"
+```
+
+**Implementation:** [tools.py:237-256](../backend/app/api/tools.py#L237-L256)
+
+**Future Enhancements:**
+- Track individual tool lifecycle (purchase → retirement)
+- Monitor tool wear and replacement intervals
+- Correlate tool quality with machining outcomes
+- Predictive maintenance based on tool usage patterns
+
+---
+
 ## Summary API
 
 Fleet-wide summaries and statistics.
