@@ -340,6 +340,29 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
                   </tr>
                 );
               }
+              
+              // Check if tool is not referenced in NC (required values are 0)
+              const notInNC = tool.required_diameter === 0 && tool.required_length === 0;
+              
+              if (notInNC) {
+                // Tool is available on machine but not referenced in NC program
+                return (
+                  <tr key={tool.tool_number} className="validation-table-row tool-summary-row">
+                    <td className="text-muted">─</td>
+                    <td>T{String(tool.tool_number).padStart(2, '0')}</td>
+                    <td>
+                      Ø{(tool.machine_tool_data.diameter || 0).toFixed(3)}" L{(tool.machine_tool_data.length || 0).toFixed(2)}"
+                      {tool.machine_tool_data.tool_name && (
+                        <span className="text-muted"> ({tool.machine_tool_data.tool_name})</span>
+                      )}
+                    </td>
+                    <td className="text-muted">────</td>
+                    <td className="text-muted">────</td>
+                    <td className="text-muted">─</td>
+                    <td className="text-muted">N/A</td>
+                  </tr>
+                );
+              }
 
               // Determine overall status
               const toolPassed = tool.available && tool.diameter_match && tool.length_sufficient;
@@ -433,6 +456,68 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
 
   const renderWCSSection = () => {
     if (!result.wcs_offset) return null;
+
+    // Check if WCS was not specified in NC (expected values are all 0)
+    const notInNC = result.wcs_offset.expected.x === 0 && 
+                    result.wcs_offset.expected.y === 0 && 
+                    result.wcs_offset.expected.z === 0 &&
+                    result.wcs_offset.warnings.some(w => w.includes("not specified in NC"));
+
+    if (notInNC) {
+      // WCS not specified in NC - show collapsed summary with machine data
+      const expandIcon = expandedWCS ? '▼' : '▶';
+      
+      return (
+        <div className="validation-section">
+          <div className="section-header">WCS OFFSET</div>
+          <table className="validation-table">
+            <thead>
+              <tr className="validation-table-header">
+                <th>ST</th>
+                <th>OFFSET</th>
+                <th>ACTUAL</th>
+                <th>EXPECTED</th>
+                <th>DIFF</th>
+                <th>TOL</th>
+                <th>RESULT</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr 
+                className="validation-table-row wcs-summary-row"
+                onClick={() => setExpandedWCS(!expandedWCS)}
+                style={{ cursor: 'pointer' }}
+              >
+                <td className="text-warning">⚠</td>
+                <td>
+                  <span className="expand-icon">{expandIcon}</span>
+                  G{result.wcs_offset.work_offset}
+                </td>
+                <td colSpan={4} className="text-muted">
+                  XYZ NOT PARSED
+                </td>
+                <td className="text-warning">WARN</td>
+              </tr>
+
+              {expandedWCS && result.wcs_offset && ['x', 'y', 'z'].map((axis) => {
+                const actual = result.wcs_offset!.actual[axis as keyof typeof result.wcs_offset.actual];
+                return (
+                  <tr key={axis} className="validation-table-row wcs-detail-row">
+                    <td></td>
+                    <td className="axis-label">{axis.toUpperCase()}</td>
+                    <td>{actual.toFixed(4)}"</td>
+                    <td className="text-muted">────</td>
+                    <td className="text-muted">────</td>
+                    <td className="text-muted">─</td>
+                    <td className="text-muted">N/A</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
 
     // Check if validation data is available
     const validationAvailable = result.wcs_offset.within_tolerance !== undefined &&
