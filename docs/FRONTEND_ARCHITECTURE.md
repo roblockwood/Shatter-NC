@@ -356,6 +356,317 @@ export const FileBrowser = () => {
 
 ---
 
+### Tool Management
+
+Tool usage tracking and speed/feed analysis page.
+
+**Location:** [ToolManagement.tsx](../frontend/src/pages/ToolManagement.tsx)
+
+**Key Features:**
+- Aggregated tool summary with usage statistics
+- Detailed per-program speed/feed analysis
+- Hierarchical display: Program → Operations with all 8 feedrate types
+- Tool-related alarm tracking
+- CSV/JSON export capabilities
+
+**Component Structure:**
+
+```typescript
+export const ToolManagement = () => {
+  // Data fetching
+  const [tools, setTools] = useState<ToolSummary[]>([]);
+  const [selectedTool, setSelectedTool] = useState<number | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
+  // Load tool summary on mount
+  useEffect(() => {
+    const fetchTools = async () => {
+      const response = await fetch('/api/tools/summary');
+      const data = await response.json();
+      setTools(data.tools);
+    };
+    fetchTools();
+  }, []);
+
+  // Handle tool click → show detail modal
+  const handleToolClick = (toolNumber: number) => {
+    setSelectedTool(toolNumber);
+    setShowDetailModal(true);
+  };
+
+  return (
+    <div className="tool-management">
+      <div className="tool-header">
+        <h1>┌─ TOOL MANAGEMENT ─┐</h1>
+        <div className="summary-stats">
+          <span>TOTAL TOOLS: {tools.length}</span>
+          <span>TOTAL PROGRAMS: {totalPrograms}</span>
+        </div>
+      </div>
+
+      <table className="tools-table">
+        <thead>
+          <tr>
+            <th>TOOL</th>
+            <th>DIAMETER</th>
+            <th>DESCRIPTION</th>
+            <th>PROGRAMS</th>
+            <th>RUNTIME</th>
+            <th>OPERATIONS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tools.map(tool => (
+            <tr key={tool.tool_number} onClick={() => handleToolClick(tool.tool_number)}>
+              <td>T{tool.tool_number}</td>
+              <td>{tool.diameter}"</td>
+              <td>{tool.description}</td>
+              <td>{tool.programs_using}</td>
+              <td>{formatRuntime(tool.estimated_runtime_seconds)}</td>
+              <td>{tool.operation_types.join(', ')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {showDetailModal && (
+        <ToolDetailModal
+          toolNumber={selectedTool}
+          onClose={() => setShowDetailModal(false)}
+        />
+      )}
+    </div>
+  );
+};
+```
+
+**Data Flow:**
+1. Component mounts → fetch `/api/tools/summary`
+2. Display tool list with aggregated statistics
+3. User clicks tool → open detail modal
+4. Detail modal fetches `/api/tools/{tool_number}`
+5. Display hierarchical program → operations structure
+6. User can export data to CSV/JSON
+
+**Terminal Aesthetic:**
+- ASCII border characters for headers and tables
+- Monospace fonts throughout
+- Green-on-black terminal color scheme
+- Hover effects with border highlighting
+
+---
+
+#### ToolDetailModal
+
+Modal component for detailed tool analysis with per-program operations.
+
+**Location:** [ToolDetailModal.tsx](../frontend/src/components/ToolDetailModal.tsx)
+
+**Key Features:**
+- Fetches detailed tool data on mount
+- Displays hierarchical program → operations structure
+- Shows all 8 feedrate types per operation
+- Includes tool-related alarm history
+- Loading and error states
+
+**Component Structure:**
+
+```typescript
+export const ToolDetailModal = ({ toolNumber, onClose }: Props) => {
+  const [toolDetail, setToolDetail] = useState<ToolDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchToolDetail = async () => {
+      try {
+        const response = await fetch(`/api/tools/${toolNumber}`);
+        const data = await response.json();
+        setToolDetail(data);
+      } catch (err) {
+        setError('Failed to load tool details');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchToolDetail();
+  }, [toolNumber]);
+
+  const renderContent = () => {
+    if (loading) return <div>LOADING...</div>;
+    if (error) return <div className="error">{error}</div>;
+
+    return (
+      <>
+        {/* Tool Specifications */}
+        <div className="detail-section">
+          <div className="spec-grid">
+            <div className="spec-item">
+              <div className="spec-label">TOOL NUMBER</div>
+              <div className="spec-value">T{toolDetail.tool_number}</div>
+            </div>
+            <div className="spec-item">
+              <div className="spec-label">DIAMETER</div>
+              <div className="spec-value">{toolDetail.diameter}"</div>
+            </div>
+            <div className="spec-item">
+              <div className="spec-label">DESCRIPTION</div>
+              <div className="spec-value">{toolDetail.description}</div>
+            </div>
+            {/* ... more specs ... */}
+          </div>
+        </div>
+
+        {/* Programs & Operations - Hierarchical Structure */}
+        <div className="detail-section">
+          <div className="detail-section-header">
+            ┌─ PROGRAMS & OPERATIONS ─────────────────┐
+          </div>
+          <div className="detail-section-content no-padding">
+            {toolDetail.programs.map((prog) => (
+              <div key={prog.program_id} className="program-section">
+                {/* Program Header */}
+                <div className="program-header">
+                  <span className="text-info">{prog.filename}</span>
+                  <span className="text-dim"> v{prog.version}</span>
+                  <span className="separator"> │ </span>
+                  <span>RUNS: {prog.production_runs}</span>
+                  <span className="separator"> │ </span>
+                  <span className="text-dim">
+                    LAST RUN: {prog.last_run ? formatDate(prog.last_run) : 'Never'}
+                  </span>
+                </div>
+
+                {/* Operations Table - All 8 Feedrate Types */}
+                {prog.operations.length > 0 && (
+                  <table className="operations-table">
+                    <thead>
+                      <tr>
+                        <th>OPERATION</th>
+                        <th>SPINDLE</th>
+                        <th>CUTTING</th>
+                        <th>PLUNGE</th>
+                        <th>FINISH</th>
+                        <th>ENTRY</th>
+                        <th>EXIT</th>
+                        <th>DIRECT</th>
+                        <th>TRANS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {prog.operations.map((op, idx) => (
+                        <tr key={idx}>
+                          <td className="text-info">{op.operation_name || 'UNKNOWN'}</td>
+                          <td>{formatValue(op.spindle_speed)}</td>
+                          <td>{formatValue(op.feedrate_cutting)}</td>
+                          <td>{formatValue(op.feedrate_plunge)}</td>
+                          <td>{formatValue(op.feedrate_finish)}</td>
+                          <td>{formatValue(op.feedrate_entry)}</td>
+                          <td>{formatValue(op.feedrate_exit)}</td>
+                          <td>{formatValue(op.feedrate_direct)}</td>
+                          <td>{formatValue(op.feedrate_transition)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="detail-section-footer">
+            └──────────────────────────────────────────┘
+          </div>
+        </div>
+
+        {/* Alarms Section */}
+        {toolDetail.alarms.length > 0 && (
+          <div className="detail-section">
+            <div className="detail-section-header">
+              ┌─ TOOL-RELATED ALARMS ───────────────────┐
+            </div>
+            {/* ... alarm display ... */}
+          </div>
+        )}
+      </>
+    );
+  };
+
+  return (
+    <div className="tool-detail-modal-overlay" onClick={onClose}>
+      <div className="tool-detail-modal" onClick={e => e.stopPropagation()}>
+        <div className="tool-detail-modal-header">
+          <h2 className="tool-detail-modal-title">
+            TOOL T{toolNumber} ANALYSIS
+          </h2>
+          <button className="tool-detail-modal-close" onClick={onClose}>
+            [X]
+          </button>
+        </div>
+        <div className="tool-detail-modal-content">
+          {renderContent()}
+        </div>
+      </div>
+    </div>
+  );
+};
+```
+
+**Data Structure (Hierarchical):**
+
+```typescript
+interface ToolDetail {
+  tool_number: number;
+  diameter: number;
+  description: string;
+  programs: ProgramUsage[];  // Programs contain operations
+  alarms: ToolAlarm[];
+}
+
+interface ProgramUsage {
+  program_id: number;
+  filename: string;
+  version: number;
+  production_runs: number;
+  last_run: string | null;
+  operations: OperationStats[];  // Nested within program
+}
+
+interface OperationStats {
+  operation_name: string | null;
+  spindle_speed: number | null;
+  feedrate_cutting: number | null;
+  feedrate_plunge: number | null;
+  feedrate_finish: number | null;
+  feedrate_entry: number | null;
+  feedrate_exit: number | null;
+  feedrate_direct: number | null;
+  feedrate_transition: number | null;
+}
+```
+
+**Critical Design: No Aggregation**
+
+Operations are **NOT** aggregated across programs. The same operation name (e.g., "ADAPTIVE1") may appear in multiple programs with different speed/feed values. This preserves per-program context and allows comparison of machining parameters across different parts.
+
+**Styling:**
+
+CSS file: [ToolDetailModal.css](../frontend/src/components/ToolDetailModal.css)
+
+Key features:
+- Fixed modal overlay with centered content
+- Scrollable content area with custom scrollbar
+- Program section headers with metadata
+- Wide operations table (9 columns) with right-aligned numeric values
+- Responsive breakpoints for smaller screens
+- Terminal aesthetic with monospace fonts and borders
+
+**Performance:**
+- Modal lazy-loads data only when opened
+- Single API call per tool detail view
+- Minimal re-renders (data fetched once on mount)
+
+---
+
 ## Component Library
 
 ### UI Components
