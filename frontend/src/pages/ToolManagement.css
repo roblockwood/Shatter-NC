@@ -1,0 +1,213 @@
+.tool-management {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.tool-summary {
+  display: flex;
+  gap: var(--spacing-lg);
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-md);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.tool-summary .separator {
+  color: var(--color-text-dim);
+}
+
+.terminal-button {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+}
+
+.terminal-button:hover {
+  border-color: var(--color-text-primary);
+  color: var(--color-text-primary);
+  text-shadow: var(--glow);
+  box-shadow: 0 0 8px var(--color-primary);
+}
+
+.terminal-button-small {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+}
+
+.terminal-button-small:hover {
+  border-color: var(--color-text-primary);
+  color: var(--color-text-primary);
+  text-shadow: var(--glow);
+}
+
+.tool-list-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+}
+
+.tool-list-header,
+.tool-list-footer {
+  color: var(--color-text-dim);
+  font-size: var(--font-sm);
+  white-space: pre;
+  overflow: hidden;
+  line-height: 1.2;
+  padding: var(--spacing-xs) 0;
+}
+
+.tool-list-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+  font-family: var(--font-mono);
+}
+
+.tool-list-table thead {
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.tool-list-table th {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+}
+
+.tool-list-table tbody tr {
+  border-bottom: 1px solid var(--color-border-subtle);
+  transition: all 0.2s ease;
+}
+
+.tool-list-table tbody tr.clickable {
+  cursor: pointer;
+}
+
+.tool-list-table tbody tr.clickable:hover {
+  background: var(--color-bg-surface);
+  border-color: var(--color-border);
+}
+
+.tool-list-table tbody tr.clickable:hover .detail-link {
+  color: var(--color-text-primary);
+  text-shadow: var(--glow);
+}
+
+.tool-list-table td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  color: var(--color-text-primary);
+}
+
+.tool-list-table td.description {
+  color: var(--color-text-secondary);
+}
+
+.tool-list-table td.operations-cell {
+  color: var(--color-text-dim);
+  font-size: var(--font-xs);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-list-table td.text-center {
+  text-align: center;
+}
+
+.tool-list-table td.text-right {
+  text-align: right;
+}
+
+.tool-list-table td.detail-link {
+  text-align: center;
+  font-weight: 700;
+}
+
+.tool-list-table td.empty-state {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--color-text-dim);
+  font-style: italic;
+}
+
+.tool-footer {
+  margin-top: auto;
+  background: var(--color-bg-surface);
+  border-top: 1px solid var(--color-border);
+}
+
+.tool-divider {
+  color: var(--color-text-dim);
+  white-space: pre;
+  overflow: hidden;
+  line-height: 1;
+  font-size: var(--font-sm);
+}
+
+.command-line {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+}
+
+.command-line .prompt {
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+.command-line .separator {
+  color: var(--color-text-dim);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .tool-summary {
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+
+  .tool-list-table {
+    font-size: var(--font-xs);
+  }
+
+  .tool-list-table th,
+  .tool-list-table td {
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  .tool-list-table td.operations-cell {
+    display: none;
+  }
+
+  .tool-divider {
+    display: none;
+  }
+}
