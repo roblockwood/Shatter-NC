@@ -414,11 +414,17 @@ const handleValidate = async (program: Program) => {
 
 **Validation Criteria:**
 
-| Check | Description | Tolerance |
-|-------|-------------|-----------|
+| Check | Description | Tolerance Source |
+|-------|-------------|------------------|
 | **Tool Exists** | Tool number loaded in machine ATC | N/A (must exist) |
-| **Diameter Match** | Tool diameter within tolerance | Default: ±0.010" |
-| **Length Sufficient** | Tool length within asymmetric tolerance | Default: +0.02"/-0.0" |
+| **Diameter Match** | Tool diameter within tolerance | **Machine database** (`diameter_tolerance` setting) |
+| **Length Sufficient** | Tool length within asymmetric tolerance | **Machine database** (`length_tolerance_plus`/`length_tolerance_minus` settings) |
+
+**Tolerance Display:**
+- Tolerance values are shown in the **TOL** column when expanding tool details
+- **Diameter**: Displays as `±X.XXXX"` (symmetric tolerance)
+- **Length**: Displays as `+X.XXXX"/-X.XXXX"` (asymmetric tolerance)
+- Values come from machine configuration, not from the NC program file
 
 **Status Icons:**
 - `✓` - Green - All checks passed
@@ -504,14 +510,28 @@ G-code programs reference workpiece coordinates (WCS) instead of machine coordin
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**Default Tolerance:** ±0.0394" (1 millimeter)
+**Tolerance Source:**
 
-**Per-Axis Tolerances:**
+WCS tolerances use a **priority system**:
 
-Tolerances can be configured per axis in machine settings:
-- **X tolerance** - Default: ±0.0394"
-- **Y tolerance** - Default: ±0.0394"
-- **Z tolerance** - Default: ±0.0394"
+1. **NC File E Parameter** (highest priority) - If WCS command includes `E` parameter:
+   ```gcode
+   G65 P8901 X10.0000 Y-5.0000 Z2.0000 E0.01 W54
+   ```
+   The `E0.01` value becomes the tolerance for all axes (uniform tolerance)
+
+2. **Machine Database Settings** (fallback) - If no E parameter in NC file:
+   - Uses per-axis tolerances from machine configuration
+   - **X tolerance** - Default: ±0.0394"
+   - **Y tolerance** - Default: ±0.0394"
+   - **Z tolerance** - Default: ±0.0394"
+
+**Tolerance Display:**
+- Tolerance value shown in **TOL** column when expanding WCS details
+- Displays as `±X.XXXX"` (uniform tolerance from E parameter, or max of per-axis tolerances)
+- Source is indicated by whether E parameter was found in NC file
+
+**Default Tolerance:** ±0.0394" (1 millimeter) when using machine settings
 
 **Failure Example:**
 

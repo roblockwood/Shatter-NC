@@ -144,6 +144,13 @@ The validation logic checks:
 - **Tool metadata** - Compares tool number, diameter, corner radius, description
 - **Tool status** - Marks as `found`, `missing`, `mismatch`, or `not_in_nc` (available but not referenced)
 
+**Tolerance Source:**
+- **Tool tolerances**: Always from machine database settings (not from NC file)
+  - `diameter_tolerance` - Symmetric tolerance for diameter matching
+  - `length_tolerance_plus` - Positive tolerance for length (tools can be longer)
+  - `length_tolerance_minus` - Negative tolerance for length (tools cannot be shorter)
+- Tolerance values are displayed in validation tables when expanding tool details
+
 Example tool validation result:
 ```json
 {
@@ -167,9 +174,13 @@ Example tool validation result:
 
 #### WCS Offset Validation
 - **Coordinate systems** - Validates G54, G55, G56, G57, G58, G59 offsets
-- **Tolerance checking** - Allows configurable tolerance for X/Y/Z offsets
+- **Tolerance checking** - Uses NC file E parameter if present, otherwise machine database settings
 - **Offset matching** - Compares program expectations vs machine reality
 - **Missing WCS in NC** - If WCS not specified in program, displays machine G54 data with "XYZ NOT PARSED" status
+
+**Tolerance Source:**
+- **Primary**: NC file E parameter (e.g., `G65 P8901 ... E0.01 ...`) - uniform tolerance for all axes
+- **Fallback**: Machine database per-axis tolerances (tolerance_x, tolerance_y, tolerance_z)
 
 Example WCS validation result:
 ```json
