@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ToolListModal } from './ToolListModal';
-import { ValidationResultModal } from './ValidationResultModal';
+import { UploadConfirmationModal } from './UploadConfirmationModal';
 import './MachineCard.css';
 import { API_BASE_URL } from '../config/api';
 
@@ -52,7 +52,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
   console.log(`Machine: ${machine.machine_name}, is_online: ${machine.is_online}, status: "${machine.status}"`);
 
   const [showToolModal, setShowToolModal] = useState(false);
-  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [validationResult, setValidationResult] = useState<any>(null);
   const [selectedFilename, setSelectedFilename] = useState('');
   const [fileContent, setFileContent] = useState('');
@@ -248,7 +248,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
 
       const result = await response.json();
       setValidationResult(result);
-      setShowValidationModal(true);
+      setShowConfirmationModal(true);
     } catch (error) {
       console.error('Validation error:', error);
       alert(`Validation failed: ${error}`);
@@ -613,7 +613,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
               onClick={() => fileInputRef.current?.click()}
               disabled={isValidating}
             >
-              {isValidating ? '[ VALIDATING... ]' : '[ UPLOAD & VALIDATE ]'}
+              {isValidating ? '[ VALIDATING... ]' : '[ UPLOAD ]'}
             </button>
           </div>
 
@@ -651,10 +651,10 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
         machineName={machine.machine_name}
       />
 
-      <ValidationResultModal
-        isOpen={showValidationModal}
+      <UploadConfirmationModal
+        isOpen={showConfirmationModal}
         onClose={() => {
-          setShowValidationModal(false);
+          setShowConfirmationModal(false);
           setFileContent('');
           setValidationResult(null);
           setSelectedFilename('');
