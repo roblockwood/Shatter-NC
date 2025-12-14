@@ -120,77 +120,133 @@ async def validate_program(
     errors = []
     tools_validation = {}
     wcs_validation = None
+    
+    # Always fetch machine tool data (even if no tools in NC)
+    machine_tool_data = {}
+    machine_tool_fetch_failed = False
+    try:
+        http_client = CNCHttpClient(machine.ip_address, machine.http_port)
+        machine_tool_data = http_client.get_tool_data()
+    except Exception as e:
+        machine_tool_fetch_failed = True
+        warnings.append(f"Could not fetch machine tool data: {str(e)}")
 
     # Validate tools
     if parsed["tools"]:
-        try:
-            # Fetch machine tool data via HTTP
-            http_client = CNCHttpClient(machine.ip_address, machine.http_port)
-            machine_tool_data = http_client.get_tool_data()
+        # Validate each tool using machine tolerances
+        for tool in parsed["tools"]:
+            tool_num = tool["tool_number"]
+            result = _validate_tool(
+                tool,
+                machine_tool_data,
+                diameter_tolerance=machine.diameter_tolerance,
+                length_tolerance_plus=machine.length_tolerance_plus,
+                length_tolerance_minus=machine.length_tolerance_minus
+            )
+            tools_validation[tool_num] = result
 
-            # Validate each tool using machine tolerances
-            for tool in parsed["tools"]:
-                tool_num = tool["tool_number"]
-                result = _validate_tool(
-                    tool,
-                    machine_tool_data,
-                    diameter_tolerance=machine.diameter_tolerance,
-                    length_tolerance_plus=machine.length_tolerance_plus,
-                    length_tolerance_minus=machine.length_tolerance_minus
+            if not result.available:
+                errors.append(f"Tool T{tool_num:02d} not found in machine tool table")
+            else:
+                if not result.diameter_match:
+                    warnings.append(f"Tool T{tool_num:02d} diameter mismatch")
+                if not result.length_sufficient:
+                    errors.append(f"Tool T{tool_num:02d} too short (need {result.required_length:.4f}\", have {result.machine_tool_data.get('length', 0):.4f}\")")
+    else:
+        # No tools found in NC code
+        if not machine_tool_fetch_failed and len(machine_tool_data) > 0:
+            # Machine data available - show available tools
+            warnings.append("No tool data found in NC program")
+            
+            # Create entries for all available machine tools to show what's available
+            for tool_num, tool_data in machine_tool_data.items():
+                tools_validation[tool_num] = ToolValidationResult(
+                    tool_number=tool_num,
+                    required_diameter=0.0,  # Not specified in NC
+                    required_length=0.0,  # Not specified in NC
+                    available=True,
+                    diameter_match=False,  # N/A - not specified in NC
+                    length_sufficient=False,  # N/A - not specified in NC
+                    machine_tool_data=tool_data,
+                    warnings=["Tool not referenced in NC program"]
                 )
-                tools_validation[tool_num] = result
+        elif machine_tool_fetch_failed:
+            # Machine unreachable - add warning
+            warnings.append("No tool data in NC program and machine data unavailable")
 
-                if not result.available:
-                    errors.append(f"Tool T{tool_num:02d} not found in machine tool table")
-                else:
-                    if not result.diameter_match:
-                        warnings.append(f"Tool T{tool_num:02d} diameter mismatch")
-                    if not result.length_sufficient:
-                        errors.append(f"Tool T{tool_num:02d} too short (need {result.required_length:.4f}\", have {result.machine_tool_data.get('length', 0):.4f}\")")
-
-        except Exception as e:
-            errors.append(f"Failed to fetch machine tool data: {str(e)}")
+    # Always fetch machine work offsets (even if no WCS in NC)
+    position_data = None
+    wcs_fetch_failed = False
+    try:
+        ftp_client = CNCFtpClient(
+            machine.ip_address,
+            machine.ftp_port,
+            machine.ftp_username,
+            machine.ftp_password
+        )
+        position_data = await ftp_client.get_position_data()
+        
+        if not position_data:
+            raise Exception("Could not retrieve POSNI1.NC from machine (file may not exist or FTP connection failed)")
+    except Exception as e:
+        # Log FTP error but don't prevent other validation
+        wcs_fetch_failed = True
+        import traceback
+        error_msg = f"Could not fetch machine WCS data: {str(e)}"
+        warnings.append(error_msg)
+        print(f"WCS Fetch Error: {error_msg}")
+        print(traceback.format_exc())
 
     # Validate WCS offset
-    if parsed["wcs_offset"]:
-        try:
-            # Fetch machine work offsets via FTP (POSNI1.NC file)
-            ftp_client = CNCFtpClient(
-                machine.ip_address,
-                machine.ftp_port,
-                machine.ftp_username,
-                machine.ftp_password
+    if parsed["wcs_offset"] and position_data:
+        # WCS found in NC code - validate against machine
+        wcs_validation = _validate_wcs_offset(
+            parsed["wcs_offset"],
+            position_data,
+            tolerance_x=machine.tolerance_x,
+            tolerance_y=machine.tolerance_y,
+            tolerance_z=machine.tolerance_z
+        )
+
+        # Always return WCS validation result (even if not within tolerance)
+        if not wcs_validation.within_tolerance:
+            errors.append(
+                f"WCS G{wcs_validation.work_offset} offset outside tolerance: "
+                f"X={wcs_validation.difference['x']:.4f}\", "
+                f"Y={wcs_validation.difference['y']:.4f}\", "
+                f"Z={wcs_validation.difference['z']:.4f}\""
             )
-            position_data = await ftp_client.get_position_data()
-
-            if not position_data:
-                raise Exception("Could not retrieve POSNI1.NC from machine (file may not exist or FTP connection failed)")
-
-            wcs_validation = _validate_wcs_offset(
-                parsed["wcs_offset"],
-                position_data,
-                tolerance_x=machine.tolerance_x,
-                tolerance_y=machine.tolerance_y,
-                tolerance_z=machine.tolerance_z
-            )
-
-            # Always return WCS validation result (even if not within tolerance)
-            if not wcs_validation.within_tolerance:
-                errors.append(
-                    f"WCS G{wcs_validation.work_offset} offset outside tolerance: "
-                    f"X={wcs_validation.difference['x']:.4f}\", "
-                    f"Y={wcs_validation.difference['y']:.4f}\", "
-                    f"Z={wcs_validation.difference['z']:.4f}\""
+    elif not parsed["wcs_offset"]:
+        # No WCS in NC code
+        if position_data and not wcs_fetch_failed:
+            # Machine data available - show machine WCS data
+            warnings.append("No WCS offset found in NC program")
+            # Get all available WCS offsets from machine and show first one as reference
+            from app.parsers.posni_parser import parse_posni
+            
+            parsed_posni = parse_posni(position_data.encode('utf-8'))
+            work_offsets = parsed_posni.get("work_offsets", {})
+            
+            # Create a validation result showing machine has WCS data but NC doesn't specify
+            if work_offsets:
+                # Show G54 as default reference
+                first_offset_num = 54
+                # Keys in work_offsets are INTEGERS (54, 55, etc.), not strings
+                first_offset_data = work_offsets.get(54, {"x": 0.0, "y": 0.0, "z": 0.0})
+                
+                wcs_validation = WCSValidationResult(
+                    valid=False,
+                    work_offset=first_offset_num,
+                    expected={"x": 0.0, "y": 0.0, "z": 0.0},  # Not specified in NC
+                    actual=first_offset_data,
+                    difference={"x": 0.0, "y": 0.0, "z": 0.0},
+                    tolerance=max(machine.tolerance_x, machine.tolerance_y, machine.tolerance_z),
+                    within_tolerance=False,
+                    warnings=["WCS offset not specified in NC program - showing G54 machine data for reference"]
                 )
-
-        except Exception as e:
-            # Log FTP error but don't prevent other validation
-            import traceback
-            error_msg = f"Could not validate WCS offset (FTP error): {str(e)}"
-            warnings.append(error_msg)
-            # Print traceback for debugging
-            print(f"WCS Validation Error: {error_msg}")
-            print(traceback.format_exc())
+        elif wcs_fetch_failed:
+            # Machine unreachable - add warning
+            warnings.append("No WCS data in NC program and machine data unavailable")
 
     # Overall validation status
     is_valid = len(errors) == 0
