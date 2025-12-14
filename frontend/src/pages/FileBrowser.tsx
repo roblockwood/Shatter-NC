@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { StatusIndicator } from '../components/ui';
 import './FileBrowser.css';
 import { API_BASE_URL } from '../config/api';
@@ -113,8 +114,10 @@ interface DeploymentDetail {
 }
 
 export const FileBrowser: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const deploymentSectionRef = React.useRef<HTMLDivElement>(null);
+  const selectedProgramRef = React.useRef<HTMLDivElement>(null);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -140,6 +143,10 @@ export const FileBrowser: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState<{ fileName: string; percent: number } | null>(null);
   // @ts-ignore - reserved for future use
   const [highlightedFile, setHighlightedFile] = useState<string | null>(null);
+  const [pendingFileSelection, setPendingFileSelection] = useState<string | null>(null);
+  // Expand/collapse state for validation tables
+  const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
+  const [expandedWCS, setExpandedWCS] = useState(false);
 
   // Fetch machines on mount and auto-select first one
   useEffect(() => {
@@ -154,6 +161,54 @@ export const FileBrowser: React.FC = () => {
       })
       .catch(err => console.error('Error fetching machines:', err));
   }, []);
+
+  // Handle URL parameters for navigation from upload success screen
+  useEffect(() => {
+    const machineParam = searchParams.get('machine');
+    const fileParam = searchParams.get('file');
+
+    if (machineParam && fileParam && machines.length > 0) {
+      const machineId = parseInt(machineParam);
+
+      // Set selected machine if different
+      if (!isNaN(machineId) && selectedMachineId !== machineId) {
+        setSelectedMachineId(machineId);
+      }
+
+      // Store pending file selection - will be handled once programs load
+      setPendingFileSelection(fileParam);
+    }
+  }, [searchParams, machines.length, selectedMachineId]);
+
+  // Handle pending file selection once programs are loaded
+  useEffect(() => {
+    if (pendingFileSelection && programs.length > 0 && !loading) {
+      // Case-insensitive file matching (CNC may return uppercase .NC)
+      const targetProgram = programs.find(p => p.name.toUpperCase() === pendingFileSelection.toUpperCase());
+
+      if (targetProgram) {
+        setSelectedProgram(targetProgram);
+        setPendingFileSelection(null); // Clear pending selection
+
+        // Scroll to selected program in list and then to deployment section
+        setTimeout(() => {
+          // First scroll the program into view in the programs list
+          selectedProgramRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          });
+
+          // Then scroll to deployment section if it's an O-number file
+          setTimeout(() => {
+            deploymentSectionRef.current?.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start'
+            });
+          }, 300);
+        }, 100);
+      }
+    }
+  }, [pendingFileSelection, programs.length, loading]);
 
   // Set path when machine changes - fetch fresh machine data to ensure we have latest config
   useEffect(() => {
@@ -171,13 +226,12 @@ export const FileBrowser: React.FC = () => {
       .then(res => res.json())
       .then(machineData => {
         const newPath = machineData.path || '/';
-        console.log(`[PATH-EFFECT] Machine ${selectedMachineId} fetched. path: '${newPath}'`);
         setCurrentPath(newPath);
         setPathLoading(false);
       })
       .catch(err => {
         if (err.name !== 'AbortError') {
-          console.error(`[PATH-EFFECT] Error fetching machine ${selectedMachineId}:`, err);
+          console.error(`Error fetching machine ${selectedMachineId}:`, err);
           setCurrentPath('/');
           setPathLoading(false);
         }
@@ -191,6 +245,28 @@ export const FileBrowser: React.FC = () => {
     // Don't fetch if path is null OR if we're still loading the path
     if (selectedMachineId === null || currentPath === null || pathLoading) {
       return;
+    }
+
+    // Check cache first for instant loading
+    const cacheKey = `programs_cache_${selectedMachineId}_${currentPath}`;
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const cacheData = JSON.parse(cached);
+        const age = Date.now() - cacheData.timestamp;
+        // Use cache if less than 60 seconds old
+        if (age < 60000 && cacheData.machineId === selectedMachineId && cacheData.path === currentPath) {
+          setPrograms(cacheData.programs);
+          setLoading(false);
+          setError(null);
+          setSelectedProgram(null);
+          return;
+        } else {
+          sessionStorage.removeItem(cacheKey);
+        }
+      } catch (e) {
+        sessionStorage.removeItem(cacheKey);
+      }
     }
 
     setLoading(true);
@@ -218,7 +294,6 @@ export const FileBrowser: React.FC = () => {
       .then(data => {
         // Only update if this fetch is still relevant (machine and path haven't changed)
         if (fetchMachineId === selectedMachineId && fetchPath === currentPath) {
-          console.log(`[FETCH] Received ${data.programs?.length || 0} programs`);
           setPrograms(data.programs || []);
           setLoading(false);
         }
@@ -285,6 +360,16 @@ export const FileBrowser: React.FC = () => {
   }, [selectedDeploymentId, deploymentDetail?.history]);
 
   const selectedMachine = machines.find(m => m.id === selectedMachineId);
+
+  const toggleToolExpanded = (toolNumber: number) => {
+    const newExpanded = new Set(expandedTools);
+    if (newExpanded.has(toolNumber)) {
+      newExpanded.delete(toolNumber);
+    } else {
+      newExpanded.add(toolNumber);
+    }
+    setExpandedTools(newExpanded);
+  };
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -384,13 +469,11 @@ export const FileBrowser: React.FC = () => {
       if (program.name === '..') {
         // Go up one level
         const parentPath = (currentPath || '/').split('/').slice(0, -1).join('/') || '/';
-        console.log(`[NAVIGATE] Going up: '${currentPath}' -> '${parentPath}'`);
         setCurrentPath(parentPath);
       } else {
         // Navigate into subdirectory
         const basePath = currentPath || '/';
         const newPath = basePath === '/' ? `/${program.name}` : `${basePath}/${program.name}`;
-        console.log(`[NAVIGATE] Going down: '${basePath}' + '${program.name}' -> '${newPath}'`);
         setCurrentPath(newPath);
       }
     } else {
@@ -791,9 +874,15 @@ export const FileBrowser: React.FC = () => {
             ┌─ NC PROGRAMS (/CNC_MEM/) {'─'.repeat(50)}┐
           </div>
 
-          {loading && (
+          {loading && !pendingFileSelection && (
             <div className="panel-loading">
               <span className="pulse">LOADING PROGRAMS...</span>
+            </div>
+          )}
+
+          {loading && pendingFileSelection && (
+            <div className="panel-loading">
+              <span className="pulse">LOADING {pendingFileSelection}...</span>
             </div>
           )}
 
@@ -824,6 +913,7 @@ export const FileBrowser: React.FC = () => {
                 {displayPrograms.map((program, idx) => (
                   <div
                     key={idx}
+                    ref={selectedProgram?.name === program.name ? selectedProgramRef : null}
                     className={`table-row ${selectedProgram?.name === program.name ? 'selected' : ''}`}
                     onClick={() => handleItemClick(program)}
                   >
@@ -1032,40 +1122,128 @@ export const FileBrowser: React.FC = () => {
               {((deploymentDetail?.deployment?.validation_results?.tools && !freshValidation) ||
                 (freshValidation?.validation?.tools)) && (
                 <div className="detail-section">
-                  <div className="section-title">TOOL DETAILS</div>
+                  <div className="section-title">TOOLS</div>
                   <div className="tools-table">
                     <table className="detail-table">
                       <thead>
                         <tr>
-                          <th>T#</th>
-                          <th>REQ DIA</th>
-                          <th>REQ LEN</th>
-                          <th>AVAIL</th>
-                          <th>STATUS</th>
+                          <th>ST</th>
+                          <th>TOOL#</th>
+                          <th>ACTUAL</th>
+                          <th>EXPECTED</th>
+                          <th>DIFF</th>
+                          <th>TOL</th>
+                          <th>RESULT</th>
                         </tr>
                       </thead>
                       <tbody>
                         {Object.entries((freshValidation?.validation?.tools || deploymentDetail?.deployment?.validation_results?.tools || {})).map(([toolKey, validation]: [string, any]) => {
                           const toolNumber = parseInt(toolKey) || toolKey;
+                          const isExpanded = expandedTools.has(toolNumber);
 
-                          // Determine status
-                          const statusClass = !validation.available ? 'text-error' :
-                            !validation.diameter_match || !validation.length_sufficient ? 'text-warning' :
-                            'text-success';
-                          const statusText = !validation.available ? '✕ MISSING' :
-                            !validation.diameter_match || !validation.length_sufficient ? '⚠ WARN' :
-                            '✓ OK';
+                          // Check if tool is not referenced in NC (required values are 0)
+                          const notInNC = validation.required_diameter === 0 && validation.required_length === 0;
+
+                          if (notInNC) {
+                            // Tool is available on machine but not referenced in NC program
+                            return (
+                              <tr key={toolNumber} className="tool-summary-row">
+                                <td className="text-muted">─</td>
+                                <td>T{String(toolNumber).padStart(2, '0')}</td>
+                                <td>
+                                  Ø{(validation.machine_tool_data?.diameter || 0).toFixed(3)}" L{(validation.machine_tool_data?.length || 0).toFixed(2)}"
+                                  {validation.machine_tool_data?.tool_name && (
+                                    <span className="text-muted"> ({validation.machine_tool_data.tool_name})</span>
+                                  )}
+                                </td>
+                                <td className="text-muted">────</td>
+                                <td className="text-muted">────</td>
+                                <td className="text-muted">─</td>
+                                <td className="text-muted">N/A</td>
+                              </tr>
+                            );
+                          }
+
+                          // Determine overall status
+                          const toolPassed = validation.available && validation.diameter_match && validation.length_sufficient;
+                          const hasError = !validation.available || !validation.length_sufficient;
+                          const hasWarning = validation.available && !validation.diameter_match;
+                          const statusClass = hasError ? 'text-error' : hasWarning ? 'text-warning' : 'text-success';
+                          const statusIcon = hasError ? '✕' : hasWarning ? '⚠' : '✓';
+                          const expandIcon = isExpanded ? '▼' : '▶';
+
+                          // Calculate values
+                          const actualLength = validation.machine_tool_data?.length || 0;
+                          const requiredLength = validation.required_length || 0;
+                          const lengthDiff = actualLength - requiredLength;
+
+                          const actualDiameter = validation.machine_tool_data?.diameter || 0;
+                          const requiredDiameter = validation.required_diameter || 0;
+                          const diameterDiff = actualDiameter - requiredDiameter;
 
                           return (
-                            <tr key={toolNumber}>
-                              <td>T{String(toolNumber).padStart(2, '0')}</td>
-                              <td>Ø{(validation.required_diameter || 0).toFixed(3)}"</td>
-                              <td>{(validation.required_length || 0).toFixed(3)}"</td>
-                              <td className={validation.available ? 'text-success' : 'text-error'}>
-                                {validation.available ? '✓' : '✕'}
-                              </td>
-                              <td className={statusClass}>{statusText}</td>
-                            </tr>
+                            <React.Fragment key={toolNumber}>
+                              {/* Summary Row */}
+                              <tr
+                                className="tool-summary-row clickable"
+                                onClick={() => validation.available && toggleToolExpanded(toolNumber)}
+                                style={{ cursor: validation.available ? 'pointer' : 'default' }}
+                              >
+                                <td className={statusClass}>{statusIcon}</td>
+                                <td>
+                                  {validation.available && <span className="expand-icon">{expandIcon}</span>}
+                                  T{String(toolNumber).padStart(2, '0')}
+                                </td>
+                                <td colSpan={4}>
+                                  {!validation.available ? (
+                                    <span className="text-error">NOT AVAILABLE</span>
+                                  ) : (
+                                    <>
+                                      {validation.machine_tool_data?.tool_name && (
+                                        <span className="text-muted">{validation.machine_tool_data.tool_name}</span>
+                                      )}
+                                    </>
+                                  )}
+                                </td>
+                                <td className={statusClass}>
+                                  {toolPassed ? 'PASS' : 'FAIL'}
+                                </td>
+                              </tr>
+
+                              {/* Detail Rows - Length */}
+                              {isExpanded && validation.available && (
+                                <tr className="tool-detail-row">
+                                  <td></td>
+                                  <td className="detail-label">Length</td>
+                                  <td>{actualLength.toFixed(2)}"</td>
+                                  <td>{requiredLength.toFixed(2)}"</td>
+                                  <td className={validation.length_sufficient ? 'text-success' : 'text-error'}>
+                                    {lengthDiff.toFixed(2)}"
+                                  </td>
+                                  <td>-</td>
+                                  <td className={validation.length_sufficient ? 'text-success' : 'text-error'}>
+                                    {validation.length_sufficient ? '✓' : '✕'}
+                                  </td>
+                                </tr>
+                              )}
+
+                              {/* Detail Rows - Diameter */}
+                              {isExpanded && validation.available && (
+                                <tr className="tool-detail-row">
+                                  <td></td>
+                                  <td className="detail-label">Diameter</td>
+                                  <td>{actualDiameter.toFixed(3)}"</td>
+                                  <td>{requiredDiameter.toFixed(3)}"</td>
+                                  <td className={validation.diameter_match ? 'text-success' : 'text-error'}>
+                                    {diameterDiff.toFixed(3)}"
+                                  </td>
+                                  <td>-</td>
+                                  <td className={validation.diameter_match ? 'text-success' : 'text-error'}>
+                                    {validation.diameter_match ? '✓' : '✕'}
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
                           );
                         })}
                       </tbody>
@@ -1076,58 +1254,146 @@ export const FileBrowser: React.FC = () => {
 
               {/* WCS VALIDATION TABLE */}
               {((deploymentDetail?.deployment?.validation_results?.wcs_offset && !freshValidation) ||
-                (freshValidation?.validation?.wcs_offset)) && (
-                <div className="detail-section">
-                  <div className="section-title">WCS OFFSET (G{(freshValidation?.validation?.wcs_offset?.work_offset || deploymentDetail?.deployment?.validation_results?.wcs_offset?.work_offset)})</div>
-                  <div className="wcs-validation">
-                    <table className="detail-table">
-                      <thead>
-                        <tr>
-                          <th>AXIS</th>
-                          <th>EXPECTED</th>
-                          <th>ACTUAL</th>
-                          <th>DIFF</th>
-                          <th>STATUS</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {['x', 'y', 'z'].map((axis) => {
-                          const wcs = freshValidation?.validation?.wcs_offset || deploymentDetail?.deployment?.validation_results?.wcs_offset;
-                          if (!wcs) return null;
-                          const expected = (wcs.expected as any)[axis];
-                          const actual = (wcs.actual as any)[axis];
-                          const difference = (wcs.difference as any)[axis];
-                          const diff = Math.abs(difference || 0);
-                          const withinTol = diff <= (wcs.tolerance || 0.1);
+                (freshValidation?.validation?.wcs_offset)) && (() => {
+                const wcs = freshValidation?.validation?.wcs_offset || deploymentDetail?.deployment?.validation_results?.wcs_offset;
+                if (!wcs) return null;
 
-                          if (expected === undefined || actual === undefined) {
+                // Check if WCS was not specified in NC (expected values are all 0)
+                const notInNC = wcs.expected.x === 0 && 
+                                wcs.expected.y === 0 && 
+                                wcs.expected.z === 0 &&
+                                wcs.warnings?.some((w: string) => w.includes("not specified in NC"));
+
+                if (notInNC) {
+                  // WCS not specified in NC - show collapsed summary with machine data
+                  const expandIcon = expandedWCS ? '▼' : '▶';
+                  
+                  return (
+                    <div className="detail-section">
+                      <div className="section-title">WCS OFFSET</div>
+                      <div className="wcs-validation">
+                        <table className="detail-table">
+                          <thead>
+                            <tr>
+                              <th>ST</th>
+                              <th>OFFSET</th>
+                              <th>ACTUAL</th>
+                              <th>EXPECTED</th>
+                              <th>DIFF</th>
+                              <th>TOL</th>
+                              <th>RESULT</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr 
+                              className="wcs-summary-row clickable"
+                              onClick={() => setExpandedWCS(!expandedWCS)}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <td className="text-warning">⚠</td>
+                              <td>
+                                <span className="expand-icon">{expandIcon}</span>
+                                G{wcs.work_offset}
+                              </td>
+                              <td colSpan={4} className="text-muted">
+                                XYZ NOT PARSED
+                              </td>
+                              <td className="text-warning">WARN</td>
+                            </tr>
+
+                            {expandedWCS && ['x', 'y', 'z'].map((axis) => {
+                              const actual = (wcs.actual as any)[axis];
+                              return (
+                                <tr key={axis} className="wcs-detail-row">
+                                  <td></td>
+                                  <td className="detail-label">{axis.toUpperCase()}</td>
+                                  <td>{(actual || 0).toFixed(4)}"</td>
+                                  <td className="text-muted">────</td>
+                                  <td className="text-muted">────</td>
+                                  <td className="text-muted">─</td>
+                                  <td className="text-muted">N/A</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // WCS found in NC - show validation results
+                const withinTolerance = wcs.within_tolerance;
+                const statusClass = withinTolerance ? 'text-success' : 'text-error';
+                const statusIcon = withinTolerance ? '✓' : '✕';
+                const expandIcon = expandedWCS ? '▼' : '▶';
+
+                return (
+                  <div className="detail-section">
+                    <div className="section-title">WCS OFFSET</div>
+                    <div className="wcs-validation">
+                      <table className="detail-table">
+                        <thead>
+                          <tr>
+                            <th>ST</th>
+                            <th>OFFSET</th>
+                            <th>ACTUAL</th>
+                            <th>EXPECTED</th>
+                            <th>DIFF</th>
+                            <th>TOL</th>
+                            <th>RESULT</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* Summary Row */}
+                          <tr
+                            className="wcs-summary-row clickable"
+                            onClick={() => setExpandedWCS(!expandedWCS)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <td className={statusClass}>{statusIcon}</td>
+                            <td>
+                              <span className="expand-icon">{expandIcon}</span>
+                              G{wcs.work_offset}
+                            </td>
+                            <td colSpan={4}>
+                              <span className="text-muted">X/Y/Z Coordinates</span>
+                            </td>
+                            <td className={statusClass}>
+                              {withinTolerance ? 'PASS' : 'FAIL'}
+                            </td>
+                          </tr>
+
+                          {/* Detail Rows - X/Y/Z Axes */}
+                          {expandedWCS && ['x', 'y', 'z'].map((axis) => {
+                            const expected = (wcs.expected as any)[axis];
+                            const actual = (wcs.actual as any)[axis];
+                            const difference = (wcs.difference as any)[axis];
+                            const diff = Math.abs(difference || 0);
+                            const withinTol = diff <= (wcs.tolerance || 0.1);
+
                             return (
-                              <tr key={axis}>
-                                <td>{axis.toUpperCase()}</td>
-                                <td colSpan={4} className="text-muted">─ no data ─</td>
+                              <tr key={axis} className="wcs-detail-row">
+                                <td></td>
+                                <td className="detail-label">{axis.toUpperCase()}</td>
+                                <td>{(actual || 0).toFixed(4)}"</td>
+                                <td>{(expected || 0).toFixed(4)}"</td>
+                                <td className={withinTol ? 'text-success' : 'text-error'}>
+                                  {diff.toFixed(4)}"
+                                </td>
+                                <td>±{(wcs.tolerance || 0.1).toFixed(4)}</td>
+                                <td className={withinTol ? 'text-success' : 'text-error'}>
+                                  {withinTol ? '✓' : '✕'}
+                                </td>
                               </tr>
                             );
-                          }
-
-                          return (
-                            <tr key={axis}>
-                              <td>{axis.toUpperCase()}</td>
-                              <td>{(expected || 0).toFixed(4)}"</td>
-                              <td>{(actual || 0).toFixed(4)}"</td>
-                              <td className={withinTol ? 'text-success' : 'text-warning'}>
-                                {diff.toFixed(4)}"
-                              </td>
-                              <td className={withinTol ? 'text-success' : 'text-warning'}>
-                                {withinTol ? '✓' : '⚠'}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* ACTIONS SECTION */}
               <div className="detail-actions">
