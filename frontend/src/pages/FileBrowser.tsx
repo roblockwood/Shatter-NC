@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { StatusIndicator } from '../components/ui';
 import './FileBrowser.css';
 import { API_BASE_URL } from '../config/api';
@@ -113,8 +114,10 @@ interface DeploymentDetail {
 }
 
 export const FileBrowser: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const deploymentSectionRef = React.useRef<HTMLDivElement>(null);
+  const selectedProgramRef = React.useRef<HTMLDivElement>(null);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -140,6 +143,7 @@ export const FileBrowser: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState<{ fileName: string; percent: number } | null>(null);
   // @ts-ignore - reserved for future use
   const [highlightedFile, setHighlightedFile] = useState<string | null>(null);
+  const [pendingFileSelection, setPendingFileSelection] = useState<string | null>(null);
 
   // Fetch machines on mount and auto-select first one
   useEffect(() => {
@@ -154,6 +158,54 @@ export const FileBrowser: React.FC = () => {
       })
       .catch(err => console.error('Error fetching machines:', err));
   }, []);
+
+  // Handle URL parameters for navigation from upload success screen
+  useEffect(() => {
+    const machineParam = searchParams.get('machine');
+    const fileParam = searchParams.get('file');
+
+    if (machineParam && fileParam && machines.length > 0) {
+      const machineId = parseInt(machineParam);
+
+      // Set selected machine if different
+      if (!isNaN(machineId) && selectedMachineId !== machineId) {
+        setSelectedMachineId(machineId);
+      }
+
+      // Store pending file selection - will be handled once programs load
+      setPendingFileSelection(fileParam);
+    }
+  }, [searchParams, machines.length, selectedMachineId]);
+
+  // Handle pending file selection once programs are loaded
+  useEffect(() => {
+    if (pendingFileSelection && programs.length > 0 && !loading) {
+      // Case-insensitive file matching (CNC may return uppercase .NC)
+      const targetProgram = programs.find(p => p.name.toUpperCase() === pendingFileSelection.toUpperCase());
+
+      if (targetProgram) {
+        setSelectedProgram(targetProgram);
+        setPendingFileSelection(null); // Clear pending selection
+
+        // Scroll to selected program in list and then to deployment section
+        setTimeout(() => {
+          // First scroll the program into view in the programs list
+          selectedProgramRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          });
+
+          // Then scroll to deployment section if it's an O-number file
+          setTimeout(() => {
+            deploymentSectionRef.current?.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start'
+            });
+          }, 300);
+        }, 100);
+      }
+    }
+  }, [pendingFileSelection, programs.length, loading]);
 
   // Set path when machine changes - fetch fresh machine data to ensure we have latest config
   useEffect(() => {
@@ -171,13 +223,12 @@ export const FileBrowser: React.FC = () => {
       .then(res => res.json())
       .then(machineData => {
         const newPath = machineData.path || '/';
-        console.log(`[PATH-EFFECT] Machine ${selectedMachineId} fetched. path: '${newPath}'`);
         setCurrentPath(newPath);
         setPathLoading(false);
       })
       .catch(err => {
         if (err.name !== 'AbortError') {
-          console.error(`[PATH-EFFECT] Error fetching machine ${selectedMachineId}:`, err);
+          console.error(`Error fetching machine ${selectedMachineId}:`, err);
           setCurrentPath('/');
           setPathLoading(false);
         }
@@ -191,6 +242,28 @@ export const FileBrowser: React.FC = () => {
     // Don't fetch if path is null OR if we're still loading the path
     if (selectedMachineId === null || currentPath === null || pathLoading) {
       return;
+    }
+
+    // Check cache first for instant loading
+    const cacheKey = `programs_cache_${selectedMachineId}_${currentPath}`;
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const cacheData = JSON.parse(cached);
+        const age = Date.now() - cacheData.timestamp;
+        // Use cache if less than 60 seconds old
+        if (age < 60000 && cacheData.machineId === selectedMachineId && cacheData.path === currentPath) {
+          setPrograms(cacheData.programs);
+          setLoading(false);
+          setError(null);
+          setSelectedProgram(null);
+          return;
+        } else {
+          sessionStorage.removeItem(cacheKey);
+        }
+      } catch (e) {
+        sessionStorage.removeItem(cacheKey);
+      }
     }
 
     setLoading(true);
@@ -218,7 +291,6 @@ export const FileBrowser: React.FC = () => {
       .then(data => {
         // Only update if this fetch is still relevant (machine and path haven't changed)
         if (fetchMachineId === selectedMachineId && fetchPath === currentPath) {
-          console.log(`[FETCH] Received ${data.programs?.length || 0} programs`);
           setPrograms(data.programs || []);
           setLoading(false);
         }
@@ -384,13 +456,11 @@ export const FileBrowser: React.FC = () => {
       if (program.name === '..') {
         // Go up one level
         const parentPath = (currentPath || '/').split('/').slice(0, -1).join('/') || '/';
-        console.log(`[NAVIGATE] Going up: '${currentPath}' -> '${parentPath}'`);
         setCurrentPath(parentPath);
       } else {
         // Navigate into subdirectory
         const basePath = currentPath || '/';
         const newPath = basePath === '/' ? `/${program.name}` : `${basePath}/${program.name}`;
-        console.log(`[NAVIGATE] Going down: '${basePath}' + '${program.name}' -> '${newPath}'`);
         setCurrentPath(newPath);
       }
     } else {
@@ -791,9 +861,15 @@ export const FileBrowser: React.FC = () => {
             ┌─ NC PROGRAMS (/CNC_MEM/) {'─'.repeat(50)}┐
           </div>
 
-          {loading && (
+          {loading && !pendingFileSelection && (
             <div className="panel-loading">
               <span className="pulse">LOADING PROGRAMS...</span>
+            </div>
+          )}
+
+          {loading && pendingFileSelection && (
+            <div className="panel-loading">
+              <span className="pulse">LOADING {pendingFileSelection}...</span>
             </div>
           )}
 
@@ -824,6 +900,7 @@ export const FileBrowser: React.FC = () => {
                 {displayPrograms.map((program, idx) => (
                   <div
                     key={idx}
+                    ref={selectedProgram?.name === program.name ? selectedProgramRef : null}
                     className={`table-row ${selectedProgram?.name === program.name ? 'selected' : ''}`}
                     onClick={() => handleItemClick(program)}
                   >

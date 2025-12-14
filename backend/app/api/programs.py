@@ -1,6 +1,7 @@
 """Program validation and upload endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 
@@ -843,27 +844,62 @@ async def get_next_onumber_fifo(
         raise HTTPException(status_code=404, detail="Machine not found")
 
     # Check if file already has a deployment on this machine
+    # FIFO association: Find the most recent deployment for this filename
+    existing_deployment = None
     if filename:
-        existing_deployment = db.query(ProgramDeployment).join(
-            Program, ProgramDeployment.program_id == Program.id
-        ).filter(
-            ProgramDeployment.machine_id == machine_id,
-            ProgramDeployment.is_current == True,
-            Program.original_filename == filename
-        ).first()
+        # FastAPI automatically URL-decodes query parameters
+        import urllib.parse
+        filename_normalized = urllib.parse.unquote_plus(filename).strip()
+        
+        # Find programs with this exact filename
+        programs_with_filename = db.query(Program).filter(
+            Program.original_filename == filename_normalized
+        ).all()
+        
+        # If no exact match, try case-insensitive
+        if not programs_with_filename:
+            programs_with_filename = db.query(Program).filter(
+                func.lower(Program.original_filename) == func.lower(filename_normalized)
+            ).all()
+        
+        # For each program with matching filename, find its most recent deployment
+        for program in programs_with_filename:
+            deployment = db.query(ProgramDeployment).filter(
+                ProgramDeployment.program_id == program.id,
+                ProgramDeployment.machine_id == machine_id
+            ).order_by(ProgramDeployment.id.desc()).first()
+            
+            if deployment:
+                if not existing_deployment or deployment.id > existing_deployment.id:
+                    existing_deployment = deployment
 
         if existing_deployment:
-            # File already deployed - return its O-number
-            match = re.match(r'O(\d{4})', existing_deployment.deployed_filename, re.IGNORECASE)
-            if match:
-                o_num = int(match.group(1))
-                return {
-                    "next_onumber": f"O{o_num}.nc",
-                    "onumber_int": o_num,
-                    "is_replacing": False,
-                    "replacement_info": None,
-                    "is_redeployment": True
-                }
+            # File already deployed - return its O-number (FIFO association)
+            try:
+                match = re.match(r'O(\d{4})', existing_deployment.deployed_filename, re.IGNORECASE)
+                if match:
+                    o_num = int(match.group(1))
+                    # Force return - this MUST execute
+                    result = {
+                        "next_onumber": f"O{o_num}.nc",
+                        "onumber_int": o_num,
+                        "is_replacing": False,
+                        "replacement_info": None,
+                        "is_redeployment": True
+                    }
+                    # Log before returning
+                    import sys
+                    print(f"FIFO SUCCESS: Found existing deployment, returning {result['next_onumber']}", file=sys.stderr)
+                    sys.stderr.flush()
+                    return result
+            except Exception as e:
+                import sys
+                import traceback
+                print(f"FIFO ERROR in return logic: {e}", file=sys.stderr)
+                print(traceback.format_exc(), file=sys.stderr)
+                sys.stderr.flush()
+                # Continue to allocate new O-number if there's an error
+                existing_deployment = None
 
     # Get all current deployments, ordered by deployed_at (oldest first)
     deployments = db.query(ProgramDeployment).filter(
