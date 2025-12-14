@@ -410,9 +410,9 @@ POLLING GRAPH (1H):
 2. **Always query machine** for current tool list and WCS offsets (even if not found in NC)
 3. Validate:
    - All tools in program exist in machine
-   - Tool diameters match within tolerance (default ±0.010")
-   - Tool lengths match within tolerance (default +0.02"/-0.0")
-   - WCS offsets match within tolerance (default ±0.0394")
+   - Tool diameters match within tolerance (from machine database settings)
+   - Tool lengths match within tolerance (from machine database settings)
+   - WCS offsets match within tolerance (from NC file E parameter, or machine settings)
 4. Display validation results in collapsable tables:
    - **Tools**: Summary row with expand icon (▶/▼), click to see Length/Diameter details
    - **WCS**: Summary row with expand icon, click to see X/Y/Z axis details
@@ -660,6 +660,10 @@ The machine card transforms into a comprehensive edit form with two sections:
 ### Validation Tolerances
 
 Tolerances used when validating G-code programs against machine state.
+
+**Important:** Tolerance sources differ between tools and WCS:
+- **Tool Tolerances**: Always from machine database settings (configured per machine)
+- **WCS Tolerances**: From NC file E parameter (if present), otherwise from machine database settings
 
 #### Tool Diameter Tolerance
 
