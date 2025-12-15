@@ -561,7 +561,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 machineId={machine.machine_id} 
                 currentStatus={machine.status} 
                 isOnline={machine.is_online}
-                onExpand={() => setExpandedPaneModal({ type: 'timeline', props: { machineId: machine.machine_id, currentStatus: machine.status, isOnline: machine.is_online } })}
+                currentError={machine.error}
+                onExpand={() => setExpandedPaneModal({ type: 'timeline', props: { machineId: machine.machine_id, currentStatus: machine.status, isOnline: machine.is_online, currentError: machine.error } })}
               />
             </div>
           </div>
@@ -653,6 +654,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                   machineId={expandedPaneModal.props.machineId}
                   currentStatus={expandedPaneModal.props.currentStatus}
                   isOnline={expandedPaneModal.props.isOnline}
+                  currentError={expandedPaneModal.props.currentError}
                 />
               )}
               {expandedPaneModal.type === 'history' && (
@@ -966,7 +968,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             </button>
           </div>
         </div>
-      ) : machine.is_online ? (
+      ) : (
         <div className="machine-card-content">
           <div 
             ref={statusIndicatorRef}
@@ -1033,6 +1035,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                   machineId={machine.machine_id}
                   currentStatus={machine.status}
                   isOnline={machine.is_online}
+                  currentError={machine.error}
                 />
               </div>
             )}
@@ -1352,24 +1355,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           </div>
 
           <div className="machine-timestamp">
-            LAST UPDATE: {new Date(machine.poll_timestamp).toLocaleTimeString()}
-          </div>
-        </div>
-      ) : (
-        <div className="machine-card-content machine-offline">
-          <div className="machine-row">
-            <span className="label text-error">OFFLINE</span>
-          </div>
-          {machine.error && (
-            <div className="machine-row">
-              <span className="value text-muted">{machine.error}</span>
-            </div>
-          )}
-          <div className="machine-card-divider-thin">
-            {'─'.repeat(32)}
-          </div>
-          <div className="machine-timestamp">
-            LAST SEEN: {new Date(machine.poll_timestamp).toLocaleTimeString()}
+            {machine.is_online ? 'LAST UPDATE' : 'LAST SEEN'}: {new Date(machine.poll_timestamp).toLocaleTimeString()}
           </div>
         </div>
       )}
