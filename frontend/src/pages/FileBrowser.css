@@ -607,44 +607,6 @@
 
 .deployment-selector:focus {
   outline: none;
-}
-
-/* Collapsable Tool and WCS Rows */
-.tool-summary-row.clickable {
-  cursor: pointer;
-}
-
-.tool-summary-row.clickable:hover {
-  background-color: rgba(0, 255, 0, 0.1);
-}
-
-.tool-detail-row {
-  background-color: rgba(0, 255, 0, 0.03);
-}
-
-.wcs-summary-row.clickable {
-  cursor: pointer;
-}
-
-.wcs-summary-row.clickable:hover {
-  background-color: rgba(0, 255, 0, 0.1);
-}
-
-.wcs-detail-row {
-  background-color: rgba(0, 255, 0, 0.03);
-}
-
-.expand-icon {
-  display: inline-block;
-  width: 1rem;
-  text-align: center;
-  margin-right: 0.25rem;
-}
-
-.detail-label {
-  padding-left: 1rem !important;
-  color: var(--color-text-muted);
-}
   border-color: var(--color-text-primary);
   box-shadow: 0 0 4px rgba(0, 255, 0, 0.3);
 }

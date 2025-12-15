@@ -38,43 +38,20 @@ class CNCFtpClient:
         self.ftp: Optional[FTP] = None
         self._connected = False
 
-    def _ensure_connection(self, retry_count=0, max_retries=3):
+    def _ensure_connection(self):
         """
         Establish or verify FTP connection.
 
         Creates a new connection if one doesn't exist or if the previous
         connection was lost. Uses passive mode for compatibility with
-        Brother CNC machines. Retries with exponential backoff on 421 errors.
+        Brother CNC machines.
         """
         if self.ftp is None or not self._connected:
-            import time
-
-            try:
-                self.ftp = FTP()
-                self.ftp.set_pasv(True)  # Use PASSIVE mode
-                self.ftp.connect(self.ip_address, self.port, timeout=self.timeout)
-                self.ftp.login(self.username, self.password)
-                self._connected = True
-            except error_perm as e:
-                # Check if it's a 421 "Service not available" error (rate limiting)
-                if "421" in str(e) and retry_count < max_retries:
-                    # Exponential backoff: 1s, 2s, 4s
-                    wait_time = 2 ** retry_count
-                    logger.warning(
-                        f"FTP connection failed with 421 error (server busy/rate limited), "
-                        f"retrying in {wait_time}s (attempt {retry_count + 1}/{max_retries})"
-                    )
-                    time.sleep(wait_time)
-                    self._connected = False
-                    self.ftp = None
-                    return self._ensure_connection(retry_count=retry_count + 1, max_retries=max_retries)
-                else:
-                    raise
-            except Exception as e:
-                # For non-421 errors, don't retry - fail immediately
-                self._connected = False
-                self.ftp = None
-                raise
+            self.ftp = FTP()
+            self.ftp.set_pasv(True)  # Use PASSIVE mode
+            self.ftp.connect(self.ip_address, self.port, timeout=self.timeout)
+            self.ftp.login(self.username, self.password)
+            self._connected = True
 
     async def test_connection(self) -> Dict[str, Any]:
         """
@@ -163,26 +140,11 @@ class CNCFtpClient:
                 self._ensure_connection()
 
                 files = []
-
-                # Remember original directory to restore at the end
-                original_dir = self.ftp.pwd()
-
-                # Change to target directory if not root
-                if path != "/":
-                    try:
-                        self.ftp.cwd(path)
-                    except Exception as e:
-                        logger.error(f"Failed to change to directory {path}: {e}")
-                        # If we can't change to the directory, restore and raise
-                        self.ftp.cwd(original_dir)
-                        raise
-
-                # Remember working directory (now in target path)
-                working_dir = self.ftp.pwd()
-
                 # Use NLST for Brother CNC compatibility (MLSD can hang in passive mode)
-                # Now listing files in current directory
-                file_list = self.ftp.nlst()
+                file_list = self.ftp.nlst(path) if path != "/" else self.ftp.nlst()
+
+                # Remember current directory to restore later
+                current_dir = self.ftp.pwd()
 
                 for name in file_list:
                     is_directory = False
@@ -192,24 +154,16 @@ class CNCFtpClient:
                     # Try to get file size - fails for directories
                     try:
                         size = self.ftp.size(name)
-                        if size is None:
-                            logger.info(f"SIZE {name} returned None")
-                            size = 0
-                        else:
-                            logger.info(f"SIZE {name} -> {size}")
-                    except Exception as e:
-                        logger.info(f"SIZE {name} failed: {type(e).__name__}: {e}")
+                    except:
                         # SIZE failed, might be a directory - try to CWD into it
                         try:
                             self.ftp.cwd(name)
                             is_directory = True
-                            # Restore to working directory
-                            self.ftp.cwd(working_dir)
-                        except Exception as e2:
+                            # Restore to original directory
+                            self.ftp.cwd(current_dir)
+                        except:
                             # Not a directory, just a file where SIZE failed
-                            logger.debug(f"CWD {name} also failed: {type(e2).__name__}: {e2}")
-                            # Set size to 0 as fallback
-                            size = 0
+                            pass
 
                     # Try to get modification date
                     try:
@@ -218,25 +172,15 @@ class CNCFtpClient:
                             parsed = self._parse_mlst_response(mlst_response)
                             if 'modify' in parsed['metadata']:
                                 modified = self._parse_mlst_date(parsed['metadata']['modify'])
-                                logger.info(f"MLST {name} -> {modified}")
-                            else:
-                                logger.info(f"MLST {name} no modify field: {parsed}")
-                        else:
-                            logger.info(f"MLST {name} returned empty response")
-                    except Exception as e:
-                        logger.info(f"MLST {name} failed: {type(e).__name__}: {e}")
+                    except:
                         # MLST not available, try alternative methods
                         try:
                             time_response = self.ftp.sendcmd('MDTM ' + name)
                             if time_response.startswith('213'):
                                 date_str = time_response.split()[1]
                                 modified = self._parse_mlst_date(date_str)
-                                logger.info(f"MDTM {name} -> {modified}")
-                            else:
-                                logger.info(f"MDTM {name} unexpected response: {time_response}")
-                        except Exception as e2:
+                        except:
                             # Can't get modification date
-                            logger.info(f"MDTM {name} failed: {type(e2).__name__}: {e2}")
                             pass
 
                     # Construct full path: append filename to current path
@@ -253,21 +197,9 @@ class CNCFtpClient:
                         "modified": modified,
                     })
 
-                # Restore original directory
-                try:
-                    self.ftp.cwd(original_dir)
-                except:
-                    # If restore fails, log but don't fail the operation
-                    logger.warning(f"Failed to restore directory to {original_dir}")
-
                 return files
 
             except Exception as e:
-                # Try to restore directory on error
-                try:
-                    self.ftp.cwd(original_dir)
-                except:
-                    pass
                 self._connected = False
                 raise e
 

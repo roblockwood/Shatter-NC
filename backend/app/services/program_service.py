@@ -60,7 +60,7 @@ class ProgramService:
         # Step 2: Compute content hash
         content_hash = Program.compute_hash(gcode_content)
 
-        # Step 3: Check if program already exists (by hash - content deduplication)
+        # Step 3: Check if program already exists (by hash)
         existing_program = self.db.query(Program).filter(
             Program.content_hash == content_hash
         ).first()
@@ -74,17 +74,8 @@ class ProgramService:
                 "validation_results": None
             }
 
-            # If deploying existing program, update its filename for FIFO association
-            # This ensures future uploads with this filename will find this program
+            # If deploying existing program, still create deployment record
             if machine_id and deployed_filename:
-                # CRITICAL FIX: Update program's filename to match the requested filename
-                # This ensures FIFO lookups by filename will find this program
-                if existing_program.original_filename != original_filename:
-                    existing_program.original_filename = original_filename
-                    self.db.commit()
-                    self.db.refresh(existing_program)
-                
-                # Use the O-number from get_next_onumber_fifo (already determined)
                 deployment = self.deploy_program(
                     program_id=existing_program.id,
                     machine_id=machine_id,
