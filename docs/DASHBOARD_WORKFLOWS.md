@@ -229,12 +229,10 @@ Each machine is displayed as a card showing real-time status.
 ║  HAAS-VF2 (Running - Green Text)                     [=] [X] ║
 ├──────────────────────────────────────────────────────────────┤
 ║  STATUS:    Running (Green)                                  ║
-║  CYCLE:     01:23:45                                         ║
-║  POWER:     12345:30:15                                      ║
-║  PARTS:     1250                                             ║
+║  PROGRAM:   O2045.NC                                         ║
+║  CYCLE:     01:23:45  PARTS:  1250                          ║
+║  TOOLS:     12 IN ATC [VIEW]                                 ║
 ║  TOOL:      T05                                              ║
-║  ────────────────────────────────────                        ║
-║  12 TOOLS IN ATC [VIEW]                                      ║
 ║  ────────────────────────────────────                        ║
 ║  [ UPLOAD & VALIDATE ]                                       ║
 ║  ────────────────────────────────────                        ║
@@ -244,6 +242,10 @@ Each machine is displayed as a card showing real-time status.
 ║  LAST UPDATE: 10:30:45 AM                                    ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
+
+**Note:** All status rows (STATUS, PROGRAM, CYCLE/PARTS, TOOLS) are **hoverable and clickable**:
+- **Hover** - Shows preview pane with relevant data (non-interactive)
+- **Click** - Expands machine card to detail view and scrolls to relevant pane
 
 **Example Card (Offline):**
 
@@ -284,13 +286,21 @@ const getStatusType = () => {
 };
 ```
 
-**Status Fields:**
+**Status Fields (in order):**
 
 - **STATUS** - Current machine status (e.g., "Running", "Stopped", "Error")
-- **CYCLE** - Cycle time (format: `HH:MM:SS`)
-- **POWER** - Power-on hours (format: `HHHHH:MM:SS`)
-- **PARTS** - Part counter value
-- **TOOL** - Current active tool (format: `T##`)
+  - **Hover:** Shows compressed StatusTimeline preview
+  - **Click:** Expands card, scrolls to status timeline pane
+- **PROGRAM** - Current program name (e.g., "O2045.NC" or "NONE")
+  - **Hover:** Shows CurrentProgramPane preview
+  - **Click:** Expands card, scrolls to current program pane
+- **CYCLE** - Cycle time (format: `HH:MM:SS`) combined with **PARTS** - Part counter value
+  - **Hover:** Shows CycleHistoryPane preview
+  - **Click:** Expands card, scrolls to cycle history pane
+- **TOOLS** - Tool count in ATC (e.g., "12 IN ATC [VIEW]")
+  - **Hover:** Shows ToolsPane preview
+  - **Click:** Expands card, scrolls to tools pane
+- **TOOL** - Current active tool (format: `T##`, shown if available)
 
 ---
 
@@ -328,37 +338,27 @@ When a machine has active alarms, an alarm indicator appears in the card header.
 
 ### Tool Summary
 
-If the machine has tools loaded in the ATC (Automatic Tool Changer), a clickable tool summary is displayed.
+If the machine has tools loaded in the ATC (Automatic Tool Changer), a tool summary is displayed in the main status section.
 
 **Visual:**
 
 ```
-────────────────────────────────
-12 TOOLS IN ATC [VIEW]
-────────────────────────────────
+TOOLS: 12 IN ATC [VIEW]
 ```
+
+**Hover Behavior:**
+- Shows **ToolsPane** preview (non-interactive)
+- Displays tool table with search, sort, and ATC/Table source toggle
+- Positioned dynamically to stay within viewport
 
 **Click Behavior:**
-- Opens **ToolListModal** with full tool list
-- Displays tool number, name, diameter, length
-- Current tool highlighted
+- Expands machine card to detail view (if not already expanded)
+- Scrolls to tools pane in expanded view
+- Highlights tools pane briefly with green glow animation
 
-**Example Tool List Modal:**
+**Location:** [MachineCard.tsx:1030-1171](../frontend/src/components/MachineCard.tsx#L1030-L1171)
 
-```
-╔════════════════════════════════════════════════════════════╗
-║  TOOLS - HAAS-VF2                                          ║
-╠════════════════════════════════════════════════════════════╣
-║  TOOL | NAME              | DIAMETER   | LENGTH            ║
-╠════════════════════════════════════════════════════════════╣
-║  T01  | 1/2" End Mill     | 0.5000"    | 3.250"            ║
-║  T02  | 1/4" Drill        | 0.2500"    | 2.750"            ║
-║  T05* | 3/8" Ball Mill    | 0.3750"    | 3.000" (CURRENT)  ║
-║  T10  | Face Mill         | 4.0000"    | 1.500"            ║
-╚════════════════════════════════════════════════════════════╝
-```
-
-**Location:** [MachineCard.tsx:589-604](../frontend/src/components/MachineCard.tsx#L589-L604)
+**Related:** See [Machine Detail View](#machine-detail-view) for expanded tools pane features
 
 ---
 
@@ -1289,6 +1289,87 @@ When no machines are configured, an ASCII art empty state is displayed.
    - Cannot query historical data beyond retention period
 
 **Solution:** Adjust time range or verify machines are actually running/online/offline.
+
+---
+
+## Machine Detail View
+
+Clicking on any status row (STATUS, PROGRAM, CYCLE/PARTS, TOOLS) or clicking the machine card itself expands it to a full detail view.
+
+### Expanded Card Layout
+
+The expanded card replaces the machine card in the grid and spans the full width of the dashboard.
+
+**Layout Structure:**
+
+```
+╔═══════════════════════════════════════════════════════════════════════╗
+║  HAAS-VF2                                           [COLLAPSE]        ║
+╠═══════════════════════════════════════════════════════════════════════╣
+║                                                                        ║
+║  ┌─ STATUS TIMELINE ───────────────────────────────────────────────┐  ║
+║  │ [Oscilloscope visualization - see UX_DESIGN_GUIDE.md]          │  ║
+║  └──────────────────────────────────────────────────────────────────┘  ║
+║                                                                        ║
+║  ┌─ ALARMS ───────────────┐  ┌─ CURRENT PROGRAM ──────────────────┐  ║
+║  │ [Alarm list]            │  │ [Program info]                     │  ║
+║  └─────────────────────────┘  └────────────────────────────────────┘  ║
+║                                                                        ║
+║  ┌─ TOOLS ────────────────┐  ┌─ CYCLE HISTORY ────────────────────┐  ║
+║  │ [Tool table]           │  │ [Production runs]                   │  ║
+║  └────────────────────────┘  └────────────────────────────────────┘  ║
+║                                                                        ║
+╚═══════════════════════════════════════════════════════════════════════╝
+```
+
+### Panes
+
+1. **Status Timeline** (Full width, top)
+   - Oscilloscope visualization of status history
+   - Configurable time ranges: 1H, 8H, 24H, 7D
+   - See [UX_DESIGN_GUIDE.md](./UX_DESIGN_GUIDE.md#oscilloscope-display-status-timeline) for details
+
+2. **Alarms Pane** (Left, top)
+   - Two-column layout: Levels 2/3/4 (left), Level 1 info (right)
+   - Color-coded by severity
+   - Dense display with scrollable content
+   - Expandable to modal for full view
+
+3. **Current Program Pane** (Right, top)
+   - Shows currently deployed program
+   - Deployment timestamp and validation status
+   - Expandable to modal for full view
+
+4. **Tools Pane** (Left, bottom)
+   - HTML table with search and sort
+   - Toggle between ATC (HTTP) and Table (FTP TOLNI1.NC) sources
+   - Expandable in-place to full screen
+   - See [TOOL_MANAGEMENT_WORKFLOWS.md](./TOOL_MANAGEMENT_WORKFLOWS.md) for details
+
+5. **Cycle History Pane** (Right, bottom)
+   - Production run history
+   - Aggregated stats and recent runs
+   - Expandable to modal for full view
+
+### Hover Previews
+
+On the collapsed machine card, hovering over status rows shows preview panes:
+- **STATUS** → StatusTimeline preview
+- **PROGRAM** → CurrentProgramPane preview
+- **CYCLE/PARTS** → CycleHistoryPane preview
+- **TOOLS** → ToolsPane preview
+- **ALARMS** (in header) → AlarmPane preview
+
+All preview panes are non-interactive and positioned dynamically to stay within viewport.
+
+### Navigation
+
+- **Click status row** → Expands card, scrolls to relevant pane, highlights briefly
+- **Click card** → Expands to detail view
+- **Click [COLLAPSE]** → Returns to collapsed card view
+- **Click [EXPAND] on pane** → Opens pane content in modal (for Alarms, Program, History) or expands in-place (for Tools)
+
+**Location:** [MachineCard.tsx:375-455](../frontend/src/components/MachineCard.tsx#L375-L455)
 
 ---
 

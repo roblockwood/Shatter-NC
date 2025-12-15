@@ -466,6 +466,15 @@ class CNCFtpClient:
         """
         return await self.get_system_file("MONTR.NC")
 
+    async def get_tool_table_data(self) -> Optional[str]:
+        """
+        Get tool table data from TOLNI1.NC system file.
+
+        Returns:
+            Tool table data as string
+        """
+        return await self.get_system_file("TOLNI1.NC")
+
     async def connect(self) -> bool:
         """
         Explicitly establish FTP connection.
