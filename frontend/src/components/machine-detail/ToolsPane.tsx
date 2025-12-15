@@ -284,23 +284,21 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           <div className="tools-empty">NO TOOLS LOADED</div>
         ) : (
           <>
-            {(isExpanded || isFullExpanded) && (
-              <div className="tools-search-container" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  className="tools-search-input"
-                  placeholder="SEARCH TOOLS..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-                {searchQuery && (
-                  <span className="tools-search-results">
-                    {filteredAndSortedTools.length} / {tools.length}
-                  </span>
-                )}
-              </div>
-            )}
+            <div className="tools-search-container" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                className="tools-search-input"
+                placeholder="SEARCH TOOLS..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+              />
+              {searchQuery && (
+                <span className="tools-search-results">
+                  {filteredAndSortedTools.length} / {tools.length}
+                </span>
+              )}
+            </div>
             <div className="tools-table-wrapper">
               <table className="tools-table">
               <thead onClick={(e) => e.stopPropagation()}>
