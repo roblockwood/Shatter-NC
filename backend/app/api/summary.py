@@ -348,7 +348,10 @@ def get_running_summary(
     )
 
 @router.get("/summary/online", response_model=OnlineSummary)
-def get_online_summary(db: Session = Depends(get_db)):
+def get_online_summary(
+    db: Session = Depends(get_db),
+    time_range: str = Query("8h", description="Time range for polling history: 1h, 8h, 24h, 7d")
+):
     """
     DEPRECATED: Use /summary/machines instead for unified machine status view.
 
@@ -357,6 +360,14 @@ def get_online_summary(db: Session = Depends(get_db)):
     Returns machines with online duration, connection health indicators, and service availability.
     Uses the polling service as the source of truth for online status.
     """
+    # Parse time range to hours
+    hours_map = {
+        '1h': 1,
+        '8h': 8,
+        '24h': 24,
+        '7d': 168,  # 7 days = 168 hours
+    }
+    hours = hours_map.get(time_range, 8)
     # Get all enabled machines
     machines_query = db.query(Machine).filter(Machine.enabled == True).all()
 
@@ -397,8 +408,8 @@ def get_online_summary(db: Session = Depends(get_db)):
         # Get connection health
         connection_health = get_connection_health(machine.last_seen_at)
 
-        # Get polling history for the trailing 8 hours
-        polling_history = get_polling_history(machine.id, db, hours=8)
+        # Get polling history for the specified time range
+        polling_history = get_polling_history(machine.id, db, hours=hours)
 
         online_machines.append(OnlineSummaryMachine(
             machine_id=machine.id,
@@ -499,7 +510,10 @@ def get_offline_summary(db: Session = Depends(get_db)):
     )
 
 @router.get("/summary/machines", response_model=MachinesSummary)
-def get_machines_summary(db: Session = Depends(get_db)):
+def get_machines_summary(
+    db: Session = Depends(get_db),
+    time_range: str = Query("8h", description="Time range for polling history: 1h, 8h, 24h, 7d")
+):
     """
     Get unified machine status summary showing all enabled machines with polling data.
 
@@ -509,6 +523,14 @@ def get_machines_summary(db: Session = Depends(get_db)):
 
     Uses the polling service as the source of truth for online status.
     """
+    # Parse time range to hours
+    hours_map = {
+        '1h': 1,
+        '8h': 8,
+        '24h': 24,
+        '7d': 168,  # 7 days = 168 hours
+    }
+    hours = hours_map.get(time_range, 8)
     # Get all enabled machines
     machines_query = db.query(Machine).filter(Machine.enabled == True).all()
 
@@ -539,10 +561,10 @@ def get_machines_summary(db: Session = Depends(get_db)):
             # This prevents false offline status when backend restarts
             pass
 
-        # Get polling history (trailing 1 hour for detailed graph, but calculate stats over 8 hours)
-        polling_history = get_polling_history(machine.id, db, hours=1)
+        # Get polling history for the specified time range
+        polling_history = get_polling_history(machine.id, db, hours=hours)
 
-        # Also get 8-hour history for calculating full stats
+        # Also get 8-hour history for calculating full stats (for uptime percentage)
         polling_history_8h = get_polling_history(machine.id, db, hours=8)
 
         # Calculate polling stats from full 8-hour history

@@ -30,6 +30,20 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
   const [runningData, setRunningData] = useState<RunningSummary | null>(null);
   const [onlineData, setOnlineData] = useState<OnlineSummary | null>(null);
   const [offlineData, setOfflineData] = useState<OfflineSummary | null>(null);
+  
+  // Use different default time ranges for different summary types
+  const getDefaultTimeRange = () => {
+    switch (summaryType) {
+      case 'running':
+        return '24h';
+      case 'online':
+        return '8h';
+      default:
+        return '24h';
+    }
+  };
+  
+  const [currentTimeRange, setCurrentTimeRange] = useState(getDefaultTimeRange());
 
   // Fetch data based on summary type
   useEffect(() => {
@@ -48,7 +62,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
             setRunningData(runningResponse);
             break;
           case 'online':
-            const onlineResponse = await summaryApi.getOnline();
+            const onlineResponse = await summaryApi.getOnline(currentTimeRange);
             setOnlineData(onlineResponse);
             break;
           case 'offline':
@@ -72,11 +86,15 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
     const pollInterval = setInterval(() => fetchData(false), 2000);
 
     return () => clearInterval(pollInterval);
-  }, [isOpen, summaryType, timeRange]);
+  }, [isOpen, summaryType, timeRange, currentTimeRange]);
 
-  // Handle time range change (only for running summary)
+  // Handle time range change
   const handleTimeRangeChange = (newRange: string) => {
-    setTimeRange(newRange);
+    if (summaryType === 'running') {
+      setTimeRange(newRange);
+    } else if (summaryType === 'online') {
+      setCurrentTimeRange(newRange);
+    }
   };
 
   // Handle close (Escape key or click outside)
@@ -181,11 +199,11 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
           </button>
         </div>
 
-        {/* Time Range Selector (only for running summary) */}
-        {summaryType === 'running' && (
+        {/* Time Range Selector (for running and online summaries) */}
+        {(summaryType === 'running' || summaryType === 'online') && (
           <div className="summary-modal-controls">
             <TimeRangeSelector
-              selectedRange={timeRange}
+              selectedRange={summaryType === 'running' ? timeRange : currentTimeRange}
               onChange={handleTimeRangeChange}
               disabled={loading}
             />

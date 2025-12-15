@@ -1,14 +1,17 @@
 import React from 'react';
 import type { MachineStatusSummary } from '../../../api/summary';
 import { getUptimeClass, formatUptimePercent } from '../../../utils/pollingGraphGenerator';
+import { PollingOscilloscope } from '../../ui/PollingOscilloscope';
 import './SummaryRow.css';
 
 interface MachineStatusRowProps {
   machine: MachineStatusSummary;
   compact?: boolean;
+  timeRange?: '1h' | '8h' | '24h' | '7d';
+  onMachineClick?: (machineId: number) => void;
 }
 
-export const MachineStatusRow: React.FC<MachineStatusRowProps> = ({ machine, compact = false }) => {
+export const MachineStatusRow: React.FC<MachineStatusRowProps> = ({ machine, compact = false, timeRange = '8h', onMachineClick }) => {
   const getStatusIcon = () => {
     if (machine.is_online) {
       return '●'; // Filled circle for online
@@ -57,45 +60,49 @@ export const MachineStatusRow: React.FC<MachineStatusRowProps> = ({ machine, com
 
   const uptimePercent = machine.uptime_8h_percent;
 
-  // Render polling graph with colored characters
-  // Show only the most recent ~13 polls (roughly 2 minutes at 5-second intervals)
+  // Use PollingOscilloscope for binary online/offline visualization
   const renderPollingGraph = () => {
-    const recentPolls = machine.polling_history_8h.slice(-13);
     return (
-      <code>
-        {recentPolls.map((poll, i) => (
-          <span
-            key={`${poll.time}-${i}`}
-            className={poll.success ? 'polling-success' : 'polling-failure'}
-          >
-            {poll.success ? '█' : '░'}
-          </span>
-        ))}
-      </code>
+      <PollingOscilloscope
+        pollingHistory={machine.polling_history_8h}
+        timeRange={timeRange}
+        compact={compact}
+        currentOnline={machine.is_online}
+      />
     );
   };
 
   if (compact) {
-    // Compact layout for popup (4 columns: machine, status, duration, graph)
+    // Compact layout for popup (4 columns: machine, duration, uptime, graph)
+    // Swapped: graph and uptime positions
     return (
-      <div className="summary-row">
+      <div 
+        className="summary-row"
+        onClick={(e) => {
+          if (onMachineClick) {
+            e.stopPropagation();
+            onMachineClick(machine.machine_id);
+          }
+        }}
+        style={{ cursor: onMachineClick ? 'pointer' : 'default' }}
+      >
         <div className="summary-cell machine-name">
           <span className={getStatusColor()}>
             {getStatusIcon()} {machine.machine_name}
           </span>
         </div>
-        <div className="summary-cell duration">
+        <div className="summary-cell duration" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>
           {getDurationText()}
+        </div>
+        <div className="summary-cell uptime" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>
+          <span className={getUptimeClass(uptimePercent)}>
+            {formatUptimePercent(uptimePercent)}
+          </span>
         </div>
         <div className="summary-cell graph">
           <div className={getUptimeClass(uptimePercent)}>
             {renderPollingGraph()}
           </div>
-        </div>
-        <div className="summary-cell uptime">
-          <span className={getUptimeClass(uptimePercent)}>
-            {formatUptimePercent(uptimePercent)}
-          </span>
         </div>
       </div>
     );

@@ -98,8 +98,8 @@ export const summaryApi = {
     return response.json();
   },
 
-  getOnline: async (): Promise<OnlineSummary> => {
-    const response = await fetch(`${API_BASE_URL}/api/summary/online`);
+  getOnline: async (timeRange: string = '8h'): Promise<OnlineSummary> => {
+    const response = await fetch(`${API_BASE_URL}/api/summary/online?time_range=${timeRange}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch online summary: ${response.statusText}`);
     }
@@ -114,8 +114,8 @@ export const summaryApi = {
     return response.json();
   },
 
-  getMachines: async (): Promise<MachinesSummary> => {
-    const response = await fetch(`${API_BASE_URL}/api/summary/machines`);
+  getMachines: async (timeRange: string = '8h'): Promise<MachinesSummary> => {
+    const response = await fetch(`${API_BASE_URL}/api/summary/machines?time_range=${timeRange}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch machines summary: ${response.statusText}`);
     }
