@@ -6,22 +6,24 @@ interface StatusEvent {
   time: string;
   status: string;
   previous_status?: string;
+  error?: string; // Error message if status is offline
 }
 
 interface StatusTimelineProps {
   machineId: number;
   currentStatus?: string; // Current machine status from WebSocket
   isOnline?: boolean; // Whether machine is online
+  currentError?: string; // Current error message if machine is offline
   onExpand?: () => void;
 }
 
 type TimeRange = '1h' | '8h' | '24h' | '7d';
 
-export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, currentStatus, isOnline, onExpand }) => {
+export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, currentStatus, isOnline, currentError, onExpand }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [events, setEvents] = useState<StatusEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; status: string; timestamp: Date } | null>(null);
+  const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; status: string; timestamp: Date; error?: string } | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const [oscilloscopeWidth, setOscilloscopeWidth] = useState(180);
   const [scaleX, setScaleX] = useState(1);
@@ -196,7 +198,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
     }
 
     const totalDuration = endTime.getTime() - startTime.getTime();
-    const dataPoints: Array<{ time: number; level: number; status: string }> = [];
+    const dataPoints: Array<{ time: number; level: number; status: string; error?: string }> = [];
 
     // If no events, still show current status
     if (events.length === 0) {
@@ -247,6 +249,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
           time: relativeTime,
           level: STATUS_LEVELS[normalized] ?? 3,
           status: normalized,
+          error: event.error, // Include error from event if available
         });
       }
     }
@@ -259,6 +262,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
       time: 100,
       level: STATUS_LEVELS[normalized] ?? 3,
       status: normalized,
+      error: !isOnline && currentError ? currentError : undefined, // Include error if offline
     });
     
     // If currentStatus is provided and different from last event, we might want to add a transition point
@@ -295,7 +299,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
     const statusLevels = [4, 3, 2, 1, 0]; // Corresponding levels
     
     // Convert data points to SVG coordinates with interpolation for smooth transitions
-    const svgPoints: Array<{ x: number; y: number; status: string; timestamp: Date }> = [];
+    const svgPoints: Array<{ x: number; y: number; status: string; timestamp: Date; error?: string }> = [];
     
     if (oscilloscopeData.length > 0) {
       oscilloscopeData.forEach((point, idx) => {
@@ -312,7 +316,9 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
         const y = Math.max(rowCenter - rowHeight/2 + 1, Math.min(rowCenter + rowHeight/2 - 1, rowCenter + oscillation));
         
         const timestamp = new Date(startTime.getTime() + (point.time / 100) * totalDuration);
-        svgPoints.push({ x, y, status: point.status, timestamp });
+        // For the final point (NOW), include error if offline
+        const error = point.time === 100 && !isOnline && currentError ? currentError : undefined;
+        svgPoints.push({ x, y, status: point.status, timestamp, error });
         
         // Add intermediate points for smoother transitions
         if (idx < oscilloscopeData.length - 1) {
@@ -334,7 +340,8 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                 x: interpX, 
                 y: finalY, 
                 status: point.status, 
-                timestamp: new Date(startTime.getTime() + (interpX / 100) * totalDuration) 
+                timestamp: new Date(startTime.getTime() + (interpX / 100) * totalDuration),
+                error: undefined // Intermediate points don't have errors
               });
             }
           }
@@ -569,15 +576,18 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                                 const normalized = normalizeStatus(dataPoint.status, isOnline);
                                 const levelY = (1 - (STATUS_LEVELS[normalized] ?? 3) / 4) * 100;
                                 const paddedY = 8 + (levelY / 100) * 84; // Map to 8-92 range
+                                // Get error from dataPoint (already includes error for final point)
                                 setHoveredPoint({
                                   x: x,
                                   y: paddedY,
                                   status: normalized.toUpperCase(),
                                   timestamp: timestamp,
+                                  error: dataPoint.error,
                                 });
                                 
-                                const tooltipWidth = 150;
-                                const tooltipHeight = 40;
+                                const tooltipWidth = 250; // Wider to accommodate error messages
+                                const hasError = dataPoint.error && dataPoint.error.length > 0;
+                                const tooltipHeight = hasError ? 80 : 40; // Taller if error message present
                                 const pointX = rect.left - containerRect.left + rect.width / 2;
                                 const pointY = rect.top - containerRect.top;
                                 
@@ -634,6 +644,14 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
               >
                 {hoveredPoint.status}<br/>
                 {hoveredPoint.timestamp.toLocaleString()}
+                {hoveredPoint.error && (
+                  <>
+                    <br/>
+                    <span style={{ color: 'var(--color-error)', fontSize: '0.9em' }}>
+                      {hoveredPoint.error}
+                    </span>
+                  </>
+                )}
               </div>
             )}
             <div className="oscilloscope-x-axis">

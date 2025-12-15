@@ -2,7 +2,7 @@
 import asyncio
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 from app.models.machine import Machine
@@ -23,6 +23,10 @@ class MachinePoller:
         self.consecutive_failures = 0
         self.is_online = False
         self.last_status: Optional[str] = None  # Track status transitions in-memory
+        self.last_heartbeat_time: Optional[datetime] = None  # Track last heartbeat event
+        self.heartbeat_interval_minutes = 30  # Log heartbeat every 30 minutes
+        self.offline_threshold = 3  # Require 3 consecutive failures before logging offline
+        self.logged_offline_status = False  # Track if we've already logged the offline transition
 
     async def poll(self) -> Dict[str, Any]:
         """Poll machine status and return data."""
@@ -53,6 +57,7 @@ class MachinePoller:
             })
 
             # Update machine health
+            was_offline = not self.is_online or self.logged_offline_status
             self.is_online = True
             self.consecutive_failures = 0
             self.last_poll_time = poll_timestamp
@@ -62,6 +67,9 @@ class MachinePoller:
             # Log events to database (non-blocking, in background)
             # Only log status events if we have a status (machine is online)
             if status_data.get("status"):
+                # If we were previously offline and now recovered, ensure we log the transition back online
+                if was_offline:
+                    self.logged_offline_status = False
                 asyncio.create_task(self._log_events_async(status_data, poll_timestamp, response_time_ms, success=True))
 
             return status_data
@@ -98,8 +106,27 @@ class MachinePoller:
                 "response_time_ms": response_time_ms,
             }
 
-            # Log status event for offline transition (non-blocking)
-            asyncio.create_task(self._log_events_async(offline_status_data, poll_timestamp, response_time_ms, success=False))
+            # Only log offline transition if we've exceeded the threshold AND haven't already logged it
+            should_log_offline = (
+                self.consecutive_failures >= self.offline_threshold and 
+                not self.logged_offline_status
+            )
+            
+            if should_log_offline:
+                # Store previous status before updating (needed for event logging)
+                previous_status = self.last_status
+                # Update last_status to "off" immediately so transition back online will be detected
+                self.last_status = "off"
+                # Update offline_status_data with correct previous_status for logging
+                offline_status_data["previous_status"] = previous_status
+                # Log status event for offline transition (non-blocking)
+                asyncio.create_task(self._log_events_async(offline_status_data, poll_timestamp, response_time_ms, success=False))
+                self.logged_offline_status = True
+                logger.info(
+                    f"Machine {self.machine.id} ({self.machine.name}) marked offline "
+                    f"after {self.consecutive_failures} consecutive failures "
+                    f"(previous status: {previous_status})"
+                )
 
             return offline_status_data
 
@@ -138,6 +165,23 @@ class MachinePoller:
             if self.last_status != current_status:
                 await self._log_status_event(db, status_data, current_status)
                 self.last_status = current_status
+                # Reset heartbeat timer on status change
+                self.last_heartbeat_time = poll_timestamp
+            # Log heartbeat if enough time has passed (even if status hasn't changed)
+            elif current_status and success:
+                should_log_heartbeat = False
+                if self.last_heartbeat_time is None:
+                    # First poll - log heartbeat
+                    should_log_heartbeat = True
+                else:
+                    # Check if heartbeat interval has passed
+                    time_since_heartbeat = poll_timestamp - self.last_heartbeat_time
+                    if time_since_heartbeat >= timedelta(minutes=self.heartbeat_interval_minutes):
+                        should_log_heartbeat = True
+                
+                if should_log_heartbeat:
+                    await self._log_status_event(db, status_data, current_status)
+                    self.last_heartbeat_time = poll_timestamp
 
             # Log alarms only when status indicates alarm (Q3)
             if current_status == "alarm":
@@ -156,11 +200,14 @@ class MachinePoller:
     async def _log_status_event(self, db: Session, status_data: Dict[str, Any], current_status: str):
         """Log machine status change event."""
         try:
+            # Use previous_status from status_data if provided (for offline transitions),
+            # otherwise use self.last_status
+            previous_status = status_data.get("previous_status", self.last_status)
             event = MachineStatusEvent(
                 time=datetime.utcnow(),
                 machine_id=self.machine.id,
                 status=current_status,
-                previous_status=self.last_status,
+                previous_status=previous_status,
                 program_name=status_data.get("program_name"),
                 o_number=status_data.get("o_number"),
                 metrics={
@@ -170,7 +217,7 @@ class MachinePoller:
                 }
             )
             db.add(event)
-            logger.debug(f"Logged status event for machine {self.machine.id}: {self.last_status} → {current_status}")
+            logger.debug(f"Logged status event for machine {self.machine.id}: {previous_status} → {current_status}")
         except Exception as e:
             logger.error(f"Failed to log status event: {e}")
             raise
