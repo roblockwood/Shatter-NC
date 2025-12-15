@@ -151,6 +151,12 @@ export const FileBrowser: React.FC = () => {
   // Expand/collapse state for validation tables
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
   const [expandedWCS, setExpandedWCS] = useState(false);
+  // Search and sort state
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  // Deployment tracking - set of filenames that have deployments
+  const [filesWithDeployments, setFilesWithDeployments] = useState<Set<string>>(new Set());
 
   // Fetch machines on mount and auto-select first one
   useEffect(() => {
@@ -319,6 +325,41 @@ export const FileBrowser: React.FC = () => {
 
     return () => controller.abort();
   }, [selectedMachineId, currentPath, pathLoading]);
+
+  // Fetch deployments list for the machine to mark files with deployment data
+  useEffect(() => {
+    if (!selectedMachineId) {
+      setFilesWithDeployments(new Set());
+      return;
+    }
+
+    const controller = new AbortController();
+    fetch(`${API_BASE_URL}/api/programs/machines/${selectedMachineId}/deployments`, {
+      signal: controller.signal,
+    })
+      .then(res => {
+        if (!res.ok) return [];
+        return res.json();
+      })
+      .then((deployments: any[]) => {
+        // Extract deployed filenames (case-insensitive)
+        const deployedFilenames = new Set<string>();
+        deployments.forEach((deployment: any) => {
+          if (deployment.deployed_filename) {
+            deployedFilenames.add(deployment.deployed_filename.toUpperCase());
+          }
+        });
+        setFilesWithDeployments(deployedFilenames);
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          console.error('Error fetching deployments:', err);
+          setFilesWithDeployments(new Set());
+        }
+      });
+
+    return () => controller.abort();
+  }, [selectedMachineId]);
 
   // Fetch preview and metadata when a .nc file is selected
   useEffect(() => {
@@ -821,14 +862,46 @@ export const FileBrowser: React.FC = () => {
     }
   };
 
-  // Sort and prepare display list
+  // Sort and prepare display list with search and sort functionality
   const displayPrograms = (() => {
+    // Filter by search query
+    let filtered = programs;
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = programs.filter(p => 
+        p.name.toLowerCase().includes(query) ||
+        (p.is_directory && 'directory'.includes(query)) ||
+        (!p.is_directory && 'file'.includes(query))
+      );
+    }
+
     // Separate directories and files
-    const directories = programs.filter(p => p.is_directory).sort((a, b) => a.name.localeCompare(b.name));
-    const files = programs.filter(p => !p.is_directory).sort((a, b) => a.name.localeCompare(b.name));
+    const directories = filtered.filter(p => p.is_directory);
+    const files = filtered.filter(p => !p.is_directory);
+
+    // Sort function
+    const sortFn = (a: Program, b: Program) => {
+      let comparison = 0;
+      
+      if (sortBy === 'name') {
+        comparison = a.name.localeCompare(b.name);
+      } else if (sortBy === 'size') {
+        comparison = a.size - b.size;
+      } else if (sortBy === 'modified') {
+        const dateA = new Date(a.modified).getTime();
+        const dateB = new Date(b.modified).getTime();
+        comparison = dateA - dateB;
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    };
+
+    // Sort directories and files separately
+    const sortedDirectories = [...directories].sort(sortFn);
+    const sortedFiles = [...files].sort(sortFn);
 
     // Combine: directories first, then files
-    const sorted = [...directories, ...files];
+    const sorted = [...sortedDirectories, ...sortedFiles];
 
     // Add parent directory entry at the top if not at root
     return currentPath !== '/'
@@ -904,6 +977,46 @@ export const FileBrowser: React.FC = () => {
 
           {!loading && !error && programs.length > 0 && (
             <div className="programs-table">
+              {/* Search and Sort Controls */}
+              <div className="table-controls">
+                <div className="search-container">
+                  <input
+                    type="text"
+                    className="file-search-input"
+                    placeholder="SEARCH FILES..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button
+                      className="search-clear-btn"
+                      onClick={() => setSearchQuery('')}
+                      title="Clear search"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <div className="sort-controls">
+                  <label className="sort-label">SORT:</label>
+                  <select
+                    className="terminal-select-sm"
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as 'name' | 'size' | 'modified')}
+                  >
+                    <option value="name">NAME</option>
+                    <option value="size">SIZE</option>
+                    <option value="modified">MODIFIED</option>
+                  </select>
+                  <button
+                    className="sort-direction-btn"
+                    onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+                    title={`Sort ${sortDirection === 'asc' ? 'descending' : 'ascending'}`}
+                  >
+                    {sortDirection === 'asc' ? '↑' : '↓'}
+                  </button>
+                </div>
+              </div>
               <div className="table-header">
                 <div className="col-name">NAME</div>
                 <div className="col-size">SIZE</div>
@@ -918,23 +1031,47 @@ export const FileBrowser: React.FC = () => {
                   <div
                     key={idx}
                     ref={selectedProgram?.name === program.name ? selectedProgramRef : null}
-                    className={`table-row ${selectedProgram?.name === program.name ? 'selected' : ''}`}
+                    className={`table-row ${selectedProgram?.name === program.name ? 'selected' : ''} ${!program.is_directory && filesWithDeployments.has(program.name.toUpperCase()) ? 'has-deployment' : ''}`}
                     onClick={() => handleItemClick(program)}
                   >
                     <div className="col-name">
                       {program.is_directory ? '/ ' : (selectedProgram?.name === program.name ? '► ' : '  ')}
                       {program.name}
+                      {!program.is_directory && filesWithDeployments.has(program.name.toUpperCase()) && (
+                        <span className="deployment-indicator" title="Has deployment data">●</span>
+                      )}
                     </div>
                     <div className="col-size">{program.is_directory ? '<DIR>' : formatBytes(program.size)}</div>
                     <div className="col-modified">{formatDate(program.modified)}</div>
-                    <div className="col-actions">
+                    <div className="col-actions" onClick={(e) => e.stopPropagation()}>
                       {!program.is_directory && (
-                        <button
-                          className="terminal-button-sm"
-                          onClick={() => handleDownload(program)}
-                        >
-                          DL
-                        </button>
+                        <>
+                          <button
+                            className="terminal-button-sm"
+                            onClick={() => handleDownload(program)}
+                            title="Download"
+                          >
+                            DL
+                          </button>
+                          {program.name.toUpperCase().endsWith('.NC') && (
+                            <button
+                              className="terminal-button-sm"
+                              onClick={() => handleViewCode(program)}
+                              title="View Code"
+                            >
+                              VC
+                            </button>
+                          )}
+                          {program.name.match(/^O\d{4}\.NC$/i) && (
+                            <button
+                              className="terminal-button-sm"
+                              onClick={() => handleValidate(program)}
+                              title="Validate"
+                            >
+                              VAL
+                            </button>
+                          )}
+                        </>
                       )}
                       {program.is_directory && (
                         <span className="col-action-spacer"></span>
