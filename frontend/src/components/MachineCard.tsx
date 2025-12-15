@@ -398,6 +398,17 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     }
   }, [isExpanded, isEditing, editMode, onCollapse, handleEditCancel]);
 
+  // Dismiss all hover panes when card is collapsed
+  useEffect(() => {
+    if (!isExpanded) {
+      setShowStatusHover(false);
+      setShowProgramHover(false);
+      setShowCycleHover(false);
+      setShowToolsHover(false);
+      setShowAlarmHover(false);
+    }
+  }, [isExpanded]);
+
   const handleEditTestConnection = async () => {
     if (!editFormData.ip_address) {
       setEditError('IP address required for connection test');

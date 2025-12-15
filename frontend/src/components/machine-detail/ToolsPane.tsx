@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useBetaMode } from '../../hooks/useBetaMode';
 import './ToolsPane.css';
 import { API_BASE_URL } from '../../config/api';
 
@@ -42,6 +44,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const [toolSource, setToolSource] = useState<'atc' | 'table'>(initialSource);
   const [tools, setTools] = useState<Tool[]>(initialTools);
   const [isLoadingTools, setIsLoadingTools] = useState(false);
+  const [toolsSummary, setToolsSummary] = useState<Array<{ tool_number: number; description: string }>>([]);
+  const navigate = useNavigate();
+  const { isBetaMode } = useBetaMode();
 
   // Update tools from initialTools when on ATC source (updates from polling)
   useEffect(() => {
@@ -49,6 +54,24 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       setTools(initialTools);
     }
   }, [initialTools, toolSource]);
+
+  // Fetch tools summary for matching (only if beta mode is enabled)
+  useEffect(() => {
+    if (isBetaMode) {
+      fetch(`${API_BASE_URL}/api/tools/summary`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.tools) {
+            setToolsSummary(data.tools);
+          }
+        })
+        .catch(err => {
+          console.error('Error fetching tools summary:', err);
+        });
+    } else {
+      setToolsSummary([]);
+    }
+  }, [isBetaMode]);
 
   // Fetch tool table only when user switches to 'table' source (once per switch)
   useEffect(() => {
@@ -85,6 +108,40 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
   const isCurrentTool = (toolNum: number) => {
     return currentTool !== undefined && currentTool === toolNum;
+  };
+
+  // Check if tool exists in tools table (by name match or tool number)
+  const getMatchedTool = (tool: Tool) => {
+    // Try to match by tool name (case-insensitive) if available
+    if (tool.tool_name) {
+      const matched = toolsSummary.find(t => 
+        t.description && 
+        t.description.toLowerCase().trim() === tool.tool_name!.toLowerCase().trim()
+      );
+      
+      if (matched) return matched;
+    }
+    
+    // Fallback: match by tool number
+    return toolsSummary.find(t => t.tool_number === tool.tool_number) || null;
+  };
+
+  const handleToolClick = (tool: Tool, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const matched = getMatchedTool(tool);
+    if (matched) {
+      navigate(`/tools?tool=${matched.tool_number}`);
+    }
+  };
+
+  const handleRowClick = (tool: Tool, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const matched = getMatchedTool(tool);
+    if (matched && isBetaMode) {
+      handleToolClick(tool, e);
+    } else if (onExpand) {
+      handleExpand(e);
+    }
   };
 
   // Filter and sort tools
@@ -317,14 +374,20 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 ) : (
                   filteredAndSortedTools.slice(0, visibleCount).map((tool, idx) => {
                 const isCurrent = isCurrentTool(tool.tool_number);
+                const matched = getMatchedTool(tool);
+                const hasMatch = matched !== null && isBetaMode;
                 return (
                   <tr 
                     key={idx} 
-                    className={isCurrent ? 'current-tool' : ''}
+                    className={`${isCurrent ? 'current-tool' : ''} ${hasMatch ? 'tool-matched' : ''}`}
+                    onClick={(e) => handleRowClick(tool, e)}
+                    style={{ cursor: hasMatch ? 'pointer' : (onExpand ? 'pointer' : 'default') }}
+                    title={hasMatch ? `Click to view tool ${matched.tool_number} in Tool Management` : undefined}
                   >
                     <td className="tools-col-pot">{tool.pot_number ?? '──'}</td>
                     <td className="tools-col-number">
                       {isCurrent && <span className="current-indicator">►</span>}
+                      {hasMatch && <span className="matched-indicator" title="Tool exists in Tool Management">●</span>}
                       {String(tool.tool_number).padStart(2, '0')}
                     </td>
                     <td className="tools-col-name">{getToolDisplayName(tool)}</td>
