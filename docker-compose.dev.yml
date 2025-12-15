@@ -26,7 +26,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      target: production
+      target: development  # Use development target for hot-reload
     container_name: shatter-backend
     restart: unless-stopped
     environment:
@@ -46,6 +46,7 @@ services:
       redis:
         condition: service_started
     volumes:
+      - ./backend:/app  # Mount backend code for hot-reload in development
       - ./database/init:/docker-entrypoint-initdb.d:ro
 
   # Frontend web application
