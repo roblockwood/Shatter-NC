@@ -84,8 +84,11 @@ export const Dashboard = () => {
           className="machines-count clickable"
           onClick={() => setEditMode(!editMode)}
         >
-          MACHINES: {machines.length}
-          {editMode && <span className="text-warning"> [EDIT MODE]</span>}
+          {editMode ? (
+            <span className="text-warning">[EDIT MODE]</span>
+          ) : (
+            <>MACHINES: {machines.length}</>
+          )}
         </span>
         <span className="separator">│</span>
         <span
@@ -106,11 +109,6 @@ export const Dashboard = () => {
         >
           ONLINE: <span className="text-info">{onlineCount}</span><span className="text-dim">/</span><span className="text-info">{machines.length}</span>
         </span>
-        <span className="separator">│</span>
-        <StatusIndicator
-          status={isConnected ? 'online' : 'offline'}
-          label={isConnected ? 'WS CONNECTED' : 'WS DISCONNECTED'}
-        />
       </div>
 
       {/* Machine Grid */}
@@ -187,6 +185,11 @@ export const Dashboard = () => {
           <span className="text-dim">REFRESH: 5s</span>
           <span className="separator">│</span>
           <span className="text-dim">{new Date().toLocaleTimeString()}</span>
+          <span className="separator">│</span>
+          <StatusIndicator
+            status={isConnected ? 'online' : 'offline'}
+            label={isConnected ? 'WS CONNECTED' : 'WS DISCONNECTED'}
+          />
         </div>
       </div>
     </div>
