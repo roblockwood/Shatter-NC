@@ -98,13 +98,25 @@
   gap: 0.25rem;
 }
 
-/* Polling Graph */
+/* Polling Graph / Oscilloscope */
+.summary-cell.graph {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* Machines summary layout - swapped positions */
+.summary-row:has(.graph):has(.uptime) {
+  grid-template-columns: 1.5fr 0.8fr 0.8fr 4fr;
+}
+
 .summary-cell.graph code {
   letter-spacing: 0.1em;
   font-family: var(--font-mono);
 }
 
-/* Color individual characters based on poll status */
+/* Color individual characters based on poll status (legacy) */
 .summary-cell.graph code .polling-success {
   color: var(--color-success) !important;
 }

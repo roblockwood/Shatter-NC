@@ -1,0 +1,149 @@
+.polling-oscilloscope {
+  display: flex;
+  flex-direction: row;
+  gap: var(--spacing-sm);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.polling-oscilloscope.compact {
+  height: 40px;
+}
+
+.oscilloscope-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8px 0;
+  min-width: 60px;
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+}
+
+.oscilloscope-label {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+.oscilloscope-display-wrapper {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.oscilloscope-display {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  background: var(--color-bg-surface);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  box-sizing: border-box;
+}
+
+.oscilloscope-data {
+  height: 100%;
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.oscilloscope-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.oscilloscope-grid-line {
+  stroke: var(--color-text-dim);
+  stroke-width: 0.5;
+  opacity: 0.2;
+}
+
+.oscilloscope-trace {
+  filter: drop-shadow(0 0 0.3px currentColor);
+  animation: oscilloscope-glow 2s ease-in-out infinite;
+}
+
+@keyframes oscilloscope-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 0.3px currentColor);
+    opacity: 1;
+  }
+  50% {
+    filter: drop-shadow(0 0 0.45px currentColor);
+    opacity: 0.98;
+  }
+}
+
+.oscilloscope-timestamp-line {
+  stroke-width: 0.5;
+  opacity: 0.25;
+  shape-rendering: crispEdges;
+}
+
+.oscilloscope-timestamp-hover-area {
+  cursor: crosshair;
+}
+
+.oscilloscope-timestamp-hover-area:hover + .oscilloscope-timestamp-line {
+  opacity: 0.8;
+  stroke-width: 1;
+}
+
+.oscilloscope-time-division-line {
+  stroke-width: 0.3;
+  opacity: 0.2;
+  shape-rendering: crispEdges;
+  pointer-events: none;
+}
+
+.oscilloscope-x-axis {
+  position: relative;
+  height: 20px;
+  margin-top: 4px;
+  font-size: var(--font-xs);
+  color: var(--color-text-dim);
+  font-family: var(--font-mono);
+}
+
+.oscilloscope-x-axis-label {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.oscilloscope-tooltip {
+  position: fixed;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  z-index: 1000;
+  pointer-events: none;
+  max-width: 250px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.tooltip-status {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.tooltip-time {
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+  margin-top: 2px;
+}
+

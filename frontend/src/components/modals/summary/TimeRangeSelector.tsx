@@ -8,11 +8,10 @@ interface TimeRangeSelectorProps {
 }
 
 const TIME_RANGES = [
-  { value: '1h', label: '1 HOUR' },
-  { value: '4h', label: '4 HOURS' },
-  { value: '24h', label: '24 HOURS' },
-  { value: '7d', label: '7 DAYS' },
-  { value: '30d', label: '30 DAYS' },
+  { value: '1h', label: '1H' },
+  { value: '8h', label: '8H' },
+  { value: '24h', label: '24H' },
+  { value: '7d', label: '7D' },
 ];
 
 export const TimeRangeSelector: React.FC<TimeRangeSelectorProps> = ({
