@@ -11,9 +11,9 @@ interface Tool {
   diameter?: number;
   length?: number;
   group?: string | number;
-  life?: string | number;
-  tool_type?: string;
-  color?: string;
+  life?: number; // Tool life remaining in minutes (integer)
+  tool_type?: number; // 1=STD Tool, 2=Large Tool
+  color?: number; // 0=no color, 1=blue, 2=red, 3=purple, 4=green, 5=light blue, 6=yellow, 7=white
 }
 
 interface ToolsPaneProps {
@@ -101,6 +101,60 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     return value.toFixed(4);
   };
 
+  const formatLife = (value: number | string | undefined) => {
+    if (value === undefined || value === null) return '──';
+    // Handle both string and number (in case backend hasn't updated yet)
+    let numValue: number;
+    if (typeof value === 'string') {
+      // Extract first number from string (handles "9952mi9952" -> 9952)
+      const match = value.match(/(\d+)/);
+      if (!match) return '──';
+      numValue = parseInt(match[1], 10);
+      if (isNaN(numValue)) return '──';
+    } else {
+      numValue = value;
+    }
+    return `${numValue}`;
+  };
+
+  const formatToolType = (value: number | undefined) => {
+    if (value === undefined || value === null) return '──';
+    switch (value) {
+      case 1:
+        return 'STD';
+      case 2:
+        return 'LARGE';
+      default:
+        return String(value);
+    }
+  };
+
+  const getColorInfo = (value: number | undefined): { name: string; hex: string } => {
+    if (value === undefined || value === null) {
+      return { name: '──', hex: '#666666' };
+    }
+    switch (value) {
+      case 0:
+        return { name: 'NONE', hex: '#666666' };
+      case 1:
+        return { name: 'BLUE', hex: '#0066ff' };
+      case 2:
+        return { name: 'RED', hex: '#ff0000' };
+      case 3:
+        return { name: 'PURPLE', hex: '#9900ff' };
+      case 4:
+        return { name: 'GREEN', hex: '#00ff00' };
+      case 5:
+        return { name: 'LT BLUE', hex: '#00ccff' };
+      case 6:
+        return { name: 'YELLOW', hex: '#ffff00' };
+      case 7:
+        return { name: 'WHITE', hex: '#ffffff' };
+      default:
+        return { name: String(value), hex: '#666666' };
+    }
+  };
+
   const getToolDisplayName = (tool: Tool) => {
     if (tool.tool_name) return tool.tool_name;
     return `TOOL ${tool.tool_number}`;
@@ -157,8 +211,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           (tool.tool_name && tool.tool_name.toLowerCase().includes(query)) ||
           (tool.pot_number && String(tool.pot_number).toLowerCase().includes(query)) ||
           (tool.group && String(tool.group).toLowerCase().includes(query)) ||
-          (tool.tool_type && tool.tool_type.toLowerCase().includes(query)) ||
-          (tool.color && tool.color.toLowerCase().includes(query))
+          (tool.tool_type !== undefined && formatToolType(tool.tool_type).toLowerCase().includes(query)) ||
+          (tool.color !== undefined && getColorInfo(tool.color).name.toLowerCase().includes(query)) ||
+          (tool.life !== undefined && String(tool.life).includes(query))
         );
       });
     }
@@ -194,16 +249,16 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           bVal = b.group ? String(b.group) : '';
           break;
         case 'life':
-          aVal = a.life ? String(a.life) : '';
-          bVal = b.life ? String(b.life) : '';
+          aVal = a.life !== undefined && a.life !== null ? a.life : -1;
+          bVal = b.life !== undefined && b.life !== null ? b.life : -1;
           break;
         case 'tool_type':
-          aVal = a.tool_type ? a.tool_type.toLowerCase() : '';
-          bVal = b.tool_type ? b.tool_type.toLowerCase() : '';
+          aVal = a.tool_type !== undefined && a.tool_type !== null ? a.tool_type : -1;
+          bVal = b.tool_type !== undefined && b.tool_type !== null ? b.tool_type : -1;
           break;
         case 'color':
-          aVal = a.color ? a.color.toLowerCase() : '';
-          bVal = b.color ? b.color.toLowerCase() : '';
+          aVal = a.color !== undefined && a.color !== null ? a.color : -1;
+          bVal = b.color !== undefined && b.color !== null ? b.color : -1;
           break;
         default:
           return 0;
@@ -392,9 +447,22 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     <td className="tools-col-diameter">{formatDimension(tool.diameter)}"</td>
                     <td className="tools-col-length">{formatDimension(tool.length)}"</td>
                     <td className="tools-col-group">{tool.group ?? '──'}</td>
-                    <td className="tools-col-life">{tool.life ?? '──'}</td>
-                    <td className="tools-col-type">{tool.tool_type ?? '──'}</td>
-                    <td className="tools-col-color">{tool.color ?? '──'}</td>
+                    <td className="tools-col-life">{formatLife(tool.life)}</td>
+                    <td className="tools-col-type">{formatToolType(tool.tool_type)}</td>
+                    <td className="tools-col-color">
+                      {tool.color !== undefined && tool.color !== null ? (
+                        <span className="color-display">
+                          <span 
+                            className="color-indicator" 
+                            style={{ backgroundColor: getColorInfo(tool.color).hex }}
+                            title={getColorInfo(tool.color).name}
+                          />
+                          <span className="color-name">{getColorInfo(tool.color).name}</span>
+                        </span>
+                      ) : (
+                        '──'
+                      )}
+                    </td>
                   </tr>
                 );
                   })
