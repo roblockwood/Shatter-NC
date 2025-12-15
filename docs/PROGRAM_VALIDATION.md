@@ -122,10 +122,34 @@ After validation saves:
 
 The validation logic checks:
 
+#### Machine Data Fetching
+
+**Always Fetched (Even When Not in NC):**
+- **Tool list** - All available tools from machine via HTTP endpoint
+- **WCS offsets** - All work offsets (G54-G59) from POSNI1.NC file via FTP
+
+**Rationale:**
+- Provides reference data even when NC program doesn't specify tools/WCS
+- Shows machine actual values for comparison
+- Helps operators understand what's available on the machine
+
+**Display Behavior:**
+- **Tools not in NC**: Shows machine tools with "N/A" status, actual values displayed
+- **WCS not in NC**: Shows "XYZ NOT PARSED" with machine G54 values for reference
+
+**Implementation:** [programs.py:124-207](../backend/app/api/programs.py#L124-L207)
+
 #### Tool Validation
 - **Tool availability** - Each tool called by the program (T1, T2, etc.) must exist in machine's ATC
 - **Tool metadata** - Compares tool number, diameter, corner radius, description
-- **Tool status** - Marks as `found`, `missing`, or `mismatch`
+- **Tool status** - Marks as `found`, `missing`, `mismatch`, or `not_in_nc` (available but not referenced)
+
+**Tolerance Source:**
+- **Tool tolerances**: Always from machine database settings (not from NC file)
+  - `diameter_tolerance` - Symmetric tolerance for diameter matching
+  - `length_tolerance_plus` - Positive tolerance for length (tools can be longer)
+  - `length_tolerance_minus` - Negative tolerance for length (tools cannot be shorter)
+- Tolerance values are displayed in validation tables when expanding tool details
 
 Example tool validation result:
 ```json
@@ -150,8 +174,13 @@ Example tool validation result:
 
 #### WCS Offset Validation
 - **Coordinate systems** - Validates G54, G55, G56, G57, G58, G59 offsets
-- **Tolerance checking** - Allows configurable tolerance for X/Y/Z offsets
+- **Tolerance checking** - Uses NC file E parameter if present, otherwise machine database settings
 - **Offset matching** - Compares program expectations vs machine reality
+- **Missing WCS in NC** - If WCS not specified in program, displays machine G54 data with "XYZ NOT PARSED" status
+
+**Tolerance Source:**
+- **Primary**: NC file E parameter (e.g., `G65 P8901 ... E0.01 ...`) - uniform tolerance for all axes
+- **Fallback**: Machine database per-axis tolerances (tolerance_x, tolerance_y, tolerance_z)
 
 Example WCS validation result:
 ```json
