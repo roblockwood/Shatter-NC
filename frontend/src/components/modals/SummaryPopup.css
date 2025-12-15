@@ -111,6 +111,10 @@
   grid-template-columns: 2fr 1.5fr 1.5fr 2fr;
 }
 
+.summary-popup:has([class*="running"]) .summary-popup-headers {
+  grid-template-columns: 1.5fr 0.8fr 0.8fr 4fr;
+}
+
 .summary-popup-header-cell {
   text-align: left;
 }

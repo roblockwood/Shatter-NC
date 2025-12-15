@@ -589,83 +589,6 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           <span className={`machine-name ${!machine.is_online ? 'text-error' : (machine.status?.toLowerCase() === 'operating' || machine.status?.toLowerCase().includes('running') ? 'text-glow' : 'text-muted')}`}>{machine.machine_name}</span>
         )}
         <div className="machine-header-actions">
-          {!isEditing && machine.alarms && machine.alarms.length > 0 && (
-            <div 
-              ref={alarmIndicatorRef}
-              className={`alarm-indicator has-alarms ${!machine.is_online ? 'blink' : ''}`}
-              onMouseEnter={() => {
-                if (alarmIndicatorRef.current) {
-                  const rect = alarmIndicatorRef.current.getBoundingClientRect();
-                  const viewportWidth = window.innerWidth;
-                  const viewportHeight = window.innerHeight;
-                  const paneWidth = 450; // Approximate width
-                  const paneHeight = 500; // Max height
-                  
-                  // Calculate position - prefer right side, but adjust if needed
-                  let left = rect.right + 8;
-                  let top = rect.top;
-                  
-                  // If pane would go off right edge, position to the left
-                  if (left + paneWidth > viewportWidth) {
-                    left = rect.left - paneWidth - 8;
-                  }
-                  
-                  // If pane would go off bottom, adjust upward
-                  if (top + paneHeight > viewportHeight) {
-                    top = Math.max(8, viewportHeight - paneHeight - 8);
-                  }
-                  
-                  // Ensure it doesn't go off top
-                  if (top < 8) {
-                    top = 8;
-                  }
-                  
-                  setAlarmHoverPosition({ top, left });
-                }
-                setShowAlarmHover(true);
-              }}
-              onMouseLeave={() => setShowAlarmHover(false)}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isExpanded) {
-                  onExpand?.();
-                }
-                // Scroll to alarm pane after expansion
-                setTimeout(() => {
-                  if (alarmPaneRef.current) {
-                    alarmPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    // Highlight briefly
-                    alarmPaneRef.current.classList.add('alarm-pane-highlight');
-                    setTimeout(() => {
-                      alarmPaneRef.current?.classList.remove('alarm-pane-highlight');
-                    }, 2000);
-                  }
-                }, 100);
-              }}
-            >
-              <div className="alarm-label">
-                {machine.alarms.length} ALARMS
-              </div>
-              {showAlarmHover && alarmHoverPosition && (
-                <div 
-                  ref={alarmHoverRef}
-                  className="alarm-hover-pane"
-                  style={{
-                    top: `${alarmHoverPosition.top}px`,
-                    left: `${alarmHoverPosition.left}px`,
-                  }}
-                  onMouseEnter={() => setShowAlarmHover(true)}
-                  onMouseLeave={() => setShowAlarmHover(false)}
-                >
-                  <AlarmPane
-                    machineId={machine.machine_id}
-                    currentAlarms={machine.alarms}
-                    isExpanded={true}
-                  />
-                </div>
-              )}
-            </div>
-          )}
           {editMode && !isEditing && (
             <>
               <button
@@ -1103,14 +1026,11 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             }}
             style={{ cursor: 'pointer' }}
           >
-            <span className="label">CYCLE:</span>
-            <span className="value">{formatTime(machine.cycle_time)}</span>
-            {machine.counters && machine.counters.length > 0 && (
-              <>
-                <span className="label" style={{ marginLeft: 'var(--spacing-md)' }}>PARTS:</span>
-                <span className="value">{machine.counters[0].count}</span>
-              </>
-            )}
+            <span className="label">CYCLE/PARTS:</span>
+            <span className="value">
+              {formatTime(machine.cycle_time)}
+              {machine.counters && machine.counters.length > 0 && `/${machine.counters[0].count}`}
+            </span>
             {showCycleHover && cycleHoverPosition && (
               <div 
                 ref={cycleHoverRef}
@@ -1206,6 +1126,87 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             </div>
           )}
 
+          {!isEditing && (
+            <div 
+              ref={alarmIndicatorRef}
+              className="machine-row machine-row-hoverable"
+              onMouseEnter={() => {
+                if (alarmIndicatorRef.current && machine.alarms && machine.alarms.length > 0) {
+                  const rect = alarmIndicatorRef.current.getBoundingClientRect();
+                  const viewportWidth = window.innerWidth;
+                  const viewportHeight = window.innerHeight;
+                  const paneWidth = 450; // Approximate width
+                  const paneHeight = 500; // Max height
+                  
+                  // Calculate position - prefer right side, but adjust if needed
+                  let left = rect.right + 8;
+                  let top = rect.top;
+                  
+                  // If pane would go off right edge, position to the left
+                  if (left + paneWidth > viewportWidth) {
+                    left = rect.left - paneWidth - 8;
+                  }
+                  
+                  // If pane would go off bottom, adjust upward
+                  if (top + paneHeight > viewportHeight) {
+                    top = Math.max(8, viewportHeight - paneHeight - 8);
+                  }
+                  
+                  // Ensure it doesn't go off top
+                  if (top < 8) {
+                    top = 8;
+                  }
+                  
+                  setAlarmHoverPosition({ top, left });
+                }
+                if (machine.alarms && machine.alarms.length > 0) {
+                  setShowAlarmHover(true);
+                }
+              }}
+              onMouseLeave={() => setShowAlarmHover(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isExpanded) {
+                  onExpand?.();
+                }
+                // Scroll to alarm pane after expansion
+                setTimeout(() => {
+                  if (alarmPaneRef.current) {
+                    alarmPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Highlight briefly
+                    alarmPaneRef.current.classList.add('alarm-pane-highlight');
+                    setTimeout(() => {
+                      alarmPaneRef.current?.classList.remove('alarm-pane-highlight');
+                    }, 2000);
+                  }
+                }, 300);
+              }}
+              style={{ cursor: machine.alarms && machine.alarms.length > 0 ? 'pointer' : 'default' }}
+            >
+              <span className="label">ALARMS:</span>
+              <span className={`value ${machine.alarms && machine.alarms.length > 0 ? 'text-error' : ''}`}>
+                {machine.alarms ? machine.alarms.length : 0}
+              </span>
+              {showAlarmHover && alarmHoverPosition && machine.alarms && machine.alarms.length > 0 && (
+                <div 
+                  ref={alarmHoverRef}
+                  className="alarm-hover-pane"
+                  style={{
+                    top: `${alarmHoverPosition.top}px`,
+                    left: `${alarmHoverPosition.left}px`,
+                  }}
+                  onMouseEnter={() => setShowAlarmHover(true)}
+                  onMouseLeave={() => setShowAlarmHover(false)}
+                >
+                  <AlarmPane
+                    machineId={machine.machine_id}
+                    currentAlarms={machine.alarms}
+                    isExpanded={true}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="machine-card-divider-thin">
             {'─'.repeat(32)}

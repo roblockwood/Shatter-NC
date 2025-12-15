@@ -121,7 +121,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
   const getTitle = () => {
     switch (summaryType) {
       case 'running':
-        return 'RUNNING SUMMARY';
+        return `RUNNING MACHINES (${timeRange.toUpperCase()})`;
       case 'online':
         return 'ONLINE SUMMARY';
       case 'offline':
@@ -132,7 +132,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
   const getHeaders = () => {
     switch (summaryType) {
       case 'running':
-        return ['MACHINE', 'RUN TIME', 'PERCENTAGE', 'LAST ACTIVE', 'PROGRAM'];
+        return ['MACHINE', 'RUN TIME', 'PERCENTAGE', 'POLLING'];
       case 'online':
         return ['MACHINE', 'ONLINE', 'HEALTH', 'SERVICES', 'LAST SEEN'];
       case 'offline':
@@ -167,7 +167,12 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
           return <div className="summary-empty">No running data available</div>;
         }
         return runningData.machines.map((machine) => (
-          <RunningSummaryRow key={machine.machine_id} machine={machine} />
+          <RunningSummaryRow 
+            key={machine.machine_id} 
+            machine={machine} 
+            compact={false}
+            timeRange={timeRange as '1h' | '8h' | '24h' | '7d'}
+          />
         ));
 
       case 'online':
@@ -190,25 +195,55 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
 
   return (
     <div className="summary-modal-overlay" onClick={onClose}>
-      <div className="summary-modal" onClick={(e) => e.stopPropagation()}>
+      <div className={`summary-modal summary-modal-${summaryType}`} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="summary-modal-header">
           <h2 className="summary-modal-title">{getTitle()}</h2>
+          {summaryType === 'running' && !loading && !error && (
+            <div className="summary-modal-header-controls">
+              <button
+                className={`time-range-btn ${timeRange === '1h' ? 'active' : ''}`}
+                onClick={() => handleTimeRangeChange('1h')}
+                disabled={loading}
+              >
+                [1H]
+              </button>
+              <button
+                className={`time-range-btn ${timeRange === '8h' ? 'active' : ''}`}
+                onClick={() => handleTimeRangeChange('8h')}
+                disabled={loading}
+              >
+                [8H]
+              </button>
+              <button
+                className={`time-range-btn ${timeRange === '24h' ? 'active' : ''}`}
+                onClick={() => handleTimeRangeChange('24h')}
+                disabled={loading}
+              >
+                [24H]
+              </button>
+              <button
+                className={`time-range-btn ${timeRange === '7d' ? 'active' : ''}`}
+                onClick={() => handleTimeRangeChange('7d')}
+                disabled={loading}
+              >
+                [7D]
+              </button>
+            </div>
+          )}
+          {summaryType === 'online' && (
+            <div className="summary-modal-header-controls">
+              <TimeRangeSelector
+                selectedRange={currentTimeRange}
+                onChange={handleTimeRangeChange}
+                disabled={loading}
+              />
+            </div>
+          )}
           <button className="summary-modal-close" onClick={onClose}>
             ✕
           </button>
         </div>
-
-        {/* Time Range Selector (for running and online summaries) */}
-        {(summaryType === 'running' || summaryType === 'online') && (
-          <div className="summary-modal-controls">
-            <TimeRangeSelector
-              selectedRange={summaryType === 'running' ? timeRange : currentTimeRange}
-              onChange={handleTimeRangeChange}
-              disabled={loading}
-            />
-          </div>
-        )}
 
         {/* Column Headers */}
         {!loading && !error && (

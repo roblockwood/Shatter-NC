@@ -6,6 +6,11 @@ export type PollingDataPoint = {
   response_time_ms?: number;
 };
 
+export type StatusEvent = {
+  time: string;
+  status: string;
+};
+
 export type RunningSummaryMachine = {
   machine_id: number;
   machine_name: string;
@@ -16,6 +21,7 @@ export type RunningSummaryMachine = {
   active_runs_count: number;
   last_run_start?: string;
   current_program?: string;
+  status_history?: StatusEvent[];
 };
 
 export type RunningSummary = {

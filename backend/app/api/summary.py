@@ -29,6 +29,11 @@ class PollingDataPoint(BaseModel):
     success: bool
     response_time_ms: Optional[int] = None
 
+class StatusEvent(BaseModel):
+    """Single status history event."""
+    time: datetime
+    status: str
+
 class RunningSummaryMachine(BaseModel):
     machine_id: int
     machine_name: str
@@ -39,6 +44,7 @@ class RunningSummaryMachine(BaseModel):
     active_runs_count: int
     last_run_start: Optional[datetime] = None
     current_program: Optional[str] = None
+    status_history: List[StatusEvent] = []  # Status history for oscilloscope (operating/standby/stopped/error only)
 
 class RunningSummary(BaseModel):
     time_range: str
@@ -128,6 +134,7 @@ def parse_time_range(time_range: str) -> timedelta:
     time_range_map = {
         '1h': timedelta(hours=1),
         '4h': timedelta(hours=4),
+        '8h': timedelta(hours=8),
         '24h': timedelta(hours=24),
         '7d': timedelta(days=7),
         '30d': timedelta(days=30),
@@ -271,14 +278,14 @@ def calculate_polling_stats(polling_history: List[PollingDataPoint]) -> PollingS
 
 @router.get("/summary/running", response_model=RunningSummary)
 def get_running_summary(
-    time_range: str = Query(default="24h", regex="^(1h|4h|24h|7d|30d)$"),
+    time_range: str = Query(default="24h", regex="^(1h|4h|8h|24h|7d|30d)$"),
     db: Session = Depends(get_db)
 ):
     """
     Get running summary showing machines sorted by total run time within the specified time range.
 
     Query Parameters:
-    - time_range: One of '1h', '4h', '24h', '7d', '30d' (default: '24h')
+    - time_range: One of '1h', '4h', '8h', '24h', '7d', '30d' (default: '24h')
 
     Returns machines sorted by total run time (descending) with run percentages and current status.
     """
@@ -329,6 +336,23 @@ def get_running_summary(
         cached_status = websocket_manager.get_machine_status(row.machine_id) if websocket_manager else None
         current_status = cached_status.get("status") if cached_status else None
 
+        # Get status history for the time range (filter out 'off' status)
+        # Parse time range for status history
+        end_time = datetime.utcnow()
+        start_time = end_time - time_delta
+        
+        status_events_query = db.query(MachineStatusEvent).filter(
+            MachineStatusEvent.machine_id == row.machine_id,
+            MachineStatusEvent.time >= start_time,
+            MachineStatusEvent.time <= end_time,
+            MachineStatusEvent.status.notin_(['off'])  # Exclude offline status
+        ).order_by(MachineStatusEvent.time.asc()).limit(1000).all()
+        
+        status_history = [
+            StatusEvent(time=event.time, status=event.status)
+            for event in status_events_query
+        ]
+
         machines.append(RunningSummaryMachine(
             machine_id=row.machine_id,
             machine_name=row.machine_name,
@@ -338,7 +362,8 @@ def get_running_summary(
             run_percentage=round(run_percentage, 1),
             active_runs_count=row.runs_count or 0,
             last_run_start=row.last_run_start,
-            current_program=row.current_program
+            current_program=row.current_program,
+            status_history=status_history
         ))
 
     return RunningSummary(
