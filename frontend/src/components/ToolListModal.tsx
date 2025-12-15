@@ -28,7 +28,8 @@ export const ToolListModal: React.FC<ToolListModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`${machineName} - TOOL TABLE`}>
-      <div className="tool-list">
+      <div className="tool-list-wrapper">
+        <div className="tool-list">
         {tools.length === 0 ? (
           <div className="no-tools">
             <p className="text-muted">NO TOOLS LOADED</p>
@@ -74,6 +75,7 @@ export const ToolListModal: React.FC<ToolListModalProps> = ({
             </tfoot>
           </table>
         )}
+        </div>
       </div>
     </Modal>
   );

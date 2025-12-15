@@ -1,5 +1,11 @@
+.tool-list-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
 .tool-list {
   min-width: 600px;
+  width: 100%;
 }
 
 .no-tools {
@@ -9,8 +15,10 @@
 
 .tool-table {
   width: 100%;
+  min-width: 600px;
   border-collapse: collapse;
   font-family: var(--font-mono);
+  table-layout: auto;
 }
 
 .tool-table-header {
@@ -52,12 +60,17 @@
   font-weight: 700;
   color: var(--color-text-primary);
   width: 80px;
+  white-space: nowrap;
 }
 
 .tool-name {
   color: var(--color-text-primary);
   font-weight: 600;
   min-width: 200px;
+  max-width: 300px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
 }
 
 .tool-diameter,
@@ -66,6 +79,7 @@
   font-family: var(--font-mono);
   text-align: right;
   width: 150px;
+  white-space: nowrap;
 }
 
 .tool-table-summary {
@@ -78,4 +92,11 @@
 .tool-table-summary td {
   padding: var(--spacing-sm);
   border: none;
+}
+
+/* Override modal width when tool list is present - using :has() selector */
+.modal-content:has(.tool-list-wrapper) {
+  width: 90ch !important;
+  min-width: 90ch !important;
+  max-width: 95vw !important;
 }
