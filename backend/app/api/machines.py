@@ -7,6 +7,7 @@ from app.models.machine import Machine
 from app.schemas.machine import MachineCreate, MachineUpdate, MachineResponse
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
+from app.utils.protocol_detector import detect_protocols
 import logging
 
 logger = logging.getLogger(__name__)
@@ -151,6 +152,68 @@ async def test_connection(machine_id: int, db: Session = Depends(get_db)):
         results["overall_status"] = "offline"
 
     return results
+
+
+@router.post("/{machine_id}/detect-protocols")
+async def detect_machine_protocols(machine_id: int, db: Session = Depends(get_db)):
+    """
+    Detect available communication protocols on a machine.
+    
+    Scans for FOCAS, MTConnect, and other control protocols that may be available.
+    This can help identify additional functionality beyond HTTP/FTP.
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    try:
+        # Initialize clients for protocol detection
+        http_client = None
+        ftp_client = None
+
+        try:
+            http_client = CNCHttpClient(
+                db_machine.ip_address,
+                port=db_machine.http_port,
+                timeout=5,
+            )
+        except Exception as e:
+            logger.warning(f"Could not initialize HTTP client: {e}")
+
+        try:
+            ftp_client = CNCFtpClient(
+                ip_address=db_machine.ip_address,
+                port=db_machine.ftp_port,
+                username=db_machine.ftp_username,
+                password=db_machine.ftp_password,
+                timeout=5,
+            )
+        except Exception as e:
+            logger.warning(f"Could not initialize FTP client: {e}")
+
+        # Run protocol detection
+        results = await detect_protocols(
+            ip_address=db_machine.ip_address,
+            http_port=db_machine.http_port,
+            ftp_client=ftp_client,
+            http_client=http_client,
+        )
+
+        # Add machine info to results
+        results["machine_id"] = machine_id
+        results["machine_name"] = db_machine.name
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Protocol detection error for machine {machine_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Protocol detection failed: {str(e)}",
+        )
 
 
 @router.post("/{machine_id}/disconnect")

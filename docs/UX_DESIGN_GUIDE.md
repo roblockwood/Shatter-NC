@@ -232,6 +232,101 @@ UNKNOWN:  ◌ [#666666]
        1  2  3  4  5
 ```
 
+**Oscilloscope Display (Status Timeline):**
+```
+OPERATING │●───────────────────────────────●───────────────
+STANDBY   │     ╱╲                          │
+STOPPED   │    ╱  ╲                         │
+ERROR     │   ╱    ╲                        │
+OFF       │  ╱      ╲───────────────────────●
+          └────────────────────────────────────
+          PAST                              NOW
+```
+
+**Oscilloscope Component - Detailed Specification:**
+
+The oscilloscope is a **smooth, analog-style visualization** that breaks from the strict terminal aesthetic to provide a more fluid representation of machine status over time. It uses SVG rendering for smooth curves and transitions, while maintaining the terminal color scheme and layout structure.
+
+**Visual Design:**
+- **Y-axis**: Status levels mapped to vertical positions
+  - Status order (top to bottom): `OPERATING`, `STANDBY`, `STOPPED`, `ERROR`, `OFF`
+  - Each status occupies a horizontal "row" or band
+  - Status labels displayed on the left side of the graph
+- **X-axis**: Time span (configurable via time range selector)
+  - Available ranges: `1H` (1 hour), `8H` (8 hours), `24H` (24 hours), `7D` (7 days)
+  - "PAST" marker on the left, "NOW" marker on the right
+  - Time division markers at logical intervals (e.g., 15m for 1H, 1h for 8H)
+- **Trace Line**: Smooth SVG path connecting status transitions
+  - Uses quadratic bezier curves for smooth transitions between status levels
+  - Subtle sine-based oscillation within each status row for analog feel
+  - Thin stroke width (0.8px) with subtle glow animation
+  - Color: Primary green (`#00ff00`) with slight width variation (15% intensity)
+- **Timestamp Indicators**: Vertical dashed lines at data points
+  - Thin, subtle lines (`strokeWidth: 0.5`, `opacity: 0.25`)
+  - Dashed pattern (`strokeDasharray: "3 2"`)
+  - Hover tooltips show status and timestamp
+  - Invisible hover areas (0.5% width) for easier interaction
+- **Time Division Lines**: Additional vertical markers for time reference
+  - Subtle lines (`opacity: 0.2`, `strokeDasharray: "1 1"`)
+  - Positioned at logical intervals based on time range
+  - Labels displayed in bottom axis section
+- **Background**: Dark surface color (`var(--color-bg-surface)`)
+- **Padding**: 8px top/bottom to prevent trace overflow
+
+**Implementation Details:**
+- **Technology**: SVG-based rendering (not ASCII)
+- **Smooth Transitions**: Quadratic bezier curves between status points
+- **Oscillation**: Subtle sine wave within status rows (frequency: 2.5, amplitude: 12% of row height)
+- **Scaling**: Dynamic horizontal scaling using CSS `transform: scaleX()` to fit container width
+- **Responsive**: Uses `ResizeObserver` to recalculate width on container resize
+- **Real-time Updates**: Integrates with WebSocket for live status changes
+- **Current Status**: Always shows the most recent status from machine polling
+
+**Status Mapping:**
+The component normalizes machine status strings to standard values:
+- `operating`, `running` → `OPERATING`
+- `standby`, `idle` → `STANDBY`
+- `stopped` → `STOPPED`
+- `error`, `error occurred` → `ERROR`
+- `off`, `offline` → `OFF`
+
+**Usage Guidelines:**
+- **Primary Use**: Machine detail view status timeline pane
+- **Hover Behavior**: Shows tooltip with status and timestamp at data points
+- **Click Behavior**: Does not expand (content always fits within pane)
+- **Time Range Selection**: User can switch between 1H, 8H, 24H, 7D via buttons
+- **Data Source**: Fetches from `/api/machines/{machine_id}/status-history` endpoint
+- **Update Frequency**: Refreshes when time range changes or on component mount
+
+**Component Props:**
+```typescript
+interface StatusTimelineProps {
+  machineId: number;
+  currentStatus?: string;  // Current machine status from WebSocket
+  isOnline?: boolean;       // Whether machine is online
+  onExpand?: () => void;   // Optional expand callback (not used currently)
+}
+```
+
+**CSS Classes:**
+- `.status-timeline` - Main container
+- `.oscilloscope-display` - SVG container
+- `.oscilloscope-svg` - SVG element
+- `.oscilloscope-trace` - Main path element
+- `.oscilloscope-timestamp-line` - Vertical timestamp indicators
+- `.oscilloscope-time-division-line` - Time division markers
+- `.oscilloscope-tooltip` - Hover tooltip
+- `.oscilloscope-x-axis` - Bottom axis with labels
+
+**Accessibility:**
+- Tooltips provide status and timestamp information on hover
+- Time range buttons are keyboard accessible
+- Status labels are clearly visible on the left side
+- Color is not the only indicator (status labels provide context)
+
+**Note on Aesthetic Exception:**
+This is the **only component** that breaks from the strict ASCII/terminal aesthetic. The smooth SVG rendering provides a more analog, oscilloscope-like feel that enhances the visualization of status transitions over time. All other components maintain the ASCII/box-drawing character aesthetic.
+
 ---
 
 ## Screen Layouts

@@ -314,44 +314,76 @@ class CNCHttpClient:
 
         # Parse tool table rows
         # Each row has: pot number, tool number, tool name, tool data (diameter x length), group, life, type, color
-        # Example: <td width="80" align="right" class="border_line2 lang_same">01</td>
-        #          <td width="190" align="center" class="border_line2 lang_same">.250 3FL      </td>
-        #          <td width="150" align="right" class="border_line2 lang_same">  3.4494x  0.0000</td>
-
-        # Find all tool rows (they start with pot number)
+        # Extract all <td> elements from each row to get all fields
+        
+        # Find all tool rows
         row_pattern = r'<tr bgcolor="#[^"]*">.*?</tr>'
         tool_rows = re.findall(row_pattern, html, re.DOTALL)
 
         for row in tool_rows:
             # Skip header row
-            if 'Tool No.' in row or 'Tool name' in row:
+            if 'Tool No.' in row or 'Tool name' in row or 'Pot' in row:
                 continue
 
-            # Extract tool number
-            tool_num_match = re.search(r'<td width="80"[^>]*>(\d+)</td>', row)
-            if not tool_num_match:
+            # Extract all <td> elements from the row
+            td_pattern = r'<td[^>]*>([^<]*)</td>'
+            td_matches = re.findall(td_pattern, row)
+            
+            if len(td_matches) < 3:  # Need at least pot, tool number, and tool name
                 continue
 
-            tool_number = int(tool_num_match.group(1))
-
-            # Extract tool name
-            name_match = re.search(r'<td width="190"[^>]*>([^<]+)</td>', row)
-            tool_name = name_match.group(1).strip() if name_match else ""
-
-            # Skip empty tool slots (those with &nbsp; or empty names)
-            if tool_name == "&nbsp;" or tool_name == "" or tool_name.isspace():
+            # Parse fields based on position (may vary, but typically: pot, tool#, name, data, group, life, type, color)
+            # Clean up &nbsp; and whitespace from all fields
+            def clean_field(value):
+                if not value:
+                    return None
+                cleaned = value.replace('&nbsp;', '').strip()
+                return cleaned if cleaned else None
+            
+            pot_number_raw = td_matches[0] if len(td_matches) > 0 else ""
+            tool_number_str = td_matches[1] if len(td_matches) > 1 else ""
+            tool_name = td_matches[2] if len(td_matches) > 2 else ""
+            
+            # Clean fields
+            pot_number = clean_field(pot_number_raw)
+            tool_number_str = clean_field(tool_number_str) or ""
+            tool_name = clean_field(tool_name) or ""
+            
+            # Skip empty tool slots
+            if not tool_name or not tool_number_str:
                 continue
 
-            # Extract tool data (length x diameter format in HTML)
-            data_match = re.search(r'<td width="150"[^>]*>\s*([\d.]+)x\s*([\d.]+)</td>', row)
-            length = float(data_match.group(1)) if data_match else 0.0
-            diameter = float(data_match.group(2)) if data_match else 0.0
+            try:
+                tool_number = int(tool_number_str)
+            except (ValueError, TypeError):
+                continue
+
+            # Extract tool data (length x diameter format in HTML) - typically 4th column
+            length = 0.0
+            diameter = 0.0
+            if len(td_matches) > 3:
+                data_str = td_matches[3].strip()
+                data_match = re.search(r'([\d.]+)x\s*([\d.]+)', data_str)
+                if data_match:
+                    length = float(data_match.group(1))
+                    diameter = float(data_match.group(2))
+
+            # Extract additional fields if available (clean &nbsp; from all)
+            group = clean_field(td_matches[4]) if len(td_matches) > 4 else None
+            life = clean_field(td_matches[5]) if len(td_matches) > 5 else None
+            tool_type = clean_field(td_matches[6]) if len(td_matches) > 6 else None
+            color = clean_field(td_matches[7]) if len(td_matches) > 7 else None
 
             tool = {
+                "pot_number": pot_number,
                 "tool_number": tool_number,
                 "tool_name": tool_name,
                 "diameter": diameter,
                 "length": length,
+                "group": group,
+                "life": life,
+                "tool_type": tool_type,
+                "color": color,
             }
             data["tools"].append(tool)
 

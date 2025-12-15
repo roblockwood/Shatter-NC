@@ -6,6 +6,11 @@ export type PollingDataPoint = {
   response_time_ms?: number;
 };
 
+export type StatusEvent = {
+  time: string;
+  status: string;
+};
+
 export type RunningSummaryMachine = {
   machine_id: number;
   machine_name: string;
@@ -16,6 +21,7 @@ export type RunningSummaryMachine = {
   active_runs_count: number;
   last_run_start?: string;
   current_program?: string;
+  status_history?: StatusEvent[];
 };
 
 export type RunningSummary = {
@@ -98,8 +104,8 @@ export const summaryApi = {
     return response.json();
   },
 
-  getOnline: async (): Promise<OnlineSummary> => {
-    const response = await fetch(`${API_BASE_URL}/api/summary/online`);
+  getOnline: async (timeRange: string = '8h'): Promise<OnlineSummary> => {
+    const response = await fetch(`${API_BASE_URL}/api/summary/online?time_range=${timeRange}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch online summary: ${response.statusText}`);
     }
@@ -114,8 +120,8 @@ export const summaryApi = {
     return response.json();
   },
 
-  getMachines: async (): Promise<MachinesSummary> => {
-    const response = await fetch(`${API_BASE_URL}/api/summary/machines`);
+  getMachines: async (timeRange: string = '8h'): Promise<MachinesSummary> => {
+    const response = await fetch(`${API_BASE_URL}/api/summary/machines?time_range=${timeRange}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch machines summary: ${response.statusText}`);
     }

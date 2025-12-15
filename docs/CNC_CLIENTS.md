@@ -6,6 +6,8 @@ Shatter includes two client libraries for communicating with Brother CNC machine
 
 The `CNCHttpClient` handles polling HTTP endpoints on the CNC web server.
 
+**📖 See [WEBSERVER_ENDPOINTS.md](WEBSERVER_ENDPOINTS.md) for complete documentation of all available HTTP endpoints on the Brother CNC machine webserver.**
+
 ### Features
 
 - Raw socket connections (Brother CNC uses non-standard HTTP/1.1)
@@ -264,10 +266,72 @@ When back on the network:
 3. Refine regex patterns if needed
 4. Add any missing endpoints
 
+## Protocol Detection
+
+Shatter includes a protocol detection utility to identify available communication protocols beyond HTTP/FTP.
+
+### Detect Protocols via API
+
+```http
+POST /api/machines/{machine_id}/detect-protocols
+```
+
+Scans for:
+- **FOCAS** (Fanuc Open CNC API) - Ports 8192-8195
+- **MTConnect** - Ports 7878, 5000
+- **Other protocols** - Modbus TCP, OPC UA, Telnet, etc.
+
+**Response:**
+```json
+{
+  "machine_id": 1,
+  "machine_name": "Mill 1",
+  "ip_address": "192.168.86.89",
+  "summary": {
+    "focas_available": true,
+    "mtconnect_available": false,
+    "other_protocols": []
+  },
+  "focas": {
+    "ports_checked": [8193, 8192, 8194, 8195],
+    "results": [...]
+  },
+  ...
+}
+```
+
+### Detect Protocols via Script
+
+```bash
+# From backend directory
+python scripts/detect_protocols.py 192.168.86.89
+python scripts/detect_protocols.py 192.168.86.89 80 21
+```
+
+The script will:
+- Scan all common protocol ports
+- Check system files for protocol hints
+- Test HTTP endpoints for protocol information
+- Generate a detailed report with recommendations
+
+### If FOCAS is Available
+
+If FOCAS is detected, you can enable advanced functionality:
+- **Real-time position** - Current XYZ coordinates
+- **Machine control** - Start/stop programs, feed hold, etc.
+- **Advanced status** - Spindle speed, feedrate, axis positions
+- **Program management** - Upload/download programs via FOCAS
+
+To use FOCAS, you'll need:
+- FOCAS library (Fwlib32.dll on Windows, libfwlib32.so on Linux)
+- Machine must have FOCAS option enabled
+- Network configuration for FOCAS port (typically 8193)
+
 ## Next Steps
 
-1. **Implement polling service** - Background task to continuously fetch data
-2. **Store time-series data** - Save status snapshots to database
-3. **Add WebSocket** - Push real-time updates to frontend
-4. **Refine parsers** - Test with real machine data and adjust
-5. **Add caching** - Use Redis for frequently accessed data
+1. **Detect protocols** - Use protocol detection to identify available options
+2. **Implement polling service** - Background task to continuously fetch data
+3. **Store time-series data** - Save status snapshots to database
+4. **Add WebSocket** - Push real-time updates to frontend
+5. **Refine parsers** - Test with real machine data and adjust
+6. **Add caching** - Use Redis for frequently accessed data
