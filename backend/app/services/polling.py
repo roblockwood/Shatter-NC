@@ -60,7 +60,9 @@ class MachinePoller:
             logger.debug(f"Successfully polled machine {self.machine.id} ({self.machine.name}) in {response_time_ms}ms")
 
             # Log events to database (non-blocking, in background)
-            asyncio.create_task(self._log_events_async(status_data, poll_timestamp, response_time_ms, success=True))
+            # Only log status events if we have a status (machine is online)
+            if status_data.get("status"):
+                asyncio.create_task(self._log_events_async(status_data, poll_timestamp, response_time_ms, success=True))
 
             return status_data
 
@@ -84,15 +86,22 @@ class MachinePoller:
                 error_message=str(e)
             ))
 
-            return {
+            # Create offline status data for logging
+            offline_status_data = {
                 "machine_id": self.machine.id,
                 "machine_name": self.machine.name,
                 "poll_timestamp": poll_timestamp.isoformat(),
                 "is_online": False,
+                "status": "off",  # Set status to "off" when machine is not responding
                 "error": str(e),
                 "consecutive_failures": self.consecutive_failures,
                 "response_time_ms": response_time_ms,
             }
+
+            # Log status event for offline transition (non-blocking)
+            asyncio.create_task(self._log_events_async(offline_status_data, poll_timestamp, response_time_ms, success=False))
+
+            return offline_status_data
 
     async def _log_events_async(self, status_data: Dict[str, Any], poll_timestamp: datetime, response_time_ms: int, success: bool):
         """
@@ -116,11 +125,12 @@ class MachinePoller:
             )
             db.add(polling_event)
 
-            # Update last_seen_at to track successful polling
-            machine = db.query(Machine).filter(Machine.id == self.machine.id).first()
-            if machine:
-                machine.last_seen_at = poll_timestamp
-                db.add(machine)
+            # Update last_seen_at to track successful polling (only when online)
+            if success and status_data.get("is_online", True):
+                machine = db.query(Machine).filter(Machine.id == self.machine.id).first()
+                if machine:
+                    machine.last_seen_at = poll_timestamp
+                    db.add(machine)
 
             current_status = status_data.get("status")
 
