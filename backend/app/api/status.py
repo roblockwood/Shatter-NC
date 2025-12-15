@@ -1,5 +1,5 @@
 """API endpoints for real-time machine status."""
-from fastapi import APIRouter, Depends, HTTPException, status as http_status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.db.base import get_db
@@ -128,8 +128,18 @@ async def get_alarms(machine_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{machine_id}/tools")
-async def get_tools(machine_id: int, db: Session = Depends(get_db)):
-    """Get ATC tool data."""
+async def get_tools(
+    machine_id: int,
+    source: str = Query("atc", description="Tool data source: 'atc' for ATC table, 'table' for tool table file"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get tool data from machine.
+    
+    Args:
+        machine_id: Machine ID
+        source: 'atc' for ATC (Automatic Tool Changer) table, 'table' for TOLNI1.NC tool table file
+    """
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not db_machine:
         raise HTTPException(
@@ -138,11 +148,40 @@ async def get_tools(machine_id: int, db: Session = Depends(get_db)):
         )
 
     try:
-        http_client = CNCHttpClient(db_machine.ip_address, port=db_machine.http_port)
-        data = http_client.get_tool_data()
-        data["machine_id"] = machine_id
-        return data
+        if source == "table":
+            # Fetch tool table from TOLNI1.NC via FTP
+            from app.clients.ftp_client import CNCFtpClient
+            from app.parsers.tolni_parser import parse_tolni
+            
+            ftp_client = CNCFtpClient(
+                ip_address=db_machine.ip_address,
+                port=db_machine.ftp_port,
+                username=db_machine.ftp_username,
+                password=db_machine.ftp_password,
+            )
+            
+            tool_table_content = await ftp_client.get_tool_table_data()
+            if tool_table_content is None:
+                raise HTTPException(
+                    status_code=http_status.HTTP_404_NOT_FOUND,
+                    detail="TOLNI1.NC file not found or could not be read",
+                )
+            
+            # Parse the tool table
+            parsed = parse_tolni(tool_table_content.encode('utf-8'))
+            parsed["machine_id"] = machine_id
+            parsed["source"] = "tool_table"
+            return parsed
+        else:
+            # Default: ATC tool data from HTTP endpoint
+            http_client = CNCHttpClient(db_machine.ip_address, port=db_machine.http_port)
+            data = http_client.get_tool_data()
+            data["machine_id"] = machine_id
+            data["source"] = "atc"
+            return data
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching tools for machine {machine_id}: {e}")
         raise HTTPException(

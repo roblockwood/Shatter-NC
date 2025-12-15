@@ -40,7 +40,12 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
             ╠{'═'.repeat(30)}╣
           </div>
         </div>
-        <div className="modal-body">{children}</div>
+        <div 
+          className="modal-body"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {children}
+        </div>
         <div className="modal-footer">
           {footer || (
             <div className="modal-border-bottom">

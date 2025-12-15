@@ -6,6 +6,18 @@
   color: var(--color-text-primary);
   min-width: 320px;
   max-width: 400px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.machine-card.expanded {
+  min-width: auto;
+  max-width: none;
+  width: 100%;
+  grid-column: 1 / -1; /* Span all columns */
+  grid-row: span 2;
+  padding: 0;
+  cursor: default;
 }
 
 .machine-card-header {
@@ -401,61 +413,96 @@
   50%, 100% { opacity: 0.3; }
 }
 
-.alarm-tooltip {
-  display: none;
-  position: absolute;
-  top: 100%;
-  right: 0;
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-error);
-  border-radius: 4px;
-  padding: var(--spacing-sm);
-  margin-top: var(--spacing-xs);
-  min-width: 250px;
-  max-width: 300px;
+.alarm-hover-pane {
+  position: fixed;
+  min-width: 400px;
+  max-width: 500px;
+  max-height: 500px;
   z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
 }
 
-.alarm-indicator:hover .alarm-tooltip {
-  display: block;
+.alarm-pane-highlight {
+  animation: alarm-highlight 2s ease-in-out;
 }
 
-.alarm-tooltip-title {
-  color: var(--color-error);
-  font-weight: 700;
-  font-size: var(--font-sm);
-  margin-bottom: var(--spacing-xs);
-  border-bottom: 1px solid var(--color-error);
-  padding-bottom: var(--spacing-xs);
+@keyframes alarm-highlight {
+  0%, 100% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 0, 0, 0.4);
+  }
 }
 
-.alarm-tooltip-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
+.tools-hover-pane {
+  position: fixed;
+  min-width: 500px;
+  max-width: 600px;
+  max-height: 500px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.tools-pane-highlight {
+  animation: tools-highlight 2s ease-in-out;
+}
+
+@keyframes tools-highlight {
+  0%, 100% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.8), 0 0 40px rgba(0, 255, 0, 0.4);
+  }
+}
+
+.machine-row-hoverable {
+  position: relative;
+}
+
+.status-hover-pane,
+.program-hover-pane,
+.cycle-hover-pane {
+  position: fixed;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.status-hover-pane {
+  min-width: 600px;
+  max-width: 700px;
   max-height: 300px;
-  overflow-y: auto;
 }
 
-.alarm-tooltip-item {
-  font-size: var(--font-xs);
-  padding: var(--spacing-xs);
-  background: rgba(255, 67, 67, 0.1);
-  border-left: 2px solid var(--color-error);
-  border-radius: 2px;
+.program-hover-pane {
+  min-width: 400px;
+  max-width: 500px;
+  max-height: 300px;
 }
 
-.alarm-tooltip-code {
-  color: var(--color-error);
-  font-weight: 600;
-  display: block;
+.cycle-hover-pane {
+  min-width: 500px;
+  max-width: 600px;
+  max-height: 400px;
 }
 
-.alarm-tooltip-message {
-  color: var(--color-text-secondary);
-  font-size: var(--font-xs);
-  margin-top: 2px;
+.status-pane-highlight,
+.program-pane-highlight,
+.cycle-pane-highlight {
+  animation: pane-highlight 2s ease-in-out;
+}
+
+@keyframes pane-highlight {
+  0%, 100% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.8), 0 0 40px rgba(0, 255, 0, 0.4);
+  }
 }
 
 .machine-alarms {
@@ -643,7 +690,75 @@
 }
 
 /* Hover effect */
-.machine-card:hover {
+.machine-card:hover:not(.expanded) {
   border-color: var(--color-border-bright);
   box-shadow: 0 0 20px rgba(0, 255, 0, 0.1);
+}
+
+/* Expanded View Styles */
+.machine-card-expanded-header {
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.expanded-header-top,
+.expanded-header-bottom {
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+  line-height: 1;
+  white-space: pre;
+  padding: var(--spacing-xs) var(--spacing-md);
+}
+
+.expanded-header-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.expanded-machine-name {
+  font-size: var(--font-xl);
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-text-primary);
+  text-shadow: var(--glow);
+}
+
+.machine-card-expanded-content {
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  background: var(--color-bg-primary);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.expanded-panes-top,
+.expanded-panes-bottom {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-lg);
+  width: 100%;
+}
+
+.expanded-pane-left,
+.expanded-pane-right,
+.expanded-pane-middle {
+  min-width: 0;
+}
+
+.expanded-pane-full {
+  width: 100%;
+  grid-column: 1 / -1;
+}
+
+/* Responsive: 2 columns -> 1 column */
+@media (max-width: 900px) {
+  .expanded-panes-top,
+  .expanded-panes-bottom {
+    grid-template-columns: 1fr;
+  }
 }
