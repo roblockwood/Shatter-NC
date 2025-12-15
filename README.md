@@ -9,6 +9,7 @@ Shatter is an open-source web platform for monitoring and managing multiple Brot
 - 🔴 **Real-time Monitoring** - Live status, cycle times, alarms, and counters for all machines
 - 📁 **Smart File Transfer** - G-code validation, tool verification, and multi-machine deployment
 - 📊 **Production Analytics** - Historical data, cycle time trends, and fleet-wide statistics
+- 🔧 **Tool Management** - Track tool usage across programs with detailed speed/feed analysis
 - 🔄 **Version Control** - Git-like versioning for NC programs with deployment tracking
 - 🏭 **Multi-Machine** - Monitor and manage multiple CNCs from a single interface
 - 🐳 **Easy Deployment** - Docker-based, runs on isolated networks
@@ -56,6 +57,7 @@ Open http://localhost:3000 and add your CNC machines through the web UI.
 
 - **[Dashboard Workflows](docs/DASHBOARD_WORKFLOWS.md)** - Fleet monitoring and machine management
 - **[File Browser Workflows](docs/FILE_BROWSER_WORKFLOWS.md)** - File management, validation, and deployment
+- **[Tool Management Workflows](docs/TOOL_MANAGEMENT_WORKFLOWS.md)** - Tool usage analysis and speed/feed tracking
 - **[Dashboard Summaries](docs/DASHBOARD_SUMMARIES.md)** - Summary feature guide
 
 ### Specialized Topics
@@ -79,10 +81,13 @@ Open http://localhost:3000 and add your CNC machines through the web UI.
 - ✅ Multi-machine fleet management dashboard
 - ✅ Historical data tracking with TimescaleDB
 - ✅ Production analytics and summaries
+- ✅ Tool management with speed/feed analysis
 - ✅ File browser with FTP integration
 - 🚧 Automated testing (in progress)
 - 📋 User authentication (planned)
 - 📋 Alarm notifications (planned)
+- 📋 Per-operation runtime tracking (planned)
+- reduce steps for upload (parallel upload and validate, auto issue O####, allow rename perhaps?)
 
 ## License
 
