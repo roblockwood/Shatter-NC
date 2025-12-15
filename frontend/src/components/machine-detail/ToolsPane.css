@@ -317,3 +317,18 @@
   margin-right: var(--spacing-xs);
 }
 
+.matched-indicator {
+  color: var(--color-info);
+  margin-right: var(--spacing-xs);
+  font-size: 0.8em;
+}
+
+.tools-table tbody tr.tool-matched {
+  border-left: 2px solid var(--color-info);
+}
+
+.tools-table tbody tr.tool-matched:hover {
+  background: var(--color-bg-elevated);
+  box-shadow: inset 2px 0 0 var(--color-info);
+}
+
