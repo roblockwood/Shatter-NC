@@ -230,9 +230,10 @@ Each machine is displayed as a card showing real-time status.
 ├──────────────────────────────────────────────────────────────┤
 ║  STATUS:    Running (Green)                                  ║
 ║  PROGRAM:   O2045.NC                                         ║
-║  CYCLE:     01:23:45  PARTS:  1250                          ║
-║  TOOLS:     12 IN ATC [VIEW]                                 ║
+║  CYCLE/PARTS: 01:23:45/1250                                  ║
+║  ATC TOOLS: 12                                               ║
 ║  TOOL:      T05                                              ║
+║  ALARMS:    0                                                ║
 ║  ────────────────────────────────────                        ║
 ║  [ UPLOAD & VALIDATE ]                                       ║
 ║  ────────────────────────────────────                        ║
@@ -243,7 +244,7 @@ Each machine is displayed as a card showing real-time status.
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-**Note:** All status rows (STATUS, PROGRAM, CYCLE/PARTS, TOOLS) are **hoverable and clickable**:
+**Note:** All status rows (STATUS, PROGRAM, CYCLE/PARTS, ATC TOOLS, ALARMS) are **hoverable and clickable**:
 - **Hover** - Shows preview pane with relevant data (non-interactive)
 - **Click** - Expands machine card to detail view and scrolls to relevant pane
 
@@ -294,45 +295,41 @@ const getStatusType = () => {
 - **PROGRAM** - Current program name (e.g., "O2045.NC" or "NONE")
   - **Hover:** Shows CurrentProgramPane preview
   - **Click:** Expands card, scrolls to current program pane
-- **CYCLE** - Cycle time (format: `HH:MM:SS`) combined with **PARTS** - Part counter value
+- **CYCLE/PARTS** - Cycle time (format: `HH:MM:SS`) and part counter value (format: `HH:MM:SS/nnnn`)
   - **Hover:** Shows CycleHistoryPane preview
   - **Click:** Expands card, scrolls to cycle history pane
-- **TOOLS** - Tool count in ATC (e.g., "12 IN ATC [VIEW]")
+- **ATC TOOLS** - Tool count in ATC (e.g., "12")
   - **Hover:** Shows ToolsPane preview
   - **Click:** Expands card, scrolls to tools pane
 - **TOOL** - Current active tool (format: `T##`, shown if available)
+- **ALARMS** - Active alarm count (e.g., "0" or "3", displayed in red if >0)
+  - **Hover:** Shows AlarmPane preview (if alarms > 0)
+  - **Click:** Expands card, scrolls to alarm pane
 
 ---
 
-### Alarm Indicators
+### Alarm Display
 
-When a machine has active alarms, an alarm indicator appears in the card header.
+When a machine has active alarms, the alarm count is displayed in the lower section of the card.
 
 **Visual:**
 
 ```
-╔══════════════════════════════════════════════════════════════╗
-║  HAAS-VF2                                  3 ALARMS  [=] [X] ║
-╚══════════════════════════════════════════════════════════════╝
+║  ALARMS:    3                                                ║
 ```
 
-**Hover Tooltip:**
+The alarm count is displayed in **red** when there are active alarms (>0).
 
-```
-╔═══════════════════════════════════════════════════════════╗
-║  3 ALARMS                                                 ║
-╠═══════════════════════════════════════════════════════════╣
-║  101  | Servo axis X overtravel                          ║
-║  201  | Spindle overload                                 ║
-║  305  | Coolant pressure low                             ║
-╚═══════════════════════════════════════════════════════════╝
-```
+**Hover Behavior:**
+- If alarms > 0, hovering shows AlarmPane preview (non-interactive)
+- Positioned dynamically to stay within viewport
 
-**Blinking Behavior:**
-- **Offline machines with alarms** - Blink red to draw attention
-- **Online machines with alarms** - Solid display (less urgent)
+**Click Behavior:**
+- Expands machine card to detail view (if not already expanded)
+- Scrolls to alarm pane in expanded view
+- Highlights alarm pane briefly with green glow animation
 
-**Implementation:** [MachineCard.tsx:284-303](../frontend/src/components/MachineCard.tsx#L284-L303)
+**Implementation:** [MachineCard.tsx:1132-1200](../frontend/src/components/MachineCard.tsx#L1132-L1200)
 
 ---
 
@@ -1357,8 +1354,8 @@ On the collapsed machine card, hovering over status rows shows preview panes:
 - **STATUS** → StatusTimeline preview
 - **PROGRAM** → CurrentProgramPane preview
 - **CYCLE/PARTS** → CycleHistoryPane preview
-- **TOOLS** → ToolsPane preview
-- **ALARMS** (in header) → AlarmPane preview
+- **ATC TOOLS** → ToolsPane preview
+- **ALARMS** → AlarmPane preview (if alarms > 0)
 
 All preview panes are non-interactive and positioned dynamically to stay within viewport.
 
