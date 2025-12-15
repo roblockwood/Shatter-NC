@@ -402,27 +402,17 @@ POLLING GRAPH (1H):
 1. Click `[ UPLOAD & VALIDATE ]` button
 2. Select `.nc` or `.NC` file from local filesystem
 3. File automatically uploads and validates against machine state
-4. **UploadConfirmationModal** opens with collapsable validation results
-5. Review validation and click `[ UPLOAD ]` to deploy with FIFO O-number assignment
+4. **ValidationResultModal** opens with results
 
 **Validation Process:**
 1. Parse G-code to extract tools and WCS offsets
-2. **Always query machine** for current tool list and WCS offsets (even if not found in NC)
+2. Query machine for current tool list and WCS offsets
 3. Validate:
    - All tools in program exist in machine
-   - Tool diameters match within tolerance (from machine database settings)
-   - Tool lengths match within tolerance (from machine database settings)
-   - WCS offsets match within tolerance (from NC file E parameter, or machine settings)
-4. Display validation results in collapsable tables:
-   - **Tools**: Summary row with expand icon (▶/▼), click to see Length/Diameter details
-   - **WCS**: Summary row with expand icon, click to see X/Y/Z axis details
-   - **Missing Data**: Shows "XYZ NOT PARSED" for WCS or "N/A" for tools not referenced in NC, with machine actual values displayed
-5. Display errors, warnings, and validation summary
-
-**Validation Display:**
-- **Collapsable Tables**: Click tool or WCS rows to expand/collapse detailed breakdowns
-- **Machine Data Always Shown**: Even when NC doesn't contain tool/WCS data, machine values are displayed for reference
-- **Status Indicators**: ✓ (pass), ⚠ (warning), ✕ (fail), ─ (not in NC)
+   - Tool diameters match within tolerance (default ±0.010")
+   - Tool lengths match within tolerance (default +0.02"/-0.0")
+   - WCS offsets match within tolerance (default ±0.0394")
+4. Display errors, warnings, and validation summary
 
 **Related Documentation:**
 - See [PROGRAM_VALIDATION.md](./PROGRAM_VALIDATION.md) for validation algorithm
@@ -660,10 +650,6 @@ The machine card transforms into a comprehensive edit form with two sections:
 ### Validation Tolerances
 
 Tolerances used when validating G-code programs against machine state.
-
-**Important:** Tolerance sources differ between tools and WCS:
-- **Tool Tolerances**: Always from machine database settings (configured per machine)
-- **WCS Tolerances**: From NC file E parameter (if present), otherwise from machine database settings
 
 #### Tool Diameter Tolerance
 
