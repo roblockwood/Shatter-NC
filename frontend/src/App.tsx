@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
 import { FileBrowser } from './pages/FileBrowser';
+import { ToolManagement } from './pages/ToolManagement';
 import './App.css';
 
 function Navigation() {
@@ -27,6 +28,12 @@ function Navigation() {
           >
             [ FILES ]
           </Link>
+          <Link
+            to="/tools"
+            className={`nav-link ${isActive('/tools') ? 'active' : ''}`}
+          >
+            [ TOOLS ]
+          </Link>
         </nav>
       </div>
 
@@ -47,6 +54,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/files" element={<FileBrowser />} />
+            <Route path="/tools" element={<ToolManagement />} />
           </Routes>
         </div>
       </div>
