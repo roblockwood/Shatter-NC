@@ -1,0 +1,113 @@
+.tools-pane {
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-body .tools-pane {
+  height: auto;
+  max-height: none;
+}
+
+.tools-pane .terminal-box-content {
+  overflow: hidden;
+  flex: 1;
+}
+
+.terminal-box-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.expand-toggle {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  padding: 2px var(--spacing-xs);
+  margin-left: auto;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+}
+
+.expand-toggle:hover {
+  color: var(--color-text-secondary);
+  border-color: var(--color-text-secondary);
+  box-shadow: var(--glow);
+}
+
+.tools-more {
+  text-align: center;
+  color: var(--color-text-dim);
+  font-size: var(--font-xs);
+  padding: var(--spacing-xs);
+  font-style: italic;
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--spacing-xs);
+  padding-top: var(--spacing-sm);
+}
+
+.tools-more:hover {
+  color: var(--color-text-secondary);
+  background: var(--color-bg-elevated);
+}
+
+.tools-empty {
+  text-align: center;
+  color: var(--color-text-muted);
+  padding: var(--spacing-md);
+  font-size: var(--font-sm);
+}
+
+.tools-table-wrapper {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  line-height: 1.2;
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+}
+
+.tools-table-header,
+.tools-table-header-row,
+.tools-table-divider,
+.tools-table-footer {
+  color: var(--color-text-secondary);
+  line-height: 1.2;
+}
+
+.tools-table-header-row {
+  padding: var(--spacing-xs) 0;
+  font-weight: 700;
+}
+
+.tools-table-body {
+  color: var(--color-text-primary);
+}
+
+.tools-table-row {
+  line-height: 1.2;
+}
+
+.tools-row-content {
+  padding: var(--spacing-xs) 0;
+  white-space: pre;
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+.tools-table-row.current-tool .tools-row-content {
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+.tools-table-row.current-tool .tools-row-content::before {
+  content: '';
+}
+

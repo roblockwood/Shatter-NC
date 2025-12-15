@@ -301,13 +301,15 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
       oscilloscopeData.forEach((point, idx) => {
         const x = (point.time / 100) * 100; // Percentage of width
         // Ensure Y stays within row boundaries (each status level gets 20% of height)
+        // Add padding: map 0-100 to 8-92 (8% padding top and bottom)
         const levelY = (1 - point.level / 4) * 100; // Invert Y (0 = bottom, 4 = top)
+        const paddedY = 8 + (levelY / 100) * 84; // Map to 8-92 range
         // Add tight oscillation to keep it within the row (oscilloscope-style)
-        const rowCenter = levelY;
-        const rowHeight = 20; // Each status row is 20% of total height
+        const rowCenter = paddedY;
+        const rowHeight = 84 / 5; // Each status row is ~16.8% of padded height (84% / 5 rows)
         // Much tighter oscillation frequency for realistic oscilloscope effect
         const oscillation = Math.sin(x * 2.5) * (rowHeight * 0.12); // Tight, high-frequency oscillation
-        const y = Math.max(rowCenter - rowHeight/2 + 2, Math.min(rowCenter + rowHeight/2 - 2, rowCenter + oscillation));
+        const y = Math.max(rowCenter - rowHeight/2 + 1, Math.min(rowCenter + rowHeight/2 - 1, rowCenter + oscillation));
         
         const timestamp = new Date(startTime.getTime() + (point.time / 100) * totalDuration);
         svgPoints.push({ x, y, status: point.status, timestamp });
@@ -324,9 +326,10 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
             for (let i = 1; i < steps; i++) {
               const t = i / steps;
               const interpX = x + (nextX - x) * t;
-              const interpY = rowCenter + (nextLevelY - rowCenter) * t;
+              const nextPaddedY = 8 + (nextLevelY / 100) * 84;
+              const interpY = rowCenter + (nextPaddedY - rowCenter) * t;
               const interpOscillation = Math.sin(interpX * 2.5) * (rowHeight * 0.12);
-              const finalY = Math.max(interpY - rowHeight/2 + 2, Math.min(interpY + rowHeight/2 - 2, interpY + interpOscillation));
+              const finalY = Math.max(interpY - rowHeight/2 + 1, Math.min(interpY + rowHeight/2 - 1, interpY + interpOscillation));
               svgPoints.push({ 
                 x: interpX, 
                 y: finalY, 
@@ -418,7 +421,10 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
   }, [svgPoints, oscilloscopeWidth]);
 
   return (
-    <div className="status-timeline">
+    <div 
+      className="status-timeline"
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="status-timeline-header">
         <div className="status-timeline-title-row">
           <span>┌─ STATUS TIMELINE {'─'.repeat(25)}┐</span>
@@ -481,18 +487,22 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                     }}
                   >
                     {/* Grid lines for each status level */}
-                    {statusLevels.map((level, idx) => (
-                      <line 
-                        key={idx}
-                        x1="0" 
-                        y1={100 - (level / 4) * 100} 
-                        x2="100" 
-                        y2={100 - (level / 4) * 100}
-                        stroke="var(--color-text-dim)"
-                        strokeWidth="0.5"
-                        opacity="0.3"
-                      />
-                    ))}
+                    {statusLevels.map((level, idx) => {
+                      const levelY = (1 - level / 4) * 100; // Invert Y (0 = bottom, 4 = top)
+                      const paddedY = 8 + (levelY / 100) * 84; // Map to 8-92 range
+                      return (
+                        <line 
+                          key={idx}
+                          x1="0" 
+                          y1={paddedY} 
+                          x2="100" 
+                          y2={paddedY}
+                          stroke="var(--color-text-dim)"
+                          strokeWidth="0.5"
+                          opacity="0.3"
+                        />
+                      );
+                    })}
                     {/* Time division markers */}
                     {timeDivisions.map((div, idx) => (
                       <line
@@ -540,59 +550,74 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                     {oscilloscopeData.map((dataPoint, dataIdx) => {
                       const x = (dataPoint.time / 100) * 100;
                       const timestamp = new Date(startTime.getTime() + (dataPoint.time / 100) * totalDuration);
+                      const hoverRadius = 0.5; // Extend hover area by 0.5% on each side
                       
                       return (
-                        <line
-                          key={dataIdx}
-                          x1={x}
-                          y1="0"
-                          x2={x}
-                          y2="100"
-                          stroke="var(--color-text-primary)"
-                          strokeWidth="0.5"
-                          strokeDasharray="3 2"
-                          opacity="0.25"
-                          shapeRendering="crispEdges"
-                          className="oscilloscope-timestamp-line"
-                          data-timestamp-idx={dataIdx}
-                          onMouseEnter={(e) => {
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            const containerRect = e.currentTarget.closest('.oscilloscope-display')?.getBoundingClientRect();
-                            if (containerRect) {
-                              const normalized = normalizeStatus(dataPoint.status, isOnline);
-                              setHoveredPoint({
-                                x: x,
-                                y: (1 - (STATUS_LEVELS[normalized] ?? 3) / 4) * 100,
-                                status: normalized.toUpperCase(),
-                                timestamp: timestamp,
-                              });
-                              
-                              const tooltipWidth = 150;
-                              const tooltipHeight = 40;
-                              const pointX = rect.left - containerRect.left + rect.width / 2;
-                              const pointY = rect.top - containerRect.top;
-                              
-                              let tooltipX = pointX;
-                              const minX = tooltipWidth / 2;
-                              const maxX = containerRect.width - tooltipWidth / 2;
-                              tooltipX = Math.max(minX, Math.min(maxX, tooltipX));
-                              
-                              let tooltipY = pointY - tooltipHeight - 5;
-                              if (tooltipY < 0) {
-                                tooltipY = pointY + rect.height + 5;
+                        <g key={dataIdx}>
+                          {/* Invisible wider rectangle for easier hover */}
+                          <rect
+                            x={x - hoverRadius}
+                            y="0"
+                            width={hoverRadius * 2}
+                            height="100"
+                            fill="transparent"
+                            className="oscilloscope-timestamp-hover-area"
+                            onMouseEnter={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const containerRect = e.currentTarget.closest('.oscilloscope-display')?.getBoundingClientRect();
+                              if (containerRect) {
+                                const normalized = normalizeStatus(dataPoint.status, isOnline);
+                                const levelY = (1 - (STATUS_LEVELS[normalized] ?? 3) / 4) * 100;
+                                const paddedY = 8 + (levelY / 100) * 84; // Map to 8-92 range
+                                setHoveredPoint({
+                                  x: x,
+                                  y: paddedY,
+                                  status: normalized.toUpperCase(),
+                                  timestamp: timestamp,
+                                });
+                                
+                                const tooltipWidth = 150;
+                                const tooltipHeight = 40;
+                                const pointX = rect.left - containerRect.left + rect.width / 2;
+                                const pointY = rect.top - containerRect.top;
+                                
+                                let tooltipX = pointX;
+                                const minX = tooltipWidth / 2;
+                                const maxX = containerRect.width - tooltipWidth / 2;
+                                tooltipX = Math.max(minX, Math.min(maxX, tooltipX));
+                                
+                                let tooltipY = pointY - tooltipHeight - 5;
+                                if (tooltipY < 0) {
+                                  tooltipY = pointY + rect.height + 5;
+                                }
+                                
+                                setTooltipPosition({
+                                  x: tooltipX,
+                                  y: tooltipY,
+                                });
                               }
-                              
-                              setTooltipPosition({
-                                x: tooltipX,
-                                y: tooltipY,
-                              });
-                            }
-                          }}
-                          onMouseLeave={() => {
-                            setHoveredPoint(null);
-                            setTooltipPosition(null);
-                          }}
-                        />
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredPoint(null);
+                              setTooltipPosition(null);
+                            }}
+                          />
+                          {/* Visible line */}
+                          <line
+                            x1={x}
+                            y1="0"
+                            x2={x}
+                            y2="100"
+                            stroke="var(--color-text-primary)"
+                            strokeWidth="0.5"
+                            strokeDasharray="3 2"
+                            opacity="0.25"
+                            shapeRendering="crispEdges"
+                            className="oscilloscope-timestamp-line"
+                            data-timestamp-idx={dataIdx}
+                            pointerEvents="none"
+                          />
+                        </g>
                       );
                     })}
                   </svg>

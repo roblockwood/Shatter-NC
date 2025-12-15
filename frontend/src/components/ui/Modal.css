@@ -16,7 +16,8 @@
   background: var(--color-bg-primary);
   border: 2px solid var(--color-text-primary);
   box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
-  width: 70ch;
+  width: 90ch;
+  max-width: 95vw;
   max-height: 85vh;
   display: flex;
   flex-direction: column;

@@ -232,6 +232,25 @@ UNKNOWN:  ◌ [#666666]
        1  2  3  4  5
 ```
 
+**Oscilloscope Display (Status Timeline):**
+```
+RUNNING │●───────────────────────────────●───────────────
+IDLE    │     ╱╲                          │
+STOPPED │    ╱  ╲                         │
+ALARM   │   ╱    ╲                        │
+ERROR   │  ╱      ╲───────────────────────●
+        └────────────────────────────────────
+        PAST                              NOW
+```
+
+**Oscilloscope Features:**
+- Y-axis: Status levels (RUNNING, IDLE, STOPPED, ALARM, ERROR)
+- X-axis: Time span (configurable: 1H, 8H, 24H, 7D)
+- Data line: Shows status transitions over time
+- Characters: `●` (data points), `─` (horizontal), `│` (vertical), `╱` `╲` (diagonals)
+- Real-time: Updates as status changes occur
+- Terminal aesthetic: Monospace font, ASCII characters only
+
 ---
 
 ## Screen Layouts

@@ -14,6 +14,7 @@ import { WS_URL, API_BASE } from '../config/api';
 export const Dashboard = () => {
   const { machines, isConnected, removeMachine, addMachine } = useWebSocket(WS_URL);
   const [editMode, setEditMode] = useState(false);
+  const [expandedMachineId, setExpandedMachineId] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingMachine, setDeletingMachine] = useState<any>(null);
   const [summaryModal, setSummaryModal] = useState<{
@@ -44,7 +45,7 @@ export const Dashboard = () => {
   };
 
   const onlineCount = machines.filter(m => m.is_online === true).length;
-  const runningCount = machines.filter(m => m.is_online === true && m.status?.includes('Running')).length;
+  const runningCount = machines.filter(m => m.is_online === true && (m.status?.toLowerCase() === 'operating' || m.status?.toLowerCase().includes('running'))).length;
 
   const handleDeleteMachine = (machine: any) => {
     setDeletingMachine(machine);
@@ -127,6 +128,9 @@ export const Dashboard = () => {
             key={machine.machine_id}
             machine={machine}
             editMode={editMode}
+            isExpanded={expandedMachineId === machine.machine_id}
+            onExpand={() => setExpandedMachineId(machine.machine_id)}
+            onCollapse={() => setExpandedMachineId(null)}
             onDelete={handleDeleteMachine}
           />
         ))}
