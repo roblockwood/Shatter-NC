@@ -413,61 +413,96 @@
   50%, 100% { opacity: 0.3; }
 }
 
-.alarm-tooltip {
-  display: none;
-  position: absolute;
-  top: 100%;
-  right: 0;
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-error);
-  border-radius: 4px;
-  padding: var(--spacing-sm);
-  margin-top: var(--spacing-xs);
-  min-width: 250px;
-  max-width: 300px;
+.alarm-hover-pane {
+  position: fixed;
+  min-width: 400px;
+  max-width: 500px;
+  max-height: 500px;
   z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
 }
 
-.alarm-indicator:hover .alarm-tooltip {
-  display: block;
+.alarm-pane-highlight {
+  animation: alarm-highlight 2s ease-in-out;
 }
 
-.alarm-tooltip-title {
-  color: var(--color-error);
-  font-weight: 700;
-  font-size: var(--font-sm);
-  margin-bottom: var(--spacing-xs);
-  border-bottom: 1px solid var(--color-error);
-  padding-bottom: var(--spacing-xs);
+@keyframes alarm-highlight {
+  0%, 100% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 0, 0, 0.4);
+  }
 }
 
-.alarm-tooltip-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
+.tools-hover-pane {
+  position: fixed;
+  min-width: 500px;
+  max-width: 600px;
+  max-height: 500px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.tools-pane-highlight {
+  animation: tools-highlight 2s ease-in-out;
+}
+
+@keyframes tools-highlight {
+  0%, 100% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.8), 0 0 40px rgba(0, 255, 0, 0.4);
+  }
+}
+
+.machine-row-hoverable {
+  position: relative;
+}
+
+.status-hover-pane,
+.program-hover-pane,
+.cycle-hover-pane {
+  position: fixed;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.status-hover-pane {
+  min-width: 600px;
+  max-width: 700px;
   max-height: 300px;
-  overflow-y: auto;
 }
 
-.alarm-tooltip-item {
-  font-size: var(--font-xs);
-  padding: var(--spacing-xs);
-  background: rgba(255, 67, 67, 0.1);
-  border-left: 2px solid var(--color-error);
-  border-radius: 2px;
+.program-hover-pane {
+  min-width: 400px;
+  max-width: 500px;
+  max-height: 300px;
 }
 
-.alarm-tooltip-code {
-  color: var(--color-error);
-  font-weight: 600;
-  display: block;
+.cycle-hover-pane {
+  min-width: 500px;
+  max-width: 600px;
+  max-height: 400px;
 }
 
-.alarm-tooltip-message {
-  color: var(--color-text-secondary);
-  font-size: var(--font-xs);
-  margin-top: 2px;
+.status-pane-highlight,
+.program-pane-highlight,
+.cycle-pane-highlight {
+  animation: pane-highlight 2s ease-in-out;
+}
+
+@keyframes pane-highlight {
+  0%, 100% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.8), 0 0 40px rgba(0, 255, 0, 0.4);
+  }
 }
 
 .machine-alarms {
