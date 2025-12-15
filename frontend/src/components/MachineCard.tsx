@@ -1,6 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ToolListModal } from './ToolListModal';
 import { UploadConfirmationModal } from './UploadConfirmationModal';
+import { Modal } from './ui/Modal';
+import { AlarmPane } from './machine-detail/AlarmPane';
+import { StatusTimeline } from './machine-detail/StatusTimeline';
+import { ToolsPane } from './machine-detail/ToolsPane';
+import { CurrentProgramPane } from './machine-detail/CurrentProgramPane';
+import { CycleHistoryPane } from './machine-detail/CycleHistoryPane';
 import './MachineCard.css';
 import { API_BASE_URL } from '../config/api';
 
@@ -44,10 +50,20 @@ interface MachineStatus {
 interface MachineCardProps {
   machine: MachineStatus;
   editMode?: boolean;
+  isExpanded?: boolean;
+  onExpand?: () => void;
+  onCollapse?: () => void;
   onDelete?: (machine: MachineStatus) => void;
 }
 
-export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = false, onDelete }) => {
+export const MachineCard: React.FC<MachineCardProps> = ({ 
+  machine, 
+  editMode = false, 
+  isExpanded = false,
+  onExpand,
+  onCollapse,
+  onDelete 
+}) => {
   // Debug: Log machine status for debugging name color
   console.log(`Machine: ${machine.machine_name}, is_online: ${machine.is_online}, status: "${machine.status}"`);
 
@@ -63,6 +79,15 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
   const [isEditSaving, setIsEditSaving] = useState(false);
   const [isEditTesting, setIsEditTesting] = useState(false);
   const [editTestResult, setEditTestResult] = useState<any>(null);
+  const [expandedPaneModal, setExpandedPaneModal] = useState<{ type: string; props: any } | null>(null);
+  const [cachedAlarms, setCachedAlarms] = useState<Alarm[] | null>(null);
+  
+  // Cache alarms from machine prop to avoid refetching
+  useEffect(() => {
+    if (machine.alarms) {
+      setCachedAlarms(machine.alarms);
+    }
+  }, [machine.alarms]);
   const [editFormData, setEditFormData] = useState({
     ip_address: machine.ip_address || '',
     ftp_username: machine.ftp_username || '',
@@ -220,8 +245,12 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
 
   const getStatusType = () => {
     if (!machine.is_online) return 'offline';
-    if (machine.status?.includes('Error')) return 'error';
-    if (machine.status?.includes('Running')) return 'running';
+    // Normalize actual machine statuses: off, standby, error, operating, stopped
+    const status = machine.status?.toLowerCase() || '';
+    if (status === 'error' || status.includes('error')) return 'error';
+    if (status === 'operating' || status.includes('running')) return 'running';
+    if (status === 'standby' || status.includes('idle')) return 'idle';
+    if (status === 'stopped' || status === 'off') return 'stopped';
     return 'idle';
   };
 
@@ -266,8 +295,188 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
     return time.substring(0, 8); // Remove decimal if present
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't expand if clicking on buttons or inputs
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('.card-action-btn') ||
+      target.closest('.upload-button') ||
+      target.closest('.tool-summary') ||
+      isEditing ||
+      editMode
+    ) {
+      return;
+    }
+    
+    if (isExpanded) {
+      onCollapse?.();
+    } else {
+      onExpand?.();
+    }
+  };
+
+  // Render expanded view
+  if (isExpanded && !isEditing && !editMode) {
+    return (
+      <div className={`machine-card expanded`} onClick={handleCardClick}>
+        <div className="machine-card-expanded-header">
+          <div className="expanded-header-top">
+            ╔{'═'.repeat(70)}╗
+          </div>
+          <div className="expanded-header-title">
+            <span className="expanded-machine-name">{machine.machine_name}</span>
+            <div className="expanded-header-actions">
+              <button
+                className="card-action-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCollapse?.();
+                }}
+                title="Collapse"
+              >
+                [COLLAPSE]
+              </button>
+            </div>
+          </div>
+          <div className="expanded-header-bottom">
+            ╠{'═'.repeat(70)}╣
+          </div>
+        </div>
+
+        <div className="machine-card-expanded-content">
+          <div className="expanded-pane-full">
+            <StatusTimeline 
+              machineId={machine.machine_id} 
+              currentStatus={machine.status} 
+              isOnline={machine.is_online}
+              onExpand={() => setExpandedPaneModal({ type: 'timeline', props: { machineId: machine.machine_id, currentStatus: machine.status, isOnline: machine.is_online } })}
+            />
+          </div>
+
+          <div className="expanded-panes-top">
+            <div className="expanded-pane-left">
+              <AlarmPane 
+                machineId={machine.machine_id} 
+                currentAlarms={machine.alarms || cachedAlarms || undefined}
+                onExpand={() => setExpandedPaneModal({ type: 'alarms', props: { machineId: machine.machine_id, currentAlarms: machine.alarms || cachedAlarms } })}
+              />
+            </div>
+            <div className="expanded-pane-right">
+              <CurrentProgramPane 
+                machineId={machine.machine_id}
+                machineStatus={machine.status}
+                onExpand={() => setExpandedPaneModal({ type: 'program', props: { machineId: machine.machine_id, machineStatus: machine.status } })}
+              />
+            </div>
+          </div>
+
+          <div className="expanded-panes-bottom">
+            <div className="expanded-pane-left">
+              <ToolsPane 
+                tools={machine.tools || []}
+                currentTool={machine.current_tool}
+                onExpand={() => setExpandedPaneModal({ type: 'tools', props: { tools: machine.tools || [], currentTool: machine.current_tool } })}
+              />
+            </div>
+            <div className="expanded-pane-right">
+              <CycleHistoryPane 
+                machineId={machine.machine_id}
+                onExpand={() => setExpandedPaneModal({ type: 'history', props: { machineId: machine.machine_id } })}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Expanded Pane Modals */}
+        {expandedPaneModal && (
+          <Modal
+            isOpen={true}
+            onClose={() => setExpandedPaneModal(null)}
+            title={expandedPaneModal.type === 'alarms' ? 'ALARMS' :
+                   expandedPaneModal.type === 'program' ? 'CURRENT PROGRAM' :
+                   expandedPaneModal.type === 'tools' ? 'TOOLS' :
+                   expandedPaneModal.type === 'timeline' ? 'STATUS TIMELINE' :
+                   expandedPaneModal.type === 'history' ? 'CYCLE HISTORY' : 'EXPANDED VIEW'}
+          >
+            <div 
+              style={{ height: 'auto', overflow: 'visible' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {expandedPaneModal.type === 'alarms' && (
+                <AlarmPane 
+                  machineId={expandedPaneModal.props.machineId} 
+                  currentAlarms={expandedPaneModal.props.currentAlarms}
+                  onExpand={undefined}
+                  isExpanded={true}
+                />
+              )}
+              {expandedPaneModal.type === 'program' && (
+                <CurrentProgramPane 
+                  machineId={expandedPaneModal.props.machineId}
+                  machineStatus={expandedPaneModal.props.machineStatus}
+                />
+              )}
+              {expandedPaneModal.type === 'tools' && (
+                <ToolsPane 
+                  tools={expandedPaneModal.props.tools}
+                  currentTool={expandedPaneModal.props.currentTool}
+                />
+              )}
+              {expandedPaneModal.type === 'timeline' && (
+                <StatusTimeline 
+                  machineId={expandedPaneModal.props.machineId}
+                  currentStatus={expandedPaneModal.props.currentStatus}
+                  isOnline={expandedPaneModal.props.isOnline}
+                />
+              )}
+              {expandedPaneModal.type === 'history' && (
+                <CycleHistoryPane 
+                  machineId={expandedPaneModal.props.machineId}
+                />
+              )}
+            </div>
+          </Modal>
+        )}
+
+        <ToolListModal
+          isOpen={showToolModal}
+          onClose={() => setShowToolModal(false)}
+          tools={(machine.tools || []) as any}
+          machineName={machine.machine_name}
+        />
+
+        <UploadConfirmationModal
+          isOpen={showConfirmationModal}
+          onClose={() => {
+            setShowConfirmationModal(false);
+            setFileContent('');
+            setValidationResult(null);
+            setSelectedFilename('');
+          }}
+          result={validationResult}
+          filename={selectedFilename}
+          machineId={machine.machine_id}
+          machineName={machine.machine_name}
+          machinePath={machine.path || '/PROGRAM'}
+          fileContent={fileContent}
+        />
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".nc,.NC,.txt"
+          style={{ display: 'none' }}
+          onChange={handleFileSelect}
+        />
+      </div>
+    );
+  }
+
+  // Render compact view
   return (
-    <div className="machine-card">
+    <div className={`machine-card ${isExpanded ? 'expanded' : ''}`} onClick={handleCardClick}>
       <div className="machine-card-header">
         {isEditing ? (
           <input
@@ -278,7 +487,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
             disabled={isEditSaving}
           />
         ) : (
-          <span className={`machine-name ${!machine.is_online ? 'text-error' : (machine.status?.includes('Running') ? 'text-glow' : 'text-muted')}`}>{machine.machine_name}</span>
+          <span className={`machine-name ${!machine.is_online ? 'text-error' : (machine.status?.toLowerCase() === 'operating' || machine.status?.toLowerCase().includes('running') ? 'text-glow' : 'text-muted')}`}>{machine.machine_name}</span>
         )}
         <div className="machine-header-actions">
           {!isEditing && machine.alarms && machine.alarms.length > 0 && (

@@ -204,6 +204,7 @@
   height: 100%;
   min-height: 20px;
   box-sizing: border-box;
+  padding: 8px 0;
 }
 
 .oscilloscope-svg {
@@ -235,9 +236,14 @@
   shape-rendering: crispEdges;
   vector-effect: non-scaling-stroke;
   transition: opacity 0.1s ease, stroke-width 0.1s ease;
+  pointer-events: none;
 }
 
-.oscilloscope-timestamp-line:hover {
+.oscilloscope-timestamp-hover-area {
+  cursor: pointer;
+}
+
+.oscilloscope-timestamp-hover-area:hover + .oscilloscope-timestamp-line {
   opacity: 0.5 !important;
   stroke-width: 0.6 !important;
 }

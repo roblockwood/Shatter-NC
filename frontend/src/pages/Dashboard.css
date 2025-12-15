@@ -40,6 +40,19 @@
   align-content: start;
 }
 
+.machine-grid .machine-card.expanded {
+  grid-column: 1 / -1; /* Span all columns */
+  grid-row: span 2;
+  width: 100%;
+  max-width: none;
+}
+
+@media (max-width: 768px) {
+  .machine-grid .machine-card.expanded {
+    grid-column: 1 / -1; /* Still span all columns on mobile */
+  }
+}
+
 .no-machines {
   grid-column: 1 / -1;
   display: flex;
