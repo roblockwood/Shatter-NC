@@ -24,7 +24,7 @@ class MachinePoller:
         self.is_online = False
         self.last_status: Optional[str] = None  # Track status transitions in-memory
         self.last_heartbeat_time: Optional[datetime] = None  # Track last heartbeat event
-        self.heartbeat_interval_minutes = 30  # Log heartbeat every 30 minutes
+        self.heartbeat_interval_minutes = 5  # Log heartbeat every 5 minutes
         self.offline_threshold = 3  # Require 3 consecutive failures before logging offline
         self.logged_offline_status = False  # Track if we've already logged the offline transition
 
@@ -167,20 +167,20 @@ class MachinePoller:
                 self.last_status = current_status
                 # Reset heartbeat timer on status change
                 self.last_heartbeat_time = poll_timestamp
-            # Log heartbeat if enough time has passed (even if status hasn't changed)
+            # Log heartbeat if exactly 5 minutes have passed (even if status hasn't changed)
             elif current_status and success:
-                should_log_heartbeat = False
-                if self.last_heartbeat_time is None:
-                    # First poll - log heartbeat
-                    should_log_heartbeat = True
-                else:
+                # Only log heartbeat if we have a previous heartbeat time to compare against
+                # This prevents logging heartbeats on first poll or after poller recreation
+                if self.last_heartbeat_time is not None:
                     # Check if heartbeat interval has passed
                     time_since_heartbeat = poll_timestamp - self.last_heartbeat_time
                     if time_since_heartbeat >= timedelta(minutes=self.heartbeat_interval_minutes):
-                        should_log_heartbeat = True
-                
-                if should_log_heartbeat:
-                    await self._log_status_event(db, status_data, current_status)
+                        # For heartbeats, previous_status should equal current_status (no change)
+                        status_data_with_heartbeat = {**status_data, "previous_status": current_status}
+                        await self._log_status_event(db, status_data_with_heartbeat, current_status)
+                        self.last_heartbeat_time = poll_timestamp
+                else:
+                    # Initialize heartbeat timer on first successful poll (don't log yet)
                     self.last_heartbeat_time = poll_timestamp
 
             # Log alarms only when status indicates alarm (Q3)

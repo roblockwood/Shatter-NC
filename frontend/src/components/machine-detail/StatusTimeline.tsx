@@ -7,6 +7,7 @@ interface StatusEvent {
   status: string;
   previous_status?: string;
   error?: string; // Error message if status is offline
+  is_heartbeat?: boolean; // True if this is a heartbeat (previous_status === status)
 }
 
 interface StatusTimelineProps {
@@ -23,7 +24,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [events, setEvents] = useState<StatusEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; status: string; timestamp: Date; error?: string } | null>(null);
+  const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; status: string; timestamp: Date; error?: string; is_heartbeat?: boolean } | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const [oscilloscopeWidth, setOscilloscopeWidth] = useState(180);
   const [scaleX, setScaleX] = useState(1);
@@ -115,7 +116,14 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
         
         if (response.ok) {
           const data = await response.json();
-          setEvents(data);
+          // Calculate is_heartbeat for each event (heartbeat when previous_status === status)
+          const eventsWithHeartbeat = data.map((event: StatusEvent) => ({
+            ...event,
+            is_heartbeat: event.previous_status !== undefined && 
+                         event.previous_status !== null &&
+                         event.previous_status.toLowerCase() === event.status.toLowerCase()
+          }));
+          setEvents(eventsWithHeartbeat);
         }
       } catch (error) {
         console.error('Error fetching status history:', error);
@@ -198,7 +206,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
     }
 
     const totalDuration = endTime.getTime() - startTime.getTime();
-    const dataPoints: Array<{ time: number; level: number; status: string; error?: string }> = [];
+    const dataPoints: Array<{ time: number; level: number; status: string; error?: string; is_heartbeat?: boolean }> = [];
 
     // If no events, still show current status
     if (events.length === 0) {
@@ -250,6 +258,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
           level: STATUS_LEVELS[normalized] ?? 3,
           status: normalized,
           error: event.error, // Include error from event if available
+          is_heartbeat: event.is_heartbeat, // Include heartbeat flag
         });
       }
     }
@@ -299,7 +308,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
     const statusLevels = [4, 3, 2, 1, 0]; // Corresponding levels
     
     // Convert data points to SVG coordinates with interpolation for smooth transitions
-    const svgPoints: Array<{ x: number; y: number; status: string; timestamp: Date; error?: string }> = [];
+    const svgPoints: Array<{ x: number; y: number; status: string; timestamp: Date; error?: string; is_heartbeat?: boolean }> = [];
     
     if (oscilloscopeData.length > 0) {
       oscilloscopeData.forEach((point, idx) => {
@@ -318,7 +327,9 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
         const timestamp = new Date(startTime.getTime() + (point.time / 100) * totalDuration);
         // For the final point (NOW), include error if offline
         const error = point.time === 100 && !isOnline && currentError ? currentError : undefined;
-        svgPoints.push({ x, y, status: point.status, timestamp, error });
+        
+        // Regular point
+        svgPoints.push({ x, y, status: point.status, timestamp, error, is_heartbeat: point.is_heartbeat });
         
         // Add intermediate points for smoother transitions
         if (idx < oscilloscopeData.length - 1) {
@@ -341,7 +352,8 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                 y: finalY, 
                 status: point.status, 
                 timestamp: new Date(startTime.getTime() + (interpX / 100) * totalDuration),
-                error: undefined // Intermediate points don't have errors
+                error: undefined, // Intermediate points don't have errors
+                is_heartbeat: point.is_heartbeat // Inherit heartbeat flag
               });
             }
           }
@@ -550,6 +562,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         vectorEffect="non-scaling-stroke"
+                        shapeRendering="crispEdges"
                         className="oscilloscope-trace"
                       />
                     )}
@@ -576,18 +589,20 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                                 const normalized = normalizeStatus(dataPoint.status, isOnline);
                                 const levelY = (1 - (STATUS_LEVELS[normalized] ?? 3) / 4) * 100;
                                 const paddedY = 8 + (levelY / 100) * 84; // Map to 8-92 range
-                                // Get error from dataPoint (already includes error for final point)
+                                // Get error and heartbeat flag from dataPoint
                                 setHoveredPoint({
                                   x: x,
                                   y: paddedY,
                                   status: normalized.toUpperCase(),
                                   timestamp: timestamp,
                                   error: dataPoint.error,
+                                  is_heartbeat: dataPoint.is_heartbeat,
                                 });
                                 
                                 const tooltipWidth = 250; // Wider to accommodate error messages
                                 const hasError = dataPoint.error && dataPoint.error.length > 0;
-                                const tooltipHeight = hasError ? 80 : 40; // Taller if error message present
+                                // Height: label (20px) + status (20px) + timestamp (20px) + error (if present, 20px)
+                                const tooltipHeight = hasError ? 80 : 60; // Account for heartbeat/event label
                                 const pointX = rect.left - containerRect.left + rect.width / 2;
                                 const pointY = rect.top - containerRect.top;
                                 
@@ -642,6 +657,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                   top: `${tooltipPosition.y}px`,
                 }}
               >
+                {hoveredPoint.is_heartbeat ? '[HEARTBEAT]' : '[STATUS EVENT]'}<br/>
                 {hoveredPoint.status}<br/>
                 {hoveredPoint.timestamp.toLocaleString()}
                 {hoveredPoint.error && (
