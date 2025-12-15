@@ -15,6 +15,7 @@ export const Dashboard = () => {
   const { machines, isConnected, removeMachine, addMachine } = useWebSocket(WS_URL);
   const [editMode, setEditMode] = useState(false);
   const [expandedMachineId, setExpandedMachineId] = useState<number | null>(null);
+  const [scrollToStatusMachineId, setScrollToStatusMachineId] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingMachine, setDeletingMachine] = useState<any>(null);
   const [summaryModal, setSummaryModal] = useState<{
@@ -128,8 +129,12 @@ export const Dashboard = () => {
             editMode={editMode}
             isExpanded={expandedMachineId === machine.machine_id}
             onExpand={() => setExpandedMachineId(machine.machine_id)}
-            onCollapse={() => setExpandedMachineId(null)}
+            onCollapse={() => {
+              setExpandedMachineId(null);
+              setScrollToStatusMachineId(null);
+            }}
             onDelete={handleDeleteMachine}
+            scrollToStatus={scrollToStatusMachineId === machine.machine_id}
           />
         ))}
 
@@ -170,6 +175,15 @@ export const Dashboard = () => {
           onClose={() => setSummaryPopup({ isOpen: false, type: null })}
           onMouseEnter={() => handlePopupMouseEnter(summaryPopup.type as 'machines' | 'running')}
           onMouseLeave={handlePopupMouseLeave}
+          onMachineClick={(machineId) => {
+            setExpandedMachineId(machineId);
+            setScrollToStatusMachineId(machineId);
+            setSummaryPopup({ isOpen: false, type: null });
+            // Reset scroll flag after a delay to allow re-triggering
+            setTimeout(() => {
+              setScrollToStatusMachineId(null);
+            }, 1000);
+          }}
         />
       )}
 

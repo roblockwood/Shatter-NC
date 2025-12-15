@@ -54,6 +54,7 @@ interface MachineCardProps {
   onExpand?: () => void;
   onCollapse?: () => void;
   onDelete?: (machine: MachineStatus) => void;
+  scrollToStatus?: boolean; // Flag to trigger scroll to status timeline
 }
 
 export const MachineCard: React.FC<MachineCardProps> = ({ 
@@ -62,7 +63,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   isExpanded = false,
   onExpand,
   onCollapse,
-  onDelete 
+  onDelete,
+  scrollToStatus = false
 }) => {
   // Debug: Log machine status for debugging name color
   console.log(`Machine: ${machine.machine_name}, is_online: ${machine.is_online}, status: "${machine.status}"`);
@@ -142,6 +144,22 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       setCurrentProgram(null);
     }
   }, [machine.machine_id, machine.is_online]);
+
+  // Handle scroll to status timeline when requested
+  useEffect(() => {
+    if (scrollToStatus && isExpanded && statusTimelineRef.current) {
+      setTimeout(() => {
+        if (statusTimelineRef.current) {
+          statusTimelineRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+          statusTimelineRef.current.classList.add('status-pane-highlight');
+          setTimeout(() => {
+            statusTimelineRef.current?.classList.remove('status-pane-highlight');
+          }, 2000);
+        }
+      }, 300);
+    }
+  }, [scrollToStatus, isExpanded]);
+
   const [editFormData, setEditFormData] = useState({
     ip_address: machine.ip_address || '',
     ftp_username: machine.ftp_username || '',
