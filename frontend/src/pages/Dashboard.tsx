@@ -14,6 +14,8 @@ import { WS_URL, API_BASE } from '../config/api';
 export const Dashboard = () => {
   const { machines, isConnected, removeMachine, addMachine } = useWebSocket(WS_URL);
   const [editMode, setEditMode] = useState(false);
+  const [expandedMachineId, setExpandedMachineId] = useState<number | null>(null);
+  const [scrollToStatusMachineId, setScrollToStatusMachineId] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingMachine, setDeletingMachine] = useState<any>(null);
   const [summaryModal, setSummaryModal] = useState<{
@@ -44,7 +46,7 @@ export const Dashboard = () => {
   };
 
   const onlineCount = machines.filter(m => m.is_online === true).length;
-  const runningCount = machines.filter(m => m.is_online === true && m.status?.includes('Running')).length;
+  const runningCount = machines.filter(m => m.is_online === true && (m.status?.toLowerCase() === 'operating' || m.status?.toLowerCase().includes('running'))).length;
 
   const handleDeleteMachine = (machine: any) => {
     setDeletingMachine(machine);
@@ -83,8 +85,11 @@ export const Dashboard = () => {
           className="machines-count clickable"
           onClick={() => setEditMode(!editMode)}
         >
-          MACHINES: {machines.length}
-          {editMode && <span className="text-warning"> [EDIT MODE]</span>}
+          {editMode ? (
+            <span className="text-warning">[EDIT MODE]</span>
+          ) : (
+            <>MACHINES: {machines.length}</>
+          )}
         </span>
         <span className="separator">│</span>
         <span
@@ -105,11 +110,6 @@ export const Dashboard = () => {
         >
           ONLINE: <span className="text-info">{onlineCount}</span><span className="text-dim">/</span><span className="text-info">{machines.length}</span>
         </span>
-        <span className="separator">│</span>
-        <StatusIndicator
-          status={isConnected ? 'online' : 'offline'}
-          label={isConnected ? 'WS CONNECTED' : 'WS DISCONNECTED'}
-        />
       </div>
 
       {/* Machine Grid */}
@@ -127,7 +127,14 @@ export const Dashboard = () => {
             key={machine.machine_id}
             machine={machine}
             editMode={editMode}
+            isExpanded={expandedMachineId === machine.machine_id}
+            onExpand={() => setExpandedMachineId(machine.machine_id)}
+            onCollapse={() => {
+              setExpandedMachineId(null);
+              setScrollToStatusMachineId(null);
+            }}
             onDelete={handleDeleteMachine}
+            scrollToStatus={scrollToStatusMachineId === machine.machine_id}
           />
         ))}
 
@@ -168,6 +175,15 @@ export const Dashboard = () => {
           onClose={() => setSummaryPopup({ isOpen: false, type: null })}
           onMouseEnter={() => handlePopupMouseEnter(summaryPopup.type as 'machines' | 'running')}
           onMouseLeave={handlePopupMouseLeave}
+          onMachineClick={(machineId) => {
+            setExpandedMachineId(machineId);
+            setScrollToStatusMachineId(machineId);
+            setSummaryPopup({ isOpen: false, type: null });
+            // Reset scroll flag after a delay to allow re-triggering
+            setTimeout(() => {
+              setScrollToStatusMachineId(null);
+            }, 1000);
+          }}
         />
       )}
 
@@ -183,6 +199,11 @@ export const Dashboard = () => {
           <span className="text-dim">REFRESH: 5s</span>
           <span className="separator">│</span>
           <span className="text-dim">{new Date().toLocaleTimeString()}</span>
+          <span className="separator">│</span>
+          <StatusIndicator
+            status={isConnected ? 'online' : 'offline'}
+            label={isConnected ? 'WS CONNECTED' : 'WS DISCONNECTED'}
+          />
         </div>
       </div>
     </div>

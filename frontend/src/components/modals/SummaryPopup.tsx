@@ -18,6 +18,7 @@ interface SummaryPopupProps {
   onClose: () => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
+  onMachineClick?: (machineId: number) => void;
 }
 
 export const SummaryPopup: React.FC<SummaryPopupProps> = ({
@@ -26,6 +27,7 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
   onClose,
   onMouseEnter,
   onMouseLeave,
+  onMachineClick,
 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +35,8 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
   const [offlineData, setOfflineData] = useState<OfflineSummary | null>(null);
   const [runningData, setRunningData] = useState<RunningSummary | null>(null);
   const [machinesData, setMachinesData] = useState<MachinesSummary | null>(null);
+  const [timeRange, setTimeRange] = useState<'1h' | '8h' | '24h' | '7d'>('8h');
+  const [runningTimeRange, setRunningTimeRange] = useState<'1h' | '8h' | '24h' | '7d'>('24h');
   const popupRef = useRef<HTMLDivElement>(null);
 
   // Fetch data based on summary type
@@ -46,7 +50,7 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
       try {
         switch (summaryType) {
           case 'online':
-            const onlineResponse = await summaryApi.getOnline();
+            const onlineResponse = await summaryApi.getOnline('8h');
             setOnlineData(onlineResponse);
             break;
           case 'offline':
@@ -54,11 +58,11 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
             setOfflineData(offlineResponse);
             break;
           case 'running':
-            const runningResponse = await summaryApi.getRunning('24h');
+            const runningResponse = await summaryApi.getRunning(runningTimeRange);
             setRunningData(runningResponse);
             break;
           case 'machines':
-            const machinesResponse = await summaryApi.getMachines();
+            const machinesResponse = await summaryApi.getMachines(timeRange);
             setMachinesData(machinesResponse);
             break;
         }
@@ -78,7 +82,7 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
     const pollInterval = setInterval(() => fetchData(false), 2000);
 
     return () => clearInterval(pollInterval);
-  }, [summaryType]);
+  }, [summaryType, timeRange, runningTimeRange]);
 
   // Position popup near anchor element
   useEffect(() => {
@@ -144,9 +148,9 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
       case 'offline':
         return ['MACHINE', 'OFFLINE', 'SINCE', 'SERVICES'];
       case 'running':
-        return ['MACHINE', 'RUN TIME', 'PERCENTAGE', 'LAST ACTIVE'];
+        return ['MACHINE', 'RUN TIME', 'PERCENTAGE', 'POLLING'];
       case 'machines':
-        return ['', 'DURATION', 'POLLING (1H)', 'UPTIME (8H)'];
+        return ['', 'DURATION', 'UPTIME', 'POLLING'];
     }
   };
 
@@ -190,7 +194,13 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
           return <div className="summary-popup-empty">No running data (24h)</div>;
         }
         return runningData.machines.slice(0, 10).map((machine) => (
-          <RunningSummaryRow key={machine.machine_id} machine={machine} compact={true} />
+          <RunningSummaryRow 
+            key={machine.machine_id} 
+            machine={machine} 
+            compact={true}
+            timeRange={runningTimeRange}
+            onMachineClick={onMachineClick}
+          />
         ));
 
       case 'machines':
@@ -198,7 +208,13 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
           return <div className="summary-popup-empty">No machines</div>;
         }
         return machinesData.machines.map((machine) => (
-          <MachineStatusRow key={machine.machine_id} machine={machine} compact={true} />
+          <MachineStatusRow 
+            key={machine.machine_id} 
+            machine={machine} 
+            compact={true} 
+            timeRange={timeRange}
+            onMachineClick={onMachineClick}
+          />
         ));
     }
   };
@@ -213,6 +229,62 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
       {/* Header */}
       <div className="summary-popup-header">
         <h3 className="summary-popup-title">{getTitle()}</h3>
+        {(summaryType === 'machines' || summaryType === 'running') && !loading && !error && (
+          <div className="summary-popup-header-controls">
+            <button
+              className={`time-range-btn ${(summaryType === 'machines' ? timeRange : runningTimeRange) === '1h' ? 'active' : ''}`}
+              onClick={() => {
+                if (summaryType === 'machines') {
+                  setTimeRange('1h');
+                } else {
+                  setRunningTimeRange('1h');
+                }
+              }}
+              disabled={loading}
+            >
+              [1H]
+            </button>
+            <button
+              className={`time-range-btn ${(summaryType === 'machines' ? timeRange : runningTimeRange) === '8h' ? 'active' : ''}`}
+              onClick={() => {
+                if (summaryType === 'machines') {
+                  setTimeRange('8h');
+                } else {
+                  setRunningTimeRange('8h');
+                }
+              }}
+              disabled={loading}
+            >
+              [8H]
+            </button>
+            <button
+              className={`time-range-btn ${(summaryType === 'machines' ? timeRange : runningTimeRange) === '24h' ? 'active' : ''}`}
+              onClick={() => {
+                if (summaryType === 'machines') {
+                  setTimeRange('24h');
+                } else {
+                  setRunningTimeRange('24h');
+                }
+              }}
+              disabled={loading}
+            >
+              [24H]
+            </button>
+            <button
+              className={`time-range-btn ${(summaryType === 'machines' ? timeRange : runningTimeRange) === '7d' ? 'active' : ''}`}
+              onClick={() => {
+                if (summaryType === 'machines') {
+                  setTimeRange('7d');
+                } else {
+                  setRunningTimeRange('7d');
+                }
+              }}
+              disabled={loading}
+            >
+              [7D]
+            </button>
+          </div>
+        )}
         <button className="summary-popup-close" onClick={onClose}>
           ✕
         </button>

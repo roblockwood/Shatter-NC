@@ -1,6 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ToolListModal } from './ToolListModal';
 import { UploadConfirmationModal } from './UploadConfirmationModal';
+import { Modal } from './ui/Modal';
+import { AlarmPane } from './machine-detail/AlarmPane';
+import { StatusTimeline } from './machine-detail/StatusTimeline';
+import { ToolsPane } from './machine-detail/ToolsPane';
+import { CurrentProgramPane } from './machine-detail/CurrentProgramPane';
+import { CycleHistoryPane } from './machine-detail/CycleHistoryPane';
 import './MachineCard.css';
 import { API_BASE_URL } from '../config/api';
 
@@ -44,10 +50,22 @@ interface MachineStatus {
 interface MachineCardProps {
   machine: MachineStatus;
   editMode?: boolean;
+  isExpanded?: boolean;
+  onExpand?: () => void;
+  onCollapse?: () => void;
   onDelete?: (machine: MachineStatus) => void;
+  scrollToStatus?: boolean; // Flag to trigger scroll to status timeline
 }
 
-export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = false, onDelete }) => {
+export const MachineCard: React.FC<MachineCardProps> = ({ 
+  machine, 
+  editMode = false, 
+  isExpanded = false,
+  onExpand,
+  onCollapse,
+  onDelete,
+  scrollToStatus = false
+}) => {
   // Debug: Log machine status for debugging name color
   console.log(`Machine: ${machine.machine_name}, is_online: ${machine.is_online}, status: "${machine.status}"`);
 
@@ -63,6 +81,85 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
   const [isEditSaving, setIsEditSaving] = useState(false);
   const [isEditTesting, setIsEditTesting] = useState(false);
   const [editTestResult, setEditTestResult] = useState<any>(null);
+  const [expandedPaneModal, setExpandedPaneModal] = useState<{ type: string; props: any } | null>(null);
+  const [expandedPane, setExpandedPane] = useState<string | null>(null);
+  const [cachedAlarms, setCachedAlarms] = useState<Alarm[] | null>(null);
+  const [showAlarmHover, setShowAlarmHover] = useState(false);
+  const [alarmHoverPosition, setAlarmHoverPosition] = useState<{ top: number; left: number } | null>(null);
+  const alarmPaneRef = useRef<HTMLDivElement>(null);
+  const alarmHoverRef = useRef<HTMLDivElement>(null);
+  const alarmIndicatorRef = useRef<HTMLDivElement>(null);
+  const [showToolsHover, setShowToolsHover] = useState(false);
+  const [toolsHoverPosition, setToolsHoverPosition] = useState<{ top: number; left: number } | null>(null);
+  const toolsPaneRef = useRef<HTMLDivElement>(null);
+  const toolsHoverRef = useRef<HTMLDivElement>(null);
+  const toolsIndicatorRef = useRef<HTMLDivElement>(null);
+  const [showStatusHover, setShowStatusHover] = useState(false);
+  const [statusHoverPosition, setStatusHoverPosition] = useState<{ top: number; left: number } | null>(null);
+  const statusTimelineRef = useRef<HTMLDivElement>(null);
+  const statusHoverRef = useRef<HTMLDivElement>(null);
+  const statusIndicatorRef = useRef<HTMLDivElement>(null);
+  const [showProgramHover, setShowProgramHover] = useState(false);
+  const [programHoverPosition, setProgramHoverPosition] = useState<{ top: number; left: number } | null>(null);
+  const currentProgramPaneRef = useRef<HTMLDivElement>(null);
+  const programHoverRef = useRef<HTMLDivElement>(null);
+  const programIndicatorRef = useRef<HTMLDivElement>(null);
+  const [showCycleHover, setShowCycleHover] = useState(false);
+  const [cycleHoverPosition, setCycleHoverPosition] = useState<{ top: number; left: number } | null>(null);
+  const cycleHistoryPaneRef = useRef<HTMLDivElement>(null);
+  const cycleHoverRef = useRef<HTMLDivElement>(null);
+  const cycleIndicatorRef = useRef<HTMLDivElement>(null);
+  const [currentProgram, setCurrentProgram] = useState<string | null>(null);
+  
+  // Cache alarms from machine prop to avoid refetching
+  useEffect(() => {
+    if (machine.alarms) {
+      setCachedAlarms(machine.alarms);
+    }
+  }, [machine.alarms]);
+
+  // Fetch current program name
+  useEffect(() => {
+    if (machine.is_online && machine.machine_id) {
+      const fetchProgram = async () => {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/programs/machines/${machine.machine_id}/deployments?current_only=true`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data && data.length > 0) {
+              setCurrentProgram(data[0].deployed_filename);
+            } else {
+              setCurrentProgram(null);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching current program:', error);
+          setCurrentProgram(null);
+        }
+      };
+      fetchProgram();
+      const interval = setInterval(fetchProgram, 30000);
+      return () => clearInterval(interval);
+    } else {
+      setCurrentProgram(null);
+    }
+  }, [machine.machine_id, machine.is_online]);
+
+  // Handle scroll to status timeline when requested
+  useEffect(() => {
+    if (scrollToStatus && isExpanded && statusTimelineRef.current) {
+      setTimeout(() => {
+        if (statusTimelineRef.current) {
+          statusTimelineRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+          statusTimelineRef.current.classList.add('status-pane-highlight');
+          setTimeout(() => {
+            statusTimelineRef.current?.classList.remove('status-pane-highlight');
+          }, 2000);
+        }
+      }, 300);
+    }
+  }, [scrollToStatus, isExpanded]);
+
   const [editFormData, setEditFormData] = useState({
     ip_address: machine.ip_address || '',
     ftp_username: machine.ftp_username || '',
@@ -220,9 +317,25 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
 
   const getStatusType = () => {
     if (!machine.is_online) return 'offline';
-    if (machine.status?.includes('Error')) return 'error';
-    if (machine.status?.includes('Running')) return 'running';
+    // Normalize actual machine statuses: off, standby, error, operating, stopped
+    const status = machine.status?.toLowerCase() || '';
+    if (status === 'error' || status.includes('error')) return 'error';
+    if (status === 'operating' || status.includes('running')) return 'running';
+    if (status === 'standby' || status.includes('idle')) return 'idle';
+    if (status === 'stopped' || status === 'off') return 'stopped';
     return 'idle';
+  };
+
+  const getStatusDisplay = () => {
+    if (!machine.is_online) return 'OFF';
+    // Normalize status display to match machine statuses: operating, standby, stopped, error, off
+    const status = machine.status?.toLowerCase() || '';
+    if (status === 'error' || status.includes('error')) return 'ERROR';
+    if (status === 'operating' || status.includes('operating') || status.includes('running')) return 'OPERATING';
+    if (status === 'standby' || status.includes('standby') || status.includes('idle')) return 'IDLE';
+    if (status === 'stopped' || status.includes('stopped')) return 'STOPPED';
+    if (status === 'off' || status.includes('off')) return 'OFF';
+    return 'UNKNOWN';
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -266,8 +379,203 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
     return time.substring(0, 8); // Remove decimal if present
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't expand if clicking on buttons or inputs
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('.card-action-btn') ||
+      target.closest('.upload-button') ||
+      target.closest('.tool-summary') ||
+      isEditing ||
+      editMode
+    ) {
+      return;
+    }
+    
+    if (isExpanded) {
+      onCollapse?.();
+    } else {
+      onExpand?.();
+    }
+  };
+
+  // Render expanded view
+  if (isExpanded && !isEditing && !editMode) {
+    return (
+      <div className={`machine-card expanded`} onClick={handleCardClick}>
+        <div className="machine-card-expanded-header">
+          <div className="expanded-header-top">
+            ╔{'═'.repeat(70)}╗
+          </div>
+          <div className="expanded-header-title">
+            <span className="expanded-machine-name">{machine.machine_name}</span>
+            <div className="expanded-header-actions">
+              <button
+                className="card-action-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCollapse?.();
+                }}
+                title="Collapse"
+              >
+                [COLLAPSE]
+              </button>
+            </div>
+          </div>
+          <div className="expanded-header-bottom">
+            ╠{'═'.repeat(70)}╣
+          </div>
+        </div>
+
+        <div className="machine-card-expanded-content">
+          <div className="expanded-pane-full">
+            <div ref={statusTimelineRef}>
+              <StatusTimeline 
+                machineId={machine.machine_id} 
+                currentStatus={machine.status} 
+                isOnline={machine.is_online}
+                onExpand={() => setExpandedPaneModal({ type: 'timeline', props: { machineId: machine.machine_id, currentStatus: machine.status, isOnline: machine.is_online } })}
+              />
+            </div>
+          </div>
+
+          <div className="expanded-panes-top">
+            <div className="expanded-pane-left">
+              <div ref={alarmPaneRef}>
+                <AlarmPane 
+                  machineId={machine.machine_id} 
+                  currentAlarms={machine.alarms || cachedAlarms || undefined}
+                  onExpand={() => setExpandedPaneModal({ type: 'alarms', props: { machineId: machine.machine_id, currentAlarms: machine.alarms || cachedAlarms } })}
+                />
+              </div>
+            </div>
+            <div className="expanded-pane-right">
+              <div ref={currentProgramPaneRef}>
+                <CurrentProgramPane 
+                  machineId={machine.machine_id}
+                  machineStatus={machine.status}
+                  onExpand={() => setExpandedPaneModal({ type: 'program', props: { machineId: machine.machine_id, machineStatus: machine.status } })}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="expanded-panes-bottom">
+            <div className="expanded-pane-left">
+              <div ref={toolsPaneRef}>
+                <ToolsPane 
+                  tools={machine.tools || []}
+                  currentTool={machine.current_tool}
+                  machineId={machine.machine_id}
+                  onExpand={() => setExpandedPane(expandedPane === 'tools' ? null : 'tools')}
+                  isExpanded={expandedPane === 'tools'}
+                  isFullExpanded={expandedPane === 'tools'}
+                />
+              </div>
+            </div>
+            <div className="expanded-pane-right">
+              <div ref={cycleHistoryPaneRef}>
+                <CycleHistoryPane 
+                  machineId={machine.machine_id}
+                  onExpand={() => setExpandedPaneModal({ type: 'history', props: { machineId: machine.machine_id } })}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Expanded Pane Modals */}
+        {expandedPaneModal && (
+          <Modal
+            isOpen={true}
+            onClose={() => setExpandedPaneModal(null)}
+            title={expandedPaneModal.type === 'alarms' ? 'ALARMS' :
+                   expandedPaneModal.type === 'program' ? 'CURRENT PROGRAM' :
+                   expandedPaneModal.type === 'tools' ? 'TOOLS' :
+                   expandedPaneModal.type === 'timeline' ? 'STATUS TIMELINE' :
+                   expandedPaneModal.type === 'history' ? 'CYCLE HISTORY' : 'EXPANDED VIEW'}
+          >
+            <div 
+              style={{ height: 'auto', overflow: 'visible' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {expandedPaneModal.type === 'alarms' && (
+                <AlarmPane 
+                  machineId={expandedPaneModal.props.machineId} 
+                  currentAlarms={expandedPaneModal.props.currentAlarms}
+                  onExpand={undefined}
+                  isExpanded={true}
+                />
+              )}
+              {expandedPaneModal.type === 'program' && (
+                <CurrentProgramPane 
+                  machineId={expandedPaneModal.props.machineId}
+                  machineStatus={expandedPaneModal.props.machineStatus}
+                />
+              )}
+              {expandedPaneModal.type === 'tools' && (
+                <ToolsPane 
+                  tools={expandedPaneModal.props.tools}
+                  currentTool={expandedPaneModal.props.currentTool}
+                  machineId={expandedPaneModal.props.machineId}
+                  isExpanded={true}
+                />
+              )}
+              {expandedPaneModal.type === 'timeline' && (
+                <StatusTimeline 
+                  machineId={expandedPaneModal.props.machineId}
+                  currentStatus={expandedPaneModal.props.currentStatus}
+                  isOnline={expandedPaneModal.props.isOnline}
+                />
+              )}
+              {expandedPaneModal.type === 'history' && (
+                <CycleHistoryPane 
+                  machineId={expandedPaneModal.props.machineId}
+                />
+              )}
+            </div>
+          </Modal>
+        )}
+
+        <ToolListModal
+          isOpen={showToolModal}
+          onClose={() => setShowToolModal(false)}
+          tools={(machine.tools || []) as any}
+          machineName={machine.machine_name}
+        />
+
+        <UploadConfirmationModal
+          isOpen={showConfirmationModal}
+          onClose={() => {
+            setShowConfirmationModal(false);
+            setFileContent('');
+            setValidationResult(null);
+            setSelectedFilename('');
+          }}
+          result={validationResult}
+          filename={selectedFilename}
+          machineId={machine.machine_id}
+          machineName={machine.machine_name}
+          machinePath={machine.path || '/PROGRAM'}
+          fileContent={fileContent}
+        />
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".nc,.NC,.txt"
+          style={{ display: 'none' }}
+          onChange={handleFileSelect}
+        />
+      </div>
+    );
+  }
+
+  // Render compact view
   return (
-    <div className="machine-card">
+    <div className={`machine-card ${isExpanded ? 'expanded' : ''}`} onClick={handleCardClick}>
       <div className="machine-card-header">
         {isEditing ? (
           <input
@@ -278,29 +586,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
             disabled={isEditSaving}
           />
         ) : (
-          <span className={`machine-name ${!machine.is_online ? 'text-error' : (machine.status?.includes('Running') ? 'text-glow' : 'text-muted')}`}>{machine.machine_name}</span>
+          <span className={`machine-name ${!machine.is_online ? 'text-error' : (machine.status?.toLowerCase() === 'operating' || machine.status?.toLowerCase().includes('running') ? 'text-glow' : 'text-muted')}`}>{machine.machine_name}</span>
         )}
         <div className="machine-header-actions">
-          {!isEditing && machine.alarms && machine.alarms.length > 0 && (
-            <div className={`alarm-indicator has-alarms ${!machine.is_online ? 'blink' : ''}`}>
-              <div className="alarm-label">
-                {machine.alarms.length} ALARMS
-              </div>
-              <div className="alarm-tooltip">
-                <div className="alarm-tooltip-title">
-                  {machine.alarms.length} ALARM{machine.alarms.length > 1 ? 'S' : ''}
-                </div>
-                <div className="alarm-tooltip-list">
-                  {machine.alarms.map((alarm, idx) => (
-                    <div key={idx} className="alarm-tooltip-item">
-                      <span className="alarm-tooltip-code">{alarm.code}</span>
-                      <span className="alarm-tooltip-message">{alarm.message}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
           {editMode && !isEditing && (
             <>
               <button
@@ -555,27 +843,279 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
         </div>
       ) : machine.is_online ? (
         <div className="machine-card-content">
-          <div className="machine-row">
+          <div 
+            ref={statusIndicatorRef}
+            className="machine-row machine-row-hoverable"
+            onMouseEnter={() => {
+              if (statusIndicatorRef.current) {
+                const rect = statusIndicatorRef.current.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                const paneWidth = 600;
+                const paneHeight = 300;
+                
+                let left = rect.right + 8;
+                let top = rect.top;
+                
+                if (left + paneWidth > viewportWidth) {
+                  left = rect.left - paneWidth - 8;
+                }
+                if (top + paneHeight > viewportHeight) {
+                  top = Math.max(8, viewportHeight - paneHeight - 8);
+                }
+                if (top < 8) {
+                  top = 8;
+                }
+                
+                setStatusHoverPosition({ top, left });
+              }
+              setShowStatusHover(true);
+            }}
+            onMouseLeave={() => setShowStatusHover(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isExpanded) {
+                onExpand?.();
+              }
+              setTimeout(() => {
+                if (statusTimelineRef.current) {
+                  statusTimelineRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+                  statusTimelineRef.current.classList.add('status-pane-highlight');
+                  setTimeout(() => {
+                    statusTimelineRef.current?.classList.remove('status-pane-highlight');
+                  }, 2000);
+                }
+              }, 300);
+            }}
+            style={{ cursor: 'pointer' }}
+          >
             <span className="label">STATUS:</span>
             <span className={`value ${getStatusType() === 'error' ? 'text-error' : 'text-success'}`}>
-              {machine.status || 'UNKNOWN'}
+              {getStatusDisplay()}
             </span>
+            {showStatusHover && statusHoverPosition && (
+              <div 
+                ref={statusHoverRef}
+                className="status-hover-pane"
+                style={{
+                  top: `${statusHoverPosition.top}px`,
+                  left: `${statusHoverPosition.left}px`,
+                }}
+                onMouseEnter={() => setShowStatusHover(true)}
+                onMouseLeave={() => setShowStatusHover(false)}
+              >
+                <StatusTimeline
+                  machineId={machine.machine_id}
+                  currentStatus={machine.status}
+                  isOnline={machine.is_online}
+                />
+              </div>
+            )}
           </div>
 
-          <div className="machine-row">
-            <span className="label">CYCLE:</span>
-            <span className="value">{formatTime(machine.cycle_time)}</span>
+          <div 
+            ref={programIndicatorRef}
+            className="machine-row machine-row-hoverable"
+            onMouseEnter={() => {
+              if (programIndicatorRef.current) {
+                const rect = programIndicatorRef.current.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                const paneWidth = 400;
+                const paneHeight = 300;
+                
+                let left = rect.right + 8;
+                let top = rect.top;
+                
+                if (left + paneWidth > viewportWidth) {
+                  left = rect.left - paneWidth - 8;
+                }
+                if (top + paneHeight > viewportHeight) {
+                  top = Math.max(8, viewportHeight - paneHeight - 8);
+                }
+                if (top < 8) {
+                  top = 8;
+                }
+                
+                setProgramHoverPosition({ top, left });
+              }
+              setShowProgramHover(true);
+            }}
+            onMouseLeave={() => setShowProgramHover(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isExpanded) {
+                onExpand?.();
+              }
+              setTimeout(() => {
+                if (currentProgramPaneRef.current) {
+                  currentProgramPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+                  currentProgramPaneRef.current.classList.add('program-pane-highlight');
+                  setTimeout(() => {
+                    currentProgramPaneRef.current?.classList.remove('program-pane-highlight');
+                  }, 2000);
+                }
+              }, 300);
+            }}
+            style={{ cursor: 'pointer' }}
+          >
+            <span className="label">PROGRAM:</span>
+            <span className="value">{currentProgram || 'NONE'}</span>
+            {showProgramHover && programHoverPosition && (
+              <div 
+                ref={programHoverRef}
+                className="program-hover-pane"
+                style={{
+                  top: `${programHoverPosition.top}px`,
+                  left: `${programHoverPosition.left}px`,
+                }}
+                onMouseEnter={() => setShowProgramHover(true)}
+                onMouseLeave={() => setShowProgramHover(false)}
+              >
+                <CurrentProgramPane
+                  machineId={machine.machine_id}
+                  machineStatus={machine.status}
+                />
+              </div>
+            )}
           </div>
 
-          <div className="machine-row">
-            <span className="label">POWER:</span>
-            <span className="value">{machine.power_on_hours || '00:00:00'}</span>
+          <div 
+            ref={cycleIndicatorRef}
+            className="machine-row machine-row-hoverable"
+            onMouseEnter={() => {
+              if (cycleIndicatorRef.current) {
+                const rect = cycleIndicatorRef.current.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                const paneWidth = 500;
+                const paneHeight = 400;
+                
+                let left = rect.right + 8;
+                let top = rect.top;
+                
+                if (left + paneWidth > viewportWidth) {
+                  left = rect.left - paneWidth - 8;
+                }
+                if (top + paneHeight > viewportHeight) {
+                  top = Math.max(8, viewportHeight - paneHeight - 8);
+                }
+                if (top < 8) {
+                  top = 8;
+                }
+                
+                setCycleHoverPosition({ top, left });
+              }
+              setShowCycleHover(true);
+            }}
+            onMouseLeave={() => setShowCycleHover(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isExpanded) {
+                onExpand?.();
+              }
+              setTimeout(() => {
+                if (cycleHistoryPaneRef.current) {
+                  cycleHistoryPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+                  cycleHistoryPaneRef.current.classList.add('cycle-pane-highlight');
+                  setTimeout(() => {
+                    cycleHistoryPaneRef.current?.classList.remove('cycle-pane-highlight');
+                  }, 2000);
+                }
+              }, 300);
+            }}
+            style={{ cursor: 'pointer' }}
+          >
+            <span className="label">CYCLE/PARTS:</span>
+            <span className="value">
+              {formatTime(machine.cycle_time)}
+              {machine.counters && machine.counters.length > 0 && `/${machine.counters[0].count}`}
+            </span>
+            {showCycleHover && cycleHoverPosition && (
+              <div 
+                ref={cycleHoverRef}
+                className="cycle-hover-pane"
+                style={{
+                  top: `${cycleHoverPosition.top}px`,
+                  left: `${cycleHoverPosition.left}px`,
+                }}
+                onMouseEnter={() => setShowCycleHover(true)}
+                onMouseLeave={() => setShowCycleHover(false)}
+              >
+                <CycleHistoryPane
+                  machineId={machine.machine_id}
+                />
+              </div>
+            )}
           </div>
 
-          {machine.counters && machine.counters.length > 0 && (
-            <div className="machine-row">
-              <span className="label">PARTS:</span>
-              <span className="value">{machine.counters[0].count}</span>
+          {machine.tools && machine.tools.length > 0 && (
+            <div
+              ref={toolsIndicatorRef}
+              className="machine-row machine-row-hoverable"
+              onMouseEnter={() => {
+                if (toolsIndicatorRef.current) {
+                  const rect = toolsIndicatorRef.current.getBoundingClientRect();
+                  const viewportWidth = window.innerWidth;
+                  const viewportHeight = window.innerHeight;
+                  const paneWidth = 500;
+                  const paneHeight = 500;
+                  
+                  let left = rect.right + 8;
+                  let top = rect.top;
+                  
+                  if (left + paneWidth > viewportWidth) {
+                    left = rect.left - paneWidth - 8;
+                  }
+                  if (top + paneHeight > viewportHeight) {
+                    top = Math.max(8, viewportHeight - paneHeight - 8);
+                  }
+                  if (top < 8) {
+                    top = 8;
+                  }
+                  
+                  setToolsHoverPosition({ top, left });
+                }
+                setShowToolsHover(true);
+              }}
+              onMouseLeave={() => setShowToolsHover(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isExpanded) {
+                  onExpand?.();
+                }
+                setTimeout(() => {
+                  if (toolsPaneRef.current) {
+                    toolsPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+                    toolsPaneRef.current.classList.add('tools-pane-highlight');
+                    setTimeout(() => {
+                      toolsPaneRef.current?.classList.remove('tools-pane-highlight');
+                    }, 2000);
+                  }
+                }, 300);
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              <span className="label">ATC TOOLS:</span>
+              <span className="value">{machine.tools.length}</span>
+              {showToolsHover && toolsHoverPosition && (
+                <div 
+                  ref={toolsHoverRef}
+                  className="tools-hover-pane"
+                  style={{
+                    top: `${toolsHoverPosition.top}px`,
+                    left: `${toolsHoverPosition.left}px`,
+                  }}
+                  onMouseEnter={() => setShowToolsHover(true)}
+                  onMouseLeave={() => setShowToolsHover(false)}
+                >
+                  <ToolsPane
+                    tools={machine.tools || []}
+                    currentTool={machine.current_tool}
+                    machineId={machine.machine_id}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -586,21 +1126,86 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, editMode = fa
             </div>
           )}
 
-          {machine.tools && machine.tools.length > 0 && (
-            <>
-              <div className="machine-card-divider-thin">
-                {'─'.repeat(32)}
-              </div>
-              <div
-                className="tool-summary"
-                onClick={() => setShowToolModal(true)}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="tool-count text-muted">
-                  {machine.tools.length} TOOLS IN ATC [VIEW]
+          {!isEditing && (
+            <div 
+              ref={alarmIndicatorRef}
+              className="machine-row machine-row-hoverable"
+              onMouseEnter={() => {
+                if (alarmIndicatorRef.current && machine.alarms && machine.alarms.length > 0) {
+                  const rect = alarmIndicatorRef.current.getBoundingClientRect();
+                  const viewportWidth = window.innerWidth;
+                  const viewportHeight = window.innerHeight;
+                  const paneWidth = 450; // Approximate width
+                  const paneHeight = 500; // Max height
+                  
+                  // Calculate position - prefer right side, but adjust if needed
+                  let left = rect.right + 8;
+                  let top = rect.top;
+                  
+                  // If pane would go off right edge, position to the left
+                  if (left + paneWidth > viewportWidth) {
+                    left = rect.left - paneWidth - 8;
+                  }
+                  
+                  // If pane would go off bottom, adjust upward
+                  if (top + paneHeight > viewportHeight) {
+                    top = Math.max(8, viewportHeight - paneHeight - 8);
+                  }
+                  
+                  // Ensure it doesn't go off top
+                  if (top < 8) {
+                    top = 8;
+                  }
+                  
+                  setAlarmHoverPosition({ top, left });
+                }
+                if (machine.alarms && machine.alarms.length > 0) {
+                  setShowAlarmHover(true);
+                }
+              }}
+              onMouseLeave={() => setShowAlarmHover(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isExpanded) {
+                  onExpand?.();
+                }
+                // Scroll to alarm pane after expansion
+                setTimeout(() => {
+                  if (alarmPaneRef.current) {
+                    alarmPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Highlight briefly
+                    alarmPaneRef.current.classList.add('alarm-pane-highlight');
+                    setTimeout(() => {
+                      alarmPaneRef.current?.classList.remove('alarm-pane-highlight');
+                    }, 2000);
+                  }
+                }, 300);
+              }}
+              style={{ cursor: machine.alarms && machine.alarms.length > 0 ? 'pointer' : 'default' }}
+            >
+              <span className="label">ALARMS:</span>
+              <span className={`value ${machine.alarms && machine.alarms.length > 0 ? 'text-error' : ''}`}>
+                {machine.alarms ? machine.alarms.length : 0}
+              </span>
+              {showAlarmHover && alarmHoverPosition && machine.alarms && machine.alarms.length > 0 && (
+                <div 
+                  ref={alarmHoverRef}
+                  className="alarm-hover-pane"
+                  style={{
+                    top: `${alarmHoverPosition.top}px`,
+                    left: `${alarmHoverPosition.left}px`,
+                  }}
+                  onMouseEnter={() => setShowAlarmHover(true)}
+                  onMouseLeave={() => setShowAlarmHover(false)}
+                >
+                  <AlarmPane
+                    machineId={machine.machine_id}
+                    currentAlarms={machine.alarms}
+                    isExpanded={true}
+                  />
                 </div>
-              </div>
-            </>
+              )}
+            </div>
           )}
 
           <div className="machine-card-divider-thin">

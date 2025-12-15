@@ -30,6 +30,48 @@
   padding: 1rem 1.5rem;
   border-bottom: 2px solid var(--color-text-dim);
   background: var(--color-bg-darker);
+  gap: 12px;
+}
+
+.summary-modal-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.summary-modal-header-controls .time-range-btn {
+  background: transparent;
+  border: 1px solid var(--color-text-dim, #666);
+  color: var(--color-text-secondary, #999);
+  padding: 4px 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.summary-modal-header-controls .time-range-btn:hover:not(:disabled) {
+  background: rgba(0, 255, 0, 0.1);
+  border-color: var(--color-text-secondary, #999);
+  color: var(--color-text-primary, #e0e0e0);
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
+}
+
+.summary-modal-header-controls .time-range-btn.active {
+  background: rgba(0, 255, 0, 0.15);
+  border-color: var(--color-text-primary, #e0e0e0);
+  color: var(--color-text-primary, #e0e0e0);
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.4);
+}
+
+.summary-modal-header-controls .time-range-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .summary-modal-title {
@@ -69,34 +111,35 @@
 
 .summary-headers {
   display: grid;
-  gap: 1rem;
-  padding: 0.75rem;
+  gap: 8px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--color-text-dim);
   background: var(--color-bg-darker);
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--color-text-secondary);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
 }
 
 /* Match grid layouts from SummaryRow.css */
-.summary-modal:has(.time-range-selector) .summary-headers {
-  grid-template-columns: 2fr 1fr 2fr 1.5fr 1fr;
+.summary-modal-running .summary-headers {
+  grid-template-columns: 1.5fr 0.8fr 0.8fr 5fr;
 }
 
-.summary-modal:has([class*="online"]) .summary-headers {
+.summary-modal-online .summary-headers {
   grid-template-columns: 2fr 1fr 1.5fr 2fr 1fr;
 }
 
-.summary-modal:has([class*="offline"]) .summary-headers {
+.summary-modal-offline .summary-headers {
   grid-template-columns: 2fr 1fr 2fr 3fr 1fr;
 }
 
 .summary-header {
   display: flex;
   align-items: center;
+  text-align: left;
 }
 
 .summary-modal-content {
@@ -208,6 +251,16 @@
 .summary-modal .summary-cell.graph {
   overflow: hidden;
   white-space: nowrap;
+}
+
+/* Enhanced oscilloscope in modal */
+.summary-modal .summary-cell-oscilloscope-full {
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
 }
 
 /* Responsive Design */
