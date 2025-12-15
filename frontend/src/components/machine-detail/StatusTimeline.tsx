@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../../config/api';
+import { useBetaMode } from '../../hooks/useBetaMode';
 import './StatusTimeline.css';
 
 interface StatusEvent {
@@ -21,6 +22,7 @@ interface StatusTimelineProps {
 type TimeRange = '1h' | '8h' | '24h' | '7d';
 
 export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, currentStatus, isOnline, currentError, onExpand }) => {
+  const { isBetaMode } = useBetaMode();
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [events, setEvents] = useState<StatusEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,8 +30,16 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const [oscilloscopeWidth, setOscilloscopeWidth] = useState(180);
   const [scaleX, setScaleX] = useState(1);
+  const [colorMode, setColorMode] = useState<boolean>(() => {
+    return localStorage.getItem('oscilloscopeColorMode') === 'true';
+  });
   const oscilloscopeRef = React.useRef<HTMLDivElement>(null);
   const oscilloscopeDataRef = React.useRef<HTMLDivElement>(null);
+  
+  // Update localStorage when colorMode changes
+  useEffect(() => {
+    localStorage.setItem('oscilloscopeColorMode', String(colorMode));
+  }, [colorMode]);
   
   // Status mapping for Y-axis (oscilloscope) - using actual machine statuses
   // Order: Operating (top), Standby, Stopped, Error, Off (bottom)
@@ -39,6 +49,93 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
     'stopped': 2,
     'error': 1,
     'off': 0,
+  };
+  
+  // Color mapping for status levels
+  const STATUS_COLORS: { [key: string]: string } = {
+    'operating': '#00ff00', // green
+    'standby': '#ffff00',    // yellow
+    'stopped': '#ff8800',    // orange
+    'error': '#ff0000',      // red
+    'off': '#808080',        // grey
+  };
+  
+  // Helper to get color for a Y position (8-92, where 8 is top, 92 is bottom)
+  const getColorForY = (y: number): string => {
+    // Y is in padded range: 8 (top) to 92 (bottom)
+    // Status levels: operating=4 (top), standby=3, stopped=2, error=1, off=0 (bottom)
+    // Invert Y: higher Y = lower level
+    const normalizedY = (y - 8) / 84; // 0 to 1, where 0 = top, 1 = bottom
+    const invertedY = 1 - normalizedY; // Invert: 0 = bottom, 1 = top
+    const level = invertedY * 4; // 0 to 4, where 0 = off (bottom), 4 = operating (top)
+    
+    // Map level to status colors with extended smooth interpolation zones
+    // Level 0 = off (grey), Level 1 = error (red), Level 2 = stopped (orange), Level 3 = standby (yellow), Level 4 = operating (green)
+    // Extended transition zones for smoother color changes
+    
+    if (level <= 0.3) {
+      // Bottom: off (grey) - pure grey
+      return STATUS_COLORS['off'];
+    } else if (level <= 1.2) {
+      // Extended transition zone around level 1: error (red)
+      if (level <= 1.0) {
+        // Transition from off (0.3) to error (1.0) - wider zone
+        const t = (level - 0.3) / 0.7; // 0 to 1 over wider range
+        return interpolateColor(STATUS_COLORS['off'], STATUS_COLORS['error'], t);
+      } else {
+        // Transition from error (1.0) to stopped (1.2) - extended
+        const t = (level - 1.0) / 0.2; // 0 to 1
+        return interpolateColor(STATUS_COLORS['error'], STATUS_COLORS['stopped'], t);
+      }
+    } else if (level <= 2.2) {
+      // Extended transition zone around level 2: stopped (orange)
+      if (level <= 2.0) {
+        // Transition from error (1.2) to stopped (2.0) - extended
+        const t = (level - 1.2) / 0.8; // 0 to 1 over wider range
+        return interpolateColor(STATUS_COLORS['error'], STATUS_COLORS['stopped'], t);
+      } else {
+        // Transition from stopped (2.0) to standby (2.2) - extended
+        const t = (level - 2.0) / 0.2; // 0 to 1
+        return interpolateColor(STATUS_COLORS['stopped'], STATUS_COLORS['standby'], t);
+      }
+    } else if (level <= 3.2) {
+      // Extended transition zone around level 3: standby (yellow)
+      if (level <= 3.0) {
+        // Transition from stopped (2.2) to standby (3.0) - extended
+        const t = (level - 2.2) / 0.8; // 0 to 1 over wider range
+        return interpolateColor(STATUS_COLORS['stopped'], STATUS_COLORS['standby'], t);
+      } else {
+        // Transition from standby (3.0) to operating (3.2) - extended
+        const t = (level - 3.0) / 0.2; // 0 to 1
+        return interpolateColor(STATUS_COLORS['standby'], STATUS_COLORS['operating'], t);
+      }
+    } else {
+      // Top: operating (green)
+      if (level <= 4.0) {
+        // Transition from standby (3.2) to operating (4.0) - extended
+        const t = (level - 3.2) / 0.8; // 0 to 1 over wider range
+        return interpolateColor(STATUS_COLORS['standby'], STATUS_COLORS['operating'], t);
+      }
+      return STATUS_COLORS['operating'];
+    }
+  };
+  
+  // Helper to interpolate between two hex colors
+  const interpolateColor = (color1: string, color2: string, t: number): string => {
+    const hex1 = color1.replace('#', '');
+    const hex2 = color2.replace('#', '');
+    const r1 = parseInt(hex1.substr(0, 2), 16);
+    const g1 = parseInt(hex1.substr(2, 2), 16);
+    const b1 = parseInt(hex1.substr(4, 2), 16);
+    const r2 = parseInt(hex2.substr(0, 2), 16);
+    const g2 = parseInt(hex2.substr(2, 2), 16);
+    const b2 = parseInt(hex2.substr(4, 2), 16);
+    
+    const r = Math.round(r1 + (r2 - r1) * t);
+    const g = Math.round(g1 + (g2 - g1) * t);
+    const b = Math.round(b1 + (b2 - b1) * t);
+    
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   };
   
   // Normalize status string to actual machine status key
@@ -474,6 +571,15 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
         >
           [7D]
         </button>
+        {isBetaMode && (
+          <button
+            className={`time-range-btn ${colorMode ? 'active' : ''}`}
+            onClick={() => setColorMode(!colorMode)}
+            title="Toggle color-coded trace"
+          >
+            [COLOR]
+          </button>
+        )}
       </div>
       <div className="status-timeline-content">
         {loading ? (
@@ -496,15 +602,26 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                   ))}
                 </div>
                 <div className="oscilloscope-svg-container" ref={oscilloscopeDataRef}>
-                  <svg 
-                    className="oscilloscope-svg"
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    style={{ 
-                      transform: `scaleX(${scaleX})`, 
-                      transformOrigin: 'left center'
+                  <div
+                    style={{
+                      transform: `scaleX(${scaleX})`,
+                      transformOrigin: 'left center',
+                      width: '100%',
+                      height: '100%',
+                      willChange: 'auto',
+                      backfaceVisibility: 'hidden',
                     }}
                   >
+                    <svg 
+                      className="oscilloscope-svg"
+                      viewBox="0 0 100 100"
+                      preserveAspectRatio="none"
+                      shapeRendering="crispEdges"
+                      style={{ 
+                        imageRendering: 'crisp-edges' as const,
+                        filter: 'none',
+                      }}
+                    >
                     {/* Grid lines for each status level */}
                     {statusLevels.map((level, idx) => {
                       const levelY = (1 - level / 4) * 100; // Invert Y (0 = bottom, 4 = top)
@@ -519,6 +636,8 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                           stroke="var(--color-text-dim)"
                           strokeWidth="0.5"
                           opacity="0.3"
+                          shapeRendering="crispEdges"
+                          style={{ filter: 'none' }}
                         />
                       );
                     })}
@@ -539,7 +658,75 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                       />
                     ))}
                     {/* Oscilloscope trace - smooth curve with oscillation */}
-                    {svgPoints.length > 1 && (
+                    {svgPoints.length > 1 && (colorMode && isBetaMode ? (
+                      // Color mode: render path segments with interpolated colors
+                      (() => {
+                        const segments: Array<{ d: string; color: string }> = [];
+                        
+                        // Build continuous path segments, splitting on color changes or every N points
+                        const MAX_POINTS_PER_SEGMENT = 3; // Force splits frequently to show color transitions
+                        let currentPath = `M ${svgPoints[0].x},${svgPoints[0].y}`;
+                        let currentColor = getColorForY(svgPoints[0].y);
+                        let pointsInSegment = 0;
+                        
+                        for (let i = 1; i < svgPoints.length; i++) {
+                          const prev = svgPoints[i - 1];
+                          const curr = svgPoints[i];
+                          const midX = (prev.x + curr.x) / 2;
+                          const midY = (prev.y + curr.y) / 2;
+                          
+                          // Get color for midpoint
+                          const segmentColor = getColorForY(midY);
+                          
+                          // Check if color changed or we've reached max points per segment
+                          const colorChanged = segmentColor !== currentColor;
+                          const shouldSplit = (colorChanged || pointsInSegment >= MAX_POINTS_PER_SEGMENT) && i > 1;
+                          
+                          if (shouldSplit) {
+                            // Split segment - close current segment and start new one
+                            // Complete path to previous point
+                            const prevPrev = svgPoints[i - 2];
+                            const prevMidX = (prevPrev.x + prev.x) / 2;
+                            const prevMidY = (prevPrev.y + prev.y) / 2;
+                            currentPath += ` Q ${prevPrev.x},${prevPrev.y} ${prevMidX},${prevMidY} T ${prev.x},${prev.y}`;
+                            
+                            // Save current segment
+                            segments.push({ d: currentPath, color: currentColor });
+                            
+                            // Start new segment from previous point
+                            currentPath = `M ${prev.x},${prev.y} Q ${prev.x},${prev.y} ${midX},${midY} T ${curr.x},${curr.y}`;
+                            currentColor = segmentColor;
+                            pointsInSegment = 1;
+                          } else {
+                            // Continue current segment
+                            currentPath += ` Q ${prev.x},${prev.y} ${midX},${midY} T ${curr.x},${curr.y}`;
+                            currentColor = segmentColor;
+                            pointsInSegment++;
+                          }
+                        }
+                        
+                        // Add final segment
+                        if (currentPath) {
+                          segments.push({ d: currentPath, color: currentColor });
+                        }
+                        
+                        return segments.map((segment, idx) => (
+                          <path
+                            key={`trace-segment-${idx}`}
+                            d={segment.d}
+                            fill="none"
+                            stroke={segment.color}
+                            strokeWidth="2"
+                            strokeLinecap="butt"
+                            strokeLinejoin="miter"
+                            vectorEffect="non-scaling-stroke"
+                            shapeRendering="crispEdges"
+                            style={{ filter: 'none' }}
+                          />
+                        ));
+                      })()
+                    ) : (
+                      // Normal mode: single path with default color
                       <path
                         d={(() => {
                           // Create smooth path using quadratic bezier curves
@@ -558,14 +745,15 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                         })()}
                         fill="none"
                         stroke="var(--color-text-primary)"
-                        strokeWidth="0.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        strokeLinecap="butt"
+                        strokeLinejoin="miter"
                         vectorEffect="non-scaling-stroke"
                         shapeRendering="crispEdges"
+                        style={{ filter: 'none' }}
                         className="oscilloscope-trace"
                       />
-                    )}
+                    ))}
                     {/* Timestamp markers - vertical lines */}
                     {oscilloscopeData.map((dataPoint, dataIdx) => {
                       const x = (dataPoint.time / 100) * 100;
@@ -641,11 +829,13 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                             className="oscilloscope-timestamp-line"
                             data-timestamp-idx={dataIdx}
                             pointerEvents="none"
+                            style={{ filter: 'none' }}
                           />
                         </g>
                       );
                     })}
-                  </svg>
+                    </svg>
+                  </div>
                 </div>
               </div>
             </div>
