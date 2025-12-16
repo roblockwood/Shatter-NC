@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useBetaMode } from '../../hooks/useBetaMode';
 import './ToolsPane.css';
 import { API_BASE_URL } from '../../config/api';
 
@@ -9,9 +11,9 @@ interface Tool {
   diameter?: number;
   length?: number;
   group?: string | number;
-  life?: string | number;
-  tool_type?: string;
-  color?: string;
+  life?: number; // Tool life remaining in minutes (integer)
+  tool_type?: number; // 1=STD Tool, 2=Large Tool
+  color?: number; // 0=no color, 1=blue, 2=red, 3=purple, 4=green, 5=light blue, 6=yellow, 7=white
 }
 
 interface ToolsPaneProps {
@@ -42,6 +44,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const [toolSource, setToolSource] = useState<'atc' | 'table'>(initialSource);
   const [tools, setTools] = useState<Tool[]>(initialTools);
   const [isLoadingTools, setIsLoadingTools] = useState(false);
+  const [toolsSummary, setToolsSummary] = useState<Array<{ tool_number: number; description: string }>>([]);
+  const navigate = useNavigate();
+  const { isBetaMode } = useBetaMode();
 
   // Update tools from initialTools when on ATC source (updates from polling)
   useEffect(() => {
@@ -49,6 +54,24 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       setTools(initialTools);
     }
   }, [initialTools, toolSource]);
+
+  // Fetch tools summary for matching (only if beta mode is enabled)
+  useEffect(() => {
+    if (isBetaMode) {
+      fetch(`${API_BASE_URL}/api/tools/summary`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.tools) {
+            setToolsSummary(data.tools);
+          }
+        })
+        .catch(err => {
+          console.error('Error fetching tools summary:', err);
+        });
+    } else {
+      setToolsSummary([]);
+    }
+  }, [isBetaMode]);
 
   // Fetch tool table only when user switches to 'table' source (once per switch)
   useEffect(() => {
@@ -78,6 +101,60 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     return value.toFixed(4);
   };
 
+  const formatLife = (value: number | string | undefined) => {
+    if (value === undefined || value === null) return '──';
+    // Handle both string and number (in case backend hasn't updated yet)
+    let numValue: number;
+    if (typeof value === 'string') {
+      // Extract first number from string (handles "9952mi9952" -> 9952)
+      const match = value.match(/(\d+)/);
+      if (!match) return '──';
+      numValue = parseInt(match[1], 10);
+      if (isNaN(numValue)) return '──';
+    } else {
+      numValue = value;
+    }
+    return `${numValue}`;
+  };
+
+  const formatToolType = (value: number | undefined) => {
+    if (value === undefined || value === null) return '──';
+    switch (value) {
+      case 1:
+        return 'STD';
+      case 2:
+        return 'LARGE';
+      default:
+        return String(value);
+    }
+  };
+
+  const getColorInfo = (value: number | undefined): { name: string; hex: string } => {
+    if (value === undefined || value === null) {
+      return { name: '──', hex: '#666666' };
+    }
+    switch (value) {
+      case 0:
+        return { name: 'NONE', hex: '#666666' };
+      case 1:
+        return { name: 'BLUE', hex: '#0066ff' };
+      case 2:
+        return { name: 'RED', hex: '#ff0000' };
+      case 3:
+        return { name: 'PURPLE', hex: '#9900ff' };
+      case 4:
+        return { name: 'GREEN', hex: '#00ff00' };
+      case 5:
+        return { name: 'LT BLUE', hex: '#00ccff' };
+      case 6:
+        return { name: 'YELLOW', hex: '#ffff00' };
+      case 7:
+        return { name: 'WHITE', hex: '#ffffff' };
+      default:
+        return { name: String(value), hex: '#666666' };
+    }
+  };
+
   const getToolDisplayName = (tool: Tool) => {
     if (tool.tool_name) return tool.tool_name;
     return `TOOL ${tool.tool_number}`;
@@ -85,6 +162,40 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
   const isCurrentTool = (toolNum: number) => {
     return currentTool !== undefined && currentTool === toolNum;
+  };
+
+  // Check if tool exists in tools table (by name match or tool number)
+  const getMatchedTool = (tool: Tool) => {
+    // Try to match by tool name (case-insensitive) if available
+    if (tool.tool_name) {
+      const matched = toolsSummary.find(t => 
+        t.description && 
+        t.description.toLowerCase().trim() === tool.tool_name!.toLowerCase().trim()
+      );
+      
+      if (matched) return matched;
+    }
+    
+    // Fallback: match by tool number
+    return toolsSummary.find(t => t.tool_number === tool.tool_number) || null;
+  };
+
+  const handleToolClick = (tool: Tool, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const matched = getMatchedTool(tool);
+    if (matched) {
+      navigate(`/tools?tool=${matched.tool_number}`);
+    }
+  };
+
+  const handleRowClick = (tool: Tool, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const matched = getMatchedTool(tool);
+    if (matched && isBetaMode) {
+      handleToolClick(tool, e);
+    } else if (onExpand) {
+      handleExpand(e);
+    }
   };
 
   // Filter and sort tools
@@ -100,8 +211,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           (tool.tool_name && tool.tool_name.toLowerCase().includes(query)) ||
           (tool.pot_number && String(tool.pot_number).toLowerCase().includes(query)) ||
           (tool.group && String(tool.group).toLowerCase().includes(query)) ||
-          (tool.tool_type && tool.tool_type.toLowerCase().includes(query)) ||
-          (tool.color && tool.color.toLowerCase().includes(query))
+          (tool.tool_type !== undefined && formatToolType(tool.tool_type).toLowerCase().includes(query)) ||
+          (tool.color !== undefined && getColorInfo(tool.color).name.toLowerCase().includes(query)) ||
+          (tool.life !== undefined && String(tool.life).includes(query))
         );
       });
     }
@@ -137,16 +249,16 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           bVal = b.group ? String(b.group) : '';
           break;
         case 'life':
-          aVal = a.life ? String(a.life) : '';
-          bVal = b.life ? String(b.life) : '';
+          aVal = a.life !== undefined && a.life !== null ? a.life : -1;
+          bVal = b.life !== undefined && b.life !== null ? b.life : -1;
           break;
         case 'tool_type':
-          aVal = a.tool_type ? a.tool_type.toLowerCase() : '';
-          bVal = b.tool_type ? b.tool_type.toLowerCase() : '';
+          aVal = a.tool_type !== undefined && a.tool_type !== null ? a.tool_type : -1;
+          bVal = b.tool_type !== undefined && b.tool_type !== null ? b.tool_type : -1;
           break;
         case 'color':
-          aVal = a.color ? a.color.toLowerCase() : '';
-          bVal = b.color ? b.color.toLowerCase() : '';
+          aVal = a.color !== undefined && a.color !== null ? a.color : -1;
+          bVal = b.color !== undefined && b.color !== null ? b.color : -1;
           break;
         default:
           return 0;
@@ -227,23 +339,21 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           <div className="tools-empty">NO TOOLS LOADED</div>
         ) : (
           <>
-            {(isExpanded || isFullExpanded) && (
-              <div className="tools-search-container" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="text"
-                  className="tools-search-input"
-                  placeholder="SEARCH TOOLS..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-                {searchQuery && (
-                  <span className="tools-search-results">
-                    {filteredAndSortedTools.length} / {tools.length}
-                  </span>
-                )}
-              </div>
-            )}
+            <div className="tools-search-container" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                className="tools-search-input"
+                placeholder="SEARCH TOOLS..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+              />
+              {searchQuery && (
+                <span className="tools-search-results">
+                  {filteredAndSortedTools.length} / {tools.length}
+                </span>
+              )}
+            </div>
             <div className="tools-table-wrapper">
               <table className="tools-table">
               <thead onClick={(e) => e.stopPropagation()}>
@@ -317,23 +427,42 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 ) : (
                   filteredAndSortedTools.slice(0, visibleCount).map((tool, idx) => {
                 const isCurrent = isCurrentTool(tool.tool_number);
+                const matched = getMatchedTool(tool);
+                const hasMatch = matched !== null && isBetaMode;
                 return (
                   <tr 
                     key={idx} 
-                    className={isCurrent ? 'current-tool' : ''}
+                    className={`${isCurrent ? 'current-tool' : ''} ${hasMatch ? 'tool-matched' : ''}`}
+                    onClick={(e) => handleRowClick(tool, e)}
+                    style={{ cursor: hasMatch ? 'pointer' : (onExpand ? 'pointer' : 'default') }}
+                    title={hasMatch ? `Click to view tool ${matched.tool_number} in Tool Management` : undefined}
                   >
                     <td className="tools-col-pot">{tool.pot_number ?? '──'}</td>
                     <td className="tools-col-number">
                       {isCurrent && <span className="current-indicator">►</span>}
+                      {hasMatch && <span className="matched-indicator" title="Tool exists in Tool Management">●</span>}
                       {String(tool.tool_number).padStart(2, '0')}
                     </td>
                     <td className="tools-col-name">{getToolDisplayName(tool)}</td>
                     <td className="tools-col-diameter">{formatDimension(tool.diameter)}"</td>
                     <td className="tools-col-length">{formatDimension(tool.length)}"</td>
                     <td className="tools-col-group">{tool.group ?? '──'}</td>
-                    <td className="tools-col-life">{tool.life ?? '──'}</td>
-                    <td className="tools-col-type">{tool.tool_type ?? '──'}</td>
-                    <td className="tools-col-color">{tool.color ?? '──'}</td>
+                    <td className="tools-col-life">{formatLife(tool.life)}</td>
+                    <td className="tools-col-type">{formatToolType(tool.tool_type)}</td>
+                    <td className="tools-col-color">
+                      {tool.color !== undefined && tool.color !== null ? (
+                        <span className="color-display">
+                          <span 
+                            className="color-indicator" 
+                            style={{ backgroundColor: getColorInfo(tool.color).hex }}
+                            title={getColorInfo(tool.color).name}
+                          />
+                          <span className="color-name">{getColorInfo(tool.color).name}</span>
+                        </span>
+                      ) : (
+                        '──'
+                      )}
+                    </td>
                   </tr>
                 );
                   })

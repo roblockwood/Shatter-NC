@@ -2,10 +2,14 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react
 import { Dashboard } from './pages/Dashboard';
 import { FileBrowser } from './pages/FileBrowser';
 import { ToolManagement } from './pages/ToolManagement';
+import { useBetaMode, useBetaModeActivator } from './hooks/useBetaMode';
+import { BetaRoute } from './components/BetaRoute';
 import './App.css';
 
 function Navigation() {
   const location = useLocation();
+  const { isBetaMode, activateBetaMode, deactivateBetaMode } = useBetaMode();
+  const handleLogoClick = useBetaModeActivator(isBetaMode, activateBetaMode, deactivateBetaMode);
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -13,7 +17,14 @@ function Navigation() {
     <>
       <div className="app-header">
         <div className="app-title">
-          <span className="text-glow-strong">SHATTER v0.1.0</span>
+          <span
+            className={`text-glow-strong ${isBetaMode ? 'beta-mode' : ''}`}
+            onClick={handleLogoClick}
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+            title={isBetaMode ? 'BETA MODE ACTIVE - Click rapidly to disable' : 'Click rapidly to enable beta mode'}
+          >
+            SHATTER v0.1.0
+          </span>
         </div>
         <nav className="app-nav">
           <Link
@@ -28,12 +39,14 @@ function Navigation() {
           >
             [ FILES ]
           </Link>
-          <Link
-            to="/tools"
-            className={`nav-link ${isActive('/tools') ? 'active' : ''}`}
-          >
-            [ TOOLS ]
-          </Link>
+          {isBetaMode && (
+            <Link
+              to="/tools"
+              className={`nav-link ${isActive('/tools') ? 'active' : ''}`}
+            >
+              [ TOOLS ]
+            </Link>
+          )}
         </nav>
       </div>
 
@@ -54,7 +67,14 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/files" element={<FileBrowser />} />
-            <Route path="/tools" element={<ToolManagement />} />
+            <Route
+              path="/tools"
+              element={
+                <BetaRoute>
+                  <ToolManagement />
+                </BetaRoute>
+              }
+            />
           </Routes>
         </div>
       </div>

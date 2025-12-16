@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import './ToolManagement.css';
 import { API_BASE } from '../config/api';
 import { AsciiLoadingScreen } from '../components/AsciiLoadingScreen';
@@ -23,6 +24,7 @@ interface ToolSummaryResponse {
 }
 
 export const ToolManagement = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tools, setTools] = useState<ToolSummary[]>([]);
   const [selectedTool, setSelectedTool] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,6 +37,23 @@ export const ToolManagement = () => {
   useEffect(() => {
     fetchToolSummary();
   }, []);
+
+  // Handle tool selection from URL parameter
+  useEffect(() => {
+    const toolParam = searchParams.get('tool');
+    if (toolParam) {
+      const toolNumber = parseInt(toolParam, 10);
+      if (!isNaN(toolNumber) && tools.length > 0) {
+        // Check if tool exists in the list
+        const toolExists = tools.some(t => t.tool_number === toolNumber);
+        if (toolExists) {
+          setSelectedTool(toolNumber);
+          // Clear the URL parameter after selecting
+          setSearchParams({});
+        }
+      }
+    }
+  }, [searchParams, tools, setSearchParams]);
 
   const fetchToolSummary = async () => {
     setLoading(true);
