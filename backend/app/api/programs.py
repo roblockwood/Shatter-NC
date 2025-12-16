@@ -110,14 +110,21 @@ async def validate_program(
             detail=f"Machine {machine_id} not found"
         )
 
-    # Parse G-code
+    # Parse G-code (gracefully handle macro files and other non-standard formats)
     try:
         parsed = parse_gcode(request.gcode_content)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to parse G-code: {str(e)}"
-        )
+        # For macro files or non-standard formats, return empty parse result
+        # This allows validation to proceed with empty tool/WCS data
+        parsed = {
+            "tools": [],
+            "posted_date": None,
+            "estimated_runtime_seconds": 0.0,
+            "wcs_offset": None,
+            "stock_size": None,
+            "line_count": len(request.gcode_content.split('\n')),
+            "file_size": len(request.gcode_content.encode('utf-8')),
+        }
 
     # Initialize validation response
     warnings = []
