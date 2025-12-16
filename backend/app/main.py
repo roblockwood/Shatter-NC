@@ -20,10 +20,22 @@ app = FastAPI(
 )
 
 # Configure CORS
+# Handle wildcard origin: if "*" is present, don't use credentials (browser restriction)
+# FastAPI's CORSMiddleware requires allow_credentials=False when using ["*"]
+cors_origins = settings.CORS_ORIGINS
+use_credentials = True
+if "*" in cors_origins:
+    # When wildcard is used, we can't use credentials - browser security restriction
+    # Filter out "*" and use ["*"] explicitly for allow_origins
+    use_credentials = False
+    processed_origins = ["*"]
+else:
+    processed_origins = cors_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_origins=processed_origins,
+    allow_credentials=use_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
