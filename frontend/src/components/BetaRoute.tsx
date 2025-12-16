@@ -1,6 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useBetaMode } from '../hooks/useBetaMode';
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 interface BetaRouteProps {
   children: ReactNode;
