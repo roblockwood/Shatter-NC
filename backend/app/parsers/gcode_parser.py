@@ -39,11 +39,17 @@ class GCodeParser:
                 - line_count: Number of lines
                 - file_size: Content size in bytes
         """
-        # Extract tool metadata from header
-        tools = self.extract_tools()
+        # Extract tool metadata from header (gracefully handle failures)
+        try:
+            tools = self.extract_tools()
+        except Exception:
+            tools = []
 
-        # Extract operation data
-        tool_operations = self.extract_tool_operations()
+        # Extract operation data (gracefully handle failures)
+        try:
+            tool_operations = self.extract_tool_operations()
+        except Exception:
+            tool_operations = {}
 
         # Merge operation data into tool metadata
         for tool in tools:
@@ -53,12 +59,33 @@ class GCodeParser:
             else:
                 tool["operations"] = []
 
+        # Extract other metadata (gracefully handle failures)
+        try:
+            posted_date = self.extract_posted_date()
+        except Exception:
+            posted_date = None
+
+        try:
+            estimated_runtime = self.estimate_runtime()
+        except Exception:
+            estimated_runtime = 0.0
+
+        try:
+            wcs_offset = self.extract_wcs_offset()
+        except Exception:
+            wcs_offset = None
+
+        try:
+            stock_size = self.extract_stock_size()
+        except Exception:
+            stock_size = None
+
         return {
             "tools": tools,
-            "posted_date": self.extract_posted_date(),
-            "estimated_runtime_seconds": self.estimate_runtime(),
-            "wcs_offset": self.extract_wcs_offset(),  # Actual WCS validation data
-            "stock_size": self.extract_stock_size(),
+            "posted_date": posted_date,
+            "estimated_runtime_seconds": estimated_runtime,
+            "wcs_offset": wcs_offset,  # Actual WCS validation data
+            "stock_size": stock_size,
             "line_count": len(self.lines),
             "file_size": len(self.content.encode('utf-8')),
         }

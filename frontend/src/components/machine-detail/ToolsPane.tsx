@@ -33,7 +33,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   tools: initialTools, 
   currentTool, 
   onExpand, 
-  isExpanded = false,
+  isExpanded: _isExpanded = false,
   isFullExpanded = false,
   machineId,
   source: initialSource = 'atc'
