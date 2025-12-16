@@ -1,5 +1,14 @@
 version: '3.8'
 
+# Production docker-compose with Watchtower labels for automatic updates
+# This version includes labels that tell Watchtower to monitor these containers
+#
+# Usage:
+#   1. Start Watchtower: docker compose -f docker-compose.watchtower.yml up -d
+#   2. Start services: docker compose -f docker-compose.prod-auto.yml up -d
+#
+# Watchtower will automatically update backend and frontend when new images are pushed to Docker Hub
+
 services:
   # PostgreSQL with TimescaleDB extension
   postgres:
@@ -22,13 +31,13 @@ services:
       retries: 5
     networks:
       - shatter-network
+    # Don't auto-update database (too risky)
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
 
-  # Backend API service
+  # Backend API service - with Watchtower label for auto-updates
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: production
+    image: ${DOCKER_HUB_USERNAME:-shatter-nc}/${DOCKER_HUB_REPOSITORY:-shatter-nc}-backend:${IMAGE_TAG:-latest}
     container_name: shatter-backend-prod
     restart: always
     environment:
@@ -56,15 +65,13 @@ services:
       start_period: 40s
     networks:
       - shatter-network
+    # Enable Watchtower to auto-update this container
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
-  # Frontend web application
+  # Frontend web application - with Watchtower label for auto-updates
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: production
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    image: ${DOCKER_HUB_USERNAME:-shatter-nc}/${DOCKER_HUB_REPOSITORY:-shatter-nc}-frontend:${IMAGE_TAG:-latest}
     container_name: shatter-frontend-prod
     restart: always
     ports:
@@ -78,6 +85,9 @@ services:
       retries: 3
     networks:
       - shatter-network
+    # Enable Watchtower to auto-update this container
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   # Redis for caching and task queue
   redis:
@@ -96,6 +106,9 @@ services:
       retries: 5
     networks:
       - shatter-network
+    # Don't auto-update Redis (stable version)
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
 
   # Portainer - Docker management UI
   portainer:
@@ -109,6 +122,9 @@ services:
       - portainer_data:/data
     networks:
       - shatter-network
+    # Don't auto-update Portainer (management tool)
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
 
 volumes:
   postgres_data:
@@ -121,3 +137,4 @@ volumes:
 networks:
   shatter-network:
     driver: bridge
+
