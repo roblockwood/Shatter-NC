@@ -21,14 +21,14 @@ interface StatusTimelineProps {
 
 type TimeRange = '1h' | '8h' | '24h' | '7d';
 
-export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, currentStatus, isOnline, currentError, onExpand }) => {
+export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, currentStatus, isOnline, currentError }) => {
   const { isBetaMode } = useBetaMode();
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [events, setEvents] = useState<StatusEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; status: string; timestamp: Date; error?: string; is_heartbeat?: boolean } | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
-  const [oscilloscopeWidth, setOscilloscopeWidth] = useState(180);
+  const [oscilloscopeWidth] = useState(180);
   const [scaleX, setScaleX] = useState(1);
   const [colorMode, setColorMode] = useState<boolean>(() => {
     return localStorage.getItem('oscilloscopeColorMode') === 'true';
@@ -514,7 +514,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
     return { svgPoints, statusLabels, statusLevels, startTime, endTime, totalDuration, timeDivisions };
   };
 
-  const { svgPoints, statusLabels, statusLevels, startTime, endTime, totalDuration, timeDivisions } = renderOscilloscope();
+  const { svgPoints, statusLabels, statusLevels, startTime, totalDuration, timeDivisions } = renderOscilloscope();
   
   // Recalculate scale after SVG is rendered
   useEffect(() => {

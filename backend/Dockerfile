@@ -10,11 +10,14 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY . .
+COPY backend/ .
+
+# Copy database migration scripts
+COPY database/init /docker-entrypoint-initdb.d
 
 # Make startup scripts executable
 RUN chmod +x /app/scripts/*.sh

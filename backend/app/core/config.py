@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     ENABLE_AUTH: bool = False
 
     # CORS
+    # Can be set as JSON array in environment variable: ["*"] or ["http://example.com"]
+    # Pydantic-settings will parse JSON strings automatically for list types
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",      # Development - Vite/React
         "http://localhost:5173",      # Development - Vite alternative port

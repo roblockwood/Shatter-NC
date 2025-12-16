@@ -25,10 +25,7 @@ services:
 
   # Backend API service
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: production
+    image: s700_nc-backend:latest
     container_name: shatter-backend-prod
     restart: always
     environment:
@@ -41,6 +38,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-WARNING}
       DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-5}
       SECRET_KEY: ${SECRET_KEY}
+      CORS_ORIGINS: '["*"]'
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
@@ -59,12 +57,7 @@ services:
 
   # Frontend web application
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: production
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    image: s700_nc-frontend:latest
     container_name: shatter-frontend-prod
     restart: always
     ports:

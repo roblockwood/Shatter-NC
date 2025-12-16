@@ -20,13 +20,27 @@ app = FastAPI(
 )
 
 # Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Handle wildcard origin - FastAPI doesn't support ["*"] with allow_credentials=True
+# So we use a regex pattern to allow all origins while keeping credentials
+cors_origins = settings.CORS_ORIGINS
+if "*" in cors_origins:
+    # Use regex to allow all origins - this works with allow_credentials=True
+    # because we're not using the literal "*" header value
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.get("/")
