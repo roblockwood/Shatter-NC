@@ -360,6 +360,8 @@ export const PollingOscilloscope: React.FC<PollingOscilloscopeProps> = ({
               width: `${oscilloscopeWidth}px`,
               maxWidth: 'none',
               boxSizing: 'border-box',
+              willChange: 'auto',
+              backfaceVisibility: 'hidden',
             }}
           >
             <svg
@@ -368,6 +370,11 @@ export const PollingOscilloscope: React.FC<PollingOscilloscopeProps> = ({
               height="100%"
               viewBox="0 0 100 100"
               preserveAspectRatio="none"
+              shapeRendering="crispEdges"
+              style={{ 
+                imageRendering: 'crisp-edges' as const,
+                filter: 'none',
+              }}
             >
               {/* Grid lines for binary states */}
               <line
@@ -379,6 +386,8 @@ export const PollingOscilloscope: React.FC<PollingOscilloscopeProps> = ({
                 stroke="#00ff00"
                 strokeWidth="0.5"
                 opacity="0.2"
+                shapeRendering="crispEdges"
+                style={{ filter: 'none' }}
               />
               <line
                 x1="0"
@@ -389,6 +398,8 @@ export const PollingOscilloscope: React.FC<PollingOscilloscopeProps> = ({
                 stroke="#ff0000"
                 strokeWidth="0.5"
                 opacity="0.2"
+                shapeRendering="crispEdges"
+                style={{ filter: 'none' }}
               />
               
               {/* Time division lines */}
@@ -405,6 +416,8 @@ export const PollingOscilloscope: React.FC<PollingOscilloscopeProps> = ({
                     opacity="0.2"
                     strokeDasharray="1 1"
                     vectorEffect="non-scaling-stroke"
+                    shapeRendering="crispEdges"
+                    style={{ filter: 'none' }}
                   />
                 </g>
               ))}
@@ -416,7 +429,11 @@ export const PollingOscilloscope: React.FC<PollingOscilloscopeProps> = ({
                 fill="none"
                 stroke={currentOnline ? "#00ff00" : "#ff0000"}
                 strokeWidth="0.8"
+                strokeLinecap="butt"
+                strokeLinejoin="miter"
                 vectorEffect="non-scaling-stroke"
+                shapeRendering="crispEdges"
+                style={{ filter: 'none' }}
               />
               
               {/* Timestamp indicators with hover areas */}
@@ -448,6 +465,7 @@ export const PollingOscilloscope: React.FC<PollingOscilloscopeProps> = ({
                       shapeRendering="crispEdges"
                       vectorEffect="non-scaling-stroke"
                       pointerEvents="none"
+                      style={{ filter: 'none' }}
                     />
                   </g>
                 );

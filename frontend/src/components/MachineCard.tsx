@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ToolListModal } from './ToolListModal';
 import { UploadConfirmationModal } from './UploadConfirmationModal';
+import { SaveConfirmModal } from './SaveConfirmModal';
 import { Modal } from './ui/Modal';
 import { AlarmPane } from './machine-detail/AlarmPane';
 import { StatusTimeline } from './machine-detail/StatusTimeline';
@@ -51,8 +52,15 @@ interface MachineCardProps {
   machine: MachineStatus;
   editMode?: boolean;
   isExpanded?: boolean;
+  isEditing?: boolean; // Controlled from parent to track which machine is being edited
+  canEdit?: boolean; // Whether this machine can be edited (only one at a time)
+  pendingEditSwitch?: boolean; // Whether a switch to another machine is pending
   onExpand?: () => void;
   onCollapse?: () => void;
+  onEditStart?: () => void; // Called when editing starts
+  onEditEnd?: () => void; // Called when editing ends
+  onRequestEditSwitch?: () => void; // Called when trying to edit while another machine is being edited
+  onCancelEditSwitch?: () => void; // Called when user cancels the edit switch
   onDelete?: (machine: MachineStatus) => void;
   scrollToStatus?: boolean; // Flag to trigger scroll to status timeline
 }
@@ -61,8 +69,15 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   machine, 
   editMode = false, 
   isExpanded = false,
+  isEditing: isEditingProp = false,
+  canEdit = true,
+  pendingEditSwitch = false,
   onExpand,
   onCollapse,
+  onEditStart,
+  onEditEnd,
+  onRequestEditSwitch,
+  onCancelEditSwitch,
   onDelete,
   scrollToStatus = false
 }) => {
@@ -71,11 +86,39 @@ export const MachineCard: React.FC<MachineCardProps> = ({
 
   const [showToolModal, setShowToolModal] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
   const [validationResult, setValidationResult] = useState<any>(null);
   const [selectedFilename, setSelectedFilename] = useState('');
   const [fileContent, setFileContent] = useState('');
   const [isValidating, setIsValidating] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
+  // Use prop if provided (controlled), otherwise use local state (uncontrolled)
+  const [isEditingLocal, setIsEditingLocal] = useState(false);
+  const isEditing = isEditingProp !== undefined ? isEditingProp : isEditingLocal;
+  
+  const startEditing = () => {
+    if (!canEdit) {
+      // Another machine is being edited - request switch
+      onRequestEditSwitch?.();
+      return;
+    }
+    if (isEditingProp !== undefined) {
+      // Controlled mode - notify parent
+      onEditStart?.();
+    } else {
+      // Uncontrolled mode - use local state
+      setIsEditingLocal(true);
+    }
+  };
+  
+  const stopEditing = () => {
+    if (isEditingProp !== undefined) {
+      // Controlled mode - notify parent
+      onEditEnd?.();
+    } else {
+      // Uncontrolled mode - use local state
+      setIsEditingLocal(false);
+    }
+  };
   const [editError, setEditError] = useState<string | null>(null);
   const [editSuccess, setEditSuccess] = useState(false);
   const [isEditSaving, setIsEditSaving] = useState(false);
@@ -177,6 +220,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     tolerance_z: (machine as any).tolerance_z || 0.0394,
   });
   const [editMachineName, setEditMachineName] = useState(machine.machine_name || '');
+  // Store the original form data when editing starts (from fetched API data)
+  const [originalFormData, setOriginalFormData] = useState<typeof editFormData | null>(null);
+  const [originalMachineName, setOriginalMachineName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch full machine configuration data on mount
@@ -186,9 +232,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         const response = await fetch(`${API_BASE_URL}/api/machines/${machine.machine_id}`);
         if (response.ok) {
           const fullMachineData = await response.json();
-          // Update form data with fetched configuration
-          setEditMachineName(fullMachineData.name || '');
-          setEditFormData({
+          // Store the fetched data as the original baseline
+          const fetchedFormData = {
             ip_address: fullMachineData.ip_address || '',
             ftp_username: fullMachineData.ftp_username || '',
             ftp_password: fullMachineData.ftp_password || '',
@@ -203,7 +248,12 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             tolerance_x: fullMachineData.tolerance_x || 0.0394,
             tolerance_y: fullMachineData.tolerance_y || 0.0394,
             tolerance_z: fullMachineData.tolerance_z || 0.0394,
-          });
+          };
+          setOriginalFormData(fetchedFormData);
+          setOriginalMachineName(fullMachineData.name || '');
+          // Update form data with fetched configuration
+          setEditMachineName(fullMachineData.name || '');
+          setEditFormData(fetchedFormData);
         }
       } catch (error) {
         console.error('Error fetching machine configuration:', error);
@@ -214,6 +264,20 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   }, [machine.machine_id]);
 
   const editFormValid = editMachineName && editFormData.ip_address && editFormData.ftp_username && editFormData.ftp_password;
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = () => {
+    if (!isEditing) return false;
+    
+    // If we don't have original data yet (still loading), assume no changes
+    if (!originalFormData || originalMachineName === null) return false;
+    
+    // Compare machine name against original
+    if (editMachineName !== originalMachineName) return true;
+    
+    // Compare all form fields against original (from fetched API data)
+    return JSON.stringify(editFormData) !== JSON.stringify(originalFormData);
+  };
 
   const handleEditSave = async () => {
     if (!editFormValid) {
@@ -238,7 +302,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
 
       setEditSuccess(true);
       setTimeout(() => {
-        setIsEditing(false);
+        stopEditing();
         setEditSuccess(false);
       }, 1500);
     } catch (error) {
@@ -249,29 +313,101 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     }
   };
 
-  const handleEditCancel = () => {
-    setIsEditing(false);
+  const performEditCancel = () => {
+    stopEditing();
     setEditError(null);
     setEditSuccess(false);
     setEditTestResult(null);
-    setEditMachineName(machine.machine_name || '');
-    setEditFormData({
-      ip_address: machine.ip_address || '',
-      ftp_username: machine.ftp_username || '',
-      ftp_password: machine.ftp_password || '',
-      ftp_port: machine.ftp_port || 21,
-      http_port: machine.http_port || 80,
-      path: machine.path !== undefined && machine.path !== null ? machine.path : '/program',
-      poll_interval_seconds: machine.poll_interval_seconds || 5,
-      enabled: machine.enabled !== false,
-      diameter_tolerance: (machine as any).diameter_tolerance || 0.010,
-      length_tolerance_plus: (machine as any).length_tolerance_plus || 0.02,
-      length_tolerance_minus: (machine as any).length_tolerance_minus || 0.0,
-      tolerance_x: (machine as any).tolerance_x || 0.0394,
-      tolerance_y: (machine as any).tolerance_y || 0.0394,
-      tolerance_z: (machine as any).tolerance_z || 0.0394,
-    });
+    // Reset to original values (from fetched API data, not machine prop)
+    if (originalFormData && originalMachineName !== null) {
+      setEditMachineName(originalMachineName);
+      setEditFormData(originalFormData);
+    } else {
+      // Fallback to machine prop if original not loaded yet
+      setEditMachineName(machine.machine_name || '');
+      setEditFormData({
+        ip_address: machine.ip_address || '',
+        ftp_username: machine.ftp_username || '',
+        ftp_password: machine.ftp_password || '',
+        ftp_port: machine.ftp_port || 21,
+        http_port: machine.http_port || 80,
+        path: machine.path !== undefined && machine.path !== null ? machine.path : '/program',
+        poll_interval_seconds: machine.poll_interval_seconds || 5,
+        enabled: machine.enabled !== false,
+        diameter_tolerance: (machine as any).diameter_tolerance || 0.010,
+        length_tolerance_plus: (machine as any).length_tolerance_plus || 0.02,
+        length_tolerance_minus: (machine as any).length_tolerance_minus || 0.0,
+        tolerance_x: (machine as any).tolerance_x || 0.0394,
+        tolerance_y: (machine as any).tolerance_y || 0.0394,
+        tolerance_z: (machine as any).tolerance_z || 0.0394,
+      });
+    }
   };
+
+  const handleEditCancel = () => {
+    if (hasUnsavedChanges()) {
+      setShowSaveConfirmModal(true);
+      return;
+    }
+    
+    // No unsaved changes, proceed with cancel
+    performEditCancel();
+  };
+
+  // Trigger save confirmation when edit switch is pending
+  useEffect(() => {
+    if (!pendingEditSwitch || !isEditing) {
+      return;
+    }
+
+    // Check for unsaved changes - only show dialog if there are changes
+    if (hasUnsavedChanges()) {
+      setShowSaveConfirmModal(true);
+    } else {
+      // No unsaved changes, just switch directly without confirmation
+      performEditCancel();
+    }
+  }, [pendingEditSwitch, isEditing, editMachineName, editFormData, machine]);
+
+  // Handle Escape key to collapse expanded card or exit edit mode
+  useEffect(() => {
+    if (isEditing) {
+      // In edit mode, Escape should trigger cancel (with confirmation if unsaved)
+      const handleEscape = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleEditCancel();
+        }
+      };
+
+      document.addEventListener('keydown', handleEscape);
+      return () => {
+        document.removeEventListener('keydown', handleEscape);
+      };
+    } else if (isExpanded && !editMode) {
+      // In expanded view, Escape should collapse
+      const handleEscape = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          onCollapse?.();
+        }
+      };
+
+      document.addEventListener('keydown', handleEscape);
+      return () => {
+        document.removeEventListener('keydown', handleEscape);
+      };
+    }
+  }, [isExpanded, isEditing, editMode, onCollapse, handleEditCancel]);
+
+  // Dismiss all hover panes when card is collapsed
+  useEffect(() => {
+    if (!isExpanded) {
+      setShowStatusHover(false);
+      setShowProgramHover(false);
+      setShowCycleHover(false);
+      setShowToolsHover(false);
+      setShowAlarmHover(false);
+    }
+  }, [isExpanded]);
 
   const handleEditTestConnection = async () => {
     if (!editFormData.ip_address) {
@@ -436,7 +572,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 machineId={machine.machine_id} 
                 currentStatus={machine.status} 
                 isOnline={machine.is_online}
-                onExpand={() => setExpandedPaneModal({ type: 'timeline', props: { machineId: machine.machine_id, currentStatus: machine.status, isOnline: machine.is_online } })}
+                currentError={machine.error}
+                onExpand={() => setExpandedPaneModal({ type: 'timeline', props: { machineId: machine.machine_id, currentStatus: machine.status, isOnline: machine.is_online, currentError: machine.error } })}
               />
             </div>
           </div>
@@ -528,6 +665,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                   machineId={expandedPaneModal.props.machineId}
                   currentStatus={expandedPaneModal.props.currentStatus}
                   isOnline={expandedPaneModal.props.isOnline}
+                  currentError={expandedPaneModal.props.currentError}
                 />
               )}
               {expandedPaneModal.type === 'history' && (
@@ -593,8 +731,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             <>
               <button
                 className="card-action-btn"
-                onClick={() => setIsEditing(true)}
-                title="Edit machine"
+                onClick={startEditing}
+                title={canEdit ? "Edit machine" : "Switch to edit this machine (will prompt to save current)"}
               >
                 [=]
               </button>
@@ -841,7 +979,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             </button>
           </div>
         </div>
-      ) : machine.is_online ? (
+      ) : (
         <div className="machine-card-content">
           <div 
             ref={statusIndicatorRef}
@@ -908,6 +1046,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                   machineId={machine.machine_id}
                   currentStatus={machine.status}
                   isOnline={machine.is_online}
+                  currentError={machine.error}
                 />
               </div>
             )}
@@ -1227,24 +1366,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           </div>
 
           <div className="machine-timestamp">
-            LAST UPDATE: {new Date(machine.poll_timestamp).toLocaleTimeString()}
-          </div>
-        </div>
-      ) : (
-        <div className="machine-card-content machine-offline">
-          <div className="machine-row">
-            <span className="label text-error">OFFLINE</span>
-          </div>
-          {machine.error && (
-            <div className="machine-row">
-              <span className="value text-muted">{machine.error}</span>
-            </div>
-          )}
-          <div className="machine-card-divider-thin">
-            {'─'.repeat(32)}
-          </div>
-          <div className="machine-timestamp">
-            LAST SEEN: {new Date(machine.poll_timestamp).toLocaleTimeString()}
+            {machine.is_online ? 'LAST UPDATE' : 'LAST SEEN'}: {new Date(machine.poll_timestamp).toLocaleTimeString()}
           </div>
         </div>
       )}
@@ -1270,6 +1392,28 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         machineName={machine.machine_name}
         machinePath={machine.path || '/PROGRAM'}
         fileContent={fileContent}
+      />
+
+      <SaveConfirmModal
+        isOpen={showSaveConfirmModal}
+        onClose={() => {
+          setShowSaveConfirmModal(false);
+          // If this was triggered by a pending switch, cancel the switch
+          if (pendingEditSwitch) {
+            onCancelEditSwitch?.();
+          }
+        }}
+        onConfirm={() => {
+          setShowSaveConfirmModal(false);
+          performEditCancel();
+          // Switch will happen via onEditEnd callback
+        }}
+        onSave={() => {
+          setShowSaveConfirmModal(false);
+          // Save will trigger onEditEnd which handles the switch
+          handleEditSave();
+        }}
+        machineName={machine.machine_name || 'Unknown'}
       />
 
       <input

@@ -309,7 +309,19 @@ class CNCHttpClient:
             return {"error": str(e)}
 
     def _parse_tool_data(self, html: str) -> Dict[str, Any]:
-        """Parse tool data HTML response."""
+        """Parse tool data HTML response.
+        
+        Parses ATC tool table with the following field mappings:
+        - pot_number: Pot/slot number in ATC
+        - tool_number: Tool number (integer)
+        - tool_name: Tool name/description
+        - diameter: Tool diameter (float, from "length x diameter" format)
+        - length: Tool length (float, from "length x diameter" format)
+        - group: Tool group identifier (string)
+        - life: Tool life remaining in minutes (integer)
+        - tool_type: Tool type (integer: 1=STD Tool, 2=Large Tool)
+        - color: Tool color (integer: 0=no color, 1=blue, 2=red, 3=purple, 4=green, 5=light blue, 6=yellow, 7=white)
+        """
         data = {"tools": []}
 
         # Parse tool table rows
@@ -326,12 +338,23 @@ class CNCHttpClient:
                 continue
 
             # Extract all <td> elements from the row
-            td_pattern = r'<td[^>]*>([^<]*)</td>'
-            td_matches = re.findall(td_pattern, row)
+            # Use non-greedy match to handle nested tags and get all TDs
+            td_pattern = r'<td[^>]*>(.*?)</td>'
+            td_matches = re.findall(td_pattern, row, re.DOTALL)
+            
+            # Clean HTML tags from each match (in case there are nested tags)
+            def clean_td_content(content):
+                # Remove any nested HTML tags
+                cleaned = re.sub(r'<[^>]+>', '', content)
+                # Clean up whitespace and &nbsp;
+                cleaned = cleaned.replace('&nbsp;', '').strip()
+                return cleaned
+            
+            td_matches = [clean_td_content(td) for td in td_matches]
             
             if len(td_matches) < 3:  # Need at least pot, tool number, and tool name
                 continue
-
+            
             # Parse fields based on position (may vary, but typically: pot, tool#, name, data, group, life, type, color)
             # Clean up &nbsp; and whitespace from all fields
             def clean_field(value):
@@ -370,9 +393,93 @@ class CNCHttpClient:
 
             # Extract additional fields if available (clean &nbsp; from all)
             group = clean_field(td_matches[4]) if len(td_matches) > 4 else None
-            life = clean_field(td_matches[5]) if len(td_matches) > 5 else None
-            tool_type = clean_field(td_matches[6]) if len(td_matches) > 6 else None
-            color = clean_field(td_matches[7]) if len(td_matches) > 7 else None
+            
+            # Parse life as integer (remove "mi" suffix and extract numeric value)
+            life = None
+            if len(td_matches) > 5:
+                life_str = clean_field(td_matches[5])
+                if life_str:
+                    # Handle formats like "9952mi  9952" or "9952mi9952" - extract first number before "mi"
+                    # Pattern: number followed by "mi" (with optional spaces) then optionally more numbers
+                    life_match = re.search(r'(\d+)\s*mi', life_str, re.IGNORECASE)
+                    if not life_match:
+                        # Fall back to just first number
+                        life_match = re.search(r'(\d+)', life_str)
+                    if life_match:
+                        try:
+                            life = int(life_match.group(1))
+                        except (ValueError, TypeError):
+                            life = None
+            
+            # Parse tool_type as integer (1=STD Tool, 2=Large Tool)
+            tool_type = None
+            if len(td_matches) > 6:
+                type_str = clean_field(td_matches[6])
+                if type_str:
+                    # Check for text patterns first, then fall back to numeric
+                    type_lower = type_str.lower()
+                    if 'std' in type_lower or 'standard' in type_lower:
+                        tool_type = 1
+                    elif 'large' in type_lower:
+                        tool_type = 2
+                    else:
+                        # Try to extract numeric value
+                        type_match = re.search(r'(\d+)', type_str)
+                        if type_match:
+                            try:
+                                tool_type = int(type_match.group(1))
+                            except (ValueError, TypeError):
+                                tool_type = None
+            
+            # Parse color as integer (0=no color, 1=blue, 2=red, 3=purple, 4=green, 5=light blue, 6=yellow, 7=white)
+            # Color is encoded in the CSS class of the TD element, not in the content
+            # Map CSS classes to color values: bg_blue=1, bg_red=2, bg_purple=3, bg_green=4, bg_cyan=5, bg_yellow=6, bg_white=7
+            color = None
+            
+            # Color mapping from CSS class to integer
+            color_class_map = {
+                'bg_blue': 1,
+                'bg_red': 2,
+                'bg_purple': 3,
+                'bg_green': 4,
+                'bg_cyan': 5,  # light blue
+                'bg_yellow': 6,
+                'bg_white': 7,
+            }
+            
+            # Extract all TD opening tags with their attributes to check CSS classes
+            # Find all <td...> tags in order
+            td_tag_pattern = r'<td([^>]*)>'
+            td_tag_matches = list(re.finditer(td_tag_pattern, row))
+            
+            # Try column 7 first (expected position), then 8, then 6
+            for col_idx in [7, 8, 6]:
+                if len(td_tag_matches) > col_idx:
+                    # Get the attributes from this TD tag
+                    td_attrs = td_tag_matches[col_idx].group(1)
+                    # Extract class attribute
+                    class_match = re.search(r'class="([^"]*)"', td_attrs)
+                    if class_match:
+                        classes = class_match.group(1).split()
+                        # Check for color class
+                        for cls in classes:
+                            if cls in color_class_map:
+                                color = color_class_map[cls]
+                                if col_idx != 7:
+                                    logger.debug(f"Tool {tool_number}: Color found in column {col_idx} instead of 7")
+                                break
+                        if color is not None:
+                            break
+            
+            # Debug logging for tool 1 to inspect color parsing
+            if tool_number == 1:
+                logger.info(f"Tool 1 DEBUG - Total columns: {len(td_matches)}")
+                logger.info(f"Tool 1 DEBUG - All column values: {td_matches}")
+                logger.info(f"Tool 1 DEBUG - Extracted values: pot={pot_number}, tool#={tool_number}, name={tool_name}, life={life}, type={tool_type}, color={color}")
+                if color is None:
+                    logger.info(f"Tool 1 DEBUG - Color is NULL. Column 7 value: '{td_matches[7] if len(td_matches) > 7 else 'N/A'}'")
+                    logger.info(f"Tool 1 DEBUG - Column 8 value: '{td_matches[8] if len(td_matches) > 8 else 'N/A'}'")
+                    logger.info(f"Tool 1 DEBUG - Raw HTML row (first 1500 chars): {row[:1500]}")
 
             tool = {
                 "pot_number": pot_number,
