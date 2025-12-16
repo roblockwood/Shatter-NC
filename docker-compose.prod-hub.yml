@@ -1,5 +1,15 @@
 version: '3.8'
 
+# Production docker-compose using images from Docker Hub
+# This file pulls pre-built images instead of building locally
+# 
+# Usage:
+#   docker compose -f docker-compose.prod-hub.yml pull
+#   docker compose -f docker-compose.prod-hub.yml up -d
+#
+# To use a specific version instead of 'latest':
+#   Set IMAGE_TAG environment variable: IMAGE_TAG=abc1234 docker compose -f docker-compose.prod-hub.yml up -d
+
 services:
   # PostgreSQL with TimescaleDB extension
   postgres:
@@ -23,12 +33,9 @@ services:
     networks:
       - shatter-network
 
-  # Backend API service
+  # Backend API service - using image from Docker Hub
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: production
+    image: ${DOCKER_HUB_USERNAME:-shatter-nc}/${DOCKER_HUB_REPOSITORY:-shatter-nc}-backend:${IMAGE_TAG:-latest}
     container_name: shatter-backend-prod
     restart: always
     environment:
@@ -57,14 +64,9 @@ services:
     networks:
       - shatter-network
 
-  # Frontend web application
+  # Frontend web application - using image from Docker Hub
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: production
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    image: ${DOCKER_HUB_USERNAME:-shatter-nc}/${DOCKER_HUB_REPOSITORY:-shatter-nc}-frontend:${IMAGE_TAG:-latest}
     container_name: shatter-frontend-prod
     restart: always
     ports:
@@ -121,3 +123,4 @@ volumes:
 networks:
   shatter-network:
     driver: bridge
+
