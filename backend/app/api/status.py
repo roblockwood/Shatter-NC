@@ -131,6 +131,7 @@ async def get_alarms(machine_id: int, db: Session = Depends(get_db)):
 async def get_tools(
     machine_id: int,
     source: str = Query("atc", description="Tool data source: 'atc' for ATC table, 'table' for tool table file"),
+    raw_html: bool = Query(False, description="Return raw HTML for debugging"),
     db: Session = Depends(get_db)
 ):
     """
@@ -139,6 +140,7 @@ async def get_tools(
     Args:
         machine_id: Machine ID
         source: 'atc' for ATC (Automatic Tool Changer) table, 'table' for TOLNI1.NC tool table file
+        raw_html: If True, return raw HTML for debugging (ATC source only)
     """
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not db_machine:
@@ -175,6 +177,16 @@ async def get_tools(
         else:
             # Default: ATC tool data from HTTP endpoint
             http_client = CNCHttpClient(db_machine.ip_address, port=db_machine.http_port)
+            
+            # If raw_html requested, return the raw HTML for inspection
+            if raw_html:
+                html = http_client._send_request("/tool")
+                return {
+                    "machine_id": machine_id,
+                    "source": "atc",
+                    "raw_html": html
+                }
+            
             data = http_client.get_tool_data()
             data["machine_id"] = machine_id
             data["source"] = "atc"

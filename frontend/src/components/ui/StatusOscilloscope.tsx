@@ -308,6 +308,8 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
             width: `${oscilloscopeWidth}px`,
             maxWidth: 'none',
             boxSizing: 'border-box',
+            willChange: 'auto',
+            backfaceVisibility: 'hidden',
           }}
         >
           <svg
@@ -316,6 +318,11 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
             height="100%"
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
+            shapeRendering="crispEdges"
+            style={{ 
+              imageRendering: 'crisp-edges' as const,
+              filter: 'none',
+            }}
           >
             {/* Grid lines for each status level */}
             {statusLevels.map((level) => {
@@ -331,6 +338,8 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
                   strokeWidth="0.3"
                   opacity="0.2"
                   vectorEffect="non-scaling-stroke"
+                  shapeRendering="crispEdges"
+                  style={{ filter: 'none' }}
                 />
               );
             })}
@@ -341,8 +350,12 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
               fill="none"
               stroke="var(--color-text-primary)"
               strokeWidth="0.8"
+              strokeLinecap="butt"
+              strokeLinejoin="miter"
               className="status-oscilloscope-trace"
               vectorEffect="non-scaling-stroke"
+              shapeRendering="crispEdges"
+              style={{ filter: 'none' }}
             />
           </svg>
         </div>
@@ -377,6 +390,8 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
                 maxWidth: 'none',
                 height: '100%',
                 boxSizing: 'border-box',
+                willChange: 'auto',
+                backfaceVisibility: 'hidden',
               }}
             >
               <svg
@@ -385,6 +400,11 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
                 height="100%"
                 viewBox="0 0 100 100"
                 preserveAspectRatio="none"
+                shapeRendering="crispEdges"
+                style={{ 
+                  imageRendering: 'crisp-edges' as const,
+                  filter: 'none',
+                }}
               >
               {/* Grid lines for each status level */}
               {statusLevels.map((level) => {
@@ -401,6 +421,8 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
                     strokeWidth="0.5"
                     opacity="0.3"
                     vectorEffect="non-scaling-stroke"
+                    shapeRendering="crispEdges"
+                    style={{ filter: 'none' }}
                   />
                 );
               })}
@@ -419,6 +441,7 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
                   opacity="0.2"
                   shapeRendering="crispEdges"
                   className="status-oscilloscope-time-division"
+                  style={{ filter: 'none' }}
                 />
               ))}
 
@@ -428,10 +451,12 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
                 fill="none"
                 stroke="var(--color-text-primary)"
                 strokeWidth="0.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                strokeLinecap="butt"
+                strokeLinejoin="miter"
                 className="status-oscilloscope-trace"
                 vectorEffect="non-scaling-stroke"
+                shapeRendering="crispEdges"
+                style={{ filter: 'none' }}
               />
 
               {/* Timestamp markers with hover */}
@@ -503,6 +528,7 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
                       shapeRendering="crispEdges"
                       className="status-oscilloscope-timestamp-line"
                       pointerEvents="none"
+                      style={{ filter: 'none' }}
                     />
                   </g>
                 );
