@@ -7,7 +7,10 @@ version: '3.8'
 #   1. Start Watchtower: docker compose -f docker-compose.watchtower.yml up -d
 #   2. Start services: docker compose -f docker-compose.prod-auto.yml up -d
 #
-# Watchtower will automatically update backend and frontend when new images are pushed to Docker Hub
+# Watchtower will automatically update backend and frontend when new images are pushed to GitHub Packages
+#
+# Note: You may need to authenticate with GitHub Packages first:
+#   echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 
 services:
   # PostgreSQL with TimescaleDB extension
@@ -37,7 +40,7 @@ services:
 
   # Backend API service - with Watchtower label for auto-updates
   backend:
-    image: ${DOCKER_HUB_USERNAME:-shatter-nc}/${DOCKER_HUB_REPOSITORY:-shatter-nc}-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_OWNER:-roblockwood}/${GITHUB_REPO:-Shatter-NC}/backend:${IMAGE_TAG:-latest}
     container_name: shatter-backend-prod
     restart: always
     environment:
@@ -71,7 +74,7 @@ services:
 
   # Frontend web application - with Watchtower label for auto-updates
   frontend:
-    image: ${DOCKER_HUB_USERNAME:-shatter-nc}/${DOCKER_HUB_REPOSITORY:-shatter-nc}-frontend:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_OWNER:-roblockwood}/${GITHUB_REPO:-Shatter-NC}/frontend:${IMAGE_TAG:-latest}
     container_name: shatter-frontend-prod
     restart: always
     ports:
@@ -110,28 +113,10 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
 
-  # Portainer - Docker management UI
-  portainer:
-    image: portainer/portainer-ce:latest
-    container_name: shatter-portainer
-    restart: always
-    ports:
-      - "${PORTAINER_PORT:-9000}:9000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data
-    networks:
-      - shatter-network
-    # Don't auto-update Portainer (management tool)
-    labels:
-      - "com.centurylinklabs.watchtower.enable=false"
-
 volumes:
   postgres_data:
     driver: local
   redis_data:
-    driver: local
-  portainer_data:
     driver: local
 
 networks:
