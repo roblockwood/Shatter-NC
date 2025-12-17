@@ -1,6 +1,6 @@
 """Pydantic schemas for Machine API endpoints."""
 from pydantic import BaseModel, Field, IPvAnyAddress
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
@@ -25,6 +25,7 @@ class MachineBase(BaseModel):
     tolerance_x: float = Field(default=0.0394, ge=0, description="WCS X offset tolerance (±)")
     tolerance_y: float = Field(default=0.0394, ge=0, description="WCS Y offset tolerance (±)")
     tolerance_z: float = Field(default=0.0394, ge=0, description="WCS Z offset tolerance (±)")
+    layout_config: Optional[Dict[str, Any]] = Field(default=None, description="Custom pane layout configuration")
 
 
 class MachineCreate(MachineBase):
@@ -54,6 +55,7 @@ class MachineUpdate(BaseModel):
     tolerance_x: Optional[float] = Field(None, ge=0, description="WCS X offset tolerance (±)")
     tolerance_y: Optional[float] = Field(None, ge=0, description="WCS Y offset tolerance (±)")
     tolerance_z: Optional[float] = Field(None, ge=0, description="WCS Z offset tolerance (±)")
+    layout_config: Optional[Dict[str, Any]] = Field(None, description="Custom pane layout configuration")
 
 
 class MachineResponse(MachineBase):

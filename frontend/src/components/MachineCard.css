@@ -727,15 +727,14 @@
 
 .machine-card-expanded-content {
   padding: var(--spacing-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-lg);
   background: var(--color-bg-primary);
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+  min-height: 100vh;
 }
 
+/* Legacy grid classes - kept for backwards compatibility but not used by LayoutManager */
 .expanded-panes-top,
 .expanded-panes-bottom {
   display: grid;
