@@ -1,7 +1,7 @@
 /**
  * Utility functions for layout configuration management
  */
-import type { PaneLayout, LayoutConfig, PaneId } from '../types/layout';
+import type { PaneLayout, LayoutConfig } from '../types/layout';
 import { DEFAULT_LAYOUT } from '../types/layout';
 
 /**
