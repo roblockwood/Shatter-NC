@@ -103,10 +103,19 @@ def run_migrations():
     engine = create_engine(db_url)
 
     # Determine migrations directory
-    # When running in Docker, migrations are at /docker-entrypoint-initdb.d
-    # When running locally, they're at ../database/init
-    migrations_dir = os.getenv("MIGRATIONS_DIR", "/docker-entrypoint-initdb.d")
-    if not Path(migrations_dir).exists():
+    # Priority order:
+    # 1. MIGRATIONS_DIR environment variable (explicit override)
+    # 2. /app/migrations (migrations baked into the image - default for production)
+    # 3. /docker-entrypoint-initdb.d (volume mount fallback)
+    # 4. ../database/init (local development)
+    migrations_dir = os.getenv("MIGRATIONS_DIR")
+    if migrations_dir and Path(migrations_dir).exists():
+        pass  # Use the environment variable
+    elif Path("/app/migrations").exists():
+        migrations_dir = "/app/migrations"
+    elif Path("/docker-entrypoint-initdb.d").exists():
+        migrations_dir = "/docker-entrypoint-initdb.d"
+    else:
         migrations_dir = Path(__file__).parent.parent.parent / "database" / "init"
 
     print(f"Checking for pending migrations in: {migrations_dir}")
