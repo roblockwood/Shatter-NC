@@ -27,7 +27,8 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+# Using npm install for better cross-platform compatibility
+RUN npm install --prefer-offline --no-audit
 
 # Copy application code
 COPY . .
