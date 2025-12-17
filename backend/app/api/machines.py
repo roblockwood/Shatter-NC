@@ -1,7 +1,7 @@
 """API endpoints for machine management."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Dict, Any
 from app.db.base import get_db
 from app.models.machine import Machine
 from app.schemas.machine import MachineCreate, MachineUpdate, MachineResponse
@@ -266,3 +266,39 @@ async def get_machines_overview(db: Session = Depends(get_db)):
         )
 
     return {"total_machines": len(machines), "machines": overview}
+
+
+@router.get("/{machine_id}/layout")
+async def get_machine_layout(machine_id: int, db: Session = Depends(get_db)):
+    """Get layout configuration for a specific machine."""
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not machine:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+    
+    # Return layout_config if it exists, otherwise return None (frontend will use default)
+    return {"layout_config": machine.layout_config}
+
+
+@router.put("/{machine_id}/layout")
+async def update_machine_layout(
+    machine_id: int,
+    layout_config: Dict[str, Any],
+    db: Session = Depends(get_db)
+):
+    """Update layout configuration for a specific machine."""
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not machine:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+    
+    # Store the entire layout_config dict (which contains panes and optionally gridCols)
+    machine.layout_config = layout_config
+    db.commit()
+    db.refresh(machine)
+    
+    return {"layout_config": machine.layout_config}
