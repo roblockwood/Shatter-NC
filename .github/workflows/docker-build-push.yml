@@ -7,6 +7,7 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
+      - 'database/**'
       - 'docker-compose.prod.yml'
       - '.github/workflows/docker-build-push.yml'
 
@@ -50,7 +51,7 @@ jobs:
       - name: Build and push backend image
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
+          context: .
           file: ./backend/Dockerfile
           target: production
           platforms: linux/amd64,linux/arm64
