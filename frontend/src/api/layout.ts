@@ -2,7 +2,7 @@
  * API functions for layout configuration
  */
 import { API_BASE_URL } from '../config/api';
-import type { LayoutConfig, PaneLayout } from '../types/layout';
+import type { PaneLayout } from '../types/layout';
 import { layoutConfigToPanes, panesToLayoutConfig } from '../utils/layoutUtils';
 
 /**
