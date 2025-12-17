@@ -53,8 +53,7 @@ Four Docker Compose files are provided for different scenarios:
 | **docker-compose.dev.yml** | Development (lightweight) | postgres, redis | N/A | Smaller PostgreSQL image, run backend/frontend locally |
 | **docker-compose.simple.yml** | Development (hybrid) | postgres, redis | N/A | Database services only, run app locally |
 | **docker-compose.prod.yml** | Production (build from source) | postgres, redis, backend, frontend | Nginx static | Builds images locally from source code |
-| **docker-compose.prod-auto.yml** | Production (pre-built images) | postgres, redis, backend, frontend | Nginx static | Uses pre-built images from GitHub Packages, supports auto-updates |
-| **docker-compose.watchtower.yml** | Auto-update service | watchtower | N/A | Automatic container updates via Watchtower |
+| **docker-compose.prod-auto.yml** | Production (pre-built images) | postgres, redis, backend, frontend, watchtower | Nginx static | Uses pre-built images from GitHub Packages, includes Watchtower for auto-updates |
 
 **Choosing a Configuration:**
 
@@ -247,6 +246,8 @@ nano .env.production
 - `ENABLE_AUTH=true` - Enable authentication (when implemented)
 
 **Step 3: Start production stack**
+
+Migration files are baked into the Docker image, so no additional setup is required.
 
 ```bash
 docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
@@ -1193,15 +1194,12 @@ Watchtower automatically monitors and updates containers when new images are ava
    echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
    ```
 
-2. **Start Watchtower**:
-   ```bash
-   docker compose -f docker-compose.watchtower.yml up -d
-   ```
-
-3. **Start services with auto-update enabled**:
+2. **Start services with auto-update enabled** (includes Watchtower):
    ```bash
    docker compose -f docker-compose.prod-auto.yml up -d
    ```
+   
+   Watchtower is included as a service in `docker-compose.prod-auto.yml` and will start automatically.
 
 ### How It Works
 
@@ -1222,7 +1220,7 @@ Watchtower automatically monitors and updates containers when new images are ava
 
 ### Customization
 
-Edit `docker-compose.watchtower.yml` to customize:
+Edit the `watchtower` service in `docker-compose.prod-auto.yml` to customize:
 - **Poll interval**: Change `WATCHTOWER_POLL_INTERVAL` (default: 300 seconds = 5 minutes)
 - **Schedule**: Uncomment `command: --schedule "0 2 * * *"` to check daily at 2 AM
 - **Notifications**: Uncomment email notification settings to receive update alerts
