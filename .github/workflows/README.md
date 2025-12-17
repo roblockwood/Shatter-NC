@@ -2,7 +2,7 @@
 
 ## Docker Build and Push
 
-The `docker-build-push.yml` workflow automatically builds and pushes Docker images to Docker Hub when code is merged into the `main` branch.
+The `docker-build-push.yml` workflow automatically builds and pushes Docker images to GitHub Packages (ghcr.io) when code is merged into the `main` branch.
 
 ### Trigger
 
@@ -21,70 +21,105 @@ Images are tagged with multiple tags for flexibility:
 2. **`main-<short-sha>`** - Specific commit (e.g., `main-abc1234`)
 3. **`YYYY-MM-DD-<short-sha>`** - Date and commit (e.g., `2025-12-15-abc1234`)
 
-### Required Secrets
+### GitHub Packages Setup
 
-Configure these secrets in your GitHub repository settings (Settings → Secrets and variables → Actions):
+**No setup required!** GitHub Packages is automatically enabled for all repositories. You don't need to:
+- Enable it in settings
+- Create a separate account
+- Configure anything special
 
-- **`DOCKER_HUB_USERNAME`** - Your Docker Hub username (required)
-- **`DOCKER_HUB_PASSWORD`** - Your Docker Hub access token or password (required)
-- **`DOCKER_HUB_REPOSITORY`** - Repository name prefix (optional, defaults to `shatter-nc` if not set)
+The workflow uses the built-in `GITHUB_TOKEN` for authentication. No additional secrets are required! The workflow automatically has permissions to:
+- Read repository contents
+- Write to GitHub Packages
 
-### Docker Hub Setup
-
-1. Create a Docker Hub account if you don't have one
-2. Create an access token:
-   - Go to Docker Hub → Account Settings → Security
-   - Click "New Access Token"
-   - Give it a name (e.g., "GitHub Actions")
-   - Copy the token (you'll only see it once)
-3. Add the token as `DOCKER_HUB_PASSWORD` secret in GitHub
+**Note:** Packages will only appear after the first successful build. Until then, you won't see a "Packages" section in your repository.
 
 ### Image Names
 
-Images will be pushed as:
-- `{DOCKER_HUB_USERNAME}/{DOCKER_HUB_REPOSITORY}-backend:{tag}`
-- `{DOCKER_HUB_USERNAME}/{DOCKER_HUB_REPOSITORY}-frontend:{tag}`
+Images will be pushed to GitHub Container Registry (ghcr.io) as:
+- `ghcr.io/{OWNER}/{REPO}/backend:{tag}`
+- `ghcr.io/{OWNER}/{REPO}/frontend:{tag}`
 
-For example, if `DOCKER_HUB_USERNAME=shatter-nc` and `DOCKER_HUB_REPOSITORY=shatter-nc`:
-- `shatter-nc/shatter-nc-backend:latest`
-- `shatter-nc/shatter-nc-backend:abc1234` (commit SHA)
-- `shatter-nc/shatter-nc-backend:2025-12-15-abc1234` (date + commit)
-- `shatter-nc/shatter-nc-frontend:latest`
-- `shatter-nc/shatter-nc-frontend:abc1234`
-- `shatter-nc/shatter-nc-frontend:2025-12-15-abc1234`
+For example, for repository `roblockwood/Shatter-NC`:
+- `ghcr.io/roblockwood/Shatter-NC/backend:latest`
+- `ghcr.io/roblockwood/Shatter-NC/backend:abc1234` (commit SHA)
+- `ghcr.io/roblockwood/Shatter-NC/backend:2025-12-15-abc1234` (date + commit)
+- `ghcr.io/roblockwood/Shatter-NC/frontend:latest`
+- `ghcr.io/roblockwood/Shatter-NC/frontend:abc1234`
+- `ghcr.io/roblockwood/Shatter-NC/frontend:2025-12-15-abc1234`
+
+### Viewing Packages
+
+Packages will appear after the first successful build. To view them:
+
+**Option 1: From your profile/organization**
+- Go to: `https://github.com/{OWNER}?tab=packages`
+- This shows all packages across all your repositories
+
+**Option 2: From the repository (after packages exist)**
+- Go to your repository on GitHub
+- Look for a "Packages" section in the right sidebar (below "About")
+- Or navigate to: `https://github.com/{OWNER}/{REPO}/packages`
+
+**Option 3: Direct package link (after first build)**
+- Backend: `https://github.com/{OWNER}/{REPO}/pkgs/container/backend`
+- Frontend: `https://github.com/{OWNER}/{REPO}/pkgs/container/frontend`
 
 ### Usage
 
-After images are pushed, you can pull them on your deployment server:
+After images are pushed, you can pull them on your deployment server. First, authenticate with GitHub Packages:
+
+```bash
+# Create a Personal Access Token (PAT) with 'read:packages' permission
+# Then login:
+echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+```
+
+Then pull images:
 
 ```bash
 # Pull latest images
-docker pull shatter-nc/shatter-nc-backend:latest
-docker pull shatter-nc/shatter-nc-frontend:latest
+docker pull ghcr.io/roblockwood/Shatter-NC/backend:latest
+docker pull ghcr.io/roblockwood/Shatter-NC/frontend:latest
 ```
 
 Or use specific commit tags:
 ```bash
 # Pull by commit SHA
-docker pull shatter-nc/shatter-nc-backend:abc1234
-docker pull shatter-nc/shatter-nc-frontend:abc1234
+docker pull ghcr.io/roblockwood/Shatter-NC/backend:abc1234
+docker pull ghcr.io/roblockwood/Shatter-NC/frontend:abc1234
 
 # Pull by date + commit
-docker pull shatter-nc/shatter-nc-backend:2025-12-15-abc1234
-docker pull shatter-nc/shatter-nc-frontend:2025-12-15-abc1234
+docker pull ghcr.io/roblockwood/Shatter-NC/backend:2025-12-15-abc1234
+docker pull ghcr.io/roblockwood/Shatter-NC/frontend:2025-12-15-abc1234
 ```
 
-### Updating docker-compose.prod.yml
+### Updating docker-compose files
 
-To use the images from Docker Hub instead of building locally, update your `docker-compose.prod.yml`:
+To use the images from GitHub Packages instead of building locally, use `docker-compose.prod-hub.yml`:
 
 ```yaml
 backend:
-  image: shatter-nc/shatter-nc-backend:latest  # or specific tag
+  image: ghcr.io/roblockwood/Shatter-NC/backend:latest  # or specific tag
   # Remove the 'build:' section
 
 frontend:
-  image: shatter-nc/shatter-nc-frontend:latest  # or specific tag
+  image: ghcr.io/roblockwood/Shatter-NC/frontend:latest  # or specific tag
   # Remove the 'build:' section
 ```
+
+Or set environment variables:
+```bash
+export GITHUB_OWNER=roblockwood
+export GITHUB_REPO=Shatter-NC
+export IMAGE_TAG=latest  # or specific tag like abc1234
+docker compose -f docker-compose.prod-hub.yml up -d
+```
+
+### Package Visibility
+
+By default, packages are private to the repository. To make them public:
+1. Go to your repository → Packages
+2. Click on the package
+3. Go to Package settings → Change visibility → Make public
 
