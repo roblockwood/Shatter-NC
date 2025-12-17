@@ -40,13 +40,13 @@ Images will be pushed to GitHub Container Registry (ghcr.io) as:
 - `ghcr.io/{OWNER}/{REPO}/backend:{tag}`
 - `ghcr.io/{OWNER}/{REPO}/frontend:{tag}`
 
-For example, for repository `roblockwood/Shatter-NC`:
-- `ghcr.io/roblockwood/Shatter-NC/backend:latest`
-- `ghcr.io/roblockwood/Shatter-NC/backend:abc1234` (commit SHA)
-- `ghcr.io/roblockwood/Shatter-NC/backend:2025-12-15-abc1234` (date + commit)
-- `ghcr.io/roblockwood/Shatter-NC/frontend:latest`
-- `ghcr.io/roblockwood/Shatter-NC/frontend:abc1234`
-- `ghcr.io/roblockwood/Shatter-NC/frontend:2025-12-15-abc1234`
+For example, for repository `roblockwood/Shatter-NC` (note: repository name is converted to lowercase):
+- `ghcr.io/roblockwood/shatter-nc/backend:latest`
+- `ghcr.io/roblockwood/shatter-nc/backend:abc1234` (commit SHA)
+- `ghcr.io/roblockwood/shatter-nc/backend:2025-12-15-abc1234` (date + commit)
+- `ghcr.io/roblockwood/shatter-nc/frontend:latest`
+- `ghcr.io/roblockwood/shatter-nc/frontend:abc1234`
+- `ghcr.io/roblockwood/shatter-nc/frontend:2025-12-15-abc1234`
 
 ### Viewing Packages
 
@@ -65,6 +65,8 @@ Packages will appear after the first successful build. To view them:
 - Backend: `https://github.com/{OWNER}/{REPO}/pkgs/container/backend`
 - Frontend: `https://github.com/{OWNER}/{REPO}/pkgs/container/frontend`
 
+**Note:** Docker image names must be lowercase. The workflow automatically converts the repository name to lowercase (e.g., `Shatter-NC` becomes `shatter-nc` in image names).
+
 ### Usage
 
 After images are pushed, you can pull them on your deployment server. First, authenticate with GitHub Packages:
@@ -78,20 +80,20 @@ echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 Then pull images:
 
 ```bash
-# Pull latest images
-docker pull ghcr.io/roblockwood/Shatter-NC/backend:latest
-docker pull ghcr.io/roblockwood/Shatter-NC/frontend:latest
+# Pull latest images (note: repository name is lowercase)
+docker pull ghcr.io/roblockwood/shatter-nc/backend:latest
+docker pull ghcr.io/roblockwood/shatter-nc/frontend:latest
 ```
 
 Or use specific commit tags:
 ```bash
 # Pull by commit SHA
-docker pull ghcr.io/roblockwood/Shatter-NC/backend:abc1234
-docker pull ghcr.io/roblockwood/Shatter-NC/frontend:abc1234
+docker pull ghcr.io/roblockwood/shatter-nc/backend:abc1234
+docker pull ghcr.io/roblockwood/shatter-nc/frontend:abc1234
 
 # Pull by date + commit
-docker pull ghcr.io/roblockwood/Shatter-NC/backend:2025-12-15-abc1234
-docker pull ghcr.io/roblockwood/Shatter-NC/frontend:2025-12-15-abc1234
+docker pull ghcr.io/roblockwood/shatter-nc/backend:2025-12-15-abc1234
+docker pull ghcr.io/roblockwood/shatter-nc/frontend:2025-12-15-abc1234
 ```
 
 ### Updating docker-compose files
@@ -100,18 +102,18 @@ To use the images from GitHub Packages instead of building locally, use `docker-
 
 ```yaml
 backend:
-  image: ghcr.io/roblockwood/Shatter-NC/backend:latest  # or specific tag
+  image: ghcr.io/roblockwood/shatter-nc/backend:latest  # or specific tag
   # Remove the 'build:' section
 
 frontend:
-  image: ghcr.io/roblockwood/Shatter-NC/frontend:latest  # or specific tag
+  image: ghcr.io/roblockwood/shatter-nc/frontend:latest  # or specific tag
   # Remove the 'build:' section
 ```
 
 Or set environment variables:
 ```bash
 export GITHUB_OWNER=roblockwood
-export GITHUB_REPO=Shatter-NC
+export GITHUB_REPO=shatter-nc  # Note: lowercase
 export IMAGE_TAG=latest  # or specific tag like abc1234
 docker compose -f docker-compose.prod-hub.yml up -d
 ```
