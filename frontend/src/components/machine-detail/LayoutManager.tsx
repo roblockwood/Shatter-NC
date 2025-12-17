@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
+import { Responsive, WidthProvider } from 'react-grid-layout';
+import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import type { PaneLayout, PaneId } from '../../types/layout';
 import { fetchMachineLayout, saveMachineLayout } from '../../api/layout';
-import { getDefaultLayout, mergeLayoutWithDefaults } from '../../utils/layoutUtils';
+import { getDefaultLayout } from '../../utils/layoutUtils';
 import './LayoutManager.css';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
@@ -28,7 +29,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
 }) => {
   const [layout, setLayout] = useState<PaneLayout[]>(getDefaultLayout());
   const [isLoading, setIsLoading] = useState(true);
-  const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const saveTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debug: Log edit mode changes
   useEffect(() => {
