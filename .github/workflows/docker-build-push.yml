@@ -10,13 +10,12 @@ on:
       - 'docker-compose.prod.yml'
       - '.github/workflows/docker-build-push.yml'
 
-env:
-  DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-  DOCKER_HUB_REPOSITORY: ${{ secrets.DOCKER_HUB_REPOSITORY }}
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     
     steps:
       - name: Checkout code
@@ -27,26 +26,24 @@ jobs:
         with:
           platforms: linux/amd64,linux/arm64
 
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate image tags
         id: tags
         run: |
           SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
           DATE_TAG=$(date +%Y-%m-%d)
-          DOCKER_USER="${DOCKER_HUB_USERNAME:-shatter-nc}"
-          DOCKER_REPO="${DOCKER_HUB_REPOSITORY:-shatter-nc}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
           echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_OUTPUT
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_OUTPUT
-          echo "BACKEND_IMAGE=${DOCKER_USER}/${DOCKER_REPO}-backend" >> $GITHUB_OUTPUT
-          echo "FRONTEND_IMAGE=${DOCKER_USER}/${DOCKER_REPO}-frontend" >> $GITHUB_OUTPUT
-        env:
-          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-          DOCKER_HUB_REPOSITORY: ${{ secrets.DOCKER_HUB_REPOSITORY }}
+          echo "BACKEND_IMAGE=ghcr.io/${OWNER}/${REPO}/backend" >> $GITHUB_OUTPUT
+          echo "FRONTEND_IMAGE=ghcr.io/${OWNER}/${REPO}/frontend" >> $GITHUB_OUTPUT
 
       - name: Build and push backend image
         uses: docker/build-push-action@v5
@@ -80,8 +77,9 @@ jobs:
 
       - name: Image summary
         run: |
-          echo "## Docker Images Built and Pushed 🐳" >> $GITHUB_STEP_SUMMARY
+          echo "## Docker Images Built and Pushed to GitHub Packages 🐳" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** GitHub Container Registry (ghcr.io)" >> $GITHUB_STEP_SUMMARY
           echo "**Architectures:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Backend" >> $GITHUB_STEP_SUMMARY
@@ -93,4 +91,6 @@ jobs:
           echo "- \`${{ steps.tags.outputs.FRONTEND_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.DATE_TAG }}-${{ steps.tags.outputs.SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**View packages:** https://github.com/${{ github.repository_owner }}?tab=packages" >> $GITHUB_STEP_SUMMARY
 

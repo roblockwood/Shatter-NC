@@ -1,6 +1,6 @@
 version: '3.8'
 
-# Production docker-compose using images from Docker Hub
+# Production docker-compose using images from GitHub Packages
 # This file pulls pre-built images instead of building locally
 # 
 # Usage:
@@ -9,6 +9,9 @@ version: '3.8'
 #
 # To use a specific version instead of 'latest':
 #   Set IMAGE_TAG environment variable: IMAGE_TAG=abc1234 docker compose -f docker-compose.prod-hub.yml up -d
+#
+# Note: You may need to authenticate with GitHub Packages first:
+#   echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 
 services:
   # PostgreSQL with TimescaleDB extension
@@ -33,9 +36,9 @@ services:
     networks:
       - shatter-network
 
-  # Backend API service - using image from Docker Hub
+  # Backend API service - using image from GitHub Packages
   backend:
-    image: ${DOCKER_HUB_USERNAME:-shatter-nc}/${DOCKER_HUB_REPOSITORY:-shatter-nc}-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_OWNER:-roblockwood}/${GITHUB_REPO:-Shatter-NC}/backend:${IMAGE_TAG:-latest}
     container_name: shatter-backend-prod
     restart: always
     environment:
@@ -64,9 +67,9 @@ services:
     networks:
       - shatter-network
 
-  # Frontend web application - using image from Docker Hub
+  # Frontend web application - using image from GitHub Packages
   frontend:
-    image: ${DOCKER_HUB_USERNAME:-shatter-nc}/${DOCKER_HUB_REPOSITORY:-shatter-nc}-frontend:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_OWNER:-roblockwood}/${GITHUB_REPO:-Shatter-NC}/frontend:${IMAGE_TAG:-latest}
     container_name: shatter-frontend-prod
     restart: always
     ports:
@@ -99,25 +102,10 @@ services:
     networks:
       - shatter-network
 
-  # Portainer - Docker management UI
-  portainer:
-    image: portainer/portainer-ce:latest
-    container_name: shatter-portainer
-    restart: always
-    ports:
-      - "${PORTAINER_PORT:-9000}:9000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data
-    networks:
-      - shatter-network
-
 volumes:
   postgres_data:
     driver: local
   redis_data:
-    driver: local
-  portainer_data:
     driver: local
 
 networks:
