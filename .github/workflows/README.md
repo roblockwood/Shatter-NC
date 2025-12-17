@@ -98,7 +98,7 @@ docker pull ghcr.io/roblockwood/shatter-nc/frontend:2025-12-15-abc1234
 
 ### Updating docker-compose files
 
-To use the images from GitHub Packages instead of building locally, use `docker-compose.prod-hub.yml`:
+To use the images from GitHub Packages instead of building locally, use `docker-compose.prod-auto.yml`:
 
 ```yaml
 backend:
@@ -115,8 +115,10 @@ Or set environment variables:
 export GITHUB_OWNER=roblockwood
 export GITHUB_REPO=shatter-nc  # Note: lowercase
 export IMAGE_TAG=latest  # or specific tag like abc1234
-docker compose -f docker-compose.prod-hub.yml up -d
+docker compose -f docker-compose.prod-auto.yml up -d
 ```
+
+**Note:** `docker-compose.prod-auto.yml` includes Watchtower labels for automatic updates. If you don't want auto-updates, simply don't start Watchtower - the labels are harmless if Watchtower isn't running.
 
 ### Package Visibility
 

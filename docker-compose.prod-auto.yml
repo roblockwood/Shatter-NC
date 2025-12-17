@@ -1,16 +1,24 @@
 version: '3.8'
 
-# Production docker-compose with Watchtower labels for automatic updates
-# This version includes labels that tell Watchtower to monitor these containers
+# Production docker-compose using pre-built images from GitHub Packages
+# This file pulls pre-built images instead of building locally
 #
-# Usage:
-#   1. Start Watchtower: docker compose -f docker-compose.watchtower.yml up -d
-#   2. Start services: docker compose -f docker-compose.prod-auto.yml up -d
+# Usage (with auto-updates):
+#   1. Authenticate: echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+#   2. Start Watchtower: docker compose -f docker-compose.watchtower.yml up -d
+#   3. Start services: docker compose -f docker-compose.prod-auto.yml up -d
 #
-# Watchtower will automatically update backend and frontend when new images are pushed to GitHub Packages
+# Usage (manual updates, without Watchtower):
+#   1. Authenticate: echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+#   2. Pull and start: docker compose -f docker-compose.prod-auto.yml pull && docker compose -f docker-compose.prod-auto.yml up -d
+#   3. To update: docker compose -f docker-compose.prod-auto.yml pull && docker compose -f docker-compose.prod-auto.yml up -d
 #
-# Note: You may need to authenticate with GitHub Packages first:
-#   echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+# Note: This file includes Watchtower labels for automatic updates.
+# If Watchtower is running, backend and frontend will auto-update.
+# If Watchtower is not running, the labels are harmless and you can update manually.
+#
+# To use a specific version instead of 'latest':
+#   Set IMAGE_TAG environment variable: IMAGE_TAG=abc1234 docker compose -f docker-compose.prod-auto.yml up -d
 
 services:
   # PostgreSQL with TimescaleDB extension
@@ -53,6 +61,13 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-WARNING}
       DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-5}
       SECRET_KEY: ${SECRET_KEY}
+      # CORS_ORIGINS: Set to '["*"]' for production with dynamic IPs
+      # Example: CORS_ORIGINS='["*"]' in .env file
+      # Migration directory - backend needs access to migration files
+      MIGRATIONS_DIR: /docker-entrypoint-initdb.d
+    volumes:
+      # Mount migration files so backend can run them on startup
+      - ./database/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
