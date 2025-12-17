@@ -35,12 +35,16 @@ class Settings(BaseSettings):
     ENABLE_AUTH: bool = False
 
     # CORS
+    # Can be set via environment variable as JSON array
+    # Example: CORS_ORIGINS='["http://localhost:3000","*"]'
+    # For production with dynamic IPs, use "*" to allow all origins
+    # Note: When "*" is used, credentials must be disabled (browser security)
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",      # Development - Vite/React
         "http://localhost:5173",      # Development - Vite alternative port
         "http://localhost",           # Production - Nginx on port 80
         "http://localhost:80",        # Production - Nginx explicit port
-        "*",                          # Allow all origins (use for testing/internal networks)
+        "*",                          # Allow all origins (for production with dynamic IPs)
     ]
 
     @property
@@ -60,6 +64,12 @@ class Settings(BaseSettings):
         env_file = ".env"
         case_sensitive = True
         extra = "ignore"  # Ignore extra environment variables (like VITE_API_URL)
+        # Allow JSON parsing for list fields like CORS_ORIGINS
+        json_schema_extra = {
+            "example": {
+                "CORS_ORIGINS": '["http://localhost:3000","http://192.168.86.60","*"]'
+            }
+        }
 
 
 # Global settings instance
