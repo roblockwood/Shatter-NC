@@ -1,0 +1,225 @@
+.layout-manager {
+  width: 100%;
+  min-height: 100%;
+  position: relative;
+}
+
+.layout-container {
+  width: 100%;
+  height: 100%;
+}
+
+.layout-manager-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.layout-manager-controls {
+  display: flex;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--spacing-sm);
+}
+
+.layout-control-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  padding: 4px var(--spacing-xs);
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+}
+
+.layout-control-btn:hover {
+  background: var(--color-text-primary);
+  color: var(--color-bg-primary);
+  box-shadow: var(--glow);
+}
+
+.layout-pane-wrapper {
+  background: transparent;
+  border: 1px solid transparent;
+  transition: border-color 0.2s ease;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.layout-manager.edit-mode .layout-pane-wrapper {
+  border: 1px dashed var(--color-border);
+}
+
+.layout-manager.edit-mode .layout-pane-wrapper:hover {
+  border-color: var(--color-text-secondary);
+}
+
+.drag-handle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+  cursor: grab !important;
+  user-select: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+  touch-action: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  pointer-events: auto !important;
+  z-index: 10;
+}
+
+.drag-handle:active {
+  cursor: grabbing !important;
+}
+
+.drag-handle * {
+  pointer-events: none;
+}
+
+.drag-handle:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+
+.drag-handle-icon {
+  font-size: var(--font-sm);
+}
+
+.drag-handle-label {
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.layout-pane-content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  min-width: 0;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.layout-pane-content > * {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Override react-grid-layout styles to match terminal theme */
+.react-grid-layout {
+  position: relative;
+  pointer-events: auto;
+  width: 100%;
+  height: 100%;
+}
+
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top, width, height;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.react-grid-item.react-draggable {
+  cursor: move;
+}
+
+.react-grid-item.react-draggable-dragging {
+  cursor: grabbing;
+  z-index: 1000;
+}
+
+.react-grid-item.cssTransforms {
+  transition-property: transform, width, height;
+}
+
+.react-grid-item.resizing {
+  z-index: 1;
+  will-change: width, height;
+}
+
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 3;
+  will-change: transform;
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: rgba(0, 255, 0, 0.1);
+  border: 1px dashed var(--color-text-primary);
+  opacity: 0.2;
+  transition-duration: 100ms;
+  z-index: 2;
+  user-select: none;
+}
+
+.react-grid-item > .react-resizable-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  bottom: 0;
+  right: 0;
+  background: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNiIgaGVpZ2h0PSI2IiB2aWV3Qm94PSIwIDAgNiA2IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxnIGZpbGw9IiM4MDgwODAiIGZpbGwtcnVsZT0iZXZlbm9kZCI+PHBhdGggZD0ibTYgNi0xLjQxNC0xLjQxNEw0LjU4NiA0LjU4NiA2IDMuMTcyIDMuMTcyIDYgNiA2eiIvPjxwYXRoIGQ9Im0wIDAgMS40MTQgMS40MTRMMS40MTQgMS40MTQgMCAyLjgyOCAyLjgyOCAwIDAgMHoiLz48L2c+PC9zdmc+') no-repeat;
+  background-position: bottom right;
+  padding: 0 3px 3px 0;
+  background-repeat: no-repeat;
+  background-origin: content-box;
+  box-sizing: border-box;
+  cursor: se-resize !important;
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+  pointer-events: auto !important;
+  z-index: 100;
+}
+
+.react-grid-item > .react-resizable-handle:hover {
+  opacity: 1;
+}
+
+.layout-manager.edit-mode .react-grid-item > .react-resizable-handle {
+  opacity: 1;
+  display: block !important;
+}
+
+.layout-manager:not(.edit-mode) .react-grid-item > .react-resizable-handle {
+  display: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  .layout-manager-controls {
+    flex-direction: column;
+  }
+  
+  .layout-control-btn {
+    width: 100%;
+  }
+}
+
+

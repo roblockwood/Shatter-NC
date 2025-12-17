@@ -8,6 +8,8 @@ import { StatusTimeline } from './machine-detail/StatusTimeline';
 import { ToolsPane } from './machine-detail/ToolsPane';
 import { CurrentProgramPane } from './machine-detail/CurrentProgramPane';
 import { CycleHistoryPane } from './machine-detail/CycleHistoryPane';
+import { LayoutManager } from './machine-detail/LayoutManager';
+import { PANE_IDS } from '../types/layout';
 import './MachineCard.css';
 import { API_BASE_URL } from '../config/api';
 
@@ -126,6 +128,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const [editTestResult, setEditTestResult] = useState<any>(null);
   const [expandedPaneModal, setExpandedPaneModal] = useState<{ type: string; props: any } | null>(null);
   const [expandedPane, setExpandedPane] = useState<string | null>(null);
+  const [layoutEditMode, setLayoutEditMode] = useState(false);
   const [cachedAlarms, setCachedAlarms] = useState<Alarm[] | null>(null);
   const [showAlarmHover, setShowAlarmHover] = useState(false);
   const [alarmHoverPosition, setAlarmHoverPosition] = useState<{ top: number; left: number } | null>(null);
@@ -524,8 +527,14 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       target.closest('.card-action-btn') ||
       target.closest('.upload-button') ||
       target.closest('.tool-summary') ||
+      target.closest('.layout-manager') ||
+      target.closest('.react-grid-item') ||
+      target.closest('.drag-handle') ||
+      target.closest('.react-resizable-handle') ||
+      target.closest('.layout-pane-wrapper') ||
       isEditing ||
-      editMode
+      editMode ||
+      layoutEditMode
     ) {
       return;
     }
@@ -552,6 +561,16 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 className="card-action-btn"
                 onClick={(e) => {
                   e.stopPropagation();
+                  setLayoutEditMode(!layoutEditMode);
+                }}
+                title={layoutEditMode ? "Exit layout edit mode" : "Customize layout"}
+              >
+                {layoutEditMode ? '[EXIT EDIT]' : '[CUSTOMIZE LAYOUT]'}
+              </button>
+              <button
+                className="card-action-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
                   onCollapse?.();
                 }}
                 title="Collapse"
@@ -566,61 +585,77 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         </div>
 
         <div className="machine-card-expanded-content">
-          <div className="expanded-pane-full">
-            <div ref={statusTimelineRef}>
-              <StatusTimeline 
-                machineId={machine.machine_id} 
-                currentStatus={machine.status} 
-                isOnline={machine.is_online}
-                currentError={machine.error}
-                onExpand={() => setExpandedPaneModal({ type: 'timeline', props: { machineId: machine.machine_id, currentStatus: machine.status, isOnline: machine.is_online, currentError: machine.error } })}
-              />
-            </div>
-          </div>
-
-          <div className="expanded-panes-top">
-            <div className="expanded-pane-left">
-              <div ref={alarmPaneRef}>
-                <AlarmPane 
-                  machineId={machine.machine_id} 
-                  currentAlarms={machine.alarms || cachedAlarms || undefined}
-                  onExpand={() => setExpandedPaneModal({ type: 'alarms', props: { machineId: machine.machine_id, currentAlarms: machine.alarms || cachedAlarms } })}
-                />
-              </div>
-            </div>
-            <div className="expanded-pane-right">
-              <div ref={currentProgramPaneRef}>
-                <CurrentProgramPane 
-                  machineId={machine.machine_id}
-                  machineStatus={machine.status}
-                  onExpand={() => setExpandedPaneModal({ type: 'program', props: { machineId: machine.machine_id, machineStatus: machine.status } })}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="expanded-panes-bottom">
-            <div className="expanded-pane-left">
-              <div ref={toolsPaneRef}>
-                <ToolsPane 
-                  tools={machine.tools || []}
-                  currentTool={machine.current_tool}
-                  machineId={machine.machine_id}
-                  onExpand={() => setExpandedPane(expandedPane === 'tools' ? null : 'tools')}
-                  isExpanded={expandedPane === 'tools'}
-                  isFullExpanded={expandedPane === 'tools'}
-                />
-              </div>
-            </div>
-            <div className="expanded-pane-right">
-              <div ref={cycleHistoryPaneRef}>
-                <CycleHistoryPane 
-                  machineId={machine.machine_id}
-                  onExpand={() => setExpandedPaneModal({ type: 'history', props: { machineId: machine.machine_id } })}
-                />
-              </div>
-            </div>
-          </div>
+          <LayoutManager
+            machineId={machine.machine_id}
+            isEditMode={layoutEditMode}
+            onEditModeChange={setLayoutEditMode}
+            panes={[
+              {
+                id: PANE_IDS.STATUS_TIMELINE,
+                component: (
+                  <div ref={statusTimelineRef}>
+                    <StatusTimeline 
+                      machineId={machine.machine_id} 
+                      currentStatus={machine.status} 
+                      isOnline={machine.is_online}
+                      currentError={machine.error}
+                      onExpand={() => setExpandedPaneModal({ type: 'timeline', props: { machineId: machine.machine_id, currentStatus: machine.status, isOnline: machine.is_online, currentError: machine.error } })}
+                    />
+                  </div>
+                ),
+              },
+              {
+                id: PANE_IDS.ALARMS,
+                component: (
+                  <div ref={alarmPaneRef}>
+                    <AlarmPane 
+                      machineId={machine.machine_id} 
+                      currentAlarms={machine.alarms || cachedAlarms || undefined}
+                      onExpand={() => setExpandedPaneModal({ type: 'alarms', props: { machineId: machine.machine_id, currentAlarms: machine.alarms || cachedAlarms } })}
+                    />
+                  </div>
+                ),
+              },
+              {
+                id: PANE_IDS.CURRENT_PROGRAM,
+                component: (
+                  <div ref={currentProgramPaneRef}>
+                    <CurrentProgramPane 
+                      machineId={machine.machine_id}
+                      machineStatus={machine.status}
+                      onExpand={() => setExpandedPaneModal({ type: 'program', props: { machineId: machine.machine_id, machineStatus: machine.status } })}
+                    />
+                  </div>
+                ),
+              },
+              {
+                id: PANE_IDS.TOOLS,
+                component: (
+                  <div ref={toolsPaneRef}>
+                    <ToolsPane 
+                      tools={machine.tools || []}
+                      currentTool={machine.current_tool}
+                      machineId={machine.machine_id}
+                      onExpand={() => setExpandedPane(expandedPane === 'tools' ? null : 'tools')}
+                      isExpanded={expandedPane === 'tools'}
+                      isFullExpanded={expandedPane === 'tools'}
+                    />
+                  </div>
+                ),
+              },
+              {
+                id: PANE_IDS.CYCLE_HISTORY,
+                component: (
+                  <div ref={cycleHistoryPaneRef}>
+                    <CycleHistoryPane 
+                      machineId={machine.machine_id}
+                      onExpand={() => setExpandedPaneModal({ type: 'history', props: { machineId: machine.machine_id } })}
+                    />
+                  </div>
+                ),
+              },
+            ]}
+          />
         </div>
 
         {/* Expanded Pane Modals */}
