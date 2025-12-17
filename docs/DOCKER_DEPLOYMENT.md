@@ -52,9 +52,8 @@ Four Docker Compose files are provided for different scenarios:
 | **docker-compose.yml** | Development (full stack) | postgres, redis, backend, frontend | Vite dev server | Full stack with hot reload |
 | **docker-compose.dev.yml** | Development (lightweight) | postgres, redis | N/A | Smaller PostgreSQL image, run backend/frontend locally |
 | **docker-compose.simple.yml** | Development (hybrid) | postgres, redis | N/A | Database services only, run app locally |
-| **docker-compose.prod.yml** | Production | postgres, redis, backend, frontend | Nginx static | Optimized for production with health checks |
-| **docker-compose.prod-hub.yml** | Production (pre-built) | postgres, redis, backend, frontend | Nginx static | Uses pre-built images from GitHub Packages |
-| **docker-compose.prod-auto.yml** | Production (auto-update) | postgres, redis, backend, frontend | Nginx static | Pre-built images with Watchtower labels for auto-updates |
+| **docker-compose.prod.yml** | Production (build from source) | postgres, redis, backend, frontend | Nginx static | Builds images locally from source code |
+| **docker-compose.prod-auto.yml** | Production (pre-built images) | postgres, redis, backend, frontend | Nginx static | Uses pre-built images from GitHub Packages, supports auto-updates |
 | **docker-compose.watchtower.yml** | Auto-update service | watchtower | N/A | Automatic container updates via Watchtower |
 
 **Choosing a Configuration:**
