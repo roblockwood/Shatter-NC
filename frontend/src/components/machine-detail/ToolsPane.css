@@ -1,9 +1,14 @@
 .tools-pane {
   font-family: var(--font-mono);
   color: var(--color-text-primary);
-  height: 300px;
+  height: 100%;
+  width: 100%;
+  min-height: 200px;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
 .modal-body .tools-pane {
@@ -16,8 +21,13 @@
   overflow-x: hidden;
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
   position: relative;
   padding: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .tools-table-wrapper {

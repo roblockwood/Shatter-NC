@@ -31,6 +31,9 @@ class Machine(Base):
     tolerance_y = Column(Float, default=0.0394)            # ±1mm = ±0.0394 inches
     tolerance_z = Column(Float, default=0.0394)            # ±1mm = ±0.0394 inches
 
+    # UI layout configuration (JSON)
+    layout_config = Column(JSON, nullable=True)  # Custom pane layout configuration
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
