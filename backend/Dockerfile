@@ -10,11 +10,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY . .
+COPY backend/ .
+
+# Copy database migration files into the image
+# These will be available at /app/migrations in the container
+COPY database/init /app/migrations
 
 # Make startup scripts executable
 RUN chmod +x /app/scripts/*.sh
