@@ -40,7 +40,7 @@ services:
 
   # Backend API service - with Watchtower label for auto-updates
   backend:
-    image: ghcr.io/${GITHUB_OWNER:-roblockwood}/${GITHUB_REPO:-Shatter-NC}/backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_OWNER:-roblockwood}/${GITHUB_REPO:-shatter-nc}/backend:${IMAGE_TAG:-latest}
     container_name: shatter-backend-prod
     restart: always
     environment:
@@ -74,7 +74,7 @@ services:
 
   # Frontend web application - with Watchtower label for auto-updates
   frontend:
-    image: ghcr.io/${GITHUB_OWNER:-roblockwood}/${GITHUB_REPO:-Shatter-NC}/frontend:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_OWNER:-roblockwood}/${GITHUB_REPO:-shatter-nc}/frontend:${IMAGE_TAG:-latest}
     container_name: shatter-frontend-prod
     restart: always
     ports:
