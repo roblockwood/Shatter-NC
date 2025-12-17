@@ -97,25 +97,10 @@ services:
     networks:
       - shatter-network
 
-  # Portainer - Docker management UI
-  portainer:
-    image: portainer/portainer-ce:latest
-    container_name: shatter-portainer
-    restart: always
-    ports:
-      - "${PORTAINER_PORT:-9000}:9000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data
-    networks:
-      - shatter-network
-
 volumes:
   postgres_data:
     driver: local
   redis_data:
-    driver: local
-  portainer_data:
     driver: local
 
 networks:

@@ -53,6 +53,9 @@ Four Docker Compose files are provided for different scenarios:
 | **docker-compose.dev.yml** | Development (lightweight) | postgres, redis | N/A | Smaller PostgreSQL image, run backend/frontend locally |
 | **docker-compose.simple.yml** | Development (hybrid) | postgres, redis | N/A | Database services only, run app locally |
 | **docker-compose.prod.yml** | Production | postgres, redis, backend, frontend | Nginx static | Optimized for production with health checks |
+| **docker-compose.prod-hub.yml** | Production (pre-built) | postgres, redis, backend, frontend | Nginx static | Uses pre-built images from GitHub Packages |
+| **docker-compose.prod-auto.yml** | Production (auto-update) | postgres, redis, backend, frontend | Nginx static | Pre-built images with Watchtower labels for auto-updates |
+| **docker-compose.watchtower.yml** | Auto-update service | watchtower | N/A | Automatic container updates via Watchtower |
 
 **Choosing a Configuration:**
 
@@ -1179,6 +1182,64 @@ docker service ls
 
 ---
 
+## Automatic Container Updates with Watchtower
+
+Watchtower automatically monitors and updates containers when new images are available from GitHub Packages.
+
+### Setup
+
+1. **Authenticate with GitHub Packages** (required for private packages):
+   ```bash
+   # Create a Personal Access Token with 'read:packages' permission
+   echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+   ```
+
+2. **Start Watchtower**:
+   ```bash
+   docker compose -f docker-compose.watchtower.yml up -d
+   ```
+
+3. **Start services with auto-update enabled**:
+   ```bash
+   docker compose -f docker-compose.prod-auto.yml up -d
+   ```
+
+### How It Works
+
+- Watchtower polls for updates every 5 minutes (configurable)
+- Only containers with `com.centurylinklabs.watchtower.enable=true` label are updated
+- Containers are automatically restarted with new images
+- Old images are cleaned up to save disk space
+
+### Configuration
+
+**Containers that auto-update:**
+- `backend` - ✅ Enabled (has watchtower label)
+- `frontend` - ✅ Enabled (has watchtower label)
+
+**Containers that don't auto-update:**
+- `postgres` - ❌ Disabled (database updates are risky)
+- `redis` - ❌ Disabled (stable version)
+
+### Customization
+
+Edit `docker-compose.watchtower.yml` to customize:
+- **Poll interval**: Change `WATCHTOWER_POLL_INTERVAL` (default: 300 seconds = 5 minutes)
+- **Schedule**: Uncomment `command: --schedule "0 2 * * *"` to check daily at 2 AM
+- **Notifications**: Uncomment email notification settings to receive update alerts
+
+### Monitoring
+
+```bash
+# View Watchtower logs
+docker logs -f watchtower
+
+# Check which containers are being monitored
+docker ps --filter "label=com.centurylinklabs.watchtower.enable=true"
+```
+
+---
+
 ## Related Documentation
 
 - [ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md) - Environment variable reference
@@ -1221,3 +1282,4 @@ docker system df                                            # Disk usage
 | Backend | 8000 | 8000 |
 | PostgreSQL | 5432 | 5432 |
 | Redis | 6379 | 6379 |
+| Watchtower | N/A | N/A (no exposed ports) |
