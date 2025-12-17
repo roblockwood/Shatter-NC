@@ -41,6 +41,11 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-WARNING}
       DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-5}
       SECRET_KEY: ${SECRET_KEY}
+      # Migration directory - backend needs access to migration files
+      MIGRATIONS_DIR: /docker-entrypoint-initdb.d
+    volumes:
+      # Mount migration files so backend can run them on startup
+      - ./database/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
