@@ -5,6 +5,7 @@ from app.core.config import settings
 
 # Import routers
 from app.api import machines, status, programs, websocket, history, summary, tools
+from app.api import settings as settings_api
 
 # Import services
 from app.services import WebSocketManager, PollingService
@@ -72,6 +73,7 @@ app.include_router(history.router, prefix="/api", tags=["history"])
 app.include_router(summary.router, prefix="/api", tags=["summary"])
 app.include_router(tools.router, prefix="/api/tools", tags=["tools"])
 app.include_router(websocket.router, prefix="/api", tags=["websocket"])
+app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"])
 
 # Inject websocket manager into websocket router
 websocket.set_websocket_manager(websocket_manager)
