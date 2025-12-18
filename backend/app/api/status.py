@@ -149,53 +149,94 @@ async def get_tools(
             detail=f"Machine with id {machine_id} not found",
         )
 
-    try:
-        if source == "table":
-            # Fetch tool table from TOLNI1.NC via FTP
-            from app.clients.ftp_client import CNCFtpClient
-            from app.parsers.tolni_parser import parse_tolni
-            
-            ftp_client = CNCFtpClient(
-                ip_address=db_machine.ip_address,
-                port=db_machine.ftp_port,
-                username=db_machine.ftp_username,
-                password=db_machine.ftp_password,
-            )
-            
-            tool_table_content = await ftp_client.get_tool_table_data()
-            if tool_table_content is None:
-                raise HTTPException(
-                    status_code=http_status.HTTP_404_NOT_FOUND,
-                    detail="TOLNI1.NC file not found or could not be read",
+        try:
+            if source == "table":
+                # Fetch tool table from TOLNI1.NC via FTP
+                from app.clients.ftp_client import CNCFtpClient
+                from app.parsers.tolni_parser import parse_tolni
+                
+                ftp_client = CNCFtpClient(
+                    ip_address=db_machine.ip_address,
+                    port=db_machine.ftp_port,
+                    username=db_machine.ftp_username,
+                    password=db_machine.ftp_password,
                 )
-            
-            # Parse the tool table
-            parsed = parse_tolni(tool_table_content.encode('utf-8'))
-            parsed["machine_id"] = machine_id
-            parsed["source"] = "tool_table"
-            return parsed
-        else:
-            # Default: ATC tool data from HTTP endpoint
-            http_client = CNCHttpClient(db_machine.ip_address, port=db_machine.http_port)
-            
-            # If raw_html requested, return the raw HTML for inspection
-            if raw_html:
-                html = http_client._send_request("/tool")
-                return {
-                    "machine_id": machine_id,
-                    "source": "atc",
-                    "raw_html": html
-                }
-            
-            data = http_client.get_tool_data()
-            data["machine_id"] = machine_id
-            data["source"] = "atc"
-            return data
+                
+                tool_table_content = await ftp_client.get_tool_table_data()
+                if tool_table_content is None:
+                    raise HTTPException(
+                        status_code=http_status.HTTP_404_NOT_FOUND,
+                        detail="TOLNI1.NC file not found or could not be read",
+                    )
+                
+                # Parse the tool table
+                parsed = parse_tolni(tool_table_content.encode('utf-8'))
+                parsed["machine_id"] = machine_id
+                parsed["source"] = "tool_table"
+                
+                # Also fetch program_name from mem.nc while we have FTP connection open
+                try:
+                    from app.parsers.mem_parser import parse_mem
+                    mem_data = await ftp_client.get_memory_data()
+                    if mem_data:
+                        logger.debug(f"Raw mem.nc content: {repr(mem_data)}")
+                        parsed_mem = parse_mem(mem_data.encode('utf-8'))
+                        program_name = parsed_mem.get("program_name")
+                        if program_name:
+                            parsed["program_name"] = program_name
+                            logger.debug(f"Extracted program_name from mem.nc: {program_name}")
+                        else:
+                            logger.debug(f"mem.nc parsed but no program_name found. Content: {repr(mem_data)}")
+                except Exception as e:
+                    logger.debug(f"Failed to fetch program_name from mem.nc: {e}")
+                
+                return parsed
+            else:
+                # Default: ATC tool data from HTTP endpoint
+                http_client = CNCHttpClient(db_machine.ip_address, port=db_machine.http_port)
+                
+                # If raw_html requested, return the raw HTML for inspection
+                if raw_html:
+                    html = http_client._send_request("/tool")
+                    return {
+                        "machine_id": machine_id,
+                        "source": "atc",
+                        "raw_html": html
+                    }
+                
+                data = http_client.get_tool_data()
+                data["machine_id"] = machine_id
+                data["source"] = "atc"
+                
+                # Also fetch program_name from mem.nc via FTP when accessing tool data
+                # This is a good time since we're already making machine requests
+                try:
+                    ftp_client = CNCFtpClient(
+                        ip_address=db_machine.ip_address,
+                        port=db_machine.ftp_port,
+                        username=db_machine.ftp_username,
+                        password=db_machine.ftp_password,
+                    )
+                    from app.parsers.mem_parser import parse_mem
+                    mem_data = await ftp_client.get_memory_data()
+                    if mem_data:
+                        logger.debug(f"Raw mem.nc content from tools endpoint: {repr(mem_data)}")
+                        parsed_mem = parse_mem(mem_data.encode('utf-8'))
+                        program_name = parsed_mem.get("program_name")
+                        if program_name:
+                            data["program_name"] = program_name
+                            logger.debug(f"Extracted program_name from mem.nc: {program_name}")
+                        else:
+                            logger.debug(f"mem.nc parsed but no program_name found. Content: {repr(mem_data)}")
+                except Exception as e:
+                    logger.debug(f"Failed to fetch program_name from mem.nc: {e}")
+                
+                return data
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching tools for machine {machine_id}: {e}")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error fetching tools for machine {machine_id}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),

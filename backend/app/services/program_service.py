@@ -1,4 +1,5 @@
 """Program management service for upload, versioning, and deployment."""
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional, Dict, Any
@@ -7,6 +8,8 @@ from datetime import datetime
 from app.models.program import Program, ProgramDeployment
 from app.models.machine import Machine
 from app.parsers.gcode_parser import parse_gcode
+
+logger = logging.getLogger(__name__)
 
 
 class ProgramService:
@@ -52,10 +55,23 @@ class ProgramService:
                 - validation_results: dict (if validated)
         """
         # Step 1: Parse G-code
+        # Parser gracefully handles failures - returns empty/default values for missing data
+        # This allows upload of macro programs and other non-standard formats
         try:
             parsed_metadata = parse_gcode(gcode_content)
         except Exception as e:
-            raise ValueError(f"Failed to parse G-code: {str(e)}")
+            # If parsing completely fails, create minimal metadata to allow upload
+            # This handles macro programs and other formats that don't match expected structure
+            logger.warning(f"G-code parser failed, using minimal metadata: {str(e)}")
+            parsed_metadata = {
+                "tools": [],
+                "posted_date": None,
+                "estimated_runtime_seconds": 0.0,
+                "wcs_offset": None,
+                "stock_size": None,
+                "line_count": len(gcode_content.split('\n')),
+                "file_size": len(gcode_content.encode('utf-8')),
+            }
 
         # Step 2: Compute content hash
         content_hash = Program.compute_hash(gcode_content)
