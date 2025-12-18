@@ -632,15 +632,18 @@ export const FileBrowser: React.FC = () => {
       const response = await fetch(url);
 
       if (!response.ok) {
-        if (response.status === 404) {
-          setDeploymentDetail(null);
-          setDeploymentError('No deployment record found');
-          return;
-        }
         throw new Error(`HTTP ${response.status}`);
       }
 
       const data: DeploymentDetail = await response.json();
+      
+      // Handle case where deployment is null (program running but not deployed through system)
+      if (!data.deployment) {
+        setDeploymentDetail(null);
+        setDeploymentError('No deployment record found');
+        return;
+      }
+      
       setDeploymentDetail(data);
     } catch (err) {
       console.error('Deployment detail error:', err);

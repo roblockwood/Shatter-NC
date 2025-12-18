@@ -27,6 +27,46 @@ class MachinePoller:
         self.heartbeat_interval_minutes = 5  # Log heartbeat every 5 minutes
         self.offline_threshold = 3  # Require 3 consecutive failures before logging offline
         self.logged_offline_status = False  # Track if we've already logged the offline transition
+        
+        # Cache for program_name from mem.nc (fetched on-demand, not during regular polling)
+        self.cached_program_name: Optional[str] = None
+        self.program_name_fetched = False  # Track if we've fetched program_name at least once
+
+    async def fetch_program_name(self) -> Optional[str]:
+        """
+        Fetch program_name from mem.nc via FTP (on-demand).
+        
+        Returns:
+            program_name if successfully fetched, None otherwise
+        """
+        try:
+            from app.clients.ftp_client import CNCFtpClient
+            from app.parsers.mem_parser import parse_mem
+            
+            ftp_client = CNCFtpClient(
+                ip_address=self.machine.ip_address,
+                port=self.machine.ftp_port,
+                username=self.machine.ftp_username,
+                password=self.machine.ftp_password,
+            )
+            mem_data = await ftp_client.get_memory_data()
+            if mem_data:
+                logger.debug(f"Machine {self.machine.id} - Raw mem.nc content: {repr(mem_data)}")
+                parsed_mem = parse_mem(mem_data.encode('utf-8'))
+                program_name = parsed_mem.get("program_name")
+                if program_name:
+                    self.cached_program_name = program_name
+                    self.program_name_fetched = True
+                    logger.info(f"Machine {self.machine.id} - Fetched program_name from mem.nc: {program_name}")
+                    return program_name
+                else:
+                    logger.debug(f"Machine {self.machine.id} - mem.nc parsed but no program_name found. Content: {repr(mem_data)}")
+            else:
+                logger.debug(f"Machine {self.machine.id} - mem.nc file not found or empty")
+        except Exception as e:
+            logger.warning(f"Machine {self.machine.id} - Failed to fetch program_name from mem.nc: {e}")
+        
+        return None
 
     async def poll(self) -> Dict[str, Any]:
         """Poll machine status and return data."""
@@ -44,6 +84,14 @@ class MachinePoller:
             # Get comprehensive status
             status_data = http_client.get_status_overview()
 
+            # Fetch program_name on first poll (initial load), then use cached value
+            if not self.program_name_fetched:
+                await self.fetch_program_name()
+            
+            # Use cached program_name if available
+            if self.cached_program_name:
+                status_data["program_name"] = self.cached_program_name
+
             # Calculate response time
             response_time_ms = int((time.time() - poll_start_time) * 1000)
 
@@ -55,6 +103,10 @@ class MachinePoller:
                 "is_online": True,
                 "response_time_ms": response_time_ms,
             })
+            
+            # Ensure program_name is explicitly included (even if None)
+            if "program_name" not in status_data:
+                status_data["program_name"] = None
 
             # Update machine health
             was_offline = not self.is_online or self.logged_offline_status
@@ -104,6 +156,7 @@ class MachinePoller:
                 "error": str(e),
                 "consecutive_failures": self.consecutive_failures,
                 "response_time_ms": response_time_ms,
+                "program_name": self.cached_program_name,  # Preserve cached program_name even when offline
             }
 
             # Only log offline transition if we've exceeded the threshold AND haven't already logged it

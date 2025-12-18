@@ -97,6 +97,18 @@
   font-size: 0.85rem;
 }
 
+/* Validation Message (when no validation performed) */
+.validation-message {
+  padding: 1rem;
+  margin-top: 0.5rem;
+  background: rgba(128, 128, 128, 0.05);
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 /* Validation Tables */
 .validation-table {
   width: 100%;

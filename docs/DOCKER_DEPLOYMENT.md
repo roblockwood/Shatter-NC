@@ -7,7 +7,6 @@
 - [Architecture](#architecture)
 - [Quick Start](#quick-start)
   - [Development (Full Stack)](#development-full-stack)
-  - [Development (DB Only)](#development-db-only)
   - [Production](#production)
 - [Service Details](#service-details)
   - [PostgreSQL + TimescaleDB](#postgresql--timescaledb)
@@ -45,22 +44,19 @@ The Shatter CNC platform is deployed using Docker Compose with multiple configur
 
 ## Docker Compose Configurations
 
-Four Docker Compose files are provided for different scenarios:
+Three Docker Compose files are provided for different scenarios:
 
 | File | Use Case | Services | Frontend | Description |
 |------|----------|----------|----------|-------------|
 | **docker-compose.yml** | Development (full stack) | postgres, redis, backend, frontend | Vite dev server | Full stack with hot reload |
-| **docker-compose.dev.yml** | Development (lightweight) | postgres, redis | N/A | Smaller PostgreSQL image, run backend/frontend locally |
-| **docker-compose.simple.yml** | Development (hybrid) | postgres, redis | N/A | Database services only, run app locally |
-| **docker-compose.prod.yml** | Production (build from source) | postgres, redis, backend, frontend | Nginx static | Builds images locally from source code |
+| **docker-compose.prod.yml** | Production (build from source) | postgres, redis, backend, frontend, watchtower | Nginx static | Builds images locally from source code, includes Watchtower |
 | **docker-compose.prod-auto.yml** | Production (pre-built images) | postgres, redis, backend, frontend, watchtower | Nginx static | Uses pre-built images from GitHub Packages, includes Watchtower for auto-updates |
 
 **Choosing a Configuration:**
 
-- **New developers:** Start with `docker-compose.yml` (full stack)
-- **Backend development:** Use `docker-compose.simple.yml` + local backend
-- **Frontend development:** Use `docker-compose.yml` (full stack)
-- **Production deployment:** Use `docker-compose.prod.yml`
+- **Development:** Use `docker-compose.yml` (full stack with hot reload)
+- **Production (local build):** Use `docker-compose.prod.yml` (builds images from source)
+- **Production (pre-built):** Use `docker-compose.prod-auto.yml` (pulls images from GitHub Packages)
 
 ---
 
@@ -181,41 +177,6 @@ docker-compose down -v
 
 ---
 
-### Development (DB Only)
-
-For running backend/frontend locally while using Docker for database services.
-
-**Step 1: Start database services**
-
-```bash
-docker-compose -f docker-compose.simple.yml up -d
-```
-
-**Step 2: Run backend locally**
-
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-**Step 3: Run frontend locally**
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-**Advantages:**
-- Faster backend restart (no container rebuild)
-- Native debugger support
-- IDE integration works better
-
----
-
 ### Production
 
 **⚠️ IMPORTANT:** Never use development configurations in production!
@@ -247,10 +208,14 @@ nano .env.production
 
 **Step 3: Start production stack**
 
-Migration files are baked into the Docker image, so no additional setup is required.
+Migration files are baked into the Docker image, so no additional setup is required. Watchtower is included for automatic container updates.
 
 ```bash
-docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
+# Build and start (builds images from source)
+docker-compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+
+# Or use pre-built images from GitHub Packages (requires authentication)
+docker-compose -f docker-compose.prod-auto.yml --env-file .env.production up -d
 ```
 
 **Step 4: Verify health**
@@ -1259,10 +1224,15 @@ docker-compose logs -f            # View all logs
 docker-compose ps                 # Service status
 docker-compose restart backend    # Restart service
 
-# Production
-docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
+# Production (build from source)
+docker-compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 docker-compose -f docker-compose.prod.yml logs -f
 docker-compose -f docker-compose.prod.yml down
+
+# Production (pre-built images)
+docker-compose -f docker-compose.prod-auto.yml --env-file .env.production up -d
+docker-compose -f docker-compose.prod-auto.yml logs -f
+docker-compose -f docker-compose.prod-auto.yml down
 
 # Maintenance
 docker-compose exec postgres psql -U shatter_user shatter  # Database CLI
