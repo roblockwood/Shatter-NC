@@ -945,11 +945,11 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
             <div className="program-info">
               <div className="program-row">
                 <span className="program-label">O-NUMBER:</span>
-                <span className="program-value text-info">{extractONumber(deployment.deployed_filename)}</span>
+                <span className="program-value text-info">{extractONumber(deployment!.deployed_filename)}</span>
               </div>
               <div className="program-row">
                 <span className="program-label">FILENAME:</span>
-                <span className="program-value">{deployment.deployed_filename}</span>
+                <span className="program-value">{deployment!.deployed_filename}</span>
               </div>
               {program && (
                 <>
@@ -974,14 +974,14 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
               <div className="program-row">
                 <span className="program-label">DEPLOYED:</span>
                 <span className="program-value">
-                  {new Date(deployment.deployed_at).toLocaleString()}
+                  {new Date(deployment!.deployed_at).toLocaleString()}
                 </span>
               </div>
-              {deployment.validation_passed !== undefined && (
+              {deployment!.validation_passed !== undefined && (
                 <div className="program-row">
                   <span className="program-label">VALIDATION:</span>
-                  <span className={`program-value ${deployment.validation_passed !== false ? 'text-success' : 'text-error'}`}>
-                    {deployment.validation_passed !== false ? 'PASSED ✓' : 'FAILED ✕'}
+                  <span className={`program-value ${deployment!.validation_passed !== false ? 'text-success' : 'text-error'}`}>
+                    {deployment!.validation_passed !== false ? 'PASSED ✓' : 'FAILED ✕'}
                   </span>
                 </div>
               )}
