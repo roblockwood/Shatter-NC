@@ -155,11 +155,25 @@ class CNCHttpClient:
         data = {}
 
         # Extract program name (current)
+        # Try multiple patterns to handle different HTML formats
         program_match = re.search(
-            r"Program.*?Current\s*</td>.*?<td[^>]*>(.*?)</td>", html, re.DOTALL
+            r"Program.*?Current\s*</td>.*?<td[^>]*>(.*?)</td>", html, re.DOTALL | re.IGNORECASE
         )
+        if not program_match:
+            # Try alternative pattern
+            program_match = re.search(
+                r"Program\s+Current[^<]*<td[^>]*>(.*?)</td>", html, re.DOTALL | re.IGNORECASE
+            )
         if program_match:
-            data["program_name"] = program_match.group(1).strip()
+            program_name = program_match.group(1).strip()
+            # Only set if not empty and not just whitespace
+            if program_name and program_name.strip():
+                data["program_name"] = program_name
+            else:
+                data["program_name"] = None
+        else:
+            # No program found - set to None explicitly
+            data["program_name"] = None
 
         # Extract cycle time
         cycle_match = re.search(
@@ -536,4 +550,43 @@ class CNCHttpClient:
             overview["tools"] = tool_data.get("tools", [])
             overview["current_tool"] = tool_data.get("current_tool")
 
+        return overview
+    
+    def get_status_overview_with_ftp(self, ftp_client) -> Dict[str, Any]:
+        """
+        Get comprehensive machine status overview including FTP data.
+        
+        This version includes program_name from mem.nc via FTP.
+        Use this when FTP client is already available (e.g., when fetching tool table).
+
+        Args:
+            ftp_client: CNCFtpClient instance for fetching mem.nc
+
+        Returns:
+            Combined status data with program_name from mem.nc
+        """
+        # Get base status overview
+        overview = self.get_status_overview()
+        
+        # Fetch program_name from mem.nc via FTP (most reliable source for active program)
+        try:
+            import asyncio
+            from app.parsers.mem_parser import parse_mem
+            
+            mem_data = asyncio.run(ftp_client.get_memory_data())
+            if mem_data:
+                logger.debug(f"Raw mem.nc content: {repr(mem_data)}")
+                parsed_mem = parse_mem(mem_data.encode('utf-8'))
+                program_name = parsed_mem.get("program_name")
+                if program_name:
+                    overview["program_name"] = program_name
+                    logger.debug(f"Extracted program_name from mem.nc: {program_name}")
+                else:
+                    logger.debug(f"mem.nc parsed but no program_name found. Content: {repr(mem_data)}")
+            else:
+                logger.debug(f"mem.nc file not found or empty")
+        except Exception as e:
+            logger.debug(f"Failed to fetch program_name from mem.nc: {e}")
+            # Continue without program_name - not critical
+        
         return overview

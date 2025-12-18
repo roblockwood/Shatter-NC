@@ -124,6 +124,7 @@ async def validate_program(
             "stock_size": None,
             "line_count": len(request.gcode_content.split('\n')),
             "file_size": len(request.gcode_content.encode('utf-8')),
+            "is_macro_program": False,  # Unknown if parser failed
         }
 
     # Initialize validation response
@@ -131,6 +132,11 @@ async def validate_program(
     errors = []
     tools_validation = {}
     wcs_validation = None
+    
+    # Check if this is a macro program - macros don't have tools/WCS to validate
+    is_macro = parsed.get("is_macro_program", False)
+    if is_macro:
+        warnings.append("Macro program detected - tool and WCS validation not applicable")
     
     # Always fetch machine tool data (even if no tools in NC)
     machine_tool_data = {}
@@ -142,8 +148,11 @@ async def validate_program(
         machine_tool_fetch_failed = True
         warnings.append(f"Could not fetch machine tool data: {str(e)}")
 
-    # Validate tools
-    if parsed["tools"]:
+    # Validate tools (skip for macro programs)
+    if is_macro:
+        # Macro programs don't have tools to validate
+        pass
+    elif parsed["tools"]:
             # Validate each tool using machine tolerances
             for tool in parsed["tools"]:
                 tool_num = tool["tool_number"]
@@ -215,8 +224,11 @@ async def validate_program(
         print(f"WCS Fetch Error: {error_msg}")
         print(traceback.format_exc())
 
-    # Validate WCS offset
-    if parsed["wcs_offset"] and position_data:
+    # Validate WCS offset (skip for macro programs)
+    if is_macro:
+        # Macro programs don't have WCS offsets to validate
+        pass
+    elif parsed["wcs_offset"] and position_data:
         # WCS found in NC code - validate against machine
         wcs_validation = _validate_wcs_offset(
             parsed["wcs_offset"],
@@ -780,11 +792,12 @@ async def get_deployment_by_onumber(
     deployed_filename_pattern = f"O{onumber_int}.nc"
 
     # Query current deployment with program join
+    # Order by deployed_at DESC to get the most recent deployment
     query = db.query(ProgramDeployment).filter(
         ProgramDeployment.machine_id == machine_id,
         ProgramDeployment.deployed_filename.ilike(deployed_filename_pattern),
         ProgramDeployment.is_current == True
-    )
+    ).order_by(ProgramDeployment.deployed_at.desc())
 
     if include_program:
         query = query.options(joinedload(ProgramDeployment.program))
@@ -792,10 +805,13 @@ async def get_deployment_by_onumber(
     deployment = query.first()
 
     if not deployment:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No deployment found for {deployed_filename_pattern}"
-        )
+        # Return 200 with null deployment instead of 404
+        # This allows the frontend to handle programs running on machine
+        # that weren't deployed through the system
+        return {
+            "deployment": None,
+            "program": None
+        }
 
     # Build response
     response = {

@@ -95,8 +95,9 @@ app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"
 # Inject websocket manager into websocket router
 websocket.set_websocket_manager(websocket_manager)
 
-# Inject polling service into summary router
+# Inject polling service into summary and machines routers
 summary.set_polling_service(polling_service)
+machines.set_polling_service(polling_service)
 
 
 @app.on_event("startup")

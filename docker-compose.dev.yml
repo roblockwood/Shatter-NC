@@ -24,8 +24,8 @@ services:
   # Backend API service
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./backend/Dockerfile
       target: development  # Use development target for hot-reload
     container_name: shatter-backend
     restart: unless-stopped
