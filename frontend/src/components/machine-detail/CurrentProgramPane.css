@@ -42,15 +42,19 @@
   font-size: var(--font-xs);
   cursor: pointer;
   padding: 2px var(--spacing-xs);
-  margin-left: auto;
   transition: all 0.2s ease;
   text-transform: uppercase;
 }
 
-.expand-toggle:hover {
+.expand-toggle:hover:not(:disabled) {
   color: var(--color-text-secondary);
   border-color: var(--color-text-secondary);
   box-shadow: var(--glow);
+}
+
+.expand-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .program-loading,
@@ -101,6 +105,10 @@
 .program-value.text-info {
   color: var(--color-info);
   font-weight: 700;
+}
+
+.program-value.text-warning {
+  color: var(--color-warning);
 }
 
 /* Validation Section */
@@ -187,5 +195,20 @@
 .text-muted {
   color: var(--color-text-muted);
   font-size: 0.85rem;
+}
+
+/* Refresh indicator animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.refresh-indicator {
+  display: inline-block;
+  animation: spin 1s linear infinite;
 }
 

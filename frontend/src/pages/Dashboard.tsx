@@ -1,4 +1,4 @@
-import { useWebSocket } from '../hooks/useWebSocket';
+import { useWebSocketContext } from '../contexts/WebSocketContext';
 import { MachineCard } from '../components/MachineCard';
 import { StatusIndicator } from '../components/ui';
 import { AddMachineCard } from '../components/AddMachineCard';
@@ -9,10 +9,10 @@ import { AsciiLoadingScreen } from '../components/AsciiLoadingScreen';
 import { AsciiEmptyState } from '../components/AsciiEmptyState';
 import './Dashboard.css';
 import { useState, useRef, useEffect } from 'react';
-import { WS_URL, API_BASE } from '../config/api';
+import { API_BASE } from '../config/api';
 
 export const Dashboard = () => {
-  const { machines, isConnected, removeMachine, addMachine } = useWebSocket(WS_URL);
+  const { machines, isConnected, removeMachine, addMachine } = useWebSocketContext();
   const [editMode, setEditMode] = useState(false);
   const [expandedMachineId, setExpandedMachineId] = useState<number | null>(null);
   const [editingMachineId, setEditingMachineId] = useState<number | null>(null);

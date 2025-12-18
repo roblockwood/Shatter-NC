@@ -14,6 +14,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Polling service will be injected from main.py
+polling_service = None
+
+def set_polling_service(service):
+    """Inject the polling service from main.py"""
+    global polling_service
+    polling_service = service
+
 
 @router.get("/", response_model=List[MachineResponse])
 async def list_machines(
@@ -302,3 +310,72 @@ async def update_machine_layout(
     db.refresh(machine)
     
     return {"layout_config": machine.layout_config}
+
+
+@router.post("/{machine_id}/refresh-program-name")
+async def refresh_program_name(machine_id: int, db: Session = Depends(get_db)):
+    """
+    Manually refresh the active program name from mem.nc for a machine.
+    
+    This fetches the program_name from the machine's FTP server (mem.nc file)
+    and updates the cached value, which will be included in the next status update.
+    """
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not machine:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+    
+    try:
+        from app.clients.ftp_client import CNCFtpClient
+        from app.parsers.mem_parser import parse_mem
+        
+        ftp_client = CNCFtpClient(
+            ip_address=machine.ip_address,
+            port=machine.ftp_port,
+            username=machine.ftp_username,
+            password=machine.ftp_password,
+        )
+        mem_data = await ftp_client.get_memory_data()
+        
+        if not mem_data:
+            return {
+                "success": False,
+                "message": "mem.nc file not found or empty",
+                "program_name": None
+            }
+        
+        logger.debug(f"Machine {machine_id} - Raw mem.nc content: {repr(mem_data)}")
+        parsed_mem = parse_mem(mem_data.encode('utf-8'))
+        program_name = parsed_mem.get("program_name")
+        
+        if program_name:
+            # Update the cached value in the poller if it exists
+            if polling_service and machine_id in polling_service.pollers:
+                poller = polling_service.pollers[machine_id]
+                poller.cached_program_name = program_name
+                poller.program_name_fetched = True
+                # Broadcast updated status with new program_name
+                status_data = await poller.poll()
+                await polling_service.websocket_manager.broadcast_status(status_data)
+            
+            return {
+                "success": True,
+                "message": f"Program name refreshed: {program_name}",
+                "program_name": program_name
+            }
+        else:
+            return {
+                "success": False,
+                "message": "mem.nc parsed but no program_name found",
+                "program_name": None,
+                "raw_content": mem_data
+            }
+            
+    except Exception as e:
+        logger.error(f"Error refreshing program_name for machine {machine_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to refresh program name: {str(e)}",
+        )
