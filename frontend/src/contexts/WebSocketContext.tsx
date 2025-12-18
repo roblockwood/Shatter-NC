@@ -1,4 +1,5 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext } from 'react';
+import type { ReactNode } from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { WS_URL } from '../config/api';
 
