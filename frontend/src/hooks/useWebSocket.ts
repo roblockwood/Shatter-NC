@@ -5,6 +5,7 @@ interface MachineStatus {
   machine_name: string;
   is_online: boolean;
   status?: string;
+  program_name?: string;  // Active program O-number from machine (e.g., "O2045")
   cycle_time?: string;
   power_on_hours?: string;
   counters?: Array<{ counter_number: number; count: number }>;
@@ -35,16 +36,24 @@ export const useWebSocket = (url: string) => {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isConnectingRef = useRef(false);
 
   useEffect(() => {
     const connect = () => {
+      // Prevent duplicate connections
+      if (wsRef.current?.readyState === WebSocket.OPEN || isConnectingRef.current) {
+        return;
+      }
+      
       try {
+        isConnectingRef.current = true;
         const ws = new WebSocket(url);
         wsRef.current = ws;
 
         ws.onopen = () => {
           console.log('WebSocket connected');
           setIsConnected(true);
+          isConnectingRef.current = false;
         };
 
         ws.onmessage = (event) => {
@@ -55,11 +64,15 @@ export const useWebSocket = (url: string) => {
               // Initial status - update all machines
               const newMachines = new Map<number, MachineStatus>();
               message.machines.forEach((machine) => {
+                // Reduced logging - only log on initial connection
+                // console.log(`[WebSocket] Initial status for machine ${machine.machine_id}:`, { program_name: machine.program_name, status: machine.status });
                 newMachines.set(machine.machine_id, machine);
               });
               setMachines(newMachines);
             } else if (message.type === 'status_update' && message.data) {
               // Update single machine
+              // Reduced logging - uncomment if needed for debugging
+              // console.log(`[WebSocket] Status update for machine ${message.data.machine_id}:`, { program_name: message.data.program_name, status: message.data.status });
               setMachines((prev) => {
                 const updated = new Map(prev);
                 updated.set(message.data!.machine_id, message.data!);
@@ -73,12 +86,14 @@ export const useWebSocket = (url: string) => {
 
         ws.onerror = (error) => {
           console.error('WebSocket error:', error);
+          isConnectingRef.current = false;
         };
 
         ws.onclose = () => {
           console.log('WebSocket disconnected');
           setIsConnected(false);
           wsRef.current = null;
+          isConnectingRef.current = false;
 
           // Attempt to reconnect after 5 seconds
           reconnectTimeoutRef.current = window.setTimeout(() => {

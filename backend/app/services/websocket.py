@@ -53,9 +53,13 @@ class WebSocketManager:
                     if machine.id in self.last_status:
                         cached = self.last_status[machine.id]
                         machine_info.update(cached)
+                        # Ensure program_name is included from cache
+                        if "program_name" in cached:
+                            machine_info["program_name"] = cached["program_name"]
                     else:
                         # No polling data yet - assume offline until first poll
                         machine_info["is_online"] = False
+                        machine_info["program_name"] = None
 
                     machines_data.append(machine_info)
 
@@ -82,6 +86,11 @@ class WebSocketManager:
         # This ensures the status is available for API queries
         machine_id = status_data.get("machine_id")
         if machine_id:
+            # Preserve program_name from cache if new status doesn't have it
+            # (program_name is fetched less frequently via FTP)
+            cached = self.last_status.get(machine_id, {})
+            if "program_name" in cached and "program_name" not in status_data:
+                status_data["program_name"] = cached["program_name"]
             self.last_status[machine_id] = status_data
 
         if not self.active_connections:
