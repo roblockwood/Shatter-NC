@@ -308,6 +308,37 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
 
   const renderToolsSection = () => {
     const toolsArray = Object.values(result.tools);
+    
+    // Check if this is a macro program or validation wasn't performed
+    const isMacroProgram = result.warnings.some(w => w.toLowerCase().includes('macro'));
+    const noValidationPerformed = toolsArray.length === 0 && (isMacroProgram || result.warnings.some(w => w.toLowerCase().includes('not applicable')));
+    
+    if (noValidationPerformed) {
+      return (
+        <div className="validation-section">
+          <div className="section-header">TOOLS</div>
+          <div className="validation-message">
+            <span className="text-muted">⚠ No validation performed - This file does not contain tool information</span>
+            {isMacroProgram && (
+              <div className="text-muted" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                Macro programs do not require tool validation.
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (toolsArray.length === 0) {
+      return (
+        <div className="validation-section">
+          <div className="section-header">TOOLS</div>
+          <div className="validation-message">
+            <span className="text-muted">No tools found in program</span>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="validation-section">
@@ -467,6 +498,26 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
   };
 
   const renderWCSSection = () => {
+    // Check if this is a macro program or validation wasn't performed
+    const isMacroProgram = result.warnings.some(w => w.toLowerCase().includes('macro'));
+    const noValidationPerformed = !result.wcs_offset && (isMacroProgram || result.warnings.some(w => w.toLowerCase().includes('not applicable')));
+    
+    if (noValidationPerformed) {
+      return (
+        <div className="validation-section">
+          <div className="section-header">WCS OFFSET</div>
+          <div className="validation-message">
+            <span className="text-muted">⚠ No validation performed - This file does not contain WCS offset information</span>
+            {isMacroProgram && (
+              <div className="text-muted" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                Macro programs do not require WCS validation.
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
     if (!result.wcs_offset) return null;
 
     // Check if WCS was not specified in NC (expected values are all 0)

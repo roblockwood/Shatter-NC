@@ -246,22 +246,31 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
           
           // Get available width (container minus Y-axis labels and padding)
           const containerWidth = container.offsetWidth;
-          const availableWidth = containerWidth - 70 - 32 - 32; // Y-axis + padding
           
-          // Get actual rendered width of the oscilloscope data
-          const dataWidth = dataElement.scrollWidth;
-          
-          if (dataWidth > 0 && availableWidth > 0) {
-            // Calculate scale factor to fit content
-            const scale = Math.min(1, availableWidth / dataWidth);
-            setScaleX(scale);
+          // Only calculate if container has valid dimensions
+          if (containerWidth > 0) {
+            const availableWidth = containerWidth - 70 - 32 - 32; // Y-axis + padding
+            
+            // Get actual rendered width of the oscilloscope data
+            const dataWidth = dataElement.scrollWidth;
+            
+            if (dataWidth > 0 && availableWidth > 0) {
+              // Calculate scale factor to fit content
+              const scale = Math.min(1, availableWidth / dataWidth);
+              setScaleX(scale);
+            } else {
+              // Fallback to scale 1 if calculation fails
+              setScaleX(1);
+            }
           }
         }
       });
     };
 
-    // Initial calculation with a small delay to ensure DOM is ready
-    const initialTimer = setTimeout(updateScale, 100);
+    // Multiple attempts to ensure container is sized (especially important for hover panes)
+    const initialTimer1 = setTimeout(updateScale, 100);
+    const initialTimer2 = setTimeout(updateScale, 300);
+    const initialTimer3 = setTimeout(updateScale, 600);
     
     // Set up ResizeObserver to watch for container size changes
     const resizeObserver = new ResizeObserver(() => {
@@ -276,7 +285,9 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
     window.addEventListener('resize', updateScale);
 
     return () => {
-      clearTimeout(initialTimer);
+      clearTimeout(initialTimer1);
+      clearTimeout(initialTimer2);
+      clearTimeout(initialTimer3);
       resizeObserver.disconnect();
       window.removeEventListener('resize', updateScale);
     };
@@ -516,25 +527,58 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
 
   const { svgPoints, statusLabels, statusLevels, startTime, endTime: _endTime, totalDuration, timeDivisions } = renderOscilloscope();
   
-  // Recalculate scale after SVG is rendered
+  // Recalculate scale after SVG is rendered and when component becomes visible
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const updateScale = () => {
       if (oscilloscopeRef.current && oscilloscopeDataRef.current) {
         const container = oscilloscopeRef.current;
         const dataElement = oscilloscopeDataRef.current;
         
         const containerWidth = container.offsetWidth;
-        const availableWidth = containerWidth - 70 - 32 - 32;
-        const dataWidth = dataElement.scrollWidth;
-        
-        if (dataWidth > 0 && availableWidth > 0) {
-          const scale = Math.min(1, availableWidth / dataWidth);
-          setScaleX(scale);
+        // Only calculate if container has valid dimensions
+        if (containerWidth > 0) {
+          const availableWidth = containerWidth - 70 - 32 - 32;
+          const dataWidth = dataElement.scrollWidth;
+          
+          if (dataWidth > 0 && availableWidth > 0) {
+            const scale = Math.min(1, availableWidth / dataWidth);
+            setScaleX(scale);
+          } else {
+            // Fallback to scale 1 if calculation fails
+            setScaleX(1);
+          }
         }
       }
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [svgPoints, oscilloscopeWidth]);
+    };
+
+    // Use multiple attempts to ensure container is sized
+    const timer1 = setTimeout(updateScale, 50);
+    const timer2 = setTimeout(updateScale, 200);
+    const timer3 = setTimeout(updateScale, 500);
+    
+    // Also use IntersectionObserver to recalculate when component becomes visible
+    let observer: IntersectionObserver | null = null;
+    if (oscilloscopeRef.current) {
+      observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            // Component is visible, recalculate scale
+            setTimeout(updateScale, 100);
+          }
+        });
+      }, { threshold: 0.1 });
+      observer.observe(oscilloscopeRef.current);
+    }
+    
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+      if (observer) {
+        observer.disconnect();
+      }
+    };
+  }, [svgPoints, oscilloscopeWidth, events.length]);
 
   return (
     <div 
@@ -604,10 +648,11 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                 <div className="oscilloscope-svg-container" ref={oscilloscopeDataRef}>
                   <div
                     style={{
-                      transform: `scaleX(${scaleX})`,
+                      transform: `scaleX(${scaleX > 0 && !isNaN(scaleX) ? scaleX : 1})`,
                       transformOrigin: 'left center',
                       width: '100%',
                       height: '100%',
+                      minHeight: '150px',
                       willChange: 'auto',
                       backfaceVisibility: 'hidden',
                     }}
@@ -658,7 +703,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                       />
                     ))}
                     {/* Oscilloscope trace - smooth curve with oscillation */}
-                    {svgPoints.length > 1 && (colorMode && isBetaMode ? (
+                    {svgPoints.length > 0 && (svgPoints.length > 1 ? (colorMode && isBetaMode ? (
                       // Color mode: render path segments with interpolated colors
                       (() => {
                         const segments: Array<{ d: string; color: string }> = [];
@@ -749,6 +794,20 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                         strokeLinecap="butt"
                         strokeLinejoin="miter"
                         vectorEffect="non-scaling-stroke"
+                        shapeRendering="crispEdges"
+                        style={{ filter: 'none' }}
+                        className="oscilloscope-trace"
+                      />
+                    )) : (
+                      // Single point - render as horizontal line
+                      <line
+                        x1="0"
+                        y1={svgPoints[0].y}
+                        x2="100"
+                        y2={svgPoints[0].y}
+                        stroke="var(--color-text-primary)"
+                        strokeWidth="2"
+                        strokeLinecap="butt"
                         shapeRendering="crispEdges"
                         style={{ filter: 'none' }}
                         className="oscilloscope-trace"

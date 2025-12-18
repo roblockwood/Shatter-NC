@@ -32,6 +32,7 @@ interface MachineStatus {
   machine_name: string;
   is_online: boolean;
   status?: string;
+  program_name?: string;  // Active program O-number from machine (e.g., "O2045")
   cycle_time?: string;
   power_on_hours?: string;
   counters?: Array<{ counter_number: number; count: number }>;
@@ -83,8 +84,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   onDelete,
   scrollToStatus = false
 }) => {
-  // Debug: Log machine status for debugging name color
-  console.log(`Machine: ${machine.machine_name}, is_online: ${machine.is_online}, status: "${machine.status}"`);
+  // Debug: Log machine status for debugging name color (only log when status actually changes)
+  // Removed excessive logging - uncomment if needed for debugging
+  // console.log(`Machine: ${machine.machine_name}, is_online: ${machine.is_online}, status: "${machine.status}", program_name: "${machine.program_name}"`);
 
   const [showToolModal, setShowToolModal] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
@@ -155,6 +157,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const cycleHistoryPaneRef = useRef<HTMLDivElement>(null);
   const cycleHoverRef = useRef<HTMLDivElement>(null);
   const cycleIndicatorRef = useRef<HTMLDivElement>(null);
+  const expandedContentRef = useRef<HTMLDivElement>(null);
   const [currentProgram, setCurrentProgram] = useState<string | null>(null);
   
   // Cache alarms from machine prop to avoid refetching
@@ -164,38 +167,48 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     }
   }, [machine.alarms]);
 
-  // Fetch current program name
+  // Use program_name from machine status (active program from polling)
+  // This shows the actual program running on the machine, not just the most recent deployment
   useEffect(() => {
-    if (machine.is_online && machine.machine_id) {
-      const fetchProgram = async () => {
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/programs/machines/${machine.machine_id}/deployments?current_only=true`);
-          if (response.ok) {
-            const data = await response.json();
-            if (data && data.length > 0) {
-              setCurrentProgram(data[0].deployed_filename);
-            } else {
-              setCurrentProgram(null);
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching current program:', error);
-          setCurrentProgram(null);
-        }
-      };
-      fetchProgram();
-      const interval = setInterval(fetchProgram, 30000);
-      return () => clearInterval(interval);
+    const programName = machine.program_name;
+    // Reduced logging - uncomment if needed for debugging
+    // console.log(`[MachineCard] program_name update for ${machine.machine_name}:`, programName, typeof programName);
+    
+    // Check if program_name is valid (not null, undefined, empty string, "----", or the string "undefined")
+    if (programName && 
+        programName !== '----' && 
+        programName !== 'undefined' && 
+        programName !== 'null' &&
+        typeof programName === 'string' &&
+        programName.trim() !== '') {
+      setCurrentProgram(programName);
     } else {
       setCurrentProgram(null);
     }
-  }, [machine.machine_id, machine.is_online]);
+  }, [machine.program_name, machine.machine_name]);
+
+  // Helper function to find pane element within current card
+  const findPaneElement = (paneId: string): HTMLElement | null => {
+    if (expandedContentRef.current) {
+      return expandedContentRef.current.querySelector(`[data-pane-id="${paneId}"]`) as HTMLElement;
+    }
+    return document.querySelector(`[data-pane-id="${paneId}"]`) as HTMLElement;
+  };
 
   // Handle scroll to status timeline when requested
   useEffect(() => {
-    if (scrollToStatus && isExpanded && statusTimelineRef.current) {
+    if (scrollToStatus && isExpanded) {
       setTimeout(() => {
-        if (statusTimelineRef.current) {
+        // Find pane by data attribute (works with LayoutManager)
+        const paneElement = findPaneElement(PANE_IDS.STATUS_TIMELINE);
+        if (paneElement) {
+          paneElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+          paneElement.classList.add('status-pane-highlight');
+          setTimeout(() => {
+            paneElement.classList.remove('status-pane-highlight');
+          }, 2000);
+        } else if (statusTimelineRef.current) {
+          // Fallback to ref if data attribute not found
           statusTimelineRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
           statusTimelineRef.current.classList.add('status-pane-highlight');
           setTimeout(() => {
@@ -584,7 +597,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           </div>
         </div>
 
-        <div className="machine-card-expanded-content">
+        <div className="machine-card-expanded-content" ref={expandedContentRef}>
           <LayoutManager
             machineId={machine.machine_id}
             isEditMode={layoutEditMode}
@@ -623,6 +636,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     <CurrentProgramPane 
                       machineId={machine.machine_id}
                       machineStatus={machine.status}
+                      programName={machine.program_name}
                       onExpand={() => setExpandedPaneModal({ type: 'program', props: { machineId: machine.machine_id, machineStatus: machine.status } })}
                     />
                   </div>
@@ -685,6 +699,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 <CurrentProgramPane 
                   machineId={expandedPaneModal.props.machineId}
                   machineStatus={expandedPaneModal.props.machineStatus}
+                  programName={machine.program_name}
                 />
               )}
               {expandedPaneModal.type === 'tools' && (
@@ -1051,7 +1066,16 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 onExpand?.();
               }
               setTimeout(() => {
-                if (statusTimelineRef.current) {
+                // Find pane by data attribute (works with LayoutManager)
+                const paneElement = findPaneElement(PANE_IDS.STATUS_TIMELINE);
+                if (paneElement) {
+                  paneElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+                  paneElement.classList.add('status-pane-highlight');
+                  setTimeout(() => {
+                    paneElement.classList.remove('status-pane-highlight');
+                  }, 2000);
+                } else if (statusTimelineRef.current) {
+                  // Fallback to ref if data attribute not found
                   statusTimelineRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
                   statusTimelineRef.current.classList.add('status-pane-highlight');
                   setTimeout(() => {
@@ -1122,7 +1146,16 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 onExpand?.();
               }
               setTimeout(() => {
-                if (currentProgramPaneRef.current) {
+                // Find pane by data attribute (works with LayoutManager)
+                const paneElement = findPaneElement(PANE_IDS.CURRENT_PROGRAM);
+                if (paneElement) {
+                  paneElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+                  paneElement.classList.add('program-pane-highlight');
+                  setTimeout(() => {
+                    paneElement.classList.remove('program-pane-highlight');
+                  }, 2000);
+                } else if (currentProgramPaneRef.current) {
+                  // Fallback to ref if data attribute not found
                   currentProgramPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
                   currentProgramPaneRef.current.classList.add('program-pane-highlight');
                   setTimeout(() => {
@@ -1149,6 +1182,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 <CurrentProgramPane
                   machineId={machine.machine_id}
                   machineStatus={machine.status}
+                  programName={machine.program_name}
                 />
               </div>
             )}
@@ -1189,7 +1223,16 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 onExpand?.();
               }
               setTimeout(() => {
-                if (cycleHistoryPaneRef.current) {
+                // Find pane by data attribute (works with LayoutManager)
+                const paneElement = findPaneElement(PANE_IDS.CYCLE_HISTORY);
+                if (paneElement) {
+                  paneElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+                  paneElement.classList.add('cycle-pane-highlight');
+                  setTimeout(() => {
+                    paneElement.classList.remove('cycle-pane-highlight');
+                  }, 2000);
+                } else if (cycleHistoryPaneRef.current) {
+                  // Fallback to ref if data attribute not found
                   cycleHistoryPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
                   cycleHistoryPaneRef.current.classList.add('cycle-pane-highlight');
                   setTimeout(() => {
@@ -1259,7 +1302,16 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                   onExpand?.();
                 }
                 setTimeout(() => {
-                  if (toolsPaneRef.current) {
+                  // Find pane by data attribute (works with LayoutManager)
+                  const paneElement = findPaneElement(PANE_IDS.TOOLS);
+                  if (paneElement) {
+                    paneElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+                    paneElement.classList.add('tools-pane-highlight');
+                    setTimeout(() => {
+                      paneElement.classList.remove('tools-pane-highlight');
+                    }, 2000);
+                  } else if (toolsPaneRef.current) {
+                    // Fallback to ref if data attribute not found
                     toolsPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
                     toolsPaneRef.current.classList.add('tools-pane-highlight');
                     setTimeout(() => {
@@ -1345,9 +1397,17 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 }
                 // Scroll to alarm pane after expansion
                 setTimeout(() => {
-                  if (alarmPaneRef.current) {
+                  // Find pane by data attribute (works with LayoutManager)
+                  const paneElement = findPaneElement(PANE_IDS.ALARMS);
+                  if (paneElement) {
+                    paneElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    paneElement.classList.add('alarm-pane-highlight');
+                    setTimeout(() => {
+                      paneElement.classList.remove('alarm-pane-highlight');
+                    }, 2000);
+                  } else if (alarmPaneRef.current) {
+                    // Fallback to ref if data attribute not found
                     alarmPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    // Highlight briefly
                     alarmPaneRef.current.classList.add('alarm-pane-highlight');
                     setTimeout(() => {
                       alarmPaneRef.current?.classList.remove('alarm-pane-highlight');

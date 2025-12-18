@@ -475,6 +475,17 @@ class CNCFtpClient:
         """
         return await self.get_system_file("TOLNI1.NC")
 
+    async def get_memory_data(self) -> Optional[str]:
+        """
+        Get memory information from MEM.NC system file.
+        
+        This file contains the currently active program name.
+
+        Returns:
+            Memory data as string
+        """
+        return await self.get_system_file("MEM.NC")
+
     async def connect(self) -> bool:
         """
         Explicitly establish FTP connection.

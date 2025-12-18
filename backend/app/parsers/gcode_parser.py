@@ -24,6 +24,34 @@ class GCodeParser:
         """
         self.content = content
         self.lines = content.split('\n')
+        self.is_macro_program = self._detect_macro_program()
+    
+    def _detect_macro_program(self) -> bool:
+        """
+        Detect if this is a macro program (Fanuc-style macro with variables and conditionals).
+        
+        Returns:
+            True if file appears to be a macro program
+        """
+        # Check for macro indicators:
+        # - Variable assignments: #100 = ...
+        # - Conditional logic: IF[...]
+        # - GOTO statements
+        # - O-number in comments (macro programs often start with (O####))
+        macro_indicators = 0
+        
+        for line in self.lines[:50]:  # Check first 50 lines
+            if re.search(r'#\d+\s*=', line):  # Variable assignment
+                macro_indicators += 1
+            if re.search(r'IF\[', line):  # Conditional
+                macro_indicators += 1
+            if re.search(r'GOTO\d+', line):  # GOTO
+                macro_indicators += 1
+            if re.search(r'\(O\d+\)', line):  # O-number in comment (macro)
+                macro_indicators += 1
+        
+        # If we find 2+ macro indicators, likely a macro program
+        return macro_indicators >= 2
 
     def parse(self) -> Dict[str, Any]:
         """
@@ -88,6 +116,7 @@ class GCodeParser:
             "stock_size": stock_size,
             "line_count": len(self.lines),
             "file_size": len(self.content.encode('utf-8')),
+            "is_macro_program": self.is_macro_program,  # Flag for macro programs
         }
 
     def extract_tools(self) -> List[Dict[str, Any]]:
@@ -422,6 +451,14 @@ class GCodeParser:
             # Remove comments and whitespace
             line = re.sub(r'\(.*?\)', '', line).strip()
             if not line:
+                continue
+            
+            # Skip macro variable assignments and conditional logic (not executable G-code)
+            # Patterns: #100 = ..., IF[...], GOTO..., N## (line numbers without G-code)
+            # Also skip lines that are only variable assignments or macro syntax
+            if re.match(r'^#\d+\s*=', line) or re.match(r'^IF\[', line) or \
+               re.match(r'^GOTO\d+', line) or re.match(r'^N\d+\s*$', line) or \
+               re.match(r'^N\d+\s*#', line) or re.search(r'#\d+\s*=\s*#\[', line):
                 continue
 
             # Extract feedrate if present (F word)

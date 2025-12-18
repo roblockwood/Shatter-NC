@@ -4,6 +4,7 @@ import { FileBrowser } from './pages/FileBrowser';
 import { ToolManagement } from './pages/ToolManagement';
 import { useBetaMode, useBetaModeActivator } from './hooks/useBetaMode';
 import { BetaRoute } from './components/BetaRoute';
+import { WebSocketProvider } from './contexts/WebSocketContext';
 import './App.css';
 
 function Navigation() {
@@ -59,26 +60,28 @@ function Navigation() {
 
 function App() {
   return (
-    <Router>
-      <div className="app">
-        <Navigation />
+    <WebSocketProvider>
+      <Router>
+        <div className="app">
+          <Navigation />
 
-        <div className="app-content">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/files" element={<FileBrowser />} />
-            <Route
-              path="/tools"
-              element={
-                <BetaRoute>
-                  <ToolManagement />
-                </BetaRoute>
-              }
-            />
-          </Routes>
+          <div className="app-content">
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/files" element={<FileBrowser />} />
+              <Route
+                path="/tools"
+                element={
+                  <BetaRoute>
+                    <ToolManagement />
+                  </BetaRoute>
+                }
+              />
+            </Routes>
+          </div>
         </div>
-      </div>
-    </Router>
+      </Router>
+    </WebSocketProvider>
   );
 }
 
