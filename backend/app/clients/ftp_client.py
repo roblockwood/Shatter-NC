@@ -466,14 +466,18 @@ class CNCFtpClient:
         """
         return await self.get_system_file("MONTR.NC")
 
-    async def get_tool_table_data(self) -> Optional[str]:
+    async def get_tool_table_data(self, units: str = 'in') -> Optional[str]:
         """
-        Get tool table data from TOLNI1.NC system file.
+        Get tool table data from TOLNI1.NC (inches) or TOLNM1.NC (millimeters) system file.
+
+        Args:
+            units: Unit system ('in' for inches, 'mm' for millimeters). Defaults to 'in'.
 
         Returns:
             Tool table data as string
         """
-        return await self.get_system_file("TOLNI1.NC")
+        filename = "TOLNI1.NC" if units == 'in' else "TOLNM1.NC"
+        return await self.get_system_file(filename)
 
     async def get_memory_data(self) -> Optional[str]:
         """

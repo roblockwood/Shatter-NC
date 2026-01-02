@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal } from './ui/Modal';
+import { formatDimension } from '../utils/formatDimension';
+import type { UnitType } from '../utils/formatDimension';
 import './UploadConfirmationModal.css';
 import { API_BASE_URL } from '../config/api';
 
@@ -70,6 +72,7 @@ interface UploadConfirmationModalProps {
   machineName: string;
   machinePath: string;
   fileContent: string;
+  units?: UnitType;
 }
 
 export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = ({
@@ -81,6 +84,7 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
   machineName,
   machinePath,
   fileContent,
+  units = 'in',
 }) => {
   const navigate = useNavigate();
   const [customONumber, setCustomONumber] = useState('O2000.nc');
@@ -386,7 +390,7 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
                     <td className="text-muted">─</td>
                     <td>T{String(tool.tool_number).padStart(2, '0')}</td>
                     <td>
-                      Ø{(tool.machine_tool_data.diameter || 0).toFixed(3)}" L{(tool.machine_tool_data.length || 0).toFixed(2)}"
+                      Ø{formatDimension(tool.machine_tool_data.diameter, units, 3)} L{formatDimension(tool.machine_tool_data.length, units, 2)}
                       {tool.machine_tool_data.tool_name && (
                         <span className="text-muted"> ({tool.machine_tool_data.tool_name})</span>
                       )}
@@ -452,14 +456,14 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
                     <tr className="validation-table-row tool-detail-row">
                       <td></td>
                       <td className="detail-label">Length</td>
-                      <td>{actualLength.toFixed(2)}"</td>
-                      <td>{requiredLength.toFixed(2)}"</td>
+                      <td>{formatDimension(actualLength, units, 2)}</td>
+                      <td>{formatDimension(requiredLength, units, 2)}</td>
                       <td className={lengthPassed ? 'text-success' : 'text-error'}>
-                        {lengthDiff.toFixed(2)}"
+                        {formatDimension(lengthDiff, units, 2)}
                       </td>
                       <td>
                         {tool.length_tolerance_plus != null && tool.length_tolerance_minus != null
-                          ? `+${tool.length_tolerance_plus.toFixed(4)}"/-${tool.length_tolerance_minus.toFixed(4)}"`
+                          ? `+${formatDimension(tool.length_tolerance_plus, units, 4)}/-${formatDimension(tool.length_tolerance_minus || 0, units, 4)}`
                           : '≥ required'}
                       </td>
                       <td className={lengthPassed ? 'text-success' : 'text-error'}>
@@ -473,14 +477,14 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
                     <tr className="validation-table-row tool-detail-row">
                       <td></td>
                       <td className="detail-label">Diameter</td>
-                      <td>{actualDiameter.toFixed(3)}"</td>
-                      <td>{requiredDiameter.toFixed(3)}"</td>
+                      <td>{formatDimension(actualDiameter, units, 3)}</td>
+                      <td>{formatDimension(requiredDiameter, units, 3)}</td>
                       <td className={diameterPassed ? 'text-success' : 'text-error'}>
-                        {diameterDiff.toFixed(3)}"
+                        {formatDimension(diameterDiff, units, 3)}
                       </td>
                       <td>
                         {tool.diameter_tolerance != null
-                          ? `±${tool.diameter_tolerance.toFixed(4)}"`
+                          ? `±${formatDimension(tool.diameter_tolerance, units, 4)}`
                           : 'exact match'}
                       </td>
                       <td className={diameterPassed ? 'text-success' : 'text-error'}>
@@ -568,7 +572,7 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
                   <tr key={axis} className="validation-table-row wcs-detail-row">
                     <td></td>
                     <td className="axis-label">{axis.toUpperCase()}</td>
-                    <td>{actual.toFixed(4)}"</td>
+                    <td>{formatDimension(actual, units, 4)}</td>
                     <td className="text-muted">────</td>
                     <td className="text-muted">────</td>
                     <td className="text-muted">─</td>
@@ -673,10 +677,10 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
                 <tr key={axis} className="validation-table-row wcs-detail-row">
                   <td></td>
                   <td className="detail-label">{axis.toUpperCase()}</td>
-                  <td>{actual.toFixed(4)}"</td>
-                  <td>{expected.toFixed(4)}"</td>
-                  <td className={axisStatusClass}>{diff.toFixed(4)}"</td>
-                  <td>±{tolerance.toFixed(4)}"</td>
+                  <td>{formatDimension(actual, units, 4)}</td>
+                  <td>{formatDimension(expected, units, 4)}</td>
+                  <td className={axisStatusClass}>{formatDimension(diff, units, 4)}</td>
+                  <td>±{formatDimension(tolerance, units, 4)}</td>
                   <td className={axisStatusClass}>{axisStatusIcon}</td>
                 </tr>
               );

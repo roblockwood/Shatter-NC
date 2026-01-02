@@ -19,9 +19,11 @@ interface MachineStatus {
   location?: string;
   poll_interval_seconds?: number;
   enabled?: boolean;
-  tools?: Array<{ tool_number: number; tool_name?: string; diameter?: number; length?: number }>;
+  tools?: Array<{ tool_number: number; tool_name?: string; diameter?: number; length?: number }>;  // ATC data
+  tool_table?: Array<{ tool_number: number; tool_name?: string; diameter?: number; length?: number }>;  // TABLE data (new)
   current_tool?: number;
   alarms?: Array<{ code: string; message: string }>;
+  units?: 'in' | 'mm';
 }
 
 interface WebSocketMessage {

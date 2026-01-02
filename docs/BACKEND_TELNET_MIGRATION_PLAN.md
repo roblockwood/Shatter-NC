@@ -470,19 +470,32 @@ Response: %R[Command(7)][Arguments(8)][Status(2)]\n[Data]\n[Checksum]%\n
    - **Integration**: When should control type be detected? On machine registration? Periodic re-detection?
    - **Validation**: Should we verify detected control type against other indicators (SYSC/SYSD files)?
 
-3. **Phase 3: Units Detection**
+3. **Phase 3: Units Implementation** ✅ **IN PROGRESS**
 
-   - Implement macro variable #302 reading
-   - Store units per machine
-   - Use units for all data parsing
+   **Status**: Manual unit selection implemented, parser/display integration in progress
+   
+   **Completed**:
+   - ✅ Manual unit selection in machine setup UI (`units` field in Machine model)
+   - ✅ Database schema: `units` column added to `machines` table (migration `09-add-units-column.sql`)
+   - ✅ Backend API: `units` field in create/update schemas
+   - ✅ Frontend UI: Unit selector in add/edit machine forms
 
-   **Open Questions & Clarifications**:
+   **Status**: ✅ **COMPLETE**
 
-   - **Macro variable reading**: Exact command format to read macro #302 via telnet? Is there a dedicated macro read command, or must we read from system data files?
-   - **Alternative sources**: Can units be read from system data files (SYSC89, SYSC94-99) instead of macro variables? Which is more reliable?
-   - **Runtime changes**: How to handle units changes at runtime? Re-read periodically or cache? Should we detect units changes and invalidate cached parsed data?
-   - **Storage**: Should units be stored in database `Machine` model? How to handle units mismatch between stored value and actual machine state?
-   - **Conversion**: When to convert units (at parse time vs display time)? Should we store raw values and convert on-demand, or convert during parsing?
+   **Completed Tasks**:
+   - ✅ Use units in parsers: Updated parsers (TOLNI, POSNI, HTTP tool parser) to accept and include units
+   - ✅ Display units in UI: Updated UI components to show correct unit suffix based on machine units
+   - ✅ Unit conversion logic: Implemented conversion utilities for display/validation
+   - ✅ API endpoints: All endpoints pass units to parsers and include units in responses
+   - ✅ Frontend formatting: Created `formatDimension` utility for consistent unit display
+
+   **Implementation Plan**: See [PHASE3_UNITS_IMPLEMENTATION_PLAN.md](PHASE3_UNITS_IMPLEMENTATION_PLAN.md) for detailed task breakdown.
+
+   **Design Decision**: Changed from automatic detection (macro variable #302) to manual selection due to inability to reliably detect units from machine. Units are now configured per-machine in the setup UI.
+
+   **Strategy**: Store raw values from machine, convert only at display/validation time. Parsers accept `units` parameter and include units metadata in output, but don't convert values.
+
+   **Note**: G-code unit detection (G20/G21) is deferred to future enhancement. Validation currently works correctly when machine and G-code use the same units.
 
 3.5. **Phase 3.5: Build Cursor Skills for Schema Definition Workflow**
 
@@ -605,27 +618,45 @@ This phase creates reusable Cursor skills/workflows that enable reliable, repeat
    - **Error handling**: What happens when schema doesn't match data? Fallback to old parser? Log error and continue? Raise exception?
    - **Schema registry**: File structure and organization for schema definitions. Should schemas be in `backend/app/schemas/cnc_data/`? How to organize by data type and control version?
 
-4. **Phase 4: Schema Definition**
+4. **Phase 4: Schema Definition** ✅ **IN PROGRESS**
 
-   - Use Cursor skills from Phase 3.5 to systematically define schemas
-   - For each data file type (TOLNn, POSNn, MEM, ATCTL, etc.):
-     - User provides schema specification
-     - Generate parser using Cursor skills
-     - Test parser with sample data
-     - Update endpoints to use new parser
-   - Create schema registry with all defined schemas
-   - Document schema variations by control version
+   **Status**: TOLN and ATCTL schemas defined and implemented. Working well in production.
 
-   **Open Questions & Clarifications**:
+   **Completed**:
+   - ✅ **TOLN (Tool Offset Table)** - Schema defined for C00 and D00 control versions
+     - Schema file: `backend/app/schemas/cnc_data/tolni_schema.py`
+     - Parser: `backend/app/parsers/tolni_parser_v2.py`
+     - Supports both TOLNI1 (inches) and TOLNM1 (millimeters) based on `machine.units`
+     - Handles control version auto-detection (C00 vs D00)
+     - Field mappings: tool_number, tool_length_offset, cutter_compensation, tool_life, tool_name, etc.
+   - ✅ **ATCTL (ATC Tool Changer)** - Schema defined for C00 (ATCTL) and D00 (ATCTLD) control versions
+     - Schema file: `backend/app/schemas/cnc_data/atctl_schema.py`
+     - Parser: `backend/app/parsers/atctl_parser_v2.py`
+     - Handles spindle, pot, and stocker tool entries
+     - Field mappings: tool_number, pot_number, group, tool_type, color, etc.
 
-   - **Parser architecture**: Design parser base class that handles control version, units, model-specific formats. Should base class be in `backend/app/parsers/base.py`? How to structure inheritance?
-   - **Backward compatibility**: How to maintain compatibility with existing endpoints (`backend/app/api/status.py`) during migration? Should we support both old and new parsers temporarily?
-   - **Testing strategy**: Unit tests, integration tests, performance benchmarks? Where should tests live (`backend/tests/`)? How to test with real machine data?
-   - **Rollout**: Migrate all parsers at once or one at a time? Should we start with one data type (e.g., MEM) as proof of concept?
+   **Remaining**:
+   - ⏳ POSN (Position/Work Offsets) - Schema definition pending
+   - ⏳ MEM (Memory/Program Info) - Schema definition pending
+   - ⏳ Other data files as needed
 
-5. **Phase 5: Replace HTTP/FTP Reads**
+   **Implementation Details**:
+   - Schema definitions use `FieldDefinition` dataclass with name, csv_index, data_type, required, description, validation
+   - Parsers auto-detect control version by analyzing data format differences
+   - Unit handling: Filename-based (TOLNI1 vs TOLNM1) - selected via `machine.units`
+   - Data validation: Type checking, required field validation, format validation
+   - Error handling: Graceful degradation for missing/optional fields
 
-   **Status**: Ready to begin - Phase 1 provides all necessary telnet commands.
+   **Files Created**:
+   - `backend/app/schemas/cnc_data/tolni_schema.py` - TOLN schema definitions
+   - `backend/app/schemas/cnc_data/atctl_schema.py` - ATCTL schema definitions
+   - `backend/app/parsers/tolni_parser_v2.py` - Schema-based TOLN parser
+   - `backend/app/parsers/atctl_parser_v2.py` - Schema-based ATCTL parser
+   - `backend/tests/test_tolni_parser_v2.py` - TOLN parser tests
+
+5. **Phase 5: Replace HTTP/FTP Reads** ✅ **IN PROGRESS**
+
+   **Status**: TOLN and ATCTL successfully migrated to Telnet. Working well in production.
 
    **Commands Available for Replacement**:
 
@@ -633,26 +664,62 @@ This phase creates reusable Cursor skills/workflows that enable reliable, repeat
    - ✅ `REDPRG` - Replace HTTP `/running_log` parsing (program content)
    - ✅ `DRQALL` - Replace FTP directory listing (`list_files()`)
    - ✅ `LOD MEM` - Replace FTP `get_memory_data()` (MEM.NC)
-   - ✅ `LOD TOLNI1` - Replace FTP `get_tool_table_data()` (TOLNI1.NC)
-   - ✅ `LOD POSNI1` - Replace FTP `get_position_data()` (POSNI1.NC)
+   - ✅ `LOD TOLNI1` / `LOD TOLNM1` - ✅ **COMPLETE** - Replace FTP `get_tool_table_data()` (TOLNI1.NC/TOLNM1.NC)
+   - ✅ `LOD ATCTL` / `LOD ATCTLD` - ✅ **COMPLETE** - Replace HTTP `/tool` (ATC Tool)
+   - ⏳ `LOD POSNI1` / `LOD POSNM1` - Replace FTP `get_position_data()` (POSNI1.NC/POSNM1.NC)
    - ❌ `REDFILE` - Still needed for system information (memory usage, registrations)
    - ❌ `REDDATE` - Still needed for machine date/time
 
+   **Migration Progress**:
+
+   - **TOLN (Tool Table)** - ✅ **COMPLETE**
+     - Telnet client updated to use `LOD TOLNI1` or `LOD TOLNM1` based on `machine.units`
+     - Schema-based parser (`tolni_parser_v2`) created and integrated
+     - API endpoint (`/api/machines/{id}/tools?source=table`) now uses Telnet exclusively
+     - FTP deprecated for TOLN data reads (kept only for NC file transfers)
+     - Response includes `protocol: "telnet"` field for tracking
+     - Pot number merging: ATCTL data merged into TABLE view to show pot assignments
+
+   - **ATCTL (ATC Tool Changer)** - ✅ **COMPLETE**
+     - Telnet client updated to use `LOD ATCTL` (C00) or `LOD ATCTLD` (D00) with auto-detection
+     - Schema-based parser (`atctl_parser_v2`) created and integrated
+     - API endpoint (`/api/machines/{id}/tools?source=atc`) now uses Telnet exclusively
+     - HTTP `/tool` endpoint deprecated for ATC data reads
+     - ATC data merged with TOLN data to provide complete tool information (diameter, length, etc.)
+     - Response includes `protocol: "telnet"` field for tracking
+
+   - **Polling Service** - ✅ **UPDATED**
+     - Polling service (`backend/app/services/polling.py`) now uses Telnet for tool data
+     - Fetches both ATC and TABLE (TOLN) data via Telnet
+     - Merges ATC with TOLN data (same logic as API endpoint)
+     - Broadcasts both `tools` (ATC) and `tool_table` (TABLE) via WebSocket
+     - Includes timestamps for cache management
+     - HTTP `get_status_overview()` no longer includes tools (excluded by default)
+
    **Tasks**:
 
-   - Replace HTTP reads with telnet commands
-   - Replace FTP reads with telnet LOD commands
+   - ✅ Replace FTP reads with telnet LOD commands for TOLN (tool table)
+   - ✅ Replace HTTP reads with telnet LOD commands for ATCTL (ATC data)
+   - ✅ Update polling service to use telnet client for tool data
+   - ⏳ Replace FTP reads with telnet LOD commands for POSN (position data)
+   - ⏳ Replace FTP reads with telnet LOD commands for MEM (memory data)
+   - ⏳ Replace HTTP reads with telnet commands (REDPRGN, REDPRG) for program info
    - Keep FTP for file transfers (upload/download) until `SAV` command is implemented
-   - Update polling service to use telnet client
-   - Add protocol selection mechanism (feature flag per machine)
+   - **Deprecation Strategy**: As each data type migrates to Telnet, FTP/HTTP is deprecated for that data type. FTP remains available only for NC file transfers.
+
+   **Migration Strategy**:
+
+   - **No Automatic Fallback**: Migrated data types use Telnet only. If Telnet fails, the request fails (503 error). This ensures clean migration and forces resolution of Telnet connectivity issues.
+   - **FTP/HTTP Deprecation**: FTP/HTTP are deprecated for data reads as each type migrates. FTP remains available only for NC file transfers (upload/download).
+   - **Protocol Tracking**: API responses include `protocol: "telnet"` field to track which protocol was used (useful for monitoring and debugging).
+   - **Error Handling**: Improved error messages for CM7500 (editing communication data) errors, guiding users to close open data files on the machine.
+   - **Data Validation**: Added validation to prevent data mix-ups (e.g., receiving ATCTL data when expecting TOLN).
+   - **Connection Management**: Each data fetch uses a separate Telnet client instance and disconnects cleanly to prevent connection reuse issues.
 
    **Open Questions & Clarifications**:
 
-   - **Feature flags**: Protocol selection per machine? Should we add a `protocol` field to `Machine` model? How to enable gradual rollout?
-   - **Parallel operation**: Run HTTP/FTP and Telnet in parallel during migration? Should we compare results for validation? How long to run in parallel?
-   - **Rollback strategy**: How to rollback if telnet fails for a machine? Should we automatically fallback to HTTP/FTP on error? How to detect when telnet is unreliable?
    - **Performance monitoring**: Track response times and error rates for comparison. Where to store metrics? Should we log protocol performance per machine?
-   - **Deprecation**: Timeline for removing HTTP/FTP code after migration? Should we keep HTTP/FTP as fallback indefinitely or remove after validation period?
+   - **Deprecation timeline**: When to remove FTP data read code entirely? After all data types migrated? Keep as reference implementation?
 
 6. **Phase 6: Enable Writes**
 

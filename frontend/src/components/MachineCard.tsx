@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ToolListModal } from './ToolListModal';
 import { UploadConfirmationModal } from './UploadConfirmationModal';
 import { SaveConfirmModal } from './SaveConfirmModal';
-import { Modal } from './ui/Modal';
 import { Select } from './ui/Select';
 import { AlarmPane } from './machine-detail/AlarmPane';
 import { StatusTimeline } from './machine-detail/StatusTimeline';
@@ -50,6 +49,7 @@ interface MachineStatus {
   path?: string;
   poll_interval_seconds?: number;
   enabled?: boolean;
+  units?: 'in' | 'mm';
 }
 
 interface MachineCardProps {
@@ -129,7 +129,6 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const [isEditSaving, setIsEditSaving] = useState(false);
   const [isEditTesting, setIsEditTesting] = useState(false);
   const [editTestResult, setEditTestResult] = useState<any>(null);
-  const [expandedPaneModal, setExpandedPaneModal] = useState<{ type: string; props: any } | null>(null);
   const [expandedPane, setExpandedPane] = useState<string | null>(null);
   const [layoutEditMode, setLayoutEditMode] = useState(false);
   const [cachedAlarms, setCachedAlarms] = useState<Alarm[] | null>(null);
@@ -622,7 +621,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                       currentStatus={machine.status} 
                       isOnline={machine.is_online}
                       currentError={machine.error}
-                      onExpand={() => setExpandedPaneModal({ type: 'timeline', props: { machineId: machine.machine_id, currentStatus: machine.status, isOnline: machine.is_online, currentError: machine.error } })}
+                      onExpand={undefined}
                     />
                   </div>
                 ),
@@ -634,7 +633,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     <AlarmPane 
                       machineId={machine.machine_id} 
                       currentAlarms={machine.alarms || cachedAlarms || undefined}
-                      onExpand={() => setExpandedPaneModal({ type: 'alarms', props: { machineId: machine.machine_id, currentAlarms: machine.alarms || cachedAlarms } })}
+                      onExpand={undefined}
                     />
                   </div>
                 ),
@@ -647,7 +646,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                       machineId={machine.machine_id}
                       machineStatus={machine.status}
                       programName={machine.program_name}
-                      onExpand={() => setExpandedPaneModal({ type: 'program', props: { machineId: machine.machine_id, machineStatus: machine.status } })}
+                      onExpand={undefined}
                     />
                   </div>
                 ),
@@ -658,11 +657,10 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                   <div ref={toolsPaneRef}>
                     <ToolsPane 
                       tools={machine.tools || []}
+                      toolTable={machine.tool_table || []}
                       currentTool={machine.current_tool}
                       machineId={machine.machine_id}
-                      onExpand={() => setExpandedPane(expandedPane === 'tools' ? null : 'tools')}
-                      isExpanded={expandedPane === 'tools'}
-                      isFullExpanded={expandedPane === 'tools'}
+                      units={(machine as any).units || 'in'}
                     />
                   </div>
                 ),
@@ -673,7 +671,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                   <div ref={cycleHistoryPaneRef}>
                     <CycleHistoryPane 
                       machineId={machine.machine_id}
-                      onExpand={() => setExpandedPaneModal({ type: 'history', props: { machineId: machine.machine_id } })}
+                      onExpand={undefined}
                     />
                   </div>
                 ),
@@ -682,66 +680,13 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           />
         </div>
 
-        {/* Expanded Pane Modals */}
-        {expandedPaneModal && (
-          <Modal
-            isOpen={true}
-            onClose={() => setExpandedPaneModal(null)}
-            title={expandedPaneModal.type === 'alarms' ? 'ALARMS' :
-                   expandedPaneModal.type === 'program' ? 'CURRENT PROGRAM' :
-                   expandedPaneModal.type === 'tools' ? 'TOOLS' :
-                   expandedPaneModal.type === 'timeline' ? 'STATUS TIMELINE' :
-                   expandedPaneModal.type === 'history' ? 'CYCLE HISTORY' : 'EXPANDED VIEW'}
-          >
-            <div 
-              style={{ height: 'auto', overflow: 'visible' }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {expandedPaneModal.type === 'alarms' && (
-                <AlarmPane 
-                  machineId={expandedPaneModal.props.machineId} 
-                  currentAlarms={expandedPaneModal.props.currentAlarms}
-                  onExpand={undefined}
-                  isExpanded={true}
-                />
-              )}
-              {expandedPaneModal.type === 'program' && (
-                <CurrentProgramPane 
-                  machineId={expandedPaneModal.props.machineId}
-                  machineStatus={expandedPaneModal.props.machineStatus}
-                  programName={machine.program_name}
-                />
-              )}
-              {expandedPaneModal.type === 'tools' && (
-                <ToolsPane 
-                  tools={expandedPaneModal.props.tools}
-                  currentTool={expandedPaneModal.props.currentTool}
-                  machineId={expandedPaneModal.props.machineId}
-                  isExpanded={true}
-                />
-              )}
-              {expandedPaneModal.type === 'timeline' && (
-                <StatusTimeline 
-                  machineId={expandedPaneModal.props.machineId}
-                  currentStatus={expandedPaneModal.props.currentStatus}
-                  isOnline={expandedPaneModal.props.isOnline}
-                  currentError={expandedPaneModal.props.currentError}
-                />
-              )}
-              {expandedPaneModal.type === 'history' && (
-                <CycleHistoryPane 
-                  machineId={expandedPaneModal.props.machineId}
-                />
-              )}
-            </div>
-          </Modal>
-        )}
 
         <ToolListModal
           isOpen={showToolModal}
           onClose={() => setShowToolModal(false)}
           tools={(machine.tools || []) as any}
           machineName={machine.machine_name}
+          units={(machine as any).units || machine.units || 'in'}
         />
 
         <UploadConfirmationModal
@@ -758,6 +703,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           machineName={machine.machine_name}
           machinePath={machine.path || '/PROGRAM'}
           fileContent={fileContent}
+          units={(machine as any).units || machine.units || 'in'}
         />
 
         <input
@@ -1408,8 +1354,10 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 >
                   <ToolsPane
                     tools={machine.tools || []}
+                    toolTable={machine.tool_table || []}
                     currentTool={machine.current_tool}
                     machineId={machine.machine_id}
+                    units={(machine as any).units || machine.units || 'in'}
                   />
                 </div>
               )}
@@ -1542,6 +1490,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         onClose={() => setShowToolModal(false)}
         tools={(machine.tools || []) as any}
         machineName={machine.machine_name}
+        units={(machine as any).units || machine.units || 'in'}
       />
 
       <UploadConfirmationModal
@@ -1558,6 +1507,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         machineName={machine.machine_name}
         machinePath={machine.path || '/PROGRAM'}
         fileContent={fileContent}
+        units={(machine as any).units || machine.units || 'in'}
       />
 
       <SaveConfirmModal
