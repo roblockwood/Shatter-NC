@@ -1,16 +1,14 @@
 version: '3.8'
 
-# Production docker-compose building images locally from source
-# This file builds images from source code instead of pulling pre-built images
+# Production docker-compose pulling pre-built images from GitHub Packages
+# This file pulls pre-built images instead of building locally
 #
 # Usage:
-#   1. Create .env file with required variables (POSTGRES_PASSWORD, SECRET_KEY, etc.)
-#   2. Build and start: docker compose -f docker-compose.prod.yml up -d --build
-#   3. To rebuild after changes: docker compose -f docker-compose.prod.yml up -d --build
+#   1. Authenticate: echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+#   2. Start services: docker compose -f docker-compose.prod.yml up -d
+#   3. To update: docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
 #
-# Note: This file includes Watchtower service and labels for automatic updates.
-# Watchtower will monitor and update containers when new images are built.
-# For pre-built images from GitHub Packages, use docker-compose.prod-auto.yml instead.
+# Note: This file does NOT include Watchtower. For automatic updates, use docker-compose.prod-auto.yml instead.
 
 services:
   # PostgreSQL with TimescaleDB extension
@@ -34,16 +32,10 @@ services:
       retries: 5
     networks:
       - shatter-network
-    # Don't auto-update database (too risky)
-    labels:
-      - "com.centurylinklabs.watchtower.enable=false"
 
-  # Backend API service - with Watchtower label for auto-updates
+  # Backend API service
   backend:
-    build:
-      context: .
-      dockerfile: ./backend/Dockerfile
-      target: production
+    image: ghcr.io/${GITHUB_OWNER:-roblockwood}/${GITHUB_REPO:-shatter-nc}/backend:${IMAGE_TAG:-latest}
     container_name: shatter-backend-prod
     restart: always
     environment:
@@ -56,8 +48,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-WARNING}
       DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-5}
       SECRET_KEY: ${SECRET_KEY}
-      # CORS_ORIGINS: Set to '["*"]' for production with dynamic IPs
-      # Example: CORS_ORIGINS='["*"]' in .env file
+      CORS_ORIGINS: '["*"]'
       # Migration directory - defaults to /app/migrations (baked into image)
       # Can override with MIGRATIONS_DIR env var or volume mount if needed
       # MIGRATIONS_DIR: /docker-entrypoint-initdb.d
@@ -80,18 +71,10 @@ services:
       start_period: 40s
     networks:
       - shatter-network
-    # Enable Watchtower to auto-update this container
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
-  # Frontend web application - with Watchtower label for auto-updates
+  # Frontend web application
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: production
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    image: ghcr.io/${GITHUB_OWNER:-roblockwood}/${GITHUB_REPO:-shatter-nc}/frontend:${IMAGE_TAG:-latest}
     container_name: shatter-frontend-prod
     restart: always
     ports:
@@ -105,9 +88,6 @@ services:
       retries: 3
     networks:
       - shatter-network
-    # Enable Watchtower to auto-update this container
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   # Redis for caching and task queue
   redis:
@@ -126,40 +106,6 @@ services:
       retries: 5
     networks:
       - shatter-network
-    # Don't auto-update Redis (stable version)
-    labels:
-      - "com.centurylinklabs.watchtower.enable=false"
-
-  # Watchtower - Automatic container updates
-  # Monitors containers with watchtower.enable=true label and updates them automatically
-  # Using nickfedor/watchtower fork which supports Docker API 1.44+ (required for Docker Engine v29+)
-  # Original containrrr/watchtower is no longer maintained and incompatible with newer Docker versions
-  watchtower:
-    image: nickfedor/watchtower:latest
-    container_name: watchtower
-    restart: always
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      # Check for updates every 5 minutes
-      - WATCHTOWER_POLL_INTERVAL=300
-      # Only watch containers with com.centurylinklabs.watchtower.enable=true label
-      - WATCHTOWER_LABEL_ENABLE=true
-      # Clean up old images after updating
-      - WATCHTOWER_CLEANUP=true
-      # Include stopped containers in cleanup
-      - WATCHTOWER_REMOVE_STOPPED_CONTAINERS=true
-      # Send notifications (optional - uncomment to enable)
-      # - WATCHTOWER_NOTIFICATIONS=email
-      # - WATCHTOWER_NOTIFICATION_EMAIL_FROM=your-email@example.com
-      # - WATCHTOWER_NOTIFICATION_EMAIL_TO=your-email@example.com
-      # - WATCHTOWER_NOTIFICATION_EMAIL_SERVER=smtp.gmail.com
-      # - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT=587
-    # Uncomment to run on a schedule instead of polling
-    # command: --schedule "0 2 * * *"  # Run at 2 AM daily
-    # Don't auto-update Watchtower itself (would cause issues)
-    labels:
-      - "com.centurylinklabs.watchtower.enable=false"
 
 volumes:
   postgres_data:
