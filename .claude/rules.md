@@ -348,3 +348,281 @@ The frontend shows the results.
 8. **Commit Properly** - Use conventional commit format
 
 These rules ensure consistency, maintainability, and quality across the Shatter project.
+
+---
+
+## 11. Phase 4: Schema Definition Workflow (MANDATORY)
+
+**When defining a new CNC data file schema (TOLNn, POSNn, MEM, ATCTL, etc.):**
+
+### Schema Input Requirements
+
+**The user MUST provide schema specification. DO NOT proceed without complete schema information.**
+
+#### Acceptable Schema Input Formats
+
+The user can provide schema specification in one of these formats:
+
+1. **Documentation References** (Preferred): Reference to documentation files containing schema information
+   - Format: `@docs/path/to/doc.json:line-range` or `@docs/path/to/doc.json:line-range`
+   - Example: `for c00 @docs/scrape/section_5_6_4_c00.json:4211-4215`
+   - The assistant should extract schema information from the referenced documentation
+
+2. **Structured Markdown** (Alternative): Complete schema specification in markdown format (see template below)
+
+#### Documentation Reference Format
+
+When user provides documentation references:
+- Extract field definitions from the documentation
+- Identify control version differences (C00 vs D00)
+- Parse field positions, data types, and validation rules
+- Create schema definition file based on extracted information
+- If documentation is incomplete, ask for clarification on missing fields
+
+#### Structured Markdown Format (Alternative)
+
+If user provides markdown format, use this structure:
+
+```markdown
+## Schema Specification: [DATA_TYPE]
+
+### Basic Information
+- **Data Type**: [TOLNn, POSNn, MEM, ATCTL, etc.]
+- **File Pattern**: [Filename pattern, e.g., "TOLNI1.NC", "TOLNM1.NC"]
+- **Description**: [Brief description of what this data represents]
+
+### Control Version Variants
+- **C00 Control**: [Description of C00 format]
+- **D00 Control**: [Description of D00 format]
+- **Other Variants**: [List any other control versions with format differences]
+
+### Unit Handling
+- **Unit Detection Method**: [filename_based | embedded_in_file | machine_config]
+  - If `filename_based`: Specify filename patterns (e.g., TOLNI1 = inches, TOLNM1 = mm)
+  - If `embedded_in_file`: Describe how units are indicated in file content
+  - If `machine_config`: Use machine.units from database
+- **Unit Conversion**: [yes | no] - Whether values need conversion based on units
+
+### Field Definitions
+
+For each field, provide:
+
+```yaml
+field_name:
+  position: [line_number, column_start, column_end] OR [regex_pattern]
+  data_type: [int | float | string | enum]
+  required: [true | false]
+  description: [What this field represents]
+  validation: [optional validation rules]
+  example: [example value]
+```
+
+### Line Format Specification
+
+- **Line Structure**: [fixed_width | delimited | regex]
+- **Delimiter**: [if delimited, specify delimiter character(s)]
+- **Line Length**: [if fixed_width, specify character count]
+- **Header Lines**: [number of header lines to skip, if any]
+- **Footer Lines**: [number of footer lines to skip, if any]
+- **Sample Lines**: [Provide 3-5 sample lines from actual file]
+
+### Example Schema Specification
+
+```markdown
+## Schema Specification: TOLNn (Tool Table)
+
+### Basic Information
+- **Data Type**: TOLNn (Tool Offset Table)
+- **File Pattern**: TOLNI1.NC (inches), TOLNM1.NC (millimeters)
+- **Description**: Tool table containing tool number, diameter, length, and offset data
+
+### Control Version Variants
+- **C00 Control**: Fixed-width format, 80 characters per line
+- **D00 Control**: Same format as C00 (no variation)
+
+### Unit Handling
+- **Unit Detection Method**: filename_based
+  - TOLNI1.NC = inches
+  - TOLNM1.NC = millimeters
+- **Unit Conversion**: no (values stored in native units)
+
+### Field Definitions
+
+```yaml
+tool_number:
+  position: [line_number, 0, 3]
+  data_type: int
+  required: true
+  description: Tool number (1-999)
+  validation: range(1, 1000)
+  example: 1
+
+diameter:
+  position: [line_number, 10, 20]
+  data_type: float
+  required: true
+  description: Tool diameter
+  validation: positive
+  example: 0.25
+
+length:
+  position: [line_number, 25, 35]
+  data_type: float
+  required: true
+  description: Tool length offset
+  validation: any
+  example: 3.4494
+```
+
+### Line Format Specification
+
+- **Line Structure**: fixed_width
+- **Line Length**: 80 characters
+- **Header Lines**: 0
+- **Footer Lines**: 0
+- **Sample Lines**:
+  ```
+  0001    0.2500    3.4494    0.0000
+  0002    0.5000    4.0000    0.0000
+  0003    0.1250    2.5000    0.0000
+  ```
+```
+
+### Schema Extraction Process
+
+**When user provides documentation references:**
+
+1. **Read the referenced documentation files**
+   - Extract field definitions from tables or notes
+   - Identify control version (C00, D00, etc.)
+   - Parse field names, positions, data types, and validation rules
+
+2. **Map fields to CSV indices or positions**
+   - For CSV/delimited formats: Map to field index (0-based)
+   - For fixed-width formats: Map to column positions
+   - Extract tool number from line prefix (e.g., T01 → tool_number=1)
+
+3. **Identify control version differences**
+   - Compare C00 and D00 field definitions
+   - Note any field additions, removals, or changes
+   - Document field index shifts if present
+
+4. **Create schema definition file**
+   - Location: `backend/app/schemas/cnc_data/[data_type]_schema.py`
+   - Use `FieldDefinition` and `SchemaDefinition` dataclasses
+   - Include both control versions in schema registry
+
+5. **Verify against sample data**
+   - Test field extraction with actual sample files
+   - Confirm field positions match documentation
+   - Adjust if discrepancies found
+
+### Schema Validation Checklist
+
+**Before proceeding with parser implementation, verify:**
+
+- [ ] Data type and file pattern identified
+- [ ] Control version variants extracted (at least C00 and D00)
+- [ ] Unit handling method determined (usually filename_based for TOLNn)
+- [ ] All key fields mapped (tool_number, diameter, length, etc.)
+- [ ] Line format structure identified (fixed_width/delimited/regex)
+- [ ] Field positions verified against sample data
+- [ ] Control version differences documented
+
+### If Schema Information is Incomplete
+
+**If documentation is missing key information:**
+
+1. **Ask for clarification** on missing fields:
+   > "The documentation doesn't specify [missing field]. Can you clarify:
+   > - [Specific question about the field]"
+
+2. **Use sample data to infer** when safe:
+   - Compare sample lines to documentation
+   - Infer field positions from data patterns
+   - Document assumptions made
+
+3. **Do NOT make assumptions** about:
+   - Critical field positions without verification
+   - Control version differences without documentation
+   - Unit handling without clear indication
+
+### Schema Registry Structure
+
+Once schema is validated, create schema definition file:
+
+**Location**: `backend/app/schemas/cnc_data/[data_type]_schema.py`
+
+**Structure**:
+```python
+"""
+Schema definition for [DATA_TYPE] data files.
+
+Control Versions:
+- C00: [description]
+- D00: [description]
+
+Unit Handling:
+- Method: [filename_based | embedded | machine_config]
+- Conversion: [yes | no]
+"""
+
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass
+
+@dataclass
+class FieldDefinition:
+    """Definition for a single field in the schema."""
+    name: str
+    position: tuple  # (line_offset, col_start, col_end) or regex pattern
+    data_type: type  # int, float, str
+    required: bool
+    description: str
+    validation: Optional[callable] = None
+
+@dataclass
+class SchemaDefinition:
+    """Complete schema definition for a data type."""
+    data_type: str
+    file_pattern: str
+    control_versions: Dict[str, Dict[str, Any]]  # {version: {field_defs}}
+    unit_handling: Dict[str, Any]
+    line_format: Dict[str, Any]
+    sample_lines: List[str]
+
+# Schema definitions per control version
+C00_SCHEMA = SchemaDefinition(...)
+D00_SCHEMA = SchemaDefinition(...)
+```
+
+### Parser Generation Workflow
+
+1. **Validate Schema** - Ensure all required information provided
+2. **Create Schema Definition** - Generate `[data_type]_schema.py` file
+3. **Generate Parser** - Create parser class using schema
+4. **Create Tests** - Generate test file with sample data
+5. **Update Endpoints** - Integrate parser into API endpoints
+6. **Document** - Update API documentation
+
+### Error Handling
+
+If schema doesn't match actual data:
+
+- **Log warning** with schema mismatch details
+- **Attempt fallback** to old parser (if exists)
+- **Raise exception** if critical field missing
+- **Document mismatch** for schema update
+
+### Success Criteria
+
+Schema definition is complete when:
+
+- ✅ All fields defined with positions and types
+- ✅ Control version variants documented
+- ✅ Unit handling method specified
+- ✅ Sample lines match field definitions
+- ✅ Parser successfully extracts all fields
+- ✅ Tests pass with sample data
+- ✅ Endpoints updated and working
+
+**This workflow ensures reliable, repeatable schema definition for all CNC data file types.**

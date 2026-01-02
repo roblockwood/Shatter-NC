@@ -41,7 +41,7 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
         )
 
         # Get comprehensive status
-        status_data = http_client.get_status_overview()
+        status_data = http_client.get_status_overview(units=db_machine.units)
         status_data["machine_id"] = machine_id
         status_data["machine_name"] = db_machine.name
 
@@ -149,94 +149,304 @@ async def get_tools(
             detail=f"Machine with id {machine_id} not found",
         )
 
-        try:
-            if source == "table":
-                # Fetch tool table from TOLNI1.NC via FTP
-                from app.clients.ftp_client import CNCFtpClient
-                from app.parsers.tolni_parser import parse_tolni
-                
-                ftp_client = CNCFtpClient(
-                    ip_address=db_machine.ip_address,
-                    port=db_machine.ftp_port,
-                    username=db_machine.ftp_username,
-                    password=db_machine.ftp_password,
+    try:
+        if source == "table":
+            # Fetch tool table from TOLNI1 (inches) or TOLNM1 (millimeters) via Telnet
+            # Phase 5: Using Telnet for data reads (FTP deprecated for data, kept only for file transfers)
+            from app.clients.telnet_client import CNCTelnetClient
+            from app.parsers.tolni_parser_v2 import parse_tolni_v2
+            
+            telnet_client = CNCTelnetClient(
+                ip_address=db_machine.ip_address,
+                port=10000,  # Telnet port
+                timeout=10
+            )
+            
+            # Use machine.units to select correct data name (TOLNI1 vs TOLNM1)
+            data_name = "TOLNI1" if db_machine.units == 'in' else "TOLNM1"
+            tool_table_content = await telnet_client.get_tool_table_data(units=db_machine.units)
+            if tool_table_content is None:
+                # Disconnect cleanly before raising error
+                await telnet_client.disconnect()
+                # Check if we have a more specific error from the Telnet client
+                # CM7500 error (status code 40) means "editing communication data" - data is open on machine
+                raise HTTPException(
+                    status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Failed to load {data_name} via Telnet. The machine may be busy (CM7500: editing communication data) or Telnet port 10000 may be blocked. Close any open data files on the machine and try again.",
                 )
+            
+            # Validate that we got TOLN data, not ATCTL data
+            # TOLN data should start with T## lines, ATCTL starts with M## lines
+            if tool_table_content.strip().startswith('M'):
+                logger.error(f"Received ATCTL data instead of TOLN data for {data_name} - possible connection/data mix-up")
+                await telnet_client.disconnect()
+                raise HTTPException(
+                    status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Data type mismatch: received ATCTL data instead of {data_name}. Please try again.",
+                )
+            
+            # Parse the tool table using schema-based parser
+            parsed = parse_tolni_v2(
+                tool_table_content.encode('utf-8'),
+                units=db_machine.units,
+                control_version=None  # Auto-detect control version
+            )
+            
+            # Merge pot numbers from ATCTL into TABLE data (reverse merge: TOLN -> ATCTL)
+            # This allows TABLE view to show which pot each tool is in
+            try:
+                from app.parsers.atctl_parser_v2 import parse_atctl_v2
                 
-                tool_table_content = await ftp_client.get_tool_table_data()
-                if tool_table_content is None:
-                    raise HTTPException(
-                        status_code=http_status.HTTP_404_NOT_FOUND,
-                        detail="TOLNI1.NC file not found or could not be read",
-                    )
+                # Fetch ATC data to get pot mappings
+                atc_client = CNCTelnetClient(
+                    ip_address=db_machine.ip_address,
+                    port=10000,
+                    timeout=10
+                )
+                atc_data = await atc_client.get_atc_magazine_data(control_version=None)
                 
-                # Parse the tool table
-                parsed = parse_tolni(tool_table_content.encode('utf-8'))
-                parsed["machine_id"] = machine_id
-                parsed["source"] = "tool_table"
-                
-                # Also fetch program_name from mem.nc while we have FTP connection open
-                try:
-                    from app.parsers.mem_parser import parse_mem
-                    mem_data = await ftp_client.get_memory_data()
-                    if mem_data:
-                        logger.debug(f"Raw mem.nc content: {repr(mem_data)}")
-                        parsed_mem = parse_mem(mem_data.encode('utf-8'))
-                        program_name = parsed_mem.get("program_name")
-                        if program_name:
-                            parsed["program_name"] = program_name
-                            logger.debug(f"Extracted program_name from mem.nc: {program_name}")
-                        else:
-                            logger.debug(f"mem.nc parsed but no program_name found. Content: {repr(mem_data)}")
-                except Exception as e:
-                    logger.debug(f"Failed to fetch program_name from mem.nc: {e}")
-                
-                return parsed
-            else:
-                # Default: ATC tool data from HTTP endpoint
+                if atc_data:
+                    atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=None)
+                    
+                    # Create reverse lookup: tool_number -> ATCTL data
+                    # This includes: pot_number, group, tool_type, color
+                    atc_lookup = {}
+                    for atc_tool in atc_parsed.get("tools", []):
+                        tool_num = atc_tool.get("tool_number")
+                        pot_number = atc_tool.get("pot_number")
+                        
+                        # Build lookup for ATCTL data (skip spindle and invalid tools)
+                        if tool_num and tool_num > 0 and tool_num != 255:
+                            if pot_number and str(pot_number).upper() != "SPINDLE":
+                                atc_lookup[tool_num] = {
+                                    "pot_number": pot_number,
+                                    "group": atc_tool.get("group"),
+                                    "tool_type": atc_tool.get("tool_type"),
+                                    "color": atc_tool.get("color"),
+                                }
+                    
+                    # Merge ATCTL data into TABLE tools (reverse merge: TOLN -> ATCTL)
+                    # This adds: pot_number, group, tool_type, color
+                    for tool in parsed.get("tools", []):
+                        tool_num = tool.get("tool_number")
+                        if tool_num and tool_num in atc_lookup:
+                            atc_data = atc_lookup[tool_num]
+                            tool["pot_number"] = atc_data["pot_number"]
+                            if atc_data.get("group") is not None:
+                                tool["group"] = atc_data["group"]
+                            if atc_data.get("tool_type") is not None:
+                                tool["tool_type"] = atc_data["tool_type"]
+                            if atc_data.get("color") is not None:
+                                tool["color"] = atc_data["color"]
+                    
+                    await atc_client.disconnect()
+                else:
+                    await atc_client.disconnect()
+            except Exception as e:
+                logger.warning(f"Failed to merge pot numbers into TABLE data: {e}")
+                # Continue without pot numbers - TABLE data is still valid
+            
+            # Disconnect cleanly after successful fetch
+            await telnet_client.disconnect()
+            parsed["machine_id"] = machine_id
+            parsed["source"] = "tool_table"
+            parsed["protocol"] = "telnet"  # Track which protocol was used
+            
+            # Also fetch program_name from MEM while we have Telnet connection open
+            try:
+                from app.parsers.mem_parser import parse_mem
+                mem_data = await telnet_client.get_memory_data()
+                if mem_data:
+                    logger.debug(f"Raw MEM content: {repr(mem_data)}")
+                    parsed_mem = parse_mem(mem_data.encode('utf-8'))
+                    program_name = parsed_mem.get("program_name")
+                    if program_name:
+                        parsed["program_name"] = program_name
+                        logger.debug(f"Extracted program_name from MEM: {program_name}")
+                    else:
+                        logger.debug(f"MEM parsed but no program_name found. Content: {repr(mem_data)}")
+            except Exception as e:
+                logger.debug(f"Failed to fetch program_name from MEM: {e}")
+            
+            return parsed
+        else:
+            # Default: ATC tool data from Telnet (Phase 5: Replace HTTP/FTP reads)
+            from app.clients.telnet_client import CNCTelnetClient
+            from app.parsers.atctl_parser_v2 import parse_atctl_v2
+            from app.parsers.tolni_parser_v2 import parse_tolni_v2
+            
+            # If raw_html requested, still use HTTP for now (for debugging)
+            if raw_html:
                 http_client = CNCHttpClient(db_machine.ip_address, port=db_machine.http_port)
+                html = http_client._send_request("/tool")
+                return {
+                    "machine_id": machine_id,
+                    "source": "atc",
+                    "raw_html": html
+                }
+            
+            telnet_client = CNCTelnetClient(
+                ip_address=db_machine.ip_address,
+                port=10000,  # Telnet port
+                timeout=10
+            )
+            
+            # Get ATC magazine data (pot/tool mappings)
+            # Retry logic is handled in telnet_client.load_data()
+            atc_data = await telnet_client.get_atc_magazine_data(control_version=None)
+            if atc_data is None:
+                await telnet_client.disconnect()
+                raise HTTPException(
+                    status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Failed to load ATCTL/ATCTLD via Telnet. The machine may be busy (CM7500: editing communication data) or Telnet port 10000 may be blocked. Close any open data files on the machine and try again.",
+                )
+            
+            # Validate that we got ATCTL data, not TOLN data
+            # ATCTL data should start with M## lines, TOLN starts with T## lines
+            if atc_data.strip().startswith('T'):
+                logger.error(f"Received TOLN data instead of ATCTL data - possible connection/data mix-up")
+                await telnet_client.disconnect()
+                raise HTTPException(
+                    status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Data type mismatch: received TOLN data instead of ATCTL. Please try again.",
+                )
+            
+            # Parse ATC data
+            atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=None)
+            
+            # Get tool table data to merge tool details (diameter, length, name)
+            # Use the SAME TOLN data source as the tool table endpoint
+            # Note: If TOLN fails, we still return ATC data (just without tool details)
+            # IMPORTANT: Disconnect ATCTL connection and create fresh one for TOLN to avoid data mix-up
+            data_name = "TOLNI1" if db_machine.units == 'in' else "TOLNM1"
+            tool_table_content = None
+            toln_client = None
+            try:
+                # Disconnect current connection to ensure clean state
+                await telnet_client.disconnect()
                 
-                # If raw_html requested, return the raw HTML for inspection
-                if raw_html:
-                    html = http_client._send_request("/tool")
-                    return {
-                        "machine_id": machine_id,
-                        "source": "atc",
-                        "raw_html": html
-                    }
+                # Create a new client instance for TOLN to ensure clean connection
+                toln_client = CNCTelnetClient(
+                    ip_address=db_machine.ip_address,
+                    port=10000,
+                    timeout=10
+                )
+                tool_table_content = await toln_client.get_tool_table_data(units=db_machine.units)
                 
-                data = http_client.get_tool_data()
-                data["machine_id"] = machine_id
-                data["source"] = "atc"
+                # Validate TOLN data - should start with T## lines, not M## (ATCTL)
+                if tool_table_content:
+                    first_line = tool_table_content.strip().split('\n')[0].strip() if tool_table_content.strip() else ""
+                    if first_line.startswith('M'):
+                        logger.error(f"Received ATCTL data instead of TOLN data ({data_name}) - possible connection/data mix-up. First line: {first_line[:50]}")
+                        tool_table_content = None  # Don't use wrong data
+                    elif not first_line.startswith('T') and first_line:
+                        logger.warning(f"TOLN data ({data_name}) doesn't start with T## - unexpected format. First line: {first_line[:50]}")
                 
-                # Also fetch program_name from mem.nc via FTP when accessing tool data
-                # This is a good time since we're already making machine requests
-                try:
-                    ftp_client = CNCFtpClient(
-                        ip_address=db_machine.ip_address,
-                        port=db_machine.ftp_port,
-                        username=db_machine.ftp_username,
-                        password=db_machine.ftp_password,
-                    )
-                    from app.parsers.mem_parser import parse_mem
-                    mem_data = await ftp_client.get_memory_data()
-                    if mem_data:
-                        logger.debug(f"Raw mem.nc content from tools endpoint: {repr(mem_data)}")
-                        parsed_mem = parse_mem(mem_data.encode('utf-8'))
-                        program_name = parsed_mem.get("program_name")
-                        if program_name:
-                            data["program_name"] = program_name
-                            logger.debug(f"Extracted program_name from mem.nc: {program_name}")
-                        else:
-                            logger.debug(f"mem.nc parsed but no program_name found. Content: {repr(mem_data)}")
-                except Exception as e:
-                    logger.debug(f"Failed to fetch program_name from mem.nc: {e}")
+                # Clean up TOLN connection
+                if toln_client:
+                    await toln_client.disconnect()
+            except Exception as e:
+                logger.warning(f"Failed to load {data_name} for ATC merge (will continue without tool details): {e}")
+                if toln_client:
+                    try:
+                        await toln_client.disconnect()
+                    except:
+                        pass
+            
+            if tool_table_content is None:
+                logger.warning(f"TOLN data ({data_name}) not available for ATC merge - ATC tools will have pot/tool mappings but no diameter/length/name")
+            
+            # Merge ATC positions with tool details
+            tools = []
+            tool_lookup = {}
+            
+            if tool_table_content:
+                tool_table_parsed = parse_tolni_v2(
+                    tool_table_content.encode('utf-8'),
+                    units=db_machine.units,
+                    control_version=atc_parsed.get("control_version")
+                )
+                logger.debug(f"Loaded {len(tool_table_parsed.get('tools', []))} tools from {data_name} for ATC merge (units={db_machine.units})")
                 
-                return data
+                # Create lookup by tool number
+                for tool in tool_table_parsed.get("tools", []):
+                    tool_num = tool.get("tool_number")
+                    if tool_num:
+                        tool_lookup[tool_num] = tool
+                        logger.debug(f"Added tool {tool_num} to lookup: name={tool.get('tool_name')}, diameter={tool.get('diameter')}, length={tool.get('length')}")
+            else:
+                logger.warning(f"No TOLN data available for ATC merge - ATC tools will have no diameter/length/name")
+            
+            # Merge ATC tools with tool details from TOLN
+            # Match by tool_number to correlate pot position with tool data
+            # Only include tools that have valid TOLN data to ensure we're using the active TOLN file
+            for atc_tool in atc_parsed.get("tools", []):
+                tool_num = atc_tool.get("tool_number")
+                if tool_num and tool_num > 0 and tool_num != 255:  # Skip "not set" and "cap setting"
+                    # Only include tools that exist in TOLN data
+                    # This ensures we're using the active TOLN file (TOLNI1 or TOLNM1 based on machine.units)
+                    if tool_num in tool_lookup:
+                        tol_tool = tool_lookup[tool_num]
+                        merged_tool = {
+                            "pot_number": atc_tool.get("pot_number"),
+                            "tool_number": tool_num,
+                            "tool_name": tol_tool.get("tool_name"),
+                            "diameter": tol_tool.get("diameter"),
+                            "length": tol_tool.get("length"),
+                            "group": atc_tool.get("group"),
+                            "life": None,  # Not in ATCTL
+                            "tool_type": atc_tool.get("tool_type"),
+                            "color": atc_tool.get("color"),
+                        }
+                        logger.debug(f"Merged ATC pot {merged_tool.get('pot_number')} tool {tool_num}: diameter={merged_tool['diameter']}, length={merged_tool['length']}, units={db_machine.units}, toln_source={data_name}")
+                        tools.append(merged_tool)
+                    else:
+                        logger.debug(f"Tool {tool_num} in ATC pot {atc_tool.get('pot_number')} not found in TOLN data ({data_name}) - skipping")
+            
+            data = {
+                "tools": tools,
+                "machine_id": machine_id,
+                "source": "atc",
+                "protocol": "telnet",
+                "units": db_machine.units,  # Ensure units are included in response
+                "control_version": atc_parsed.get("control_version"),
+                "toln_source": data_name  # Track which TOLN file was used
+            }
+            
+            logger.info(f"ATC data merged: {len(tools)} tools, TOLN source={data_name}, units={db_machine.units}")
+            
+            # Also fetch program_name from MEM using a fresh connection
+            try:
+                from app.parsers.mem_parser import parse_mem
+                # Create fresh connection for MEM to avoid any data mix-up
+                mem_client = CNCTelnetClient(
+                    ip_address=db_machine.ip_address,
+                    port=10000,
+                    timeout=10
+                )
+                mem_data = await mem_client.get_memory_data()
+                if mem_data:
+                    logger.debug(f"Raw MEM content: {repr(mem_data)}")
+                    parsed_mem = parse_mem(mem_data.encode('utf-8'))
+                    program_name = parsed_mem.get("program_name")
+                    if program_name:
+                        data["program_name"] = program_name
+                        logger.debug(f"Extracted program_name from MEM: {program_name}")
+                await mem_client.disconnect()
+            except Exception as e:
+                logger.debug(f"Failed to fetch program_name from MEM: {e}")
+                if 'mem_client' in locals():
+                    try:
+                        await mem_client.disconnect()
+                    except:
+                        pass
+            
+            return data
 
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Error fetching tools for machine {machine_id}: {e}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching tools for machine {machine_id}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
@@ -314,7 +524,7 @@ async def get_position(machine_id: int, db: Session = Depends(get_db)):
             raise Exception("Failed to retrieve POSNI1.NC file")
 
         # Parse the POSNI1.NC content
-        parsed = parse_posni(position_data.encode('utf-8'))
+        parsed = parse_posni(position_data.encode('utf-8'), units=db_machine.units)
 
         return {
             "machine_id": machine_id,
@@ -323,6 +533,7 @@ async def get_position(machine_id: int, db: Session = Depends(get_db)):
             "extended_offsets": parsed.get("extended_offsets", {}),
             "fixture_offsets": parsed.get("fixture_offsets", {}),
             "rotary_offsets": parsed.get("rotary_offsets", {}),
+            "units": parsed.get("units", db_machine.units),
         }
 
     except Exception as e:

@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBetaMode } from '../../hooks/useBetaMode';
+import { formatDimension } from '../../utils/formatDimension';
+import type { UnitType } from '../../utils/formatDimension';
 import './ToolsPane.css';
 import { API_BASE_URL } from '../../config/api';
 
@@ -17,13 +19,12 @@ interface Tool {
 }
 
 interface ToolsPaneProps {
-  tools: Tool[];
+  tools: Tool[];  // ATC data from WebSocket
+  toolTable?: Tool[];  // TABLE data from WebSocket (new)
   currentTool?: number;
-  onExpand?: () => void;
-  isExpanded?: boolean;
-  isFullExpanded?: boolean;
   machineId?: number;
   source?: 'atc' | 'table';
+  units?: UnitType;
 }
 
 type SortColumn = 'pot_number' | 'tool_number' | 'tool_name' | 'diameter' | 'length' | 'group' | 'life' | 'tool_type' | 'color';
@@ -31,29 +32,91 @@ type SortDirection = 'asc' | 'desc';
 
 export const ToolsPane: React.FC<ToolsPaneProps> = ({ 
   tools: initialTools, 
+  toolTable: initialToolTable,
   currentTool, 
-  onExpand, 
-  isExpanded: _isExpanded = false,
-  isFullExpanded = false,
   machineId,
-  source: initialSource = 'atc'
+  source: initialSource = 'atc',
+  units = 'in'
 }) => {
-  const [sortColumn, setSortColumn] = useState<SortColumn>('tool_number');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  // Cache sort settings separately for each view (ATC and TABLE)
+  const [sortSettings, setSortSettings] = useState<{
+    atc: { column: SortColumn; direction: SortDirection };
+    table: { column: SortColumn; direction: SortDirection };
+  }>({
+    atc: { column: 'pot_number', direction: 'asc' },  // ATC defaults to POT# ascending
+    table: { column: 'tool_number', direction: 'asc' }  // TABLE defaults to T# ascending
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [toolSource, setToolSource] = useState<'atc' | 'table'>(initialSource);
-  const [tools, setTools] = useState<Tool[]>(initialTools);
+  
+  // Get current sort settings based on active source
+  const sortColumn = sortSettings[toolSource].column;
+  const sortDirection = sortSettings[toolSource].direction;
+  // Cache tools separately for each source (ATC and TABLE)
+  const [toolsCache, setToolsCache] = useState<{ atc: Tool[]; table: Tool[] }>({
+    atc: initialSource === 'atc' ? initialTools : [],
+    table: initialSource === 'table' ? (initialToolTable || []) : []
+  });
+  // Track timestamps for cache entries to determine if data is stale
+  const [cacheTimestamps, setCacheTimestamps] = useState<{
+    atc: number | null;
+    table: number | null;
+  }>({
+    atc: null,
+    table: null
+  });
   const [isLoadingTools, setIsLoadingTools] = useState(false);
+  const [toolsError, setToolsError] = useState<{ atc: string | null; table: string | null }>({
+    atc: null,
+    table: null
+  });
   const [toolsSummary, setToolsSummary] = useState<Array<{ tool_number: number; description: string }>>([]);
+  
+  // Get current tools from cache based on active source
+  const tools = toolsCache[toolSource];
+  // Get current error for active source
+  const currentError = toolsError[toolSource];
+  
+  // Update cache when WebSocket data arrives (fresh Telnet data from polling)
+  useEffect(() => {
+    if (machineId) {
+      // Update ATC cache from WebSocket
+      if (initialTools && initialTools.length > 0) {
+        setToolsCache(prev => ({
+          ...prev,
+          atc: initialTools
+        }));
+        setCacheTimestamps(prev => ({
+          ...prev,
+          atc: Date.now()
+        }));
+        // Clear error when fresh data arrives
+        setToolsError(prev => ({
+          ...prev,
+          atc: null
+        }));
+      }
+      
+      // Update TABLE cache from WebSocket
+      if (initialToolTable && initialToolTable.length > 0) {
+        setToolsCache(prev => ({
+          ...prev,
+          table: initialToolTable
+        }));
+        setCacheTimestamps(prev => ({
+          ...prev,
+          table: Date.now()
+        }));
+        // Clear error when fresh data arrives
+        setToolsError(prev => ({
+          ...prev,
+          table: null
+        }));
+      }
+    }
+  }, [initialTools, initialToolTable, machineId]);
   const navigate = useNavigate();
   const { isBetaMode } = useBetaMode();
-
-  // Update tools from initialTools when on ATC source (updates from polling)
-  useEffect(() => {
-    if (toolSource === 'atc') {
-      setTools(initialTools);
-    }
-  }, [initialTools, toolSource]);
 
   // Fetch tools summary for matching (only if beta mode is enabled)
   useEffect(() => {
@@ -73,33 +136,100 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     }
   }, [isBetaMode]);
 
-  // Fetch tool table only when user switches to 'table' source (once per switch)
+  // Rely on WebSocket data - no automatic fetching to avoid Telnet conflicts
+  // WebSocket provides fresh data every 5 seconds via polling service
+  // Only fetch as fallback if WebSocket data doesn't arrive within timeout
   useEffect(() => {
-    if (machineId && toolSource === 'table') {
-      setIsLoadingTools(true);
-      fetch(`${API_BASE_URL}/api/machines/${machineId}/tools?source=table`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.tools) {
-            setTools(data.tools);
-          }
-          setIsLoadingTools(false);
-        })
-        .catch(err => {
-          console.error('Error fetching tool table:', err);
-          setIsLoadingTools(false);
-        });
-    } else if (toolSource === 'atc') {
-      setTools(initialTools);
+    if (machineId && toolSource) {
+      const cachedTools = toolsCache[toolSource];
+      const cacheTimestamp = cacheTimestamps[toolSource];
+      const now = Date.now();
+      const INITIAL_LOAD_TIMEOUT = 10000; // 10 seconds - wait for WebSocket to provide data
+      const STALE_THRESHOLD = 60000; // 60 seconds - only fetch if WebSocket is clearly broken
+      
+      // Check if we need to fetch (fallback only):
+      // 1. No cached data AND we've waited long enough for WebSocket (10s)
+      // 2. Cache is very stale (>60s - indicating WebSocket is broken)
+      const needsFetch = (
+        (!cachedTools || cachedTools.length === 0) && 
+        cacheTimestamp && (now - cacheTimestamp) > INITIAL_LOAD_TIMEOUT
+      ) || (
+        cacheTimestamp && (now - cacheTimestamp) > STALE_THRESHOLD
+      );
+      
+      if (needsFetch) {
+        // Only fetch as fallback - WebSocket should provide data
+        setIsLoadingTools(true);
+        
+        const sourceParam = toolSource === 'atc' ? 'atc' : 'table';
+        fetch(`${API_BASE_URL}/api/machines/${machineId}/tools?source=${sourceParam}`)
+          .then(res => {
+            if (!res.ok) {
+              return res.json().then(errData => {
+                const errorMsg = errData.detail || `HTTP ${res.status}: ${res.statusText}`;
+                // For 503 errors, provide more helpful message
+                if (res.status === 503) {
+                  throw new Error(`Machine temporarily unavailable: ${errorMsg}. The machine may be busy or Telnet port 10000 may be blocked. Please try again in a moment.`);
+                }
+                throw new Error(errorMsg);
+              });
+            }
+            return res.json();
+          })
+          .then(data => {
+            if (data && data.tools) {
+              // Update cache for this source
+              setToolsCache(prev => ({
+                ...prev,
+                [toolSource]: data.tools
+              }));
+              setCacheTimestamps(prev => ({
+                ...prev,
+                [toolSource]: Date.now()
+              }));
+              // Clear error on successful fetch
+              setToolsError(prev => ({
+                ...prev,
+                [toolSource]: null
+              }));
+            } else {
+              console.warn(`Tool ${sourceParam} response missing tools array:`, data);
+              // Only clear cache if we had no previous data
+              setToolsCache(prev => {
+                if (prev[toolSource].length === 0) {
+                  return {
+                    ...prev,
+                    [toolSource]: []
+                  };
+                }
+                return prev; // Keep existing cache
+              });
+            }
+            setIsLoadingTools(false);
+          })
+          .catch(err => {
+            console.error(`Error fetching ${sourceParam} data:`, err);
+            // Store error message for display
+            const errorMessage = err instanceof Error ? err.message : `Failed to fetch ${sourceParam} data`;
+            setToolsError(prev => ({
+              ...prev,
+              [toolSource]: errorMessage
+            }));
+            // Don't clear cache on error - keep previous data visible
+            setIsLoadingTools(false);
+          });
+      } else if (!cachedTools || cachedTools.length === 0) {
+        // No data yet, but haven't waited long enough - show loading while waiting for WebSocket
+        setIsLoadingTools(true);
+      } else {
+        // Have cached data - no fetch needed, WebSocket will keep it fresh
+        setIsLoadingTools(false);
+      }
     }
-    // Only fetch when source changes to 'table', not on every render
+    // Only check when source changes, not on every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [machineId, toolSource]);
 
-  const formatDimension = (value: number | undefined) => {
-    if (!value || value <= 0) return '────';
-    return value.toFixed(4);
-  };
 
   const formatLife = (value: number | string | undefined) => {
     if (value === undefined || value === null) return '──';
@@ -156,8 +286,8 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   };
 
   const getToolDisplayName = (tool: Tool) => {
-    if (tool.tool_name) return tool.tool_name;
-    return `TOOL ${tool.tool_number}`;
+    // Return empty string if no tool_name, so it displays as blank
+    return tool.tool_name || '';
   };
 
   const isCurrentTool = (toolNum: number) => {
@@ -193,8 +323,6 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     const matched = getMatchedTool(tool);
     if (matched && isBetaMode) {
       handleToolClick(tool, e);
-    } else if (onExpand) {
-      handleExpand(e);
     }
   };
 
@@ -225,8 +353,21 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
       switch (sortColumn) {
         case 'pot_number':
-          aVal = a.pot_number ? String(a.pot_number) : '';
-          bVal = b.pot_number ? String(b.pot_number) : '';
+          // Numeric sorting for pot numbers (handle string "SPINDLE" and numeric values)
+          if (a.pot_number === undefined || a.pot_number === null) {
+            aVal = Infinity; // Put undefined/null at end
+          } else if (typeof a.pot_number === 'string' && a.pot_number.toUpperCase() === 'SPINDLE') {
+            aVal = -1; // Put SPINDLE at beginning
+          } else {
+            aVal = typeof a.pot_number === 'number' ? a.pot_number : parseFloat(String(a.pot_number)) || Infinity;
+          }
+          if (b.pot_number === undefined || b.pot_number === null) {
+            bVal = Infinity;
+          } else if (typeof b.pot_number === 'string' && b.pot_number.toUpperCase() === 'SPINDLE') {
+            bVal = -1;
+          } else {
+            bVal = typeof b.pot_number === 'number' ? b.pot_number : parseFloat(String(b.pot_number)) || Infinity;
+          }
           break;
         case 'tool_number':
           aVal = a.tool_number;
@@ -273,33 +414,40 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   }, [tools, searchQuery, sortColumn, sortDirection]);
 
   const handleSort = (column: SortColumn) => {
-    if (sortColumn === column) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortColumn(column);
-      setSortDirection('asc');
-    }
+    setSortSettings(prev => {
+      const current = prev[toolSource];
+      if (current.column === column) {
+        // Toggle direction for same column
+        return {
+          ...prev,
+          [toolSource]: {
+            column,
+            direction: current.direction === 'asc' ? 'desc' : 'asc'
+          }
+        };
+      } else {
+        // New column - default to ascending
+        return {
+          ...prev,
+          [toolSource]: {
+            column,
+            direction: 'asc'
+          }
+        };
+      }
+    });
   };
 
   // Show all tools since list is scrollable
   const visibleCount = filteredAndSortedTools.length;
 
-  const handleExpand = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (onExpand) {
-      onExpand();
-    }
-  };
-
   return (
     <div 
-      className={`tools-pane terminal-box ${isFullExpanded ? 'tools-pane-full-expanded' : ''}`}
+      className="tools-pane terminal-box"
       onClick={(e) => e.stopPropagation()}
     >
       <div 
         className="terminal-box-header"
-        onClick={handleExpand}
-        style={{ cursor: onExpand ? 'pointer' : 'default' }}
       >
         <div className="terminal-box-top">
           <div className="terminal-box-title-row">
@@ -333,12 +481,22 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         </div>
       </div>
       <div className="terminal-box-content">
-        {isLoadingTools ? (
-          <div className="tools-empty">LOADING TOOL TABLE...</div>
-        ) : tools.length === 0 ? (
+        {tools.length === 0 && !isLoadingTools && !currentError ? (
           <div className="tools-empty">NO TOOLS LOADED</div>
         ) : (
           <>
+            {/* Show error message if present */}
+            {currentError && (
+              <div className="tools-error-message" onClick={(e) => e.stopPropagation()}>
+                <span className="tools-error-text">⚠ {currentError}</span>
+              </div>
+            )}
+            {/* Show subtle loading indicator while fetching, but keep previous data visible */}
+            {isLoadingTools && !currentError && (
+              <div className="tools-loading-indicator" onClick={(e) => e.stopPropagation()}>
+                <span className="tools-loading-text">UPDATING...</span>
+              </div>
+            )}
             <div className="tools-search-container" onClick={(e) => e.stopPropagation()}>
               <input
                 type="text"
@@ -414,10 +572,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                   </th>
                 </tr>
               </thead>
-              <tbody 
-                onClick={handleExpand}
-                style={{ cursor: onExpand ? 'pointer' : 'default' }}
-              >
+              <tbody>
                 {filteredAndSortedTools.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="tools-empty-row">
@@ -434,7 +589,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     key={idx} 
                     className={`${isCurrent ? 'current-tool' : ''} ${hasMatch ? 'tool-matched' : ''}`}
                     onClick={(e) => handleRowClick(tool, e)}
-                    style={{ cursor: hasMatch ? 'pointer' : (onExpand ? 'pointer' : 'default') }}
+                    style={{ cursor: hasMatch ? 'pointer' : 'default' }}
                     title={hasMatch ? `Click to view tool ${matched.tool_number} in Tool Management` : undefined}
                   >
                     <td className="tools-col-pot">{tool.pot_number ?? '──'}</td>
@@ -443,9 +598,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       {hasMatch && <span className="matched-indicator" title="Tool exists in Tool Management">●</span>}
                       {String(tool.tool_number).padStart(2, '0')}
                     </td>
-                    <td className="tools-col-name">{getToolDisplayName(tool)}</td>
-                    <td className="tools-col-diameter">{formatDimension(tool.diameter)}"</td>
-                    <td className="tools-col-length">{formatDimension(tool.length)}"</td>
+                    <td className="tools-col-name">{getToolDisplayName(tool) || '──'}</td>
+                    <td className="tools-col-diameter">{formatDimension(tool.diameter, units)}</td>
+                    <td className="tools-col-length">{formatDimension(tool.length, units)}</td>
                     <td className="tools-col-group">{tool.group ?? '──'}</td>
                     <td className="tools-col-life">{formatLife(tool.life)}</td>
                     <td className="tools-col-type">{formatToolType(tool.tool_type)}</td>
@@ -473,25 +628,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           </>
         )}
       </div>
-      {!isFullExpanded && (
-        <div className="terminal-box-footer">
-          └{'─'.repeat(42)}┘
-        </div>
-      )}
-      {isFullExpanded && onExpand && (
-        <div className="terminal-box-footer">
-          <button
-            className="tools-collapse-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              onExpand();
-            }}
-          >
-            [COLLAPSE]
-          </button>
-          └{'─'.repeat(42)}┘
-        </div>
-      )}
+      <div className="terminal-box-footer">
+        └{'─'.repeat(42)}┘
+      </div>
     </div>
   );
 };
