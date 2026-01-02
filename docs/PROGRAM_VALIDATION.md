@@ -145,11 +145,19 @@ The validation logic checks:
 - **Tool status** - Marks as `found`, `missing`, `mismatch`, or `not_in_nc` (available but not referenced)
 
 **Tolerance Source:**
-- **Tool tolerances**: Always from machine database settings (not from NC file)
+
+Tool tolerances can come from either machine settings or G-code defaults, controlled by the `use_machine_tool_tolerances` flag on the machine:
+
+- **Machine Settings** (`use_machine_tool_tolerances = TRUE`):
   - `diameter_tolerance` - Symmetric tolerance for diameter matching
   - `length_tolerance_plus` - Positive tolerance for length (tools can be longer)
   - `length_tolerance_minus` - Negative tolerance for length (tools cannot be shorter)
-- Tolerance values are displayed in validation tables when expanding tool details
+
+- **G-code Defaults** (`use_machine_tool_tolerances = FALSE`, default):
+  - Diameter: Exact match required (difference must be < 0.0001")
+  - Length: Tool must be at least as long as required (machine_length ≥ required_length, no upper limit)
+
+Tolerance values are displayed in validation tables when expanding tool details. When using G-code defaults, the tolerance column shows "exact match" for diameter and "≥ required" for length.
 
 Example tool validation result:
 ```json
@@ -179,8 +187,15 @@ Example tool validation result:
 - **Missing WCS in NC** - If WCS not specified in program, displays machine G54 data with "XYZ NOT PARSED" status
 
 **Tolerance Source:**
-- **Primary**: NC file E parameter (e.g., `G65 P8901 ... E0.01 ...`) - uniform tolerance for all axes
-- **Fallback**: Machine database per-axis tolerances (tolerance_x, tolerance_y, tolerance_z)
+
+WCS tolerances can come from either machine settings or G-code E parameter, controlled by the `use_machine_wcs_tolerances` flag on the machine:
+
+- **Machine Settings** (`use_machine_wcs_tolerances = TRUE`):
+  - Uses per-axis tolerances from machine configuration (`tolerance_x`, `tolerance_y`, `tolerance_z`)
+
+- **G-code Defaults** (`use_machine_wcs_tolerances = FALSE`, default):
+  - **Primary**: NC file E parameter (e.g., `G65 P8901 ... E0.01 ...`) - uniform tolerance for all axes
+  - **Fallback**: If E parameter is missing, validation fails with a warning that tolerance is not specified
 
 Example WCS validation result:
 ```json
