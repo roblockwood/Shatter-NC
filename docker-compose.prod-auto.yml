@@ -60,8 +60,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-WARNING}
       DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-5}
       SECRET_KEY: ${SECRET_KEY}
-      # CORS_ORIGINS: Set to '["*"]' for production with dynamic IPs
-      # Example: CORS_ORIGINS='["*"]' in .env file
+      CORS_ORIGINS: '["*"]'
       # Migration directory - defaults to /app/migrations (baked into image)
       # Can override with MIGRATIONS_DIR env var or volume mount if needed
       # MIGRATIONS_DIR: /docker-entrypoint-initdb.d
