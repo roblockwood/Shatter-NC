@@ -3,6 +3,7 @@ import { ToolListModal } from './ToolListModal';
 import { UploadConfirmationModal } from './UploadConfirmationModal';
 import { SaveConfirmModal } from './SaveConfirmModal';
 import { Modal } from './ui/Modal';
+import { Select } from './ui/Select';
 import { AlarmPane } from './machine-detail/AlarmPane';
 import { StatusTimeline } from './machine-detail/StatusTimeline';
 import { ToolsPane } from './machine-detail/ToolsPane';
@@ -234,6 +235,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     tolerance_x: (machine as any).tolerance_x || 0.0394,
     tolerance_y: (machine as any).tolerance_y || 0.0394,
     tolerance_z: (machine as any).tolerance_z || 0.0394,
+    use_machine_tool_tolerances: (machine as any).use_machine_tool_tolerances || false,
+    use_machine_wcs_tolerances: (machine as any).use_machine_wcs_tolerances || false,
+    units: (machine as any).units || 'in',
   });
   const [editMachineName, setEditMachineName] = useState(machine.machine_name || '');
   // Store the original form data when editing starts (from fetched API data)
@@ -264,6 +268,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             tolerance_x: fullMachineData.tolerance_x || 0.0394,
             tolerance_y: fullMachineData.tolerance_y || 0.0394,
             tolerance_z: fullMachineData.tolerance_z || 0.0394,
+            use_machine_tool_tolerances: fullMachineData.use_machine_tool_tolerances || false,
+            use_machine_wcs_tolerances: fullMachineData.use_machine_wcs_tolerances || false,
+            units: fullMachineData.units || 'in',
           };
           setOriginalFormData(fetchedFormData);
           setOriginalMachineName(fullMachineData.name || '');
@@ -356,6 +363,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         tolerance_x: (machine as any).tolerance_x || 0.0394,
         tolerance_y: (machine as any).tolerance_y || 0.0394,
         tolerance_z: (machine as any).tolerance_z || 0.0394,
+        use_machine_tool_tolerances: (machine as any).use_machine_tool_tolerances || false,
+        use_machine_wcs_tolerances: (machine as any).use_machine_wcs_tolerances || false,
+        units: (machine as any).units || 'in',
       });
     }
   };
@@ -913,89 +923,150 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               <label htmlFor={`enabled-${machine.machine_id}`}>ENABLED</label>
             </div>
           </div>
+
+          <div className="form-row">
+            <label>UNITS:</label>
+            <Select
+              value={editFormData.units}
+              onChange={(value) => setEditFormData({ ...editFormData, units: value })}
+              disabled={isEditSaving}
+              options={[
+                { value: 'in', label: 'INCHES (in)' },
+                { value: 'mm', label: 'MILLIMETERS (mm)' },
+              ]}
+            />
+          </div>
           </div>
 
           {/* Tolerances Section */}
           <div className="tolerances-section">
             <div className="tolerances-header">VALIDATION TOLERANCES (inches)</div>
 
-            {/* Tool Diameter Group */}
+            {/* Tool Tolerances Group */}
             <div className="tolerance-group">
-              <div className="tolerance-group-label">TOOL DIAMETER</div>
-              <div className="tolerance-field tolerance-field-inline">
-                <label>(±):</label>
-                <input
-                  type="number"
-                  step="0.00001"
-                  value={editFormData.diameter_tolerance}
-                  onChange={(e) => setEditFormData({ ...editFormData, diameter_tolerance: parseFloat(e.target.value) })}
-                  disabled={isEditSaving}
-                />
+              <div className="tolerance-group-header">
+                <div className="tolerance-group-label">TOOL TOLERANCES</div>
+                <div className="tolerance-override-toggle">
+                  <input
+                    type="checkbox"
+                    id={`use-machine-tool-tolerances-${machine.machine_id}`}
+                    checked={editFormData.use_machine_tool_tolerances}
+                    onChange={(e) => setEditFormData({ ...editFormData, use_machine_tool_tolerances: e.target.checked })}
+                    disabled={isEditSaving}
+                  />
+                  <label htmlFor={`use-machine-tool-tolerances-${machine.machine_id}`}>
+                    Use machine settings
+                  </label>
+                </div>
               </div>
-            </div>
+              
+              <div className={`tolerance-group-content ${!editFormData.use_machine_tool_tolerances ? 'disabled' : ''}`}>
+                {/* Tool Diameter Group */}
+                <div className="tolerance-subgroup">
+                  <div className="tolerance-group-label">TOOL DIAMETER</div>
+                  <div className="tolerance-field tolerance-field-inline">
+                    <label>(±):</label>
+                    <input
+                      type="number"
+                      step="0.00001"
+                      value={editFormData.diameter_tolerance}
+                      onChange={(e) => setEditFormData({ ...editFormData, diameter_tolerance: parseFloat(e.target.value) })}
+                      disabled={isEditSaving || !editFormData.use_machine_tool_tolerances}
+                    />
+                  </div>
+                </div>
 
-            {/* Tool Length Group */}
-            <div className="tolerance-group">
-              <div className="tolerance-group-label">TOOL LENGTH</div>
-              <div className="tolerance-group-row">
-                <div className="tolerance-field tolerance-field-inline">
-                  <label>(+):</label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    value={editFormData.length_tolerance_plus}
-                    onChange={(e) => setEditFormData({ ...editFormData, length_tolerance_plus: parseFloat(e.target.value) })}
-                    disabled={isEditSaving}
-                  />
-                </div>
-                <div className="tolerance-field tolerance-field-inline">
-                  <label>(-):</label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    value={editFormData.length_tolerance_minus}
-                    onChange={(e) => setEditFormData({ ...editFormData, length_tolerance_minus: parseFloat(e.target.value) })}
-                    disabled={isEditSaving}
-                  />
+                {/* Tool Length Group */}
+                <div className="tolerance-subgroup">
+                  <div className="tolerance-group-label">TOOL LENGTH</div>
+                  <div className="tolerance-group-row">
+                    <div className="tolerance-field tolerance-field-inline">
+                      <label>(+):</label>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={editFormData.length_tolerance_plus}
+                        onChange={(e) => setEditFormData({ ...editFormData, length_tolerance_plus: parseFloat(e.target.value) })}
+                        disabled={isEditSaving || !editFormData.use_machine_tool_tolerances}
+                      />
+                    </div>
+                    <div className="tolerance-field tolerance-field-inline">
+                      <label>(-):</label>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={editFormData.length_tolerance_minus}
+                        onChange={(e) => setEditFormData({ ...editFormData, length_tolerance_minus: parseFloat(e.target.value) })}
+                        disabled={isEditSaving || !editFormData.use_machine_tool_tolerances}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
+              {!editFormData.use_machine_tool_tolerances && (
+                <div className="tolerance-hint">
+                  Using G-code defaults: diameter must match exactly, length must be ≥ required
+                </div>
+              )}
             </div>
 
             {/* WCS Offset Group */}
             <div className="tolerance-group">
-              <div className="tolerance-group-label">WCS OFFSET</div>
-              <div className="tolerance-group-row">
-                <div className="tolerance-field tolerance-field-inline">
-                  <label>X (±):</label>
+              <div className="tolerance-group-header">
+                <div className="tolerance-group-label">WCS OFFSET</div>
+                <div className="tolerance-override-toggle">
                   <input
-                    type="number"
-                    step="0.0001"
-                    value={editFormData.tolerance_x}
-                    onChange={(e) => setEditFormData({ ...editFormData, tolerance_x: parseFloat(e.target.value) })}
+                    type="checkbox"
+                    id={`use-machine-wcs-tolerances-${machine.machine_id}`}
+                    checked={editFormData.use_machine_wcs_tolerances}
+                    onChange={(e) => setEditFormData({ ...editFormData, use_machine_wcs_tolerances: e.target.checked })}
                     disabled={isEditSaving}
                   />
-                </div>
-                <div className="tolerance-field tolerance-field-inline">
-                  <label>Y (±):</label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    value={editFormData.tolerance_y}
-                    onChange={(e) => setEditFormData({ ...editFormData, tolerance_y: parseFloat(e.target.value) })}
-                    disabled={isEditSaving}
-                  />
-                </div>
-                <div className="tolerance-field tolerance-field-inline">
-                  <label>Z (±):</label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    value={editFormData.tolerance_z}
-                    onChange={(e) => setEditFormData({ ...editFormData, tolerance_z: parseFloat(e.target.value) })}
-                    disabled={isEditSaving}
-                  />
+                  <label htmlFor={`use-machine-wcs-tolerances-${machine.machine_id}`}>
+                    Use machine settings
+                  </label>
                 </div>
               </div>
+              
+              <div className={`tolerance-group-content ${!editFormData.use_machine_wcs_tolerances ? 'disabled' : ''}`}>
+                <div className="tolerance-group-row">
+                  <div className="tolerance-field tolerance-field-inline">
+                    <label>X (±):</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={editFormData.tolerance_x}
+                      onChange={(e) => setEditFormData({ ...editFormData, tolerance_x: parseFloat(e.target.value) })}
+                      disabled={isEditSaving || !editFormData.use_machine_wcs_tolerances}
+                    />
+                  </div>
+                  <div className="tolerance-field tolerance-field-inline">
+                    <label>Y (±):</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={editFormData.tolerance_y}
+                      onChange={(e) => setEditFormData({ ...editFormData, tolerance_y: parseFloat(e.target.value) })}
+                      disabled={isEditSaving || !editFormData.use_machine_wcs_tolerances}
+                    />
+                  </div>
+                  <div className="tolerance-field tolerance-field-inline">
+                    <label>Z (±):</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={editFormData.tolerance_z}
+                      onChange={(e) => setEditFormData({ ...editFormData, tolerance_z: parseFloat(e.target.value) })}
+                      disabled={isEditSaving || !editFormData.use_machine_wcs_tolerances}
+                    />
+                  </div>
+                </div>
+              </div>
+              {!editFormData.use_machine_wcs_tolerances && (
+                <div className="tolerance-hint">
+                  Using G-code E parameter if present in WCS validation macro
+                </div>
+              )}
             </div>
           </div>
 

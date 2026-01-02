@@ -19,11 +19,14 @@ We've implemented an **automatic migration system** that runs on every backend c
 
 ### How It Works
 
-1. **Startup Script** ([backend/scripts/start.sh](../backend/scripts/start.sh))
-   - Runs before the FastAPI application starts
-   - Waits for PostgreSQL to be ready
-   - Executes the migration runner
-   - Only starts the app if migrations succeed
+1. **Startup Scripts**
+   - **Production**: [`backend/scripts/start.sh`](../backend/scripts/start.sh) - Runs migrations then starts the app
+   - **Development**: [`backend/scripts/start-dev.sh`](../backend/scripts/start-dev.sh) - Runs migrations then starts the app with hot-reload
+   - Both scripts:
+     - Run before the FastAPI application starts
+     - Wait for PostgreSQL to be ready
+     - Execute the migration runner
+     - Only start the app if migrations succeed
 
 2. **Migration Runner** ([backend/scripts/run_migrations.py](../backend/scripts/run_migrations.py))
    - Tracks applied migrations in `schema_migrations` table
@@ -131,8 +134,9 @@ docker compose -f docker-compose.dev.yml up -d
 ## Files Modified
 
 - [`backend/scripts/run_migrations.py`](../backend/scripts/run_migrations.py) - Migration runner script
-- [`backend/scripts/start.sh`](../backend/scripts/start.sh) - Backend startup script
-- [`backend/Dockerfile`](../backend/Dockerfile) - Updated to use startup script
+- [`backend/scripts/start.sh`](../backend/scripts/start.sh) - Production startup script (runs migrations, starts app)
+- [`backend/scripts/start-dev.sh`](../backend/scripts/start-dev.sh) - Development startup script (runs migrations, starts app with hot-reload)
+- [`backend/Dockerfile`](../backend/Dockerfile) - Updated to use startup scripts (start-dev.sh for development, start.sh for production)
 - [`docker-compose.dev.yml`](../docker-compose.dev.yml) - Mounts migration files, uses startup script
 
 ## Benefits

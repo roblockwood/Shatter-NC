@@ -478,17 +478,55 @@ This is the **only component** that breaks from the strict ASCII/terminal aesthe
 
 ### Dropdown/Select
 
+**IMPORTANT:** Always use the custom `Select` component from `components/ui/Select.tsx` instead of native HTML `<select>` elements. Native selects cannot be styled to match the terminal aesthetic and will display with system-default styling.
+
+**Custom Select Component:**
+
+```tsx
+import { Select } from '../components/ui/Select';
+
+<Select
+  value={selectedValue}
+  onChange={(value) => setSelectedValue(value)}
+  options={[
+    { value: 'option1', label: 'OPTION 1' },
+    { value: 'option2', label: 'OPTION 2' },
+  ]}
+  disabled={false}
+  className="custom-class"
+/>
+```
+
+**Visual Design:**
+- Dark background (`#1a1a1a`) matching terminal theme
+- Green border (`#00ff00`) with glow on hover/focus
+- Green text matching terminal color scheme
+- Custom dropdown popup with green glow border
+- Selected option shows green checkmark (✓)
+- Hover state: Green highlight background
+- Dropdown arrow: Green, rotates on open
+
+**Example:**
 ```
 MACHINE: [ SPEEDIO-01 ▼ ]
 
 When open:
 ┌─────────────────┐
-│ > SPEEDIO-01    │
-│   SPEEDIO-02    │
+│ ✓ SPEEDIO-01    │  ← Selected (green checkmark)
+│   SPEEDIO-02    │  ← Hover highlight
 │   SPEEDIO-03    │
 │   ALL MACHINES  │
 └─────────────────┘
 ```
+
+**Key Features:**
+- Fully styled to match terminal aesthetic
+- Keyboard accessible (Arrow keys, Enter, Escape)
+- Click-outside-to-close behavior
+- Positioned dropdown (adjusts if near viewport edge)
+- Consistent styling across all browsers/platforms
+
+**Location:** [Select.tsx](../frontend/src/components/ui/Select.tsx), [Select.css](../frontend/src/components/ui/Select.css)
 
 ---
 
