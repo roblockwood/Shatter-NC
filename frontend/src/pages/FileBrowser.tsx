@@ -929,15 +929,19 @@ export const FileBrowser: React.FC = () => {
       {/* Machine Selector */}
       <div className="machine-selector-bar">
         <label className="selector-label">MACHINE:</label>
-        <Select
-          value={selectedMachineId?.toString() || ''}
-          onChange={(value) => setSelectedMachineId(value ? Number(value) : null)}
-          options={machines.map(machine => ({
-            value: machine.id.toString(),
-            label: `${machine.name} (${machine.ip_address})`
-          }))}
-          className="terminal-select"
-        />
+        {machines.length > 0 ? (
+          <Select
+            value={selectedMachineId?.toString() || ''}
+            onChange={(value) => setSelectedMachineId(value ? Number(value) : null)}
+            options={machines.map(machine => ({
+              value: machine.id.toString(),
+              label: `${machine.name} (${machine.ip_address})`
+            }))}
+            className="terminal-select"
+          />
+        ) : (
+          <span className="text-muted">Loading machines...</span>
+        )}
         {selectedMachine && (
           <span className="machine-status">
             <StatusIndicator status="online" label="" />
