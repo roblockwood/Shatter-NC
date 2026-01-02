@@ -36,7 +36,8 @@ interface MachineStatus {
   cycle_time?: string;
   power_on_hours?: string;
   counters?: Array<{ counter_number: number; count: number }>;
-  tools?: Tool[];
+  tools?: Tool[];  // ATC data
+  tool_table?: Tool[];  // TABLE data (TOLN)
   current_tool?: number;
   alarms?: Alarm[];
   error?: string;
@@ -129,7 +130,6 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const [isEditSaving, setIsEditSaving] = useState(false);
   const [isEditTesting, setIsEditTesting] = useState(false);
   const [editTestResult, setEditTestResult] = useState<any>(null);
-  const [expandedPane, setExpandedPane] = useState<string | null>(null);
   const [layoutEditMode, setLayoutEditMode] = useState(false);
   const [cachedAlarms, setCachedAlarms] = useState<Alarm[] | null>(null);
   const [showAlarmHover, setShowAlarmHover] = useState(false);
