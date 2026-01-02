@@ -34,7 +34,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
 
       - name: Log in to GitHub Container Registry
         if: github.event_name == 'push'
@@ -64,7 +64,7 @@ jobs:
           context: .
           file: ./backend/Dockerfile
           target: production
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: ${{ github.event_name == 'push' }}
           tags: |
             ${{ steps.tags.outputs.BACKEND_IMAGE }}:latest
@@ -79,7 +79,7 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile
           target: production
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: ${{ github.event_name == 'push' }}
           tags: |
             ${{ steps.tags.outputs.FRONTEND_IMAGE }}:latest
@@ -94,7 +94,7 @@ jobs:
             echo "## Docker Images Built and Pushed to GitHub Packages 🐳" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Registry:** GitHub Container Registry (ghcr.io)" >> $GITHUB_STEP_SUMMARY
-            echo "**Architectures:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+            echo "**Architectures:** linux/amd64" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### Backend" >> $GITHUB_STEP_SUMMARY
             echo "- \`${{ steps.tags.outputs.BACKEND_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
@@ -111,7 +111,7 @@ jobs:
             echo "## Docker Images Built Successfully ✅" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Event:** Pull Request validation" >> $GITHUB_STEP_SUMMARY
-            echo "**Architectures:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+            echo "**Architectures:** linux/amd64" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "Both backend and frontend images built successfully. Ready to merge! 🚀" >> $GITHUB_STEP_SUMMARY
           fi
