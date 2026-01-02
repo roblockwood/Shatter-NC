@@ -44,7 +44,8 @@ class Settings(BaseSettings):
         "http://localhost:5173",      # Development - Vite alternative port
         "http://localhost",           # Production - Nginx on port 80
         "http://localhost:80",        # Production - Nginx explicit port
-        "*",                          # Allow all origins (for production with dynamic IPs)
+        # "*",                        # Allow all origins (for production with dynamic IPs)
+        # Note: Uncomment "*" above for production if needed, but it disables credentials
     ]
 
     @property
