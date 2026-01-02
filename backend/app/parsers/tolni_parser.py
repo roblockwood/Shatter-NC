@@ -15,16 +15,18 @@ import re
 class TOLNIParser:
     """Parser for TOLNI1.NC tool table data."""
 
-    def __init__(self, content: bytes):
+    def __init__(self, content: bytes, units: str = 'in'):
         """
         Initialize parser with TOLNI1.NC file content.
 
         Args:
             content: Raw bytes from TOLNI1.NC file
+            units: Unit system ('in' for inches, 'mm' for millimeters). Defaults to 'in'.
         """
         # Decode and clean content (strip null bytes)
         self.content = content.decode('utf-8', errors='replace').rstrip('\x00')
         self.lines = [line.strip() for line in self.content.split('\n') if line.strip()]
+        self.units = units
 
     def parse(self) -> Dict[str, Any]:
         """
@@ -53,7 +55,8 @@ class TOLNIParser:
 
         return {
             "tools": tools,
-            "total_tools": len(tools)
+            "total_tools": len(tools),
+            "units": self.units
         }
 
     def _parse_csv_line(self, line: str) -> Optional[Dict[str, Any]]:
@@ -130,16 +133,17 @@ class TOLNIParser:
         return tool
 
 
-def parse_tolni(content: bytes) -> Dict[str, Any]:
+def parse_tolni(content: bytes, units: str = 'in') -> Dict[str, Any]:
     """
     Convenience function to parse TOLNI1.NC content.
 
     Args:
         content: Raw bytes from TOLNI1.NC file
+        units: Unit system ('in' for inches, 'mm' for millimeters). Defaults to 'in'.
 
     Returns:
-        Parsed tool table data
+        Parsed tool table data with units metadata
     """
-    parser = TOLNIParser(content)
+    parser = TOLNIParser(content, units=units)
     return parser.parse()
 

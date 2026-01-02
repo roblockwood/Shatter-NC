@@ -662,6 +662,95 @@ Set breakpoint → Press F5 → Breakpoint hits → Inspect variables
 
 ---
 
+### Units Handling
+
+Shatter supports both imperial (inches) and metric (millimeters) units. Units are configured per-machine and used throughout the system for dimensional data.
+
+**Backend Units Handling:**
+
+1. **Machine Configuration**: Each machine has a `units` field (`'in'` or `'mm'`) stored in the database
+   - Location: `backend/app/models/machine.py`
+   - Default: `'in'` (inches)
+
+2. **Unit Converter Utility**: Conversion functions for display/validation
+   - Location: `backend/app/utils/unit_converter.py`
+   - Functions:
+     - `convert_inches_to_mm(value: float) -> float`
+     - `convert_mm_to_inches(value: float) -> float`
+     - `convert_dimension(value: float, from_units: str, to_units: str) -> float`
+     - `format_dimension(value: float, units: str, decimals: int = 4) -> str`
+
+3. **Parser Integration**: Parsers accept `units` parameter and include units in output
+   - Example: `parse_tolni(content: bytes, units: str = 'in') -> Dict[str, Any]`
+   - Parsers store raw values (no conversion) and include `units` metadata
+   - Location: `backend/app/parsers/tolni_parser.py`, `posni_parser.py`
+
+4. **API Endpoints**: All dimensional data endpoints pass `machine.units` to parsers
+   - Location: `backend/app/api/status.py`
+   - Response includes `units` field for client display
+   - Example: `GET /api/machines/{id}/tools` returns `{"tools": [...], "units": "in"}`
+
+5. **Validation**: Tool and WCS validation converts tolerances to machine's native units
+   - Location: `backend/app/api/programs.py`
+   - Tolerances stored in inches, converted to mm if machine uses mm
+
+**Frontend Units Handling:**
+
+1. **Formatting Utility**: Consistent dimension display
+   - Location: `frontend/src/utils/formatDimension.ts`
+   - Function: `formatDimension(value: number | null | undefined, units: 'in' | 'mm', decimals: number = 4) -> string`
+   - Returns: `"0.2500\""` for inches, `"6.3500 mm"` for millimeters, `"────"` for null/undefined
+
+2. **Component Usage**: All dimensional displays use `formatDimension`
+   - Import: `import { formatDimension } from '../utils/formatDimension'`
+   - Usage: `formatDimension(tool.diameter, units, 4)`
+   - Components: `ToolListModal`, `ToolsPane`, `ToolDetailModal`, `UploadConfirmationModal`
+
+3. **Machine Data**: Components receive `units` prop from machine configuration
+   - Passed from `MachineCard` to child components
+   - Available in API responses: `machine.units` or `status.units`
+
+**Best Practices:**
+
+- ✅ Always pass `units` parameter to parsers (from `machine.units`)
+- ✅ Include `units` field in API responses with dimensional data
+- ✅ Use `formatDimension` utility for all frontend displays
+- ✅ Store raw values (no conversion) - convert only at display/validation time
+- ✅ Default to `'in'` for backward compatibility
+- ❌ Don't hardcode unit suffixes (`"` or ` mm`) - use `formatDimension`
+- ❌ Don't convert values in parsers - store raw and convert when needed
+
+**Example: Adding Units to New Endpoint**
+
+```python
+# backend/app/api/status.py
+@router.get("/{machine_id}/tools")
+async def get_tools(machine_id: int, db: Session = Depends(get_db)):
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    # ... fetch tool data ...
+    data = http_client.get_tool_data(units=db_machine.units)  # Pass units
+    data["units"] = db_machine.units  # Include in response
+    return data
+```
+
+```typescript
+// frontend/src/components/ToolDisplay.tsx
+import { formatDimension } from '../utils/formatDimension';
+
+export const ToolDisplay: React.FC<{tool: Tool, units: string}> = ({ tool, units }) => {
+  return (
+    <div>
+      Diameter: {formatDimension(tool.diameter, units, 4)}
+      Length: {formatDimension(tool.length, units, 4)}
+    </div>
+  );
+};
+```
+
+See [PHASE3_UNITS_IMPLEMENTATION_PLAN.md](PHASE3_UNITS_IMPLEMENTATION_PLAN.md) for complete implementation details.
+
+---
+
 ## Frontend Development
 
 ### Creating Components

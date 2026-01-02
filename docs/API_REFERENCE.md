@@ -78,6 +78,7 @@ Get list of all configured machines.
     "tags": ["production", "floor-a"],
     "poll_interval_seconds": 5,
     "enabled": true,
+    "units": "in",
     "diameter_tolerance": 0.01,
     "length_tolerance_plus": 0.02,
     "length_tolerance_minus": 0.0,
@@ -144,6 +145,7 @@ Add a new machine configuration.
   "tags": ["production"],
   "poll_interval_seconds": 5,
   "enabled": true,
+  "units": "in",
   "diameter_tolerance": 0.01,
   "length_tolerance_plus": 0.02,
   "length_tolerance_minus": 0.0,
@@ -152,6 +154,9 @@ Add a new machine configuration.
   "tolerance_z": 0.0394
 }
 ```
+
+**Request Fields:**
+- `units` (string, optional): Measurement units (`"in"` for inches, `"mm"` for millimeters). Default: `"in"`
 
 **Response (201 Created):**
 ```json
@@ -389,6 +394,7 @@ Get real-time comprehensive status including running log, counters, alarms, and 
     {"counter_number": 4, "count": 0}
   ],
   "alarms": [],
+  "units": "in",
   "tools": [
     {
       "tool_number": 1,
@@ -547,6 +553,7 @@ Get ATC (Automatic Tool Changer) tool table.
       "length": 4.0
     }
   ],
+  "units": "in",
   "timestamp": "2025-01-15T14:30:00Z"
 }
 ```
@@ -635,9 +642,14 @@ Get work offsets (G54-G59) and extended offsets from POSNI1.NC file.
     ...
   },
   "fixture_offsets": {},
-  "rotary_offsets": {}
+  "rotary_offsets": {},
+  "units": "in"
 }
 ```
+
+**Response Fields:**
+- `units` (string): Measurement units for coordinate values (`"in"` for inches, `"mm"` for millimeters)
+- All coordinate values (x, y, z, a, b, c) are in the machine's configured units
 
 **Example:**
 ```bash

@@ -265,7 +265,7 @@ async def validate_program(
             # Get all available WCS offsets from machine and show first one as reference
             from app.parsers.posni_parser import parse_posni
             
-            parsed_posni = parse_posni(position_data.encode('utf-8'))
+            parsed_posni = parse_posni(position_data.encode('utf-8'), units=machine.units)
             work_offsets = parsed_posni.get("work_offsets", {})
             
             # Create a validation result showing machine has WCS data but NC doesn't specify
