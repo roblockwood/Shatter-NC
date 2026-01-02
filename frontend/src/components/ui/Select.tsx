@@ -27,7 +27,7 @@ export const Select: React.FC<SelectProps> = ({
   const selectRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const selectedOption = options.find(opt => opt.value === value) || options[0];
+  const selectedOption = options.find(opt => opt.value === value) || options[0] || { value: '', label: '' };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
