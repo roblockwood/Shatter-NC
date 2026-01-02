@@ -25,6 +25,11 @@ class MachineBase(BaseModel):
     tolerance_x: float = Field(default=0.0394, ge=0, description="WCS X offset tolerance (±)")
     tolerance_y: float = Field(default=0.0394, ge=0, description="WCS Y offset tolerance (±)")
     tolerance_z: float = Field(default=0.0394, ge=0, description="WCS Z offset tolerance (±)")
+    # Tolerance override flags
+    use_machine_tool_tolerances: bool = Field(default=False, description="Use machine-defined tool tolerances instead of G-code defaults (exact match for diameter, length >= required)")
+    use_machine_wcs_tolerances: bool = Field(default=False, description="Use machine-defined WCS tolerances instead of G-code E parameter")
+    # Measurement units
+    units: str = Field(default='in', description="Measurement units: 'in' for inches, 'mm' for millimeters")
     layout_config: Optional[Dict[str, Any]] = Field(default=None, description="Custom pane layout configuration")
 
 
@@ -55,6 +60,11 @@ class MachineUpdate(BaseModel):
     tolerance_x: Optional[float] = Field(None, ge=0, description="WCS X offset tolerance (±)")
     tolerance_y: Optional[float] = Field(None, ge=0, description="WCS Y offset tolerance (±)")
     tolerance_z: Optional[float] = Field(None, ge=0, description="WCS Z offset tolerance (±)")
+    # Tolerance override flags
+    use_machine_tool_tolerances: Optional[bool] = Field(None, description="Use machine-defined tool tolerances instead of G-code defaults (exact match for diameter, length >= required)")
+    use_machine_wcs_tolerances: Optional[bool] = Field(None, description="Use machine-defined WCS tolerances instead of G-code E parameter")
+    # Measurement units
+    units: Optional[str] = Field(None, description="Measurement units: 'in' for inches, 'mm' for millimeters")
     layout_config: Optional[Dict[str, Any]] = Field(None, description="Custom pane layout configuration")
 
 
