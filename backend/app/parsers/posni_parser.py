@@ -15,16 +15,18 @@ import re
 class POSNIParser:
     """Parser for POSNI1.NC work offset data."""
 
-    def __init__(self, content: bytes):
+    def __init__(self, content: bytes, units: str = 'in'):
         """
         Initialize parser with POSNI1.NC file content.
 
         Args:
             content: Raw bytes from POSNI1.NC file
+            units: Unit system ('in' for inches, 'mm' for millimeters). Defaults to 'in'.
         """
         # Decode and clean content (strip null bytes)
         self.content = content.decode('utf-8', errors='replace').rstrip('\x00')
         self.lines = [line.strip() for line in self.content.split('\n') if line.strip()]
+        self.units = units
 
     def parse(self) -> Dict[str, Any]:
         """
@@ -91,6 +93,7 @@ class POSNIParser:
             "extended_offsets": extended_offsets,
             "fixture_offsets": fixture_offsets,
             "rotary_offsets": rotary_offsets,
+            "units": self.units,
         }
 
     def get_work_offset(self, offset_number: int) -> Optional[Dict[str, float]]:
@@ -107,30 +110,32 @@ class POSNIParser:
         return parsed["work_offsets"].get(offset_number)
 
 
-def parse_posni(content: bytes) -> Dict[str, Any]:
+def parse_posni(content: bytes, units: str = 'in') -> Dict[str, Any]:
     """
     Convenience function to parse POSNI1.NC content.
 
     Args:
         content: Raw bytes from POSNI1.NC file
+        units: Unit system ('in' for inches, 'mm' for millimeters). Defaults to 'in'.
 
     Returns:
-        Parsed position data
+        Parsed position data with units metadata
     """
-    parser = POSNIParser(content)
+    parser = POSNIParser(content, units=units)
     return parser.parse()
 
 
-def get_work_offset(content: bytes, offset_number: int) -> Optional[Dict[str, float]]:
+def get_work_offset(content: bytes, offset_number: int, units: str = 'in') -> Optional[Dict[str, float]]:
     """
     Extract a specific work offset from POSNI1.NC.
 
     Args:
         content: Raw bytes from POSNI1.NC file
         offset_number: Offset number (54 for G54, 55 for G55, etc.)
+        units: Unit system ('in' for inches, 'mm' for millimeters). Defaults to 'in'.
 
     Returns:
         Dict with x, y, z coordinates or None if not found
     """
-    parser = POSNIParser(content)
+    parser = POSNIParser(content, units=units)
     return parser.get_work_offset(offset_number)

@@ -81,8 +81,132 @@ class MachinePoller:
                 timeout=5,
             )
 
-            # Get comprehensive status
-            status_data = http_client.get_status_overview()
+            # Get comprehensive status (without tools - we'll get that via Telnet)
+            status_data = http_client.get_status_overview(units=self.machine.units, include_tools=False)
+            
+            # Remove tools from HTTP data if it was included (we'll get fresh data via Telnet)
+            status_data.pop("tools", None)
+            status_data.pop("current_tool", None)
+
+            # Fetch tool data via Telnet (fresh data, same as API endpoint)
+            try:
+                from app.clients.telnet_client import CNCTelnetClient
+                from app.parsers.atctl_parser_v2 import parse_atctl_v2
+                from app.parsers.tolni_parser_v2 import parse_tolni_v2
+                
+                telnet_client = CNCTelnetClient(
+                    ip_address=self.machine.ip_address,
+                    port=10000,
+                    timeout=10
+                )
+                
+                # Get tool table data first (needed for both ATC merge and TABLE display)
+                data_name = "TOLNI1" if self.machine.units == 'in' else "TOLNM1"
+                tool_table_content = await telnet_client.get_tool_table_data(units=self.machine.units)
+                
+                if tool_table_content:
+                    tool_table_parsed = parse_tolni_v2(
+                        tool_table_content.encode('utf-8'),
+                        units=self.machine.units,
+                        control_version=None  # Auto-detect
+                    )
+                    
+                    # Get ATC magazine data (pot/tool mappings) for merging
+                    atc_data = await telnet_client.get_atc_magazine_data(control_version=None)
+                    
+                    # Start with pure TOLN (table) data
+                    tool_table_tools = tool_table_parsed.get("tools", [])
+                    
+                    if atc_data:
+                        atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=None)
+                        
+                        # Create reverse lookup: tool_number -> ATCTL data (for TABLE view)
+                        # This includes: pot_number, group, tool_type, color
+                        atc_lookup = {}
+                        for atc_tool in atc_parsed.get("tools", []):
+                            tool_num = atc_tool.get("tool_number")
+                            pot_number = atc_tool.get("pot_number")
+                            
+                            # Extract current_tool from spindle
+                            if pot_number and (str(pot_number).upper() == "SPINDLE" or pot_number == 0):
+                                if tool_num and tool_num > 0 and tool_num != 255:
+                                    status_data["current_tool"] = tool_num
+                            
+                            # Build lookup for ATCTL data (skip spindle and invalid tools)
+                            if tool_num and tool_num > 0 and tool_num != 255:
+                                if pot_number and str(pot_number).upper() != "SPINDLE":
+                                    atc_lookup[tool_num] = {
+                                        "pot_number": pot_number,
+                                        "group": atc_tool.get("group"),
+                                        "tool_type": atc_tool.get("tool_type"),
+                                        "color": atc_tool.get("color"),
+                                    }
+                        
+                        # Merge ATCTL data into TABLE tools (reverse merge: TOLN -> ATCTL)
+                        # This adds: pot_number, group, tool_type, color
+                        for tool in tool_table_tools:
+                            tool_num = tool.get("tool_number")
+                            if tool_num and tool_num in atc_lookup:
+                                atc_data = atc_lookup[tool_num]
+                                tool["pot_number"] = atc_data["pot_number"]
+                                if atc_data.get("group") is not None:
+                                    tool["group"] = atc_data["group"]
+                                if atc_data.get("tool_type") is not None:
+                                    tool["tool_type"] = atc_data["tool_type"]
+                                if atc_data.get("color") is not None:
+                                    tool["color"] = atc_data["color"]
+                        
+                        # Merge ATC positions with tool details (forward merge: ATCTL -> TOLN)
+                        tools = []
+                        tool_lookup = {}
+                        
+                        # Create lookup by tool number from TOLN data
+                        for tool in tool_table_tools:
+                            tool_num = tool.get("tool_number")
+                            if tool_num:
+                                tool_lookup[tool_num] = tool
+                        
+                        # Merge ATC tools with tool details from TOLN
+                        # Match by tool_number to correlate pot position with tool data
+                        # Only include tools that have valid TOLN data
+                        for atc_tool in atc_parsed.get("tools", []):
+                            tool_num = atc_tool.get("tool_number")
+                            pot_number = atc_tool.get("pot_number")
+                            
+                            if tool_num and tool_num > 0 and tool_num != 255:  # Skip "not set" and "cap setting"
+                                if tool_num in tool_lookup:
+                                    tol_tool = tool_lookup[tool_num]
+                                    merged_tool = {
+                                        "pot_number": pot_number,
+                                        "tool_number": tool_num,
+                                        "tool_name": tol_tool.get("tool_name"),
+                                        "diameter": tol_tool.get("diameter"),
+                                        "length": tol_tool.get("length"),
+                                        "group": atc_tool.get("group"),
+                                        "life": None,  # Not in ATCTL
+                                        "tool_type": atc_tool.get("tool_type"),
+                                        "color": atc_tool.get("color"),
+                                    }
+                                    tools.append(merged_tool)
+                        
+                        status_data["tools"] = tools
+                        status_data["tools_timestamp"] = poll_timestamp.isoformat()
+                        logger.debug(f"Machine {self.machine.id} - Fetched {len(tools)} ATC tools and {len(tool_table_tools)} table tools via Telnet")
+                    else:
+                        logger.warning(f"Machine {self.machine.id} - No ATC data available via Telnet")
+                    
+                    # Store TABLE data with pot numbers merged (if ATC data was available)
+                    status_data["tool_table"] = tool_table_tools
+                    status_data["tool_table_timestamp"] = poll_timestamp.isoformat()
+                    
+                    await telnet_client.disconnect()
+                else:
+                    await telnet_client.disconnect()
+                    logger.warning(f"Machine {self.machine.id} - No tool table data available via Telnet")
+            except Exception as e:
+                logger.warning(f"Machine {self.machine.id} - Failed to fetch tool data via Telnet: {e}")
+                # Continue without tool data - don't fail the entire poll
+                # Tools will be empty/undefined, which is fine
 
             # Fetch program_name on first poll (initial load), then use cached value
             if not self.program_name_fetched:

@@ -308,21 +308,24 @@ class CNCHttpClient:
         data["timestamp"] = datetime.now().isoformat()
         return data
 
-    def get_tool_data(self) -> Dict[str, Any]:
+    def get_tool_data(self, units: str = 'in') -> Dict[str, Any]:
         """
         Fetch ATC tool data.
 
+        Args:
+            units: Unit system ('in' for inches, 'mm' for millimeters). Defaults to 'in'.
+
         Returns:
-            Parsed tool table data
+            Parsed tool table data with units metadata
         """
         try:
             html = self._send_request("/tool")
-            return self._parse_tool_data(html)
+            return self._parse_tool_data(html, units=units)
         except Exception as e:
             logger.error(f"Error fetching tool data: {e}")
             return {"error": str(e)}
 
-    def _parse_tool_data(self, html: str) -> Dict[str, Any]:
+    def _parse_tool_data(self, html: str, units: str = 'in') -> Dict[str, Any]:
         """Parse tool data HTML response.
         
         Parses ATC tool table with the following field mappings:
@@ -335,6 +338,10 @@ class CNCHttpClient:
         - life: Tool life remaining in minutes (integer)
         - tool_type: Tool type (integer: 1=STD Tool, 2=Large Tool)
         - color: Tool color (integer: 0=no color, 1=blue, 2=red, 3=purple, 4=green, 5=light blue, 6=yellow, 7=white)
+        
+        Args:
+            html: HTML content from /tool endpoint
+            units: Unit system ('in' for inches, 'mm' for millimeters). Defaults to 'in'.
         """
         data = {"tools": []}
 
@@ -509,13 +516,19 @@ class CNCHttpClient:
             data["tools"].append(tool)
 
         data["timestamp"] = datetime.now().isoformat()
+        data["units"] = units
         return data
 
-    def get_status_overview(self) -> Dict[str, Any]:
+    def get_status_overview(self, units: str = 'in', include_tools: bool = False) -> Dict[str, Any]:
         """
         Get comprehensive machine status overview.
 
         Combines data from multiple endpoints for a complete picture.
+
+        Args:
+            units: Unit system ('in' for inches, 'mm' for millimeters). Defaults to 'in'.
+            include_tools: If True, include tool data via HTTP (deprecated - use Telnet instead).
+                          Defaults to False to avoid stale data.
 
         Returns:
             Combined status data
@@ -531,6 +544,7 @@ class CNCHttpClient:
         overview = {
             "ip_address": self.ip_address,
             "timestamp": datetime.now().isoformat(),
+            "units": units,
         }
         overview.update(running_data)
 
@@ -544,15 +558,17 @@ class CNCHttpClient:
         if "error" not in alarm_data:
             overview["alarms"] = alarm_data.get("alarms", [])
 
-        # Get tool data (optional - don't fail if this fails)
-        tool_data = self.get_tool_data()
-        if "error" not in tool_data:
-            overview["tools"] = tool_data.get("tools", [])
-            overview["current_tool"] = tool_data.get("current_tool")
+        # Get tool data (optional - deprecated, use Telnet instead)
+        # Only include if explicitly requested (for backward compatibility)
+        if include_tools:
+            tool_data = self.get_tool_data(units=units)
+            if "error" not in tool_data:
+                overview["tools"] = tool_data.get("tools", [])
+                overview["current_tool"] = tool_data.get("current_tool")
 
         return overview
     
-    def get_status_overview_with_ftp(self, ftp_client) -> Dict[str, Any]:
+    def get_status_overview_with_ftp(self, ftp_client, units: str = 'in') -> Dict[str, Any]:
         """
         Get comprehensive machine status overview including FTP data.
         
@@ -561,12 +577,13 @@ class CNCHttpClient:
 
         Args:
             ftp_client: CNCFtpClient instance for fetching mem.nc
+            units: Unit system ('in' for inches, 'mm' for millimeters). Defaults to 'in'.
 
         Returns:
             Combined status data with program_name from mem.nc
         """
         # Get base status overview
-        overview = self.get_status_overview()
+        overview = self.get_status_overview(units=units)
         
         # Fetch program_name from mem.nc via FTP (most reliable source for active program)
         try:

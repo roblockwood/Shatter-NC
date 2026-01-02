@@ -9,6 +9,11 @@ interface MachineStatus {
   cycle_time?: string;
   power_on_hours?: string;
   counters?: Array<{ counter_number: number; count: number }>;
+  tools?: Array<{ tool_number: number; tool_name?: string; diameter?: number; length?: number; pot_number?: string | number; }>; // ATC data
+  tool_table?: Array<{ tool_number: number; tool_name?: string; diameter?: number; length?: number; pot_number?: string | number; }>; // TABLE data
+  current_tool?: number;
+  alarms?: Array<{ code: string; message: string }>;
+  units?: 'in' | 'mm';
   error?: string;
   poll_timestamp: string;
   ip_address?: string;
@@ -19,9 +24,6 @@ interface MachineStatus {
   location?: string;
   poll_interval_seconds?: number;
   enabled?: boolean;
-  tools?: Array<{ tool_number: number; tool_name?: string; diameter?: number; length?: number }>;
-  current_tool?: number;
-  alarms?: Array<{ code: string; message: string }>;
 }
 
 interface WebSocketMessage {
