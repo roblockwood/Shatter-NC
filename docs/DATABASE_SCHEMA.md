@@ -54,9 +54,12 @@ machines (Machine Configuration)
 ├── tags (JSONB)
 ├── poll_interval_seconds
 ├── enabled
+├── units (in/mm)
 ├── diameter_tolerance
 ├── length_tolerance_plus, length_tolerance_minus
 ├── tolerance_x, tolerance_y, tolerance_z
+├── use_machine_tool_tolerances (boolean)
+├── use_machine_wcs_tolerances (boolean)
 ├── created_at, updated_at
 └── last_seen_at
 
@@ -170,12 +173,15 @@ Machine configuration and metadata.
 | `tags` | JSON | Yes | NULL | Machine tags (e.g., ["production", "floor-a"]) |
 | `poll_interval_seconds` | Integer | No | 5 | Polling interval |
 | `enabled` | Boolean | No | TRUE | Enable/disable polling |
+| `units` | String(2) | No | "in" | Units of measurement (in/mm) |
 | `diameter_tolerance` | Float | No | 0.010 | Tool diameter tolerance (±inches) |
 | `length_tolerance_plus` | Float | No | 0.02 | Tool length tolerance + (inches) |
 | `length_tolerance_minus` | Float | No | 0.0 | Tool length tolerance - (inches) |
 | `tolerance_x` | Float | No | 0.0394 | WCS X tolerance (±inches, ±1mm) |
 | `tolerance_y` | Float | No | 0.0394 | WCS Y tolerance (±inches, ±1mm) |
 | `tolerance_z` | Float | No | 0.0394 | WCS Z tolerance (±inches, ±1mm) |
+| `use_machine_tool_tolerances` | Boolean | No | FALSE | When TRUE, use machine-defined tool tolerances. When FALSE, use G-code defaults (exact diameter match, length ≥ required) |
+| `use_machine_wcs_tolerances` | Boolean | No | FALSE | When TRUE, use machine-defined WCS tolerances. When FALSE, use E parameter from G-code if present |
 | `created_at` | DateTime(TZ) | No | NOW() | Record creation time |
 | `updated_at` | DateTime(TZ) | Yes | - | Last update time |
 | `last_seen_at` | DateTime(TZ) | Yes | NULL | Last successful poll time |

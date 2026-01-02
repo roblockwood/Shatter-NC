@@ -181,6 +181,58 @@
   color: var(--color-text-primary);
 }
 
+.form-row select,
+.form-select {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2300ff00' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--spacing-xs) center;
+  background-size: 12px;
+  padding-right: calc(var(--spacing-sm) + 16px);
+}
+
+.form-row select:focus,
+.form-select:focus {
+  outline: none;
+  border-color: var(--color-text-primary);
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.1);
+}
+
+.form-row select:disabled,
+.form-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.form-row select option,
+.form-select option {
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  padding: var(--spacing-xs);
+}
+
+.form-row select option:checked,
+.form-select option:checked {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+.form-row select option:hover,
+.form-select option:hover {
+  background: rgba(0, 255, 0, 0.1);
+  color: var(--color-text-primary);
+}
+
 .form-row-inline {
   display: flex;
   gap: var(--spacing-md);
@@ -267,7 +319,35 @@
   width: 16px;
   height: 16px;
   cursor: pointer;
-  accent-color: var(--color-text-primary);
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-text-primary);
+  position: relative;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.form-checkbox input[type="checkbox"]:checked {
+  background: var(--color-bg-primary);
+  border-color: var(--color-text-primary);
+}
+
+.form-checkbox input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.form-checkbox input[type="checkbox"]:hover {
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
 }
 
 .form-checkbox label {
@@ -592,6 +672,13 @@
   margin-bottom: var(--spacing-sm);
 }
 
+.tolerance-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xs);
+}
+
 .tolerance-group-label {
   font-size: var(--font-xs);
   color: var(--color-text-muted);
@@ -599,6 +686,85 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding-bottom: 2px;
+}
+
+.tolerance-override-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-xs);
+}
+
+.tolerance-override-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-text-primary);
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.tolerance-override-toggle input[type="checkbox"]:checked {
+  background: var(--color-bg-primary);
+  border-color: var(--color-text-primary);
+}
+
+.tolerance-override-toggle input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--color-text-primary);
+  font-size: 10px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.tolerance-override-toggle input[type="checkbox"]:hover {
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
+}
+
+.tolerance-override-toggle label {
+  cursor: pointer;
+  user-select: none;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  padding-bottom: 0;
+}
+
+.tolerance-group-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  transition: all 0.2s ease;
+}
+
+.tolerance-group-content.disabled {
+  display: none;
+}
+
+.tolerance-subgroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
+}
+
+.tolerance-hint {
+  font-size: var(--font-xs);
+  color: var(--color-text-dim);
+  font-style: italic;
+  margin-top: var(--spacing-xs);
+  padding-left: var(--spacing-sm);
+  line-height: 1.4;
 }
 
 .tolerance-group-row {

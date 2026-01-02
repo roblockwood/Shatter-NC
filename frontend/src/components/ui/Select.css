@@ -1,0 +1,131 @@
+.custom-select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.custom-select {
+  background: var(--color-bg-primary, #1a1a1a);
+  border: 1px solid var(--color-border, #2a2a2a);
+  color: var(--color-text-primary, #00ff00);
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: var(--font-sm, 12px);
+  padding: var(--spacing-xs, 8px) var(--spacing-sm, 12px);
+  padding-right: calc(var(--spacing-sm, 12px) + 20px);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  min-height: 36px;
+}
+
+.custom-select:hover:not(.disabled) {
+  border-color: var(--color-text-primary, #00ff00);
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.1);
+}
+
+.custom-select:focus {
+  outline: none;
+  border-color: var(--color-text-primary, #00ff00);
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+}
+
+.custom-select.open {
+  border-color: var(--color-text-primary, #00ff00);
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+}
+
+.custom-select.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.custom-select-value {
+  flex: 1;
+  text-align: left;
+}
+
+.custom-select-arrow {
+  position: absolute;
+  right: var(--spacing-sm, 12px);
+  font-size: 10px;
+  color: var(--color-text-primary, #00ff00);
+  transition: transform 0.2s ease;
+  pointer-events: none;
+}
+
+.custom-select.open .custom-select-arrow {
+  transform: rotate(180deg);
+}
+
+.custom-select-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: var(--color-bg-primary, #1a1a1a);
+  border: 1px solid var(--color-text-primary, #00ff00);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 255, 0, 0.3);
+  margin-top: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  border-radius: 2px;
+}
+
+.custom-select-option {
+  padding: var(--spacing-xs, 8px) var(--spacing-sm, 12px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 8px);
+  transition: all 0.15s ease;
+  color: var(--color-text-primary, #00ff00);
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: var(--font-sm, 12px);
+}
+
+.custom-select-option:hover {
+  background: rgba(0, 255, 0, 0.15);
+  color: var(--color-text-primary, #00ff00);
+}
+
+.custom-select-option.selected {
+  background: rgba(0, 255, 0, 0.1);
+}
+
+.custom-select-option.selected .custom-select-option-label {
+  color: var(--color-text-primary, #00ff00);
+}
+
+.custom-select-checkmark {
+  color: var(--color-text-primary, #00ff00);
+  font-weight: bold;
+  width: 16px;
+  display: inline-block;
+  text-align: center;
+}
+
+.custom-select-option-label {
+  flex: 1;
+}
+
+/* Scrollbar styling for dropdown */
+.custom-select-dropdown::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-select-dropdown::-webkit-scrollbar-track {
+  background: var(--color-bg-primary, #1a1a1a);
+}
+
+.custom-select-dropdown::-webkit-scrollbar-thumb {
+  background: var(--color-border, #2a2a2a);
+  border-radius: 4px;
+}
+
+.custom-select-dropdown::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-primary, #00ff00);
+}
+

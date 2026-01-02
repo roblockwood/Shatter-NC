@@ -4,3 +4,4 @@ export { StatusIndicator } from './StatusIndicator';
 export { PollingOscilloscope } from './PollingOscilloscope';
 export { StatusOscilloscope } from './StatusOscilloscope';
 export { Modal } from './Modal';
+export { Select } from './Select';

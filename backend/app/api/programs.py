@@ -153,20 +153,22 @@ async def validate_program(
         # Macro programs don't have tools to validate
         pass
     elif parsed["tools"]:
-            # Validate each tool using machine tolerances
+            # Validate each tool using appropriate tolerance source
             for tool in parsed["tools"]:
                 tool_num = tool["tool_number"]
                 result = _validate_tool(
                     tool,
                     machine_tool_data,
+                    use_machine_tolerances=machine.use_machine_tool_tolerances,
                     diameter_tolerance=machine.diameter_tolerance,
                     length_tolerance_plus=machine.length_tolerance_plus,
                     length_tolerance_minus=machine.length_tolerance_minus
                 )
-                # Add tolerance values to result for display
-                result.diameter_tolerance = machine.diameter_tolerance
-                result.length_tolerance_plus = machine.length_tolerance_plus
-                result.length_tolerance_minus = machine.length_tolerance_minus
+                # Only add tolerance values if using machine tolerances (function sets None for G-code mode)
+                if machine.use_machine_tool_tolerances:
+                    result.diameter_tolerance = machine.diameter_tolerance
+                    result.length_tolerance_plus = machine.length_tolerance_plus
+                    result.length_tolerance_minus = machine.length_tolerance_minus
                 tools_validation[tool_num] = result
 
             if not result.available:
@@ -233,6 +235,7 @@ async def validate_program(
         wcs_validation = _validate_wcs_offset(
             parsed["wcs_offset"],
             position_data,
+            use_machine_tolerances=machine.use_machine_wcs_tolerances,
             tolerance_x=machine.tolerance_x,
             tolerance_y=machine.tolerance_y,
             tolerance_z=machine.tolerance_z
@@ -361,6 +364,7 @@ async def validate_file_on_machine(
 def _validate_tool(
     program_tool: Dict[str, Any],
     machine_tool_data: Dict[str, Any],
+    use_machine_tolerances: bool = False,
     diameter_tolerance: float = 0.00025,
     length_tolerance_plus: float = 0.0079,
     length_tolerance_minus: float = 0.0
@@ -371,9 +375,10 @@ def _validate_tool(
     Args:
         program_tool: Tool requirements from G-code
         machine_tool_data: Tool data from machine
-        diameter_tolerance: Machine diameter tolerance (±)
-        length_tolerance_plus: Machine length tolerance in positive direction (+)
-        length_tolerance_minus: Machine length tolerance in negative direction (-)
+        use_machine_tolerances: If True, use machine tolerances. If False, use G-code defaults (exact match for diameter, length >= required)
+        diameter_tolerance: Machine diameter tolerance (±) - only used if use_machine_tolerances=True
+        length_tolerance_plus: Machine length tolerance in positive direction (+) - only used if use_machine_tolerances=True
+        length_tolerance_minus: Machine length tolerance in negative direction (-) - only used if use_machine_tolerances=True
 
     Returns:
         ToolValidationResult
@@ -401,35 +406,57 @@ def _validate_tool(
             warnings=[f"Tool T{tool_num:02d} not found in machine tool table"]
         )
 
-    # Validate diameter (within tolerance)
     machine_diameter = machine_tool.get("diameter", 0)
-    diameter_diff = abs(machine_diameter - program_tool["diameter"])
-    diameter_match = diameter_diff <= diameter_tolerance
-
-    # Validate length (machine tool must be within tolerance range)
-    # Allows: required - length_tolerance_minus <= machine_length <= required + length_tolerance_plus
     machine_length = machine_tool.get("length", 0)
     required_length = program_tool["length_total"]
-    length_min = required_length - length_tolerance_minus
-    length_max = required_length + length_tolerance_plus
-    length_sufficient = length_min <= machine_length <= length_max
+    diameter_diff = abs(machine_diameter - program_tool["diameter"])
+    
+    # Apply tolerances based on mode
+    if use_machine_tolerances:
+        # Use machine-defined tolerances
+        diameter_match = diameter_diff <= diameter_tolerance
+        
+        length_min = required_length - length_tolerance_minus
+        length_max = required_length + length_tolerance_plus
+        length_sufficient = length_min <= machine_length <= length_max
+    else:
+        # Use G-code defaults: exact diameter match, length >= required
+        diameter_match = diameter_diff < 0.0001  # Very tight tolerance (exact match)
+        length_sufficient = machine_length >= required_length  # Just need to be >= required
+        
+        # For display purposes, set effective tolerances to indicate G-code mode
+        diameter_tolerance = 0.0001  # Display as "exact match"
+        length_tolerance_plus = None  # No upper limit (indicates G-code mode)
+        length_tolerance_minus = 0.0  # Cannot be shorter
 
     warnings = []
     if not diameter_match:
-        warnings.append(
-            f"Diameter mismatch: need {program_tool['diameter']:.4f}\", "
-            f"have {machine_diameter:.4f}\" (diff: {diameter_diff:.4f}\", tolerance: ±{diameter_tolerance:.5f}\")"
-        )
+        if use_machine_tolerances:
+            warnings.append(
+                f"Diameter mismatch: need {program_tool['diameter']:.4f}\", "
+                f"have {machine_diameter:.4f}\" (diff: {diameter_diff:.4f}\", tolerance: ±{diameter_tolerance:.5f}\")"
+            )
+        else:
+            warnings.append(
+                f"Diameter mismatch: need {program_tool['diameter']:.4f}\", "
+                f"have {machine_diameter:.4f}\" (exact match required)"
+            )
     if not length_sufficient:
-        warnings.append(
-            f"Tool length out of tolerance: need {required_length:.4f}\", "
-            f"have {machine_length:.4f}\" (acceptable: {length_min:.4f}\" to {length_max:.4f}\")"
-        )
+        if use_machine_tolerances:
+            warnings.append(
+                f"Tool length out of tolerance: need {required_length:.4f}\", "
+                f"have {machine_length:.4f}\" (acceptable: {length_min:.4f}\" to {length_max:.4f}\")"
+            )
+        else:
+            warnings.append(
+                f"Tool too short: need {required_length:.4f}\", "
+                f"have {machine_length:.4f}\" (must be ≥ required)"
+            )
 
     return ToolValidationResult(
         tool_number=tool_num,
         required_diameter=program_tool["diameter"],
-        required_length=program_tool["length_total"],
+        required_length=required_length,
         available=True,
         diameter_match=diameter_match,
         length_sufficient=length_sufficient,
@@ -438,13 +465,17 @@ def _validate_tool(
             "diameter": machine_diameter,
             "length": machine_length,
         },
-        warnings=warnings
+        warnings=warnings,
+        diameter_tolerance=diameter_tolerance if use_machine_tolerances else None,  # None indicates G-code mode
+        length_tolerance_plus=length_tolerance_plus if use_machine_tolerances else None,
+        length_tolerance_minus=length_tolerance_minus if use_machine_tolerances else None,
     )
 
 
 def _validate_wcs_offset(
     program_wcs: Dict[str, Any],
     machine_position_data: str,
+    use_machine_tolerances: bool = False,
     tolerance_x: float = 0.0394,
     tolerance_y: float = 0.0394,
     tolerance_z: float = 0.0394
@@ -455,9 +486,10 @@ def _validate_wcs_offset(
     Args:
         program_wcs: Expected WCS offset from G-code
         machine_position_data: POSNI1.NC file content from machine (as string)
-        tolerance_x: Machine X tolerance (±)
-        tolerance_y: Machine Y tolerance (±)
-        tolerance_z: Machine Z tolerance (±)
+        use_machine_tolerances: If True, use machine tolerances. If False, use E parameter from G-code if present
+        tolerance_x: Machine X tolerance (±) - only used if use_machine_tolerances=True
+        tolerance_y: Machine Y tolerance (±) - only used if use_machine_tolerances=True
+        tolerance_z: Machine Z tolerance (±) - only used if use_machine_tolerances=True
 
     Returns:
         WCSValidationResult
@@ -468,15 +500,33 @@ def _validate_wcs_offset(
         "y": program_wcs["y"],
         "z": program_wcs["z"],
     }
-    # Use program tolerance (E parameter) if specified, otherwise use machine per-axis tolerances
-    # Program E parameter applies uniformly to all axes if specified
-    program_tolerance = program_wcs.get("tolerance")
-    if program_tolerance:
-        # Program specifies a uniform tolerance (E parameter)
-        tolerance_x = tolerance_y = tolerance_z = program_tolerance
+    
+    # Determine tolerance source
+    if use_machine_tolerances:
+        # Use machine per-axis tolerances
+        final_tolerance_x = tolerance_x
+        final_tolerance_y = tolerance_y
+        final_tolerance_z = tolerance_z
+    else:
+        # Use program tolerance (E parameter) if specified, otherwise fail validation
+        program_tolerance = program_wcs.get("tolerance")
+        if program_tolerance:
+            final_tolerance_x = final_tolerance_y = final_tolerance_z = program_tolerance
+        else:
+            # No E parameter in G-code - this is an error when using G-code mode
+            return WCSValidationResult(
+                valid=False,
+                work_offset=work_offset,
+                expected=expected,
+                actual={},
+                difference={},
+                tolerance=0.0,
+                within_tolerance=False,
+                warnings=["No E parameter found in G-code WCS validation macro - cannot validate without tolerance"]
+            )
 
-    # Store the primary tolerance for display (use max if different per-axis)
-    tolerance = max(tolerance_x, tolerance_y, tolerance_z)
+    # Store the primary tolerance for display
+    tolerance = max(final_tolerance_x, final_tolerance_y, final_tolerance_z)
 
     # Parse POSNI1.NC to get actual machine offset
     # Convert string to bytes for parser
@@ -509,19 +559,19 @@ def _validate_wcs_offset(
 
     # Check if within tolerance (per-axis tolerances)
     within_tolerance = (
-        difference["x"] <= tolerance_x and
-        difference["y"] <= tolerance_y and
-        difference["z"] <= tolerance_z
+        difference["x"] <= final_tolerance_x and
+        difference["y"] <= final_tolerance_y and
+        difference["z"] <= final_tolerance_z
     )
 
     warnings = []
     if not within_tolerance:
-        if difference["x"] > tolerance_x:
-            warnings.append(f"X axis difference {difference['x']:.4f}\" exceeds tolerance ±{tolerance_x}\"")
-        if difference["y"] > tolerance_y:
-            warnings.append(f"Y axis difference {difference['y']:.4f}\" exceeds tolerance ±{tolerance_y}\"")
-        if difference["z"] > tolerance_z:
-            warnings.append(f"Z axis difference {difference['z']:.4f}\" exceeds tolerance ±{tolerance_z}\"")
+        if difference["x"] > final_tolerance_x:
+            warnings.append(f"X axis difference {difference['x']:.4f}\" exceeds tolerance ±{final_tolerance_x}\"")
+        if difference["y"] > final_tolerance_y:
+            warnings.append(f"Y axis difference {difference['y']:.4f}\" exceeds tolerance ±{final_tolerance_y}\"")
+        if difference["z"] > final_tolerance_z:
+            warnings.append(f"Z axis difference {difference['z']:.4f}\" exceeds tolerance ±{final_tolerance_z}\"")
 
     result = WCSValidationResult(
         valid=within_tolerance,
