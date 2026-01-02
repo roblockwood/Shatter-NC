@@ -163,6 +163,7 @@ export const ToolDetailModal: React.FC<ToolDetailModalProps> = ({
                   {toolDetail.specifications.diameter_range[0] !== toolDetail.specifications.diameter_range[1] &&
                     ` - ${toolDetail.specifications.diameter_range[1].toFixed(3)}"`}
                 </span>
+                {/* TODO: Add units support when tool detail API includes units */}
               </div>
               {toolDetail.specifications.length_range && (
                 <div className="spec-item">
