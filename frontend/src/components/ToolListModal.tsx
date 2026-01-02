@@ -1,5 +1,7 @@
 import React from 'react';
 import { Modal } from './ui/Modal';
+import { formatDimension } from '../utils/formatDimension';
+import type { UnitType } from '../utils/formatDimension';
 import './ToolListModal.css';
 
 interface Tool {
@@ -14,6 +16,7 @@ interface ToolListModalProps {
   onClose: () => void;
   tools: Tool[];
   machineName: string;
+  units?: UnitType;
 }
 
 export const ToolListModal: React.FC<ToolListModalProps> = ({
@@ -21,10 +24,8 @@ export const ToolListModal: React.FC<ToolListModalProps> = ({
   onClose,
   tools,
   machineName,
+  units = 'in',
 }) => {
-  const formatDimension = (value: number) => {
-    return value > 0 ? value.toFixed(4) : '────';
-  };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`${machineName} - TOOL TABLE`}>
@@ -55,10 +56,10 @@ export const ToolListModal: React.FC<ToolListModalProps> = ({
                   </td>
                   <td className="tool-name">{tool.tool_name}</td>
                   <td className="tool-diameter">
-                    {formatDimension(tool.diameter)}"
+                    {formatDimension(tool.diameter, units)}
                   </td>
                   <td className="tool-length">
-                    {formatDimension(tool.length)}"
+                    {formatDimension(tool.length, units)}
                   </td>
                 </tr>
               ))}

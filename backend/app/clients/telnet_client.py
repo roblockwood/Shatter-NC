@@ -364,49 +364,113 @@ class CNCTelnetClient:
                 "timestamp": datetime.now().isoformat(),
             }
 
-    async def load_data(self, data_name: str, verbose: bool = False) -> Optional[str]:
+    async def load_data(self, data_name: str, verbose: bool = False, max_retries: int = 2) -> Optional[str]:
         """
         Load arbitrary data by name using LOD command.
+        
+        Includes retry logic for transient connection failures.
 
         Args:
             data_name: Name of data to load (e.g., "MEM", "TOLNI1", "POSNI1", "ATCTL", "DIR")
             verbose: If True, log command details
+            max_retries: Maximum number of retry attempts (default: 2, so 3 total attempts)
 
         Returns:
             Data content as string, or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
-                return None
+        for attempt in range(max_retries + 1):
+            try:
+                # Ensure connection (will reconnect if needed)
+                if not self._connected:
+                    connected = await self.connect()
+                    if not connected:
+                        if attempt < max_retries:
+                            wait_time = 0.5 * (attempt + 1)  # 0.5s, 1s, 1.5s
+                            logger.warning(f"Telnet connection failed for '{data_name}', retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
+                            await asyncio.sleep(wait_time)
+                            continue
+                        return None
 
-        try:
-            success, status, data = await self._send_command("LOD", data_name, verbose=verbose)
-            if success:
-                return data
-            else:
-                logger.warning(f"Failed to load data '{data_name}': status {status}")
+                success, status, data = await self._send_command("LOD", data_name, verbose=verbose)
+                if success:
+                    return data
+                else:
+                    # Check if it's a transient error that might benefit from retry
+                    # Status codes like "40" (conflict due to communication using other port) might be retryable
+                    if status == "40" and attempt < max_retries:
+                        wait_time = 0.5 * (attempt + 1)
+                        logger.warning(f"Failed to load '{data_name}': status {status} (communication conflict), retrying in {wait_time}s")
+                        await asyncio.sleep(wait_time)
+                        # Disconnect to force reconnection
+                        await self.disconnect()
+                        continue
+                    else:
+                        logger.warning(f"Failed to load data '{data_name}': status {status}")
+                        return None
+            except (ConnectionError, TimeoutError, asyncio.TimeoutError) as e:
+                if attempt < max_retries:
+                    wait_time = 0.5 * (attempt + 1)
+                    logger.warning(f"Connection error loading '{data_name}': {e}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
+                    await self.disconnect()  # Force disconnect to clear bad connection
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"Error loading data '{data_name}' after {max_retries + 1} attempts: {e}")
+                    return None
+            except Exception as e:
+                # Non-retryable errors (parsing, etc.) - fail immediately
+                logger.error(f"Error loading data '{data_name}': {e}")
                 return None
-        except Exception as e:
-            logger.error(f"Error loading data '{data_name}': {e}")
-            return None
+        
+        return None
 
     # Convenience methods for common data files
     async def get_memory_data(self, verbose: bool = False) -> Optional[str]:
         """Get memory/program information from MEM."""
         return await self.load_data("MEM", verbose=verbose)
 
-    async def get_tool_table_data(self, verbose: bool = False) -> Optional[str]:
-        """Get tool table data from TOLNI1."""
-        return await self.load_data("TOLNI1", verbose=verbose)
+    async def get_tool_table_data(self, units: str = 'in', verbose: bool = False) -> Optional[str]:
+        """
+        Get tool table data from TOLNI1 (inches) or TOLNM1 (millimeters).
+        
+        Args:
+            units: Unit system ('in' for inches, 'mm' for millimeters). Defaults to 'in'.
+            verbose: If True, log command details
+            
+        Returns:
+            Tool table data as string, or None on failure
+        """
+        data_name = "TOLNI1" if units == 'in' else "TOLNM1"
+        return await self.load_data(data_name, verbose=verbose)
 
     async def get_position_data(self, verbose: bool = False) -> Optional[str]:
         """Get position/work offsets from POSNI1."""
         return await self.load_data("POSNI1", verbose=verbose)
 
-    async def get_atc_magazine_data(self, verbose: bool = False) -> Optional[str]:
-        """Get ATC magazine configuration from ATCTL."""
-        return await self.load_data("ATCTL", verbose=verbose)
+    async def get_atc_magazine_data(self, control_version: Optional[str] = None, verbose: bool = False) -> Optional[str]:
+        """
+        Get ATC magazine configuration from ATCTL (C00) or ATCTLD (D00).
+        
+        Args:
+            control_version: Control version ('C00' or 'D00'). If None, tries both.
+            verbose: If True, log command details
+            
+        Returns:
+            ATC magazine data as string, or None on failure
+        """
+        # D00 uses ATCTLD, C00 uses ATCTL
+        if control_version == "D00":
+            data_name = "ATCTLD"
+        elif control_version == "C00":
+            data_name = "ATCTL"
+        else:
+            # Try D00 first (newer), fallback to C00
+            data = await self.load_data("ATCTLD", verbose=verbose)
+            if data:
+                return data
+            data_name = "ATCTL"
+        
+        return await self.load_data(data_name, verbose=verbose)
 
     async def get_directory_listing(self, verbose: bool = False) -> Optional[str]:
         """
