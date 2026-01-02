@@ -616,9 +616,9 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
                         {lengthDiff.toFixed(2)}"
                       </td>
                       <td>
-                        {tool.length_tolerance_plus !== undefined && tool.length_tolerance_minus !== undefined
+                        {tool.length_tolerance_plus != null && tool.length_tolerance_minus != null
                           ? `+${tool.length_tolerance_plus.toFixed(4)}"/-${tool.length_tolerance_minus.toFixed(4)}"`
-                          : '-'}
+                          : '≥ required'}
                       </td>
                       <td className={lengthPassed ? 'text-success' : 'text-error'}>
                         {lengthPassed ? '✓' : '✕'}
@@ -637,9 +637,9 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
                         {diameterDiff.toFixed(3)}"
                       </td>
                       <td>
-                        {tool.diameter_tolerance !== undefined
+                        {tool.diameter_tolerance != null
                           ? `±${tool.diameter_tolerance.toFixed(4)}"`
-                          : '-'}
+                          : 'exact match'}
                       </td>
                       <td className={diameterPassed ? 'text-success' : 'text-error'}>
                         {diameterPassed ? '✓' : '✕'}

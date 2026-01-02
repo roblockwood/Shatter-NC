@@ -30,7 +30,7 @@ RUN useradd -m -u 1000 shatter && chown -R shatter:shatter /app
 FROM base AS development
 USER shatter
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["/app/scripts/start-dev.sh"]
 
 # Production stage
 FROM base AS production

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import './AddMachineCard.css';
 import { API_BASE } from '../config/api';
+import { Select } from './ui/Select';
 
 interface MachineData {
   name: string;
@@ -13,6 +14,15 @@ interface MachineData {
   poll_interval_seconds?: number;
   enabled?: boolean;
   model?: string;
+  diameter_tolerance?: number;
+  length_tolerance_plus?: number;
+  length_tolerance_minus?: number;
+  tolerance_x?: number;
+  tolerance_y?: number;
+  tolerance_z?: number;
+  use_machine_tool_tolerances?: boolean;
+  use_machine_wcs_tolerances?: boolean;
+  units?: string;
 }
 
 interface AddMachineCardProps {
@@ -35,7 +45,16 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
     path: '/PROGRAM',
     poll_interval_seconds: 5,
     enabled: true,
-    model: 'Brother CNC'
+    model: 'Brother CNC',
+    diameter_tolerance: 0.010,
+    length_tolerance_plus: 0.02,
+    length_tolerance_minus: 0.0,
+    tolerance_x: 0.0394,
+    tolerance_y: 0.0394,
+    tolerance_z: 0.0394,
+    use_machine_tool_tolerances: false,
+    use_machine_wcs_tolerances: false,
+    units: 'in',
   });
 
   const isFormValid = formData.name && formData.ip_address && formData.ftp_username && formData.ftp_password;
@@ -49,7 +68,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
     setIsSaving(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/machines`, {
+      const response = await fetch(`${API_BASE}/machines/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -68,7 +87,16 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
           path: '/PROGRAM',
           poll_interval_seconds: 5,
           enabled: true,
-          model: 'Brother CNC'
+          model: 'Brother CNC',
+          diameter_tolerance: 0.010,
+          length_tolerance_plus: 0.02,
+          length_tolerance_minus: 0.0,
+          tolerance_x: 0.0394,
+          tolerance_y: 0.0394,
+          tolerance_z: 0.0394,
+          use_machine_tool_tolerances: false,
+          use_machine_wcs_tolerances: false,
+          units: 'in',
         });
         // Notify parent that machine was added
         if (onAdd) {
@@ -110,7 +138,16 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
       path: '/PROGRAM',
       poll_interval_seconds: 5,
       enabled: true,
-      model: 'Brother CNC'
+      model: 'Brother CNC',
+      diameter_tolerance: 0.010,
+      length_tolerance_plus: 0.02,
+      length_tolerance_minus: 0.0,
+      tolerance_x: 0.0394,
+      tolerance_y: 0.0394,
+      tolerance_z: 0.0394,
+      use_machine_tool_tolerances: false,
+      use_machine_wcs_tolerances: false,
+      units: 'in',
     });
     setError(null);
     if (onCancelProp) {
@@ -242,7 +279,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
           />
         </div>
 
-        <div className="form-row-inline">
+          <div className="form-row-inline">
           <div>
             <label>POLL INTERVAL:</label>
             <input
@@ -264,6 +301,151 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
               disabled={isSaving}
             />
             <label htmlFor="enabled">ENABLED</label>
+          </div>
+        </div>
+
+        <div className="form-row">
+          <label>UNITS:</label>
+          <Select
+            value={formData.units || 'in'}
+            onChange={(value) => setFormData({ ...formData, units: value })}
+            disabled={isSaving}
+            options={[
+              { value: 'in', label: 'INCHES (in)' },
+              { value: 'mm', label: 'MILLIMETERS (mm)' },
+            ]}
+          />
+        </div>
+
+        {/* Tolerances Section */}
+        <div className="tolerances-section">
+          <div className="tolerances-header">VALIDATION TOLERANCES (inches)</div>
+
+          {/* Tool Tolerances Group */}
+          <div className="tolerance-group">
+            <div className="tolerance-group-header">
+              <div className="tolerance-group-label">TOOL TOLERANCES</div>
+              <div className="tolerance-override-toggle">
+                <input
+                  type="checkbox"
+                  id="use-machine-tool-tolerances-new"
+                  checked={formData.use_machine_tool_tolerances || false}
+                  onChange={(e) => setFormData({ ...formData, use_machine_tool_tolerances: e.target.checked })}
+                  disabled={isSaving}
+                />
+                <label htmlFor="use-machine-tool-tolerances-new">
+                  Use machine settings
+                </label>
+              </div>
+            </div>
+            
+            <div className={`tolerance-group-content ${!formData.use_machine_tool_tolerances ? 'disabled' : ''}`}>
+              {/* Tool Diameter Group */}
+              <div className="tolerance-subgroup">
+                <div className="tolerance-group-label">TOOL DIAMETER</div>
+                <div className="tolerance-field tolerance-field-inline">
+                  <label>(±):</label>
+                  <input
+                    type="number"
+                    step="0.00001"
+                    value={formData.diameter_tolerance || 0.010}
+                    onChange={(e) => setFormData({ ...formData, diameter_tolerance: parseFloat(e.target.value) })}
+                    disabled={isSaving || !formData.use_machine_tool_tolerances}
+                  />
+                </div>
+              </div>
+
+              {/* Tool Length Group */}
+              <div className="tolerance-subgroup">
+                <div className="tolerance-group-label">TOOL LENGTH</div>
+                <div className="tolerance-group-row">
+                  <div className="tolerance-field tolerance-field-inline">
+                    <label>(+):</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={formData.length_tolerance_plus || 0.02}
+                      onChange={(e) => setFormData({ ...formData, length_tolerance_plus: parseFloat(e.target.value) })}
+                      disabled={isSaving || !formData.use_machine_tool_tolerances}
+                    />
+                  </div>
+                  <div className="tolerance-field tolerance-field-inline">
+                    <label>(-):</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={formData.length_tolerance_minus || 0.0}
+                      onChange={(e) => setFormData({ ...formData, length_tolerance_minus: parseFloat(e.target.value) })}
+                      disabled={isSaving || !formData.use_machine_tool_tolerances}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            {!formData.use_machine_tool_tolerances && (
+              <div className="tolerance-hint">
+                Using G-code defaults: diameter must match exactly, length must be ≥ required
+              </div>
+            )}
+          </div>
+
+          {/* WCS Offset Group */}
+          <div className="tolerance-group">
+            <div className="tolerance-group-header">
+              <div className="tolerance-group-label">WCS OFFSET</div>
+              <div className="tolerance-override-toggle">
+                <input
+                  type="checkbox"
+                  id="use-machine-wcs-tolerances-new"
+                  checked={formData.use_machine_wcs_tolerances || false}
+                  onChange={(e) => setFormData({ ...formData, use_machine_wcs_tolerances: e.target.checked })}
+                  disabled={isSaving}
+                />
+                <label htmlFor="use-machine-wcs-tolerances-new">
+                  Use machine settings
+                </label>
+              </div>
+            </div>
+            
+            <div className={`tolerance-group-content ${!formData.use_machine_wcs_tolerances ? 'disabled' : ''}`}>
+              <div className="tolerance-group-row">
+                <div className="tolerance-field tolerance-field-inline">
+                  <label>X (±):</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={formData.tolerance_x || 0.0394}
+                    onChange={(e) => setFormData({ ...formData, tolerance_x: parseFloat(e.target.value) })}
+                    disabled={isSaving || !formData.use_machine_wcs_tolerances}
+                  />
+                </div>
+                <div className="tolerance-field tolerance-field-inline">
+                  <label>Y (±):</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={formData.tolerance_y || 0.0394}
+                    onChange={(e) => setFormData({ ...formData, tolerance_y: parseFloat(e.target.value) })}
+                    disabled={isSaving || !formData.use_machine_wcs_tolerances}
+                  />
+                </div>
+                <div className="tolerance-field tolerance-field-inline">
+                  <label>Z (±):</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={formData.tolerance_z || 0.0394}
+                    onChange={(e) => setFormData({ ...formData, tolerance_z: parseFloat(e.target.value) })}
+                    disabled={isSaving || !formData.use_machine_wcs_tolerances}
+                  />
+                </div>
+              </div>
+            </div>
+            {!formData.use_machine_wcs_tolerances && (
+              <div className="tolerance-hint">
+                Using G-code E parameter if present in WCS validation macro
+              </div>
+            )}
           </div>
         </div>
 
