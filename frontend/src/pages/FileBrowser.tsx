@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { StatusIndicator } from '../components/ui';
+import { StatusIndicator, Select } from '../components/ui';
 import './FileBrowser.css';
 import { API_BASE_URL } from '../config/api';
 
@@ -929,17 +929,15 @@ export const FileBrowser: React.FC = () => {
       {/* Machine Selector */}
       <div className="machine-selector-bar">
         <label className="selector-label">MACHINE:</label>
-        <select
+        <Select
+          value={selectedMachineId?.toString() || ''}
+          onChange={(value) => setSelectedMachineId(value ? Number(value) : null)}
+          options={machines.map(machine => ({
+            value: machine.id.toString(),
+            label: `${machine.name} (${machine.ip_address})`
+          }))}
           className="terminal-select"
-          value={selectedMachineId || ''}
-          onChange={(e) => setSelectedMachineId(Number(e.target.value))}
-        >
-          {machines.map(machine => (
-            <option key={machine.id} value={machine.id}>
-              {machine.name} ({machine.ip_address})
-            </option>
-          ))}
-        </select>
+        />
         {selectedMachine && (
           <span className="machine-status">
             <StatusIndicator status="online" label="" />
@@ -1130,20 +1128,21 @@ export const FileBrowser: React.FC = () => {
                       </span>
                     )}
                     {!freshValidation && deploymentDetail?.history && deploymentDetail.history.length > 1 && (
-                      <select
+                      <Select
+                        value={selectedDeploymentId?.toString() || ''}
+                        onChange={(value) => setSelectedDeploymentId(value ? parseInt(value) : null)}
+                        options={[
+                          {
+                            value: '',
+                            label: `${deploymentDetail.program?.original_filename} (${formatDate(deploymentDetail.deployment.deployed_at)}) - CURRENT`
+                          },
+                          ...deploymentDetail.history.slice(1).map((entry) => ({
+                            value: entry.id.toString(),
+                            label: `${entry.original_filename} (${formatDate(entry.deployed_at)})`
+                          }))
+                        ]}
                         className="deployment-selector"
-                        value={selectedDeploymentId || ''}
-                        onChange={(e) => setSelectedDeploymentId(e.target.value ? parseInt(e.target.value) : null)}
-                      >
-                        <option value="">
-                          {deploymentDetail.program?.original_filename} ({formatDate(deploymentDetail.deployment.deployed_at)}) - CURRENT
-                        </option>
-                        {deploymentDetail.history.slice(1).map((entry) => (
-                          <option key={entry.id} value={entry.id}>
-                            {entry.original_filename} ({formatDate(entry.deployed_at)})
-                          </option>
-                        ))}
-                      </select>
+                      />
                     )}
                   </div>
 

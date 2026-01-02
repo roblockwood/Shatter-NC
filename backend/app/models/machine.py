@@ -31,6 +31,13 @@ class Machine(Base):
     tolerance_y = Column(Float, default=0.0394)            # ±1mm = ±0.0394 inches
     tolerance_z = Column(Float, default=0.0394)            # ±1mm = ±0.0394 inches
 
+    # Tolerance override flags
+    use_machine_tool_tolerances = Column(Boolean, default=False)  # Use machine tolerances vs G-code defaults
+    use_machine_wcs_tolerances = Column(Boolean, default=False)    # Use machine tolerances vs G-code E parameter
+
+    # Measurement units
+    units = Column(String(2), default='in')  # 'in' for inches, 'mm' for millimeters
+
     # UI layout configuration (JSON)
     layout_config = Column(JSON, nullable=True)  # Custom pane layout configuration
 

@@ -658,9 +658,24 @@ The machine card transforms into a comprehensive edit form with two sections:
 
 Tolerances used when validating G-code programs against machine state.
 
-**Important:** Tolerance sources differ between tools and WCS:
-- **Tool Tolerances**: Always from machine database settings (configured per machine)
-- **WCS Tolerances**: From NC file E parameter (if present), otherwise from machine database settings
+**Tolerance Source Control:**
+
+Each machine can be configured to use either machine-defined tolerances or G-code defaults, controlled by toggle checkboxes in the machine configuration:
+
+- **Use Machine Settings (checked)**: Use tolerance values defined in the machine configuration
+- **Use G-code Defaults (unchecked)**: Use validation rules from the G-code program
+
+**Tool Tolerances:**
+- **Machine Settings**: Uses `diameter_tolerance`, `length_tolerance_plus`, `length_tolerance_minus` from machine configuration
+- **G-code Defaults**: 
+  - Diameter: Exact match required (difference < 0.0001")
+  - Length: Tool must be at least as long as required (length ≥ required, no upper limit)
+
+**WCS Tolerances:**
+- **Machine Settings**: Uses `tolerance_x`, `tolerance_y`, `tolerance_z` from machine configuration
+- **G-code Defaults**: Uses E parameter from WCS validation macro in G-code (e.g., `G65 P8901 ... E0.01 ...`). If E parameter is missing, validation fails with a warning.
+
+**Default Behavior:** New machines start with both tolerance overrides disabled (unchecked), meaning G-code defaults are used by default.
 
 #### Tool Diameter Tolerance
 
