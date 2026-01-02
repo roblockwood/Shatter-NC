@@ -243,12 +243,20 @@ async def validate_program(
 
         # Always return WCS validation result (even if not within tolerance)
         if not wcs_validation.within_tolerance:
-            errors.append(
-                f"WCS G{wcs_validation.work_offset} offset outside tolerance: "
-                f"X={wcs_validation.difference['x']:.4f}\", "
-                f"Y={wcs_validation.difference['y']:.4f}\", "
-                f"Z={wcs_validation.difference['z']:.4f}\""
-            )
+            # Only include difference values if they exist (may be empty if validation failed early)
+            if wcs_validation.difference and all(key in wcs_validation.difference for key in ['x', 'y', 'z']):
+                errors.append(
+                    f"WCS G{wcs_validation.work_offset} offset outside tolerance: "
+                    f"X={wcs_validation.difference['x']:.4f}\", "
+                    f"Y={wcs_validation.difference['y']:.4f}\", "
+                    f"Z={wcs_validation.difference['z']:.4f}\""
+                )
+            else:
+                # Validation failed but no difference data (e.g., missing E parameter or machine data)
+                error_msg = f"WCS G{wcs_validation.work_offset} validation failed"
+                if wcs_validation.warnings:
+                    error_msg += f": {wcs_validation.warnings[0]}"
+                errors.append(error_msg)
     elif not parsed["wcs_offset"]:
         # No WCS in NC code
         if position_data and not wcs_fetch_failed:
