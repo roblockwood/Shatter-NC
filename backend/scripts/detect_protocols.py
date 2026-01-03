@@ -86,20 +86,6 @@ async def main():
             print("  ✗ FOCAS not detected")
             print("    Checked ports:", ", ".join(map(str, results["focas"]["ports_checked"])))
 
-        # MTConnect
-        print("\n📡 MTConnect Detection:")
-        mtconnect_available = results["summary"]["mtconnect_available"]
-        if mtconnect_available:
-            print("  ✓ MTConnect appears to be AVAILABLE!")
-            for result in results["mtconnect"]["results"]:
-                if result["open"]:
-                    print(f"    - Port {result['port']}: OPEN")
-                    if result.get("banner"):
-                        print(f"      Banner: {result['banner'][:50]}")
-        else:
-            print("  ✗ MTConnect not detected")
-            print("    Checked ports:", ", ".join(map(str, results["mtconnect"]["ports_checked"])))
-
         # Other protocols
         print("\n📡 Other Protocols:")
         if results["summary"]["other_protocols"]:
@@ -134,19 +120,13 @@ async def main():
             print("  - Get current XYZ position, spindle speed, feedrate, etc.")
             print("  - Control machine operations programmatically")
 
-        if mtconnect_available:
-            print("\n✓ MTConnect is available! You can:")
-            print("  - Use MTConnect adapter for standardized machine data")
-            print("  - Integrate with MTConnect-compatible systems")
-            print("  - Access structured machine data via REST API")
-
-        if not focas_available and not mtconnect_available:
+        if not focas_available:
             print("\n⚠ No advanced protocols detected.")
             print("  Current capabilities:")
             print("    - HTTP endpoints for status monitoring")
             print("    - FTP for file transfer and system files")
             print("  To enable more functionality:")
-            print("    - Check machine configuration for FOCAS/MTConnect options")
+            print("    - Check machine configuration for FOCAS options")
             print("    - Consult machine manual for protocol setup")
             print("    - Contact machine manufacturer for protocol availability")
 

@@ -1,18 +1,34 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { API_BASE_URL } from '../../config/api';
 import './AlarmPane.css';
 
 interface Alarm {
   code: string;
   message: string;
+  description?: string;
   severity?: string;
   level_class?: string;
+  stop_level?: string;
+  reset_level?: string;
+  cause?: string;
+  solution?: string;
   time?: string;
 }
 
 interface AlarmPaneProps {
   machineId: number;
-  currentAlarms?: Array<{ code: string; message: string; severity?: string; level_class?: string }>;
+  currentAlarms?: Array<{
+    code: string;
+    message: string;
+    description?: string;
+    severity?: string;
+    level_class?: string;
+    stop_level?: string;
+    reset_level?: string;
+    cause?: string;
+    solution?: string;
+  }>;
   onExpand?: () => void;
   isExpanded?: boolean;
 }
@@ -20,6 +36,8 @@ interface AlarmPaneProps {
 export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId, currentAlarms, onExpand, isExpanded = false }) => {
   const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hoveredAlarm, setHoveredAlarm] = useState<Alarm | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
 
   // Prioritize currentAlarms prop (from WebSocket) - update immediately when it changes
   useEffect(() => {
@@ -29,8 +47,13 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId, currentAlarms, 
         ? currentAlarms.map(a => ({
             code: a.code,
             message: a.message,
+            description: a.description,
             severity: a.severity,
             level_class: a.level_class,
+            stop_level: a.stop_level,
+            reset_level: a.reset_level,
+            cause: a.cause,
+            solution: a.solution,
           }))
         : [];
       setAlarms(mappedAlarms);
@@ -55,13 +78,6 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId, currentAlarms, 
           // API returns { alarms: [...] } or just array
           const alarmArray = Array.isArray(data) ? data : (data.alarms || []);
           setAlarms(Array.isArray(alarmArray) ? alarmArray : []);
-          
-          // Debug: Log alarm severity data
-          console.log('=== ALARM SEVERITY DEBUG ===');
-          alarmArray.forEach((alarm: Alarm) => {
-            console.log(`Code: ${alarm.code}, Severity: ${alarm.severity}, Level Class: ${alarm.level_class}`);
-          });
-          console.log('===========================');
         } else {
           setAlarms([]);
         }
@@ -79,76 +95,68 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId, currentAlarms, 
     return () => clearInterval(interval);
   }, [machineId, currentAlarms]);
 
-  const getSeverityColor = (severity?: string, levelClass?: string): string => {
-    // Priority: level_class > severity
-    if (levelClass) {
-      if (levelClass === 'alarm_level_4' || levelClass.includes('level_4') || levelClass.includes('critical')) {
-        return '#ff0000'; // Red for critical
-      }
-      if (levelClass === 'alarm_level_3' || levelClass.includes('level_3') || levelClass.includes('error')) {
-        return '#ff0000'; // Red for error
-      }
-      if (levelClass === 'alarm_level_2' || levelClass.includes('level_2') || levelClass.includes('warning')) {
-        return '#ffaa00'; // Orange/Yellow for warning
-      }
-      if (levelClass === 'alarm_level_1' || levelClass.includes('level_1') || levelClass.includes('info')) {
-        return '#00ffff'; // Cyan for info (distinct from default green)
+  const getSeverityLevel = (alarm: Alarm): number => {
+    // Use stop_level exclusively (higher number = more severe)
+    // Stop levels: 5 = most critical, 4 = critical, 3 = error, 2 = warning, 1 = info
+    if (alarm.stop_level !== undefined && alarm.stop_level !== null && alarm.stop_level !== '') {
+      const level = parseInt(String(alarm.stop_level), 10);
+      if (!isNaN(level) && level >= 1 && level <= 5) {
+        return level;
       }
     }
     
-    // Fallback to severity
-    if (severity === 'critical') return '#ff0000';
-    if (severity === 'error') return '#ff0000';
-    if (severity === 'warning') return '#ffaa00';
-    if (severity === 'info') return '#00ffff';
-    
-    // Default: use cyan to distinguish from terminal's default green
-    return '#00ffff';
+    // If stop_level is missing or invalid, default to 3 (error level)
+    // This should rarely happen if the API is working correctly
+    return 3;
   };
 
-  const getSeverityIndicator = (severity?: string, levelClass?: string) => {
-    if (levelClass?.includes('level_4') || severity === 'critical') return '!!!';
-    if (levelClass?.includes('level_3') || severity === 'error') return '!!';
-    if (levelClass?.includes('level_2') || severity === 'warning') return '!';
+  const getSeverityColor = (alarm: Alarm): string => {
+    const level = getSeverityLevel(alarm);
+    
+    // Map severity level to color
+    // Level 5: Critical (bright red)
+    if (level >= 5) return '#ff0000';
+    // Level 4: Critical (red)
+    if (level === 4) return '#ff3333';
+    // Level 3: Error (red-orange)
+    if (level === 3) return '#ff6600';
+    // Level 2: Warning (orange/yellow)
+    if (level === 2) return '#ffaa00';
+    // Level 1: Info (cyan)
+    if (level === 1) return '#00ffff';
+    
+    // Default: red for unknown
+    return '#ff0000';
+  };
+
+  const getSeverityIndicator = (alarm: Alarm) => {
+    const level = getSeverityLevel(alarm);
+    if (level >= 5) return '!!!';
+    if (level === 4) return '!!!';
+    if (level === 3) return '!!';
+    if (level === 2) return '!';
     return '!';
   };
 
-  const isInfoLevel = (severity?: string, levelClass?: string): boolean => {
-    // Returns true for level 1 (info) only, false for levels 2/3/4
-    if (levelClass) {
-      // Check for exact level class matches first
-      if (levelClass === 'alarm_level_1') {
-        return true;
-      }
-      if (levelClass === 'alarm_level_2' || levelClass === 'alarm_level_3' || levelClass === 'alarm_level_4') {
-        return false;
-      }
-      // Fallback to string includes for backwards compatibility
-      if (levelClass.includes('level_1')) {
-        return true;
-      }
-      if (levelClass.includes('level_2') || levelClass.includes('level_3') || levelClass.includes('level_4')) {
-        return false;
-      }
-    }
-    // Fallback to severity
-    if (severity === 'info') return true;
-    if (severity === 'warning' || severity === 'error' || severity === 'critical') return false;
-    // If no level_class or severity, default to non-info (likely old data)
-    return false;
-  };
+  // Sort alarms by severity (highest first) using stop_level
+  const sortedAlarms = [...alarms].sort((a, b) => {
+    const levelA = getSeverityLevel(a);
+    const levelB = getSeverityLevel(b);
+    return levelB - levelA; // Higher severity first
+  });
 
-  // Split alarms: left pane = levels 2/3/4, right pane = level 1 (info) only
-  const nonInfoAlarms = alarms.filter(a => !isInfoLevel(a.severity, a.level_class));
-  const infoAlarms = alarms.filter(a => isInfoLevel(a.severity, a.level_class));
+  // Split alarms: highest severity (stop_level 4-5) vs others (stop_level 1-3)
+  // Highest severity alarms go in left column, others in right column
+  const highestSeverityAlarms = sortedAlarms.filter(a => getSeverityLevel(a) >= 4);
+  const otherAlarms = sortedAlarms.filter(a => getSeverityLevel(a) < 4);
 
   // Show all alarms when expanded, otherwise limit to 10 per column
   const maxPerColumn = isExpanded ? Infinity : 10;
-  const visibleNonInfo = isExpanded ? nonInfoAlarms : nonInfoAlarms.slice(0, maxPerColumn);
-  const visibleInfo = isExpanded ? infoAlarms : infoAlarms.slice(0, maxPerColumn);
-  const hasMoreNonInfo = !isExpanded && nonInfoAlarms.length > maxPerColumn;
-  const hasMoreInfo = !isExpanded && infoAlarms.length > maxPerColumn;
-  const hasMoreAlarms = hasMoreNonInfo || hasMoreInfo;
+  const visibleHighest = isExpanded ? highestSeverityAlarms : highestSeverityAlarms.slice(0, maxPerColumn);
+  const visibleOthers = isExpanded ? otherAlarms : otherAlarms.slice(0, maxPerColumn);
+  const hasMoreHighest = !isExpanded && highestSeverityAlarms.length > maxPerColumn;
+  const hasMoreOthers = !isExpanded && otherAlarms.length > maxPerColumn;
+  const hasMoreAlarms = hasMoreHighest || hasMoreOthers;
 
   return (
     <div 
@@ -182,11 +190,12 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId, currentAlarms, 
           <div className="alarm-empty">NO ACTIVE ALARMS</div>
         ) : (
           <div className="alarm-list-grid">
-            {/* Non-Info Column (Levels 2/3/4) */}
+            {/* Highest Severity Column (Level 4-5) */}
             <div className="alarm-column">
-              {visibleNonInfo.length > 0 ? (
-                visibleNonInfo.map((alarm, idx) => {
-                  const severityColor = getSeverityColor(alarm.severity, alarm.level_class);
+              {visibleHighest.length > 0 ? (
+                visibleHighest.map((alarm, idx) => {
+                  const severityColor = getSeverityColor(alarm);
+                  const displayText = alarm.description || alarm.message || alarm.code;
                   return (
                     <div key={idx} className="alarm-item">
                       <div 
@@ -194,18 +203,48 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId, currentAlarms, 
                         style={{ color: severityColor, '--alarm-color': severityColor } as React.CSSProperties}
                       >
                         <span className="alarm-severity" style={{ color: severityColor }}>
-                          {getSeverityIndicator(alarm.severity, alarm.level_class)}
+                          {getSeverityIndicator(alarm)}
                         </span>
-                        <span className="alarm-code" style={{ color: severityColor }}>{alarm.code}</span>
-                        <span className="alarm-message-inline" style={{ color: severityColor }}>{alarm.message}</span>
+                        <span 
+                          className="alarm-code" 
+                          style={{ 
+                            color: severityColor, 
+                            cursor: (alarm.cause || alarm.solution) ? 'help' : 'default' 
+                          }}
+                          onMouseEnter={(e) => {
+                            if (alarm.cause || alarm.solution) {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setHoveredAlarm(alarm);
+                              // Position tooltip above the alarm code, centered
+                              // Adjust if tooltip would go off-screen
+                              const tooltipWidth = 300; // Approximate tooltip width
+                              let x = rect.left + rect.width / 2;
+                              const minX = tooltipWidth / 2;
+                              const maxX = window.innerWidth - tooltipWidth / 2;
+                              x = Math.max(minX, Math.min(maxX, x));
+                              
+                              setTooltipPosition({
+                                x: x,
+                                y: rect.top,
+                              });
+                            }
+                          }}
+                          onMouseLeave={() => {
+                            setHoveredAlarm(null);
+                            setTooltipPosition(null);
+                          }}
+                        >
+                          {alarm.code}
+                        </span>
+                        <span className="alarm-message-inline" style={{ color: severityColor }}>{displayText}</span>
                       </div>
                     </div>
                   );
                 })
               ) : (
-                <div className="alarm-column-empty">NO WARNING/ERROR ALARMS</div>
+                <div className="alarm-column-empty">NO CRITICAL ALARMS</div>
               )}
-              {hasMoreNonInfo && onExpand && (
+              {hasMoreHighest && onExpand && (
                 <div 
                   className="alarm-more" 
                   onClick={(e) => {
@@ -214,16 +253,17 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId, currentAlarms, 
                   }}
                   style={{ cursor: 'pointer' }}
                 >
-                  +{nonInfoAlarms.length - maxPerColumn} MORE
+                  +{highestSeverityAlarms.length - maxPerColumn} MORE
                 </div>
               )}
             </div>
 
-            {/* Info Column (Level 1 only) */}
+            {/* Other Alarms Column (Level 1-3) */}
             <div className="alarm-column">
-              {visibleInfo.length > 0 ? (
-                visibleInfo.map((alarm, idx) => {
-                  const severityColor = getSeverityColor(alarm.severity, alarm.level_class);
+              {visibleOthers.length > 0 ? (
+                visibleOthers.map((alarm, idx) => {
+                  const severityColor = getSeverityColor(alarm);
+                  const displayText = alarm.description || alarm.message || alarm.code;
                   return (
                     <div key={idx} className="alarm-item">
                       <div 
@@ -231,18 +271,48 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId, currentAlarms, 
                         style={{ color: severityColor, '--alarm-color': severityColor } as React.CSSProperties}
                       >
                         <span className="alarm-severity" style={{ color: severityColor }}>
-                          {getSeverityIndicator(alarm.severity, alarm.level_class)}
+                          {getSeverityIndicator(alarm)}
                         </span>
-                        <span className="alarm-code" style={{ color: severityColor }}>{alarm.code}</span>
-                        <span className="alarm-message-inline" style={{ color: severityColor }}>{alarm.message}</span>
+                        <span 
+                          className="alarm-code" 
+                          style={{ 
+                            color: severityColor, 
+                            cursor: (alarm.cause || alarm.solution) ? 'help' : 'default' 
+                          }}
+                          onMouseEnter={(e) => {
+                            if (alarm.cause || alarm.solution) {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setHoveredAlarm(alarm);
+                              // Position tooltip above the alarm code, centered
+                              // Adjust if tooltip would go off-screen
+                              const tooltipWidth = 300; // Approximate tooltip width
+                              let x = rect.left + rect.width / 2;
+                              const minX = tooltipWidth / 2;
+                              const maxX = window.innerWidth - tooltipWidth / 2;
+                              x = Math.max(minX, Math.min(maxX, x));
+                              
+                              setTooltipPosition({
+                                x: x,
+                                y: rect.top,
+                              });
+                            }
+                          }}
+                          onMouseLeave={() => {
+                            setHoveredAlarm(null);
+                            setTooltipPosition(null);
+                          }}
+                        >
+                          {alarm.code}
+                        </span>
+                        <span className="alarm-message-inline" style={{ color: severityColor }}>{displayText}</span>
                       </div>
                     </div>
                   );
                 })
               ) : (
-                <div className="alarm-column-empty">NO INFO ALARMS</div>
+                <div className="alarm-column-empty">NO WARNING/INFO ALARMS</div>
               )}
-              {hasMoreInfo && onExpand && (
+              {hasMoreOthers && onExpand && (
                 <div 
                   className="alarm-more" 
                   onClick={(e) => {
@@ -251,7 +321,7 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId, currentAlarms, 
                   }}
                   style={{ cursor: 'pointer' }}
                 >
-                  +{infoAlarms.length - maxPerColumn} MORE
+                  +{otherAlarms.length - maxPerColumn} MORE
                 </div>
               )}
             </div>
@@ -261,6 +331,43 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId, currentAlarms, 
       <div className="terminal-box-footer">
         └{'─'.repeat(42)}┘
       </div>
+      
+      {/* Alarm Code Tooltip - Rendered via Portal to avoid clipping */}
+      {hoveredAlarm && tooltipPosition && (hoveredAlarm.cause || hoveredAlarm.solution) && typeof document !== 'undefined' && createPortal(
+        <div
+          className="alarm-code-tooltip"
+          style={{
+            position: 'fixed',
+            left: `${tooltipPosition.x}px`,
+            top: `${tooltipPosition.y}px`,
+            transform: 'translate(-50%, calc(-100% - 8px))',
+            zIndex: 10000,
+          }}
+          onMouseEnter={() => {
+            // Keep tooltip visible when hovering over it
+          }}
+          onMouseLeave={() => {
+            setHoveredAlarm(null);
+            setTooltipPosition(null);
+          }}
+        >
+          <div className="alarm-tooltip-content">
+            {hoveredAlarm.cause && (
+              <div className="alarm-tooltip-section">
+                <div className="alarm-tooltip-label">CAUSE:</div>
+                <div className="alarm-tooltip-text">{hoveredAlarm.cause}</div>
+              </div>
+            )}
+            {hoveredAlarm.solution && (
+              <div className="alarm-tooltip-section">
+                <div className="alarm-tooltip-label">SOLUTION:</div>
+                <div className="alarm-tooltip-text">{hoveredAlarm.solution}</div>
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
