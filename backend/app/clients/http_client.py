@@ -568,7 +568,7 @@ class CNCHttpClient:
 
         return overview
     
-    def get_status_overview_with_ftp(self, ftp_client, units: str = 'in') -> Dict[str, Any]:
+    def get_status_overview_with_ftp(self, ftp_client, machine, units: str = 'in') -> Dict[str, Any]:
         """
         Get comprehensive machine status overview including FTP data.
         
@@ -585,25 +585,37 @@ class CNCHttpClient:
         # Get base status overview
         overview = self.get_status_overview(units=units)
         
-        # Fetch program_name from mem.nc via FTP (most reliable source for active program)
+        # Fetch program_name from MEM via Telnet (Phase 5: Replace FTP reads)
+        # Note: This is a synchronous method, so we use asyncio.run for async Telnet client
         try:
             import asyncio
-            from app.parsers.mem_parser import parse_mem
+            from app.clients.telnet_client import get_or_create_connection
+            from app.parsers.mem_parser_v2 import parse_mem_v2
             
-            mem_data = asyncio.run(ftp_client.get_memory_data())
+            async def fetch_mem():
+                telnet_client = await get_or_create_connection(
+                    ip_address=machine.ip_address,
+                    port=10000,
+                    timeout=10
+                )
+                mem_data = await telnet_client.get_memory_data(verbose=False)
+                # Connection stays in pool - don't disconnect
+                return mem_data
+            
+            mem_data = asyncio.run(fetch_mem())
             if mem_data:
-                logger.debug(f"Raw mem.nc content: {repr(mem_data)}")
-                parsed_mem = parse_mem(mem_data.encode('utf-8'))
+                logger.debug(f"Raw MEM content: {repr(mem_data)}")
+                parsed_mem = parse_mem_v2(mem_data.encode('utf-8'), control_version=None)
                 program_name = parsed_mem.get("program_name")
                 if program_name:
                     overview["program_name"] = program_name
-                    logger.debug(f"Extracted program_name from mem.nc: {program_name}")
+                    logger.debug(f"Extracted program_name from MEM: {program_name}")
                 else:
-                    logger.debug(f"mem.nc parsed but no program_name found. Content: {repr(mem_data)}")
+                    logger.debug(f"MEM parsed but no program_name found. Content: {repr(mem_data)}")
             else:
-                logger.debug(f"mem.nc file not found or empty")
+                logger.debug(f"MEM file not found or empty")
         except Exception as e:
-            logger.debug(f"Failed to fetch program_name from mem.nc: {e}")
+            logger.debug(f"Failed to fetch program_name from MEM via Telnet: {e}")
             # Continue without program_name - not critical
         
         return overview

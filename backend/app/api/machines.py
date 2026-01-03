@@ -108,7 +108,7 @@ async def delete_machine(machine_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{machine_id}/test")
 async def test_connection(machine_id: int, db: Session = Depends(get_db)):
-    """Test connection to a machine (HTTP and FTP)."""
+    """Test connection to a machine (Telnet and FTP)."""
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not db_machine:
         raise HTTPException(
@@ -122,19 +122,22 @@ async def test_connection(machine_id: int, db: Session = Depends(get_db)):
         "ip_address": db_machine.ip_address,
     }
 
-    # Test HTTP connection
+    # Test Telnet connection (primary communication protocol)
     try:
-        http_client = CNCHttpClient(
+        from app.clients.telnet_client import CNCTelnetClient
+        telnet_client = CNCTelnetClient(
             db_machine.ip_address,
-            port=db_machine.http_port,
+            port=10000,  # Telnet port is always 10000
             timeout=5,
         )
-        results["http"] = http_client.test_connection()
+        results["telnet"] = await telnet_client.test_connection()
+        # Clean up test connection
+        await telnet_client.disconnect()
     except Exception as e:
-        logger.error(f"HTTP test error for machine {machine_id}: {e}")
-        results["http"] = {"success": False, "error": str(e)}
+        logger.error(f"Telnet test error for machine {machine_id}: {e}")
+        results["telnet"] = {"success": False, "error": str(e)}
 
-    # Test FTP connection
+    # Test FTP connection (for file operations)
     try:
         ftp_client = CNCFtpClient(
             db_machine.ip_address,
@@ -148,14 +151,16 @@ async def test_connection(machine_id: int, db: Session = Depends(get_db)):
         logger.error(f"FTP test error for machine {machine_id}: {e}")
         results["ftp"] = {"success": False, "error": str(e)}
 
-    # Determine overall status
-    http_ok = results.get("http", {}).get("success", False)
+    # Determine overall status (Telnet is primary, FTP is secondary)
+    telnet_ok = results.get("telnet", {}).get("success", False)
     ftp_ok = results.get("ftp", {}).get("success", False)
 
-    if http_ok and ftp_ok:
+    if telnet_ok and ftp_ok:
         results["overall_status"] = "online"
-    elif http_ok or ftp_ok:
-        results["overall_status"] = "partial"
+    elif telnet_ok:
+        results["overall_status"] = "online"  # Telnet is sufficient for data operations
+    elif ftp_ok:
+        results["overall_status"] = "partial"  # FTP only (can do file ops but not data reads)
     else:
         results["overall_status"] = "offline"
 
@@ -167,7 +172,7 @@ async def detect_machine_protocols(machine_id: int, db: Session = Depends(get_db
     """
     Detect available communication protocols on a machine.
     
-    Scans for FOCAS, MTConnect, and other control protocols that may be available.
+    Scans for FOCAS and other control protocols that may be available.
     This can help identify additional functionality beyond HTTP/FTP.
     """
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
@@ -315,9 +320,10 @@ async def update_machine_layout(
 @router.post("/{machine_id}/refresh-program-name")
 async def refresh_program_name(machine_id: int, db: Session = Depends(get_db)):
     """
-    Manually refresh the active program name from mem.nc for a machine.
+    Manually refresh the active program name from MEM for a machine.
     
-    This fetches the program_name from the machine's FTP server (mem.nc file)
+    Phase 5: Replace FTP reads - MEM now uses Telnet.
+    This fetches the program_name from the machine via Telnet (MEM file)
     and updates the cached value, which will be included in the next status update.
     """
     machine = db.query(Machine).filter(Machine.id == machine_id).first()
@@ -328,26 +334,27 @@ async def refresh_program_name(machine_id: int, db: Session = Depends(get_db)):
         )
     
     try:
-        from app.clients.ftp_client import CNCFtpClient
-        from app.parsers.mem_parser import parse_mem
+        from app.clients.telnet_client import get_or_create_connection
+        from app.parsers.mem_parser_v2 import parse_mem_v2
         
-        ftp_client = CNCFtpClient(
+        # Use pooled connection (reused across operations)
+        telnet_client = await get_or_create_connection(
             ip_address=machine.ip_address,
-            port=machine.ftp_port,
-            username=machine.ftp_username,
-            password=machine.ftp_password,
+            port=10000,
+            timeout=10
         )
-        mem_data = await ftp_client.get_memory_data()
+        mem_data = await telnet_client.get_memory_data(verbose=False)
         
         if not mem_data:
+            # Connection stays in pool - don't disconnect
             return {
                 "success": False,
-                "message": "mem.nc file not found or empty",
+                "message": "MEM file not found or empty via Telnet",
                 "program_name": None
             }
         
-        logger.debug(f"Machine {machine_id} - Raw mem.nc content: {repr(mem_data)}")
-        parsed_mem = parse_mem(mem_data.encode('utf-8'))
+        logger.debug(f"Machine {machine_id} - Raw MEM content: {repr(mem_data)}")
+        parsed_mem = parse_mem_v2(mem_data.encode('utf-8'), control_version=None)
         program_name = parsed_mem.get("program_name")
         
         if program_name:
@@ -360,15 +367,17 @@ async def refresh_program_name(machine_id: int, db: Session = Depends(get_db)):
                 status_data = await poller.poll()
                 await polling_service.websocket_manager.broadcast_status(status_data)
             
+            # Connection stays in pool - don't disconnect
             return {
                 "success": True,
                 "message": f"Program name refreshed: {program_name}",
                 "program_name": program_name
             }
         else:
+            # Connection stays in pool - don't disconnect
             return {
                 "success": False,
-                "message": "mem.nc parsed but no program_name found",
+                "message": "MEM parsed but no program_name found",
                 "program_name": None,
                 "raw_content": mem_data
             }
