@@ -174,12 +174,16 @@ class MachinePoller:
             
             # Get alarms from Telnet (Phase 5: Migrate to Telnet)
             try:
+                from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
+                
                 alarm_data_raw = await telnet_client.get_alarm_data(verbose=False)
                 if alarm_data_raw:
-                    alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=None)
+                    alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=control_version)
                     # Convert to format expected by frontend (combine alarms and loading_alarms)
                     all_alarms = alarm_parsed.get("alarms", []) + alarm_parsed.get("loading_alarms", [])
-                    status_data["alarms"] = all_alarms
+                    # Enrich with lookup data (description, cause, solution, stop_level, reset_level)
+                    enriched_alarms = [enrich_alarm_with_lookup(alarm, control_version) for alarm in all_alarms]
+                    status_data["alarms"] = enriched_alarms
                 else:
                     status_data["alarms"] = []
             except Exception as e:
