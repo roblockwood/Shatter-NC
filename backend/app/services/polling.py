@@ -34,37 +34,38 @@ class MachinePoller:
 
     async def fetch_program_name(self) -> Optional[str]:
         """
-        Fetch program_name from mem.nc via FTP (on-demand).
+        Fetch program_name from MEM via Telnet (on-demand).
         
         Returns:
             program_name if successfully fetched, None otherwise
         """
         try:
-            from app.clients.ftp_client import CNCFtpClient
-            from app.parsers.mem_parser import parse_mem
+            from app.clients.telnet_client import get_or_create_connection
+            from app.parsers.mem_parser_v2 import parse_mem_v2
             
-            ftp_client = CNCFtpClient(
+            # Use pooled connection
+            telnet_client = await get_or_create_connection(
                 ip_address=self.machine.ip_address,
-                port=self.machine.ftp_port,
-                username=self.machine.ftp_username,
-                password=self.machine.ftp_password,
+                port=10000,
+                timeout=10
             )
-            mem_data = await ftp_client.get_memory_data()
+            
+            mem_data = await telnet_client.get_memory_data(verbose=False)
             if mem_data:
-                logger.debug(f"Machine {self.machine.id} - Raw mem.nc content: {repr(mem_data)}")
-                parsed_mem = parse_mem(mem_data.encode('utf-8'))
+                logger.debug(f"Machine {self.machine.id} - Raw MEM content: {repr(mem_data)}")
+                parsed_mem = parse_mem_v2(mem_data.encode('utf-8'), control_version=None)
                 program_name = parsed_mem.get("program_name")
                 if program_name:
                     self.cached_program_name = program_name
                     self.program_name_fetched = True
-                    logger.info(f"Machine {self.machine.id} - Fetched program_name from mem.nc: {program_name}")
+                    logger.info(f"Machine {self.machine.id} - Fetched program_name from MEM via Telnet: {program_name}")
                     return program_name
                 else:
-                    logger.debug(f"Machine {self.machine.id} - mem.nc parsed but no program_name found. Content: {repr(mem_data)}")
+                    logger.debug(f"Machine {self.machine.id} - MEM parsed but no program_name found. Content: {repr(mem_data)}")
             else:
-                logger.debug(f"Machine {self.machine.id} - mem.nc file not found or empty")
+                logger.debug(f"Machine {self.machine.id} - MEM file not found or empty")
         except Exception as e:
-            logger.warning(f"Machine {self.machine.id} - Failed to fetch program_name from mem.nc: {e}")
+            logger.warning(f"Machine {self.machine.id} - Failed to fetch program_name from MEM via Telnet: {e}")
         
         return None
 
@@ -75,31 +76,127 @@ class MachinePoller:
 
         try:
             logger.debug(f"Polling machine {self.machine.id} ({self.machine.name}) at {self.machine.ip_address}")
-            http_client = CNCHttpClient(
-                self.machine.ip_address,
-                port=self.machine.http_port,
-                timeout=5,
-            )
-
-            # Get comprehensive status (without tools - we'll get that via Telnet)
-            status_data = http_client.get_status_overview(units=self.machine.units, include_tools=False)
             
-            # Remove tools from HTTP data if it was included (we'll get fresh data via Telnet)
-            status_data.pop("tools", None)
-            status_data.pop("current_tool", None)
+            # Phase 5: Migrate to Telnet for MONTR and PRD3 data (replaces HTTP get_status_overview)
+            from app.clients.telnet_client import get_or_create_connection
+            from app.parsers.montr_parser_v2 import parse_montr_v2
+            from app.parsers.alarm_parser_v2 import parse_alarm_v2
+            from app.parsers.prd3_parser_v2 import parse_prd3_v2
+            
+            # Use pooled connection (reused across operations)
+            telnet_client = await get_or_create_connection(
+                ip_address=self.machine.ip_address,
+                port=10000,
+                timeout=10
+            )
+            
+            # Detect control version once (cached in telnet_client)
+            control_version = await telnet_client.detect_control_type()
+            
+            # Get MONTR data (replaces HTTP /running_log and /work_counter)
+            montr_data = await telnet_client.get_monitor_data(verbose=False)
+            if not montr_data:
+                raise ConnectionError("Failed to fetch MONTR data - machine may be unreachable")
+            
+            parsed = parse_montr_v2(montr_data.encode('utf-8'), control_version=control_version)
+            
+            # Get PRD3 data (contains current status)
+            prd3_data = await telnet_client.get_prd3_data(control_version=control_version, verbose=False)
+            prd3_parsed = None
+            if prd3_data:
+                prd3_parsed = parse_prd3_v2(prd3_data.encode('utf-8'), control_version=control_version)
+            
+            # Format response to match HTTP client format
+            program_info = parsed.get("program_info", {})
+            time_info = parsed.get("time_info", {})
+            counters = parsed.get("counters", [])
+            
+            # Get status from PRD3 (more accurate than inferring from program presence)
+            # PRD3 status codes: 1=off, 2=standby, 3=operating, 4=stopped, 5=error
+            if prd3_parsed and prd3_parsed.get("current_status"):
+                current_status_data = prd3_parsed["current_status"]
+                status_code = current_status_data.get("current_status")  # Raw integer code (1-5)
+                machine_status = current_status_data.get("status")  # Mapped string
+                
+                logger.debug(f"Machine {self.machine.id} - PRD3 status_code={status_code}, mapped_status={machine_status}")
+                
+                # If status is "off" (code 1), but machine is responding to Telnet, it's likely in standby
+                # A truly powered-off machine wouldn't respond to Telnet requests
+                if machine_status == "off":
+                    # Check if machine is actually active (has power-on time, program info, etc.)
+                    has_power_on_time = time_info.get("power_on_time", "000000000") != "000000000"
+                    has_program = bool(program_info.get("operation_program_no"))
+                    
+                    if has_power_on_time or has_program:
+                        logger.info(f"Machine {self.machine.id} - PRD3 reports 'off' but machine appears active (power_on_time={has_power_on_time}, program={has_program}), using 'standby'")
+                        machine_status = "standby"
+            else:
+                # Fallback: infer from program presence (legacy behavior)
+                machine_status = "operating" if program_info.get("operation_program_no") else "standby"
+                logger.warning(f"Machine {self.machine.id} - PRD3 data not available, using fallback status: {machine_status}")
+            
+            # Format time strings (MONTR format: HHMMSSMMM, HTTP format: HHMM:SS.MMM)
+            def format_time(time_str: str) -> str:
+                """Convert HHMMSSMMM to HHMM:SS.MMM format."""
+                if not time_str or len(time_str) != 9:
+                    return time_str
+                try:
+                    hours = time_str[0:2]
+                    minutes = time_str[2:4]
+                    seconds = time_str[4:6]
+                    milliseconds = time_str[6:9]
+                    return f"{hours}{minutes}:{seconds}.{milliseconds}"
+                except (ValueError, IndexError):
+                    return time_str
+            
+            status_data = {
+                "ip_address": self.machine.ip_address,
+                "timestamp": datetime.now().isoformat(),
+                "units": self.machine.units,
+                "program_name": program_info.get("operation_program_no", "----"),
+                "cycle_time": format_time(time_info.get("total_operation_time", "000000000")),
+                "cutting_time": format_time(time_info.get("operation_time", "000000000")),
+                "non_cutting_time": "000000:00.0",  # Not in MONTR
+                "power_on_hours": format_time(time_info.get("power_on_time", "000000000")),
+                "operation_time": format_time(time_info.get("operation_time", "000000000")),
+                "status": machine_status,  # From PRD3: off, standby, operating, stopped, error
+                "counters": [
+                    {
+                        "counter_number": c.get("counter_number", i + 1),
+                        "count": c.get("count", 0),
+                        "current": c.get("current", 0),
+                        "end": c.get("end", 0),
+                        "end_warning": c.get("end_warning", 0),
+                    }
+                    for i, c in enumerate(counters)
+                ],
+            }
+            
+            # Get alarms from Telnet (Phase 5: Migrate to Telnet)
+            try:
+                alarm_data_raw = await telnet_client.get_alarm_data(verbose=False)
+                if alarm_data_raw:
+                    alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=None)
+                    # Convert to format expected by frontend (combine alarms and loading_alarms)
+                    all_alarms = alarm_parsed.get("alarms", []) + alarm_parsed.get("loading_alarms", [])
+                    status_data["alarms"] = all_alarms
+                else:
+                    status_data["alarms"] = []
+            except Exception as e:
+                logger.warning(f"Machine {self.machine.id} - Failed to fetch alarms: {e}")
+                status_data["alarms"] = []
+            
+            # Override status to 'error' if there are active alarms (unless machine is off)
+            if status_data.get("alarms") and machine_status != "off":
+                machine_status = "error"
+                status_data["status"] = "error"
 
             # Fetch tool data via Telnet (fresh data, same as API endpoint)
             try:
-                from app.clients.telnet_client import get_or_create_connection
                 from app.parsers.atctl_parser_v2 import parse_atctl_v2
                 from app.parsers.tolni_parser_v2 import parse_tolni_v2
                 
-                # Use pooled connection (reused across operations)
-                telnet_client = await get_or_create_connection(
-                    ip_address=self.machine.ip_address,
-                    port=10000,
-                    timeout=10
-                )
+                # Reuse the same pooled connection from above
                 
                 # Get tool table data first (needed for both ATC merge and TABLE display)
                 data_name = "TOLNI1" if self.machine.units == 'in' else "TOLNM1"
@@ -207,13 +304,8 @@ class MachinePoller:
                 # Continue without tool data - don't fail the entire poll
                 # Tools will be empty/undefined, which is fine
 
-            # Fetch program_name on first poll (initial load), then use cached value
-            if not self.program_name_fetched:
-                await self.fetch_program_name()
-            
-            # Use cached program_name if available
-            if self.cached_program_name:
-                status_data["program_name"] = self.cached_program_name
+            # Program name is already set from MONTR data (operation_program_no)
+            # No need to fetch from MEM separately - MONTR is more reliable
 
             # Calculate response time
             response_time_ms = int((time.time() - poll_start_time) * 1000)
@@ -402,16 +494,11 @@ class MachinePoller:
         """
         Log alarm events.
 
-        Fetches active alarms from machine and logs any new ones to database.
+        Uses alarms from status_data (already fetched via Telnet in poll()).
         """
         try:
-            # Get alarms from machine
-            http_client = CNCHttpClient(
-                self.machine.ip_address,
-                port=self.machine.http_port,
-                timeout=5,
-            )
-            alarms = http_client.get_alarms()
+            # Get alarms from status_data (already fetched via Telnet)
+            alarms = status_data.get("alarms", [])
 
             if not alarms:
                 logger.debug(f"No alarms found for machine {self.machine.id}")
@@ -535,6 +622,14 @@ class PollingService:
                 await self.polling_task
             except asyncio.CancelledError:
                 pass
+        
+        # Close all Telnet connections for machines we were polling
+        try:
+            from app.clients.telnet_client import close_all_connections
+            await close_all_connections()
+        except Exception as e:
+            logger.warning(f"Error closing Telnet connections during polling service stop: {e}")
+        
         logger.info("Polling service stopped")
 
     async def _poll_loop(self):
