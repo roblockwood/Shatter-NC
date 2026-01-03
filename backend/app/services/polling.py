@@ -90,11 +90,12 @@ class MachinePoller:
 
             # Fetch tool data via Telnet (fresh data, same as API endpoint)
             try:
-                from app.clients.telnet_client import CNCTelnetClient
+                from app.clients.telnet_client import get_or_create_connection
                 from app.parsers.atctl_parser_v2 import parse_atctl_v2
                 from app.parsers.tolni_parser_v2 import parse_tolni_v2
                 
-                telnet_client = CNCTelnetClient(
+                # Use pooled connection (reused across operations)
+                telnet_client = await get_or_create_connection(
                     ip_address=self.machine.ip_address,
                     port=10000,
                     timeout=10
@@ -102,7 +103,7 @@ class MachinePoller:
                 
                 # Get tool table data first (needed for both ATC merge and TABLE display)
                 data_name = "TOLNI1" if self.machine.units == 'in' else "TOLNM1"
-                tool_table_content = await telnet_client.get_tool_table_data(units=self.machine.units)
+                tool_table_content = await telnet_client.get_tool_table_data(units=self.machine.units, verbose=False)
                 
                 if tool_table_content:
                     tool_table_parsed = parse_tolni_v2(
@@ -112,7 +113,7 @@ class MachinePoller:
                     )
                     
                     # Get ATC magazine data (pot/tool mappings) for merging
-                    atc_data = await telnet_client.get_atc_magazine_data(control_version=None)
+                    atc_data = await telnet_client.get_atc_magazine_data(control_version=None, verbose=False)
                     
                     # Start with pure TOLN (table) data
                     tool_table_tools = tool_table_parsed.get("tools", [])
@@ -198,10 +199,8 @@ class MachinePoller:
                     # Store TABLE data with pot numbers merged (if ATC data was available)
                     status_data["tool_table"] = tool_table_tools
                     status_data["tool_table_timestamp"] = poll_timestamp.isoformat()
-                    
-                    await telnet_client.disconnect()
+                    # Connection stays open in pool for next operation
                 else:
-                    await telnet_client.disconnect()
                     logger.warning(f"Machine {self.machine.id} - No tool table data available via Telnet")
             except Exception as e:
                 logger.warning(f"Machine {self.machine.id} - Failed to fetch tool data via Telnet: {e}")

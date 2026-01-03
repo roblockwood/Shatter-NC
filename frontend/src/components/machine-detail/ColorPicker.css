@@ -1,0 +1,117 @@
+/* Color Picker Backdrop */
+.color-picker-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 9999;
+  cursor: pointer;
+}
+
+/* Color Picker Palette */
+.color-picker-palette {
+  position: fixed;
+  background: var(--color-bg-secondary, #2a2a2a);
+  border: 2px solid var(--color-border, #444);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  min-width: 280px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.color-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--color-bg-tertiary, #1a1a1a);
+  border-bottom: 1px solid var(--color-border, #444);
+}
+
+.color-picker-title {
+  font-weight: 600;
+  color: var(--color-text-primary, #fff);
+  font-size: 14px;
+}
+
+.color-picker-close {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary, #aaa);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.color-picker-close:hover {
+  background: var(--color-bg-hover, #333);
+  color: var(--color-text-primary, #fff);
+}
+
+.color-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 12px;
+}
+
+.color-picker-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  background: var(--color-bg-secondary, #2a2a2a);
+  border: 2px solid var(--color-border, #444);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-height: 70px;
+}
+
+.color-picker-swatch:hover {
+  background: var(--color-bg-hover, #333);
+  border-color: var(--color-primary, #0066ff);
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 102, 255, 0.3);
+}
+
+.color-picker-swatch-selected {
+  border-color: var(--color-primary, #0066ff);
+  background: var(--color-bg-hover, #333);
+  box-shadow: 0 0 0 2px rgba(0, 102, 255, 0.3);
+}
+
+.color-picker-swatch-color {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  border: 2px solid var(--color-border, #444);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.color-picker-swatch-name {
+  font-size: 11px;
+  color: var(--color-text-secondary, #aaa);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.color-picker-swatch-selected .color-picker-swatch-name {
+  color: var(--color-primary, #0066ff);
+  font-weight: 600;
+}
+
