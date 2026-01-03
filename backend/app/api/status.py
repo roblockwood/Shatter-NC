@@ -153,10 +153,11 @@ async def get_tools(
         if source == "table":
             # Fetch tool table from TOLNI1 (inches) or TOLNM1 (millimeters) via Telnet
             # Phase 5: Using Telnet for data reads (FTP deprecated for data, kept only for file transfers)
-            from app.clients.telnet_client import CNCTelnetClient
+            from app.clients.telnet_client import get_or_create_connection
             from app.parsers.tolni_parser_v2 import parse_tolni_v2
             
-            telnet_client = CNCTelnetClient(
+            # Use pooled connection (reused across operations)
+            telnet_client = await get_or_create_connection(
                 ip_address=db_machine.ip_address,
                 port=10000,  # Telnet port
                 timeout=10
@@ -164,10 +165,9 @@ async def get_tools(
             
             # Use machine.units to select correct data name (TOLNI1 vs TOLNM1)
             data_name = "TOLNI1" if db_machine.units == 'in' else "TOLNM1"
-            tool_table_content = await telnet_client.get_tool_table_data(units=db_machine.units)
+            tool_table_content = await telnet_client.get_tool_table_data(units=db_machine.units, verbose=False)
             if tool_table_content is None:
-                # Disconnect cleanly before raising error
-                await telnet_client.disconnect()
+                # Connection stays in pool - don't disconnect
                 # Check if we have a more specific error from the Telnet client
                 # CM7500 error (status code 40) means "editing communication data" - data is open on machine
                 raise HTTPException(
@@ -179,7 +179,7 @@ async def get_tools(
             # TOLN data should start with T## lines, ATCTL starts with M## lines
             if tool_table_content.strip().startswith('M'):
                 logger.error(f"Received ATCTL data instead of TOLN data for {data_name} - possible connection/data mix-up")
-                await telnet_client.disconnect()
+                # Connection stays in pool - don't disconnect
                 raise HTTPException(
                     status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Data type mismatch: received ATCTL data instead of {data_name}. Please try again.",
@@ -197,13 +197,8 @@ async def get_tools(
             try:
                 from app.parsers.atctl_parser_v2 import parse_atctl_v2
                 
-                # Fetch ATC data to get pot mappings
-                atc_client = CNCTelnetClient(
-                    ip_address=db_machine.ip_address,
-                    port=10000,
-                    timeout=10
-                )
-                atc_data = await atc_client.get_atc_magazine_data(control_version=None)
+                # Fetch ATC data to get pot mappings (reuse same pooled connection)
+                atc_data = await telnet_client.get_atc_magazine_data(control_version=None)
                 
                 if atc_data:
                     atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=None)
@@ -238,16 +233,12 @@ async def get_tools(
                                 tool["tool_type"] = atc_data["tool_type"]
                             if atc_data.get("color") is not None:
                                 tool["color"] = atc_data["color"]
-                    
-                    await atc_client.disconnect()
-                else:
-                    await atc_client.disconnect()
+                # Connection stays in pool - don't disconnect
             except Exception as e:
                 logger.warning(f"Failed to merge pot numbers into TABLE data: {e}")
                 # Continue without pot numbers - TABLE data is still valid
             
-            # Disconnect cleanly after successful fetch
-            await telnet_client.disconnect()
+            # Connection stays in pool for reuse - don't disconnect
             parsed["machine_id"] = machine_id
             parsed["source"] = "tool_table"
             parsed["protocol"] = "telnet"  # Track which protocol was used
@@ -271,7 +262,7 @@ async def get_tools(
             return parsed
         else:
             # Default: ATC tool data from Telnet (Phase 5: Replace HTTP/FTP reads)
-            from app.clients.telnet_client import CNCTelnetClient
+            from app.clients.telnet_client import get_or_create_connection
             from app.parsers.atctl_parser_v2 import parse_atctl_v2
             from app.parsers.tolni_parser_v2 import parse_tolni_v2
             
@@ -285,7 +276,8 @@ async def get_tools(
                     "raw_html": html
                 }
             
-            telnet_client = CNCTelnetClient(
+            # Use pooled connection (reused across operations)
+            telnet_client = await get_or_create_connection(
                 ip_address=db_machine.ip_address,
                 port=10000,  # Telnet port
                 timeout=10
@@ -293,9 +285,9 @@ async def get_tools(
             
             # Get ATC magazine data (pot/tool mappings)
             # Retry logic is handled in telnet_client.load_data()
-            atc_data = await telnet_client.get_atc_magazine_data(control_version=None)
+            atc_data = await telnet_client.get_atc_magazine_data(control_version=None, verbose=False)
             if atc_data is None:
-                await telnet_client.disconnect()
+                # Connection stays in pool - don't disconnect
                 raise HTTPException(
                     status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail="Failed to load ATCTL/ATCTLD via Telnet. The machine may be busy (CM7500: editing communication data) or Telnet port 10000 may be blocked. Close any open data files on the machine and try again.",
@@ -305,7 +297,7 @@ async def get_tools(
             # ATCTL data should start with M## lines, TOLN starts with T## lines
             if atc_data.strip().startswith('T'):
                 logger.error(f"Received TOLN data instead of ATCTL data - possible connection/data mix-up")
-                await telnet_client.disconnect()
+                # Connection stays in pool - don't disconnect
                 raise HTTPException(
                     status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Data type mismatch: received TOLN data instead of ATCTL. Please try again.",
@@ -315,23 +307,13 @@ async def get_tools(
             atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=None)
             
             # Get tool table data to merge tool details (diameter, length, name)
-            # Use the SAME TOLN data source as the tool table endpoint
+            # Use the SAME pooled connection (semaphore ensures serialization)
             # Note: If TOLN fails, we still return ATC data (just without tool details)
-            # IMPORTANT: Disconnect ATCTL connection and create fresh one for TOLN to avoid data mix-up
             data_name = "TOLNI1" if db_machine.units == 'in' else "TOLNM1"
             tool_table_content = None
-            toln_client = None
             try:
-                # Disconnect current connection to ensure clean state
-                await telnet_client.disconnect()
-                
-                # Create a new client instance for TOLN to ensure clean connection
-                toln_client = CNCTelnetClient(
-                    ip_address=db_machine.ip_address,
-                    port=10000,
-                    timeout=10
-                )
-                tool_table_content = await toln_client.get_tool_table_data(units=db_machine.units)
+                # Reuse same pooled connection (semaphore ensures operations are serialized)
+                tool_table_content = await telnet_client.get_tool_table_data(units=db_machine.units, verbose=False)
                 
                 # Validate TOLN data - should start with T## lines, not M## (ATCTL)
                 if tool_table_content:
@@ -341,17 +323,10 @@ async def get_tools(
                         tool_table_content = None  # Don't use wrong data
                     elif not first_line.startswith('T') and first_line:
                         logger.warning(f"TOLN data ({data_name}) doesn't start with T## - unexpected format. First line: {first_line[:50]}")
-                
-                # Clean up TOLN connection
-                if toln_client:
-                    await toln_client.disconnect()
+                # Connection stays in pool - don't disconnect
             except Exception as e:
                 logger.warning(f"Failed to load {data_name} for ATC merge (will continue without tool details): {e}")
-                if toln_client:
-                    try:
-                        await toln_client.disconnect()
-                    except:
-                        pass
+                # Connection stays in pool - don't disconnect
             
             if tool_table_content is None:
                 logger.warning(f"TOLN data ({data_name}) not available for ATC merge - ATC tools will have pot/tool mappings but no diameter/length/name")
@@ -415,16 +390,11 @@ async def get_tools(
             
             logger.info(f"ATC data merged: {len(tools)} tools, TOLN source={data_name}, units={db_machine.units}")
             
-            # Also fetch program_name from MEM using a fresh connection
+            # Also fetch program_name from MEM using same pooled connection
             try:
                 from app.parsers.mem_parser import parse_mem
-                # Create fresh connection for MEM to avoid any data mix-up
-                mem_client = CNCTelnetClient(
-                    ip_address=db_machine.ip_address,
-                    port=10000,
-                    timeout=10
-                )
-                mem_data = await mem_client.get_memory_data()
+                # Reuse same pooled connection (semaphore ensures serialization)
+                mem_data = await telnet_client.get_memory_data()
                 if mem_data:
                     logger.debug(f"Raw MEM content: {repr(mem_data)}")
                     parsed_mem = parse_mem(mem_data.encode('utf-8'))
@@ -432,14 +402,10 @@ async def get_tools(
                     if program_name:
                         data["program_name"] = program_name
                         logger.debug(f"Extracted program_name from MEM: {program_name}")
-                await mem_client.disconnect()
+                # Connection stays in pool - don't disconnect
             except Exception as e:
                 logger.debug(f"Failed to fetch program_name from MEM: {e}")
-                if 'mem_client' in locals():
-                    try:
-                        await mem_client.disconnect()
-                    except:
-                        pass
+                # Connection stays in pool - don't disconnect
             
             return data
 
@@ -447,6 +413,93 @@ async def get_tools(
         raise
     except Exception as e:
         logger.error(f"Error fetching tools for machine {machine_id}: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.put("/{machine_id}/tools/atc/pot/{pot_number}/color")
+async def change_tool_color(
+    machine_id: int,
+    pot_number: int,
+    tool_number: int = Query(..., description="Tool number in the pot"),
+    color: int = Query(..., description="Color value (0-7)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Change tool color in ATC magazine.
+    
+    Args:
+        machine_id: Machine ID
+        pot_number: Pot number (1-99)
+        tool_number: Tool number in the pot (for verification)
+        color: Color value (0=None, 1=Blue, 2=Red, 3=Purple, 4=Green, 5=Light Blue, 6=Yellow, 7=White)
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    # Validate inputs
+    if not 1 <= pot_number <= 99:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid pot number: {pot_number} (must be 1-99)",
+        )
+    
+    if not 0 <= color <= 7:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid color value: {color} (must be 0-7)",
+        )
+
+    try:
+        from app.clients.telnet_client import CNCTelnetClient
+        
+        # Use pooled connection (reused across operations)
+        from app.clients.telnet_client import get_or_create_connection
+        telnet_client = await get_or_create_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=10
+        )
+        
+        success, status_code = await telnet_client.change_atc_tool_color(
+            pot_number=pot_number,
+            tool_number=tool_number,
+            color=color,
+            verbose=True
+        )
+        
+        # Connection stays in pool for reuse - don't disconnect
+        
+        logger.info(f"Color change result: success={success}, status_code={status_code}")
+        
+        if not success:
+            status_desc = CNCTelnetClient.get_status_description(status_code or "00")
+            logger.error(f"Failed to change tool color for pot {pot_number}, tool {tool_number}, color {color}: {status_desc} (status={status_code})")
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to change tool color: {status_desc}",
+            )
+        
+        color_names = {0: "None", 1: "Blue", 2: "Red", 3: "Purple", 4: "Green", 5: "Light Blue", 6: "Yellow", 7: "White"}
+        return {
+            "success": True,
+            "pot_number": pot_number,
+            "tool_number": tool_number,
+            "color": color,
+            "color_name": color_names.get(color, "Unknown"),
+            "message": f"Tool color changed to {color_names.get(color, 'Unknown')}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error changing tool color for machine {machine_id}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),

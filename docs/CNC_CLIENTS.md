@@ -1,6 +1,6 @@
 # CNC Communication Clients
 
-Shatter includes two client libraries for communicating with Brother CNC machines.
+Shatter includes three client libraries for communicating with Brother CNC machines: HTTP, FTP, and Telnet.
 
 ## HTTP Client
 
@@ -265,6 +265,130 @@ When back on the network:
 2. Verify data parsing accuracy
 3. Refine regex patterns if needed
 4. Add any missing endpoints
+
+## Telnet Client
+
+The `CNCTelnetClient` handles direct data file reading and write operations via Protocol Type 2 (Port 10000).
+
+**📖 See [BACKEND_TELNET_MIGRATION_PLAN.md](BACKEND_TELNET_MIGRATION_PLAN.md) for complete documentation of the Telnet migration plan and protocol details.**
+
+### Features
+
+- **Connection Pooling**: Persistent connections are reused across operations for improved stability
+- **Semaphore Serialization**: Per-machine locks ensure only one operation at a time
+- **Auto-Reconnect**: Connections automatically recover if lost
+- **Direct data access**: Same data format as FTP files, but more reliable
+- **Write operations**: Supports tool color changes, ATC assignments, and more (Phase 6)
+
+### Connection Pooling
+
+**⚠️ IMPORTANT**: Always use `get_or_create_connection()` instead of creating `CNCTelnetClient` directly.
+
+The telnet client uses a connection pool to maintain persistent connections per machine. This dramatically improves stability:
+
+- **Reduced connection churn**: Connections are reused instead of created/destroyed each operation
+- **Faster operations**: No connect/disconnect overhead
+- **Better reliability**: Fewer connection attempts = fewer failure points
+- **Automatic recovery**: Lost connections are automatically reconnected
+
+**Usage Pattern**:
+```python
+from app.clients.telnet_client import get_or_create_connection
+
+# Get pooled connection (reused across operations)
+telnet_client = await get_or_create_connection(
+    ip_address="192.168.86.89",
+    port=10000,
+    timeout=10
+)
+
+# Use connection for operations
+tool_data = await telnet_client.get_tool_table_data(units='in')
+atc_data = await telnet_client.get_atc_magazine_data()
+
+# Connection stays in pool - DO NOT call disconnect()
+```
+
+**Key Points**:
+- **Never create `CNCTelnetClient` directly**: Always use `get_or_create_connection()`
+- **Don't disconnect**: Connections stay open in the pool for reuse
+- **Automatic health checks**: Connections are checked and auto-reconnected if lost
+- **Per-machine pools**: Each machine has its own persistent connection
+
+### Available Methods
+
+- `get_or_create_connection(ip_address, port, timeout)` - Get pooled connection
+- `load_data(data_name)` - Load arbitrary data file (e.g., "MEM", "TOLNI1", "ATCTL")
+- `get_tool_table_data(units)` - Get tool table (TOLNI1 or TOLNM1 based on units)
+- `get_atc_magazine_data(control_version)` - Get ATC magazine configuration
+- `get_memory_data()` - Get memory/program information
+- `get_position_data()` - Get position/work offsets
+- `change_atc_tool_color(pot_number, tool_number, color)` - Change tool color (Phase 6)
+- `test_connection()` - Test connectivity and measure latency
+
+### Data Files Available via LOD
+
+| File | Contents |
+|------|----------|
+| `MEM` | Memory/program information (same as MEM.NC via FTP) |
+| `TOLNI1` / `TOLNM1` | Tool table (inches/metric, same as TOLNI1.NC/TOLNM1.NC via FTP) |
+| `ATCTL` / `ATCTLD` | ATC magazine configuration (C00/D00 control versions) |
+| `POSNI1` / `POSNM1` | Position/work offsets (same as POSNI1.NC/POSNM1.NC via FTP) |
+| `SYSC89`, `SYSC94-99` | System data files |
+| `PRD1`, `PRD2`, `PRD3` | Production data |
+
+### Semaphore Serialization
+
+All telnet operations use per-machine semaphore locks to ensure:
+- Only one operation per machine at a time
+- Writes wait for active reads to complete
+- Reads wait for active writes to complete
+- No conflicts between polling (reads) and API operations (writes)
+
+This is handled automatically - you don't need to manage locks manually.
+
+### Write Operations (Phase 6)
+
+Write operations use extended timeouts (5 seconds) and are fully serialized:
+
+```python
+# Change tool color
+telnet_client = await get_or_create_connection(ip_address, port=10000)
+success, status = await telnet_client.change_atc_tool_color(
+    pot_number=2,
+    tool_number=2,
+    color=4  # Green
+)
+```
+
+**Status Codes**:
+- `00` - Success
+- `02` - Illegal slave command header
+- `30` - Invalid tool/pot number
+- `32` - Cannot change during operation
+- See `COMPLETION_CODES` in `telnet_client.py` for full list
+
+### Error Handling
+
+```python
+try:
+    telnet_client = await get_or_create_connection(ip_address, port=10000)
+    data = await telnet_client.get_tool_table_data(units='in')
+except ConnectionError as e:
+    # Connection failed
+    logger.error(f"Cannot connect to CNC: {e}")
+except TimeoutError as e:
+    # Operation timed out
+    logger.error(f"Operation timed out: {e}")
+```
+
+### Benefits Over HTTP/FTP
+
+- **More reliable**: Direct TCP connection, no HTML parsing
+- **Faster**: Lower latency, persistent connections
+- **Write support**: Can modify machine data (tool colors, ATC assignments, etc.)
+- **Better error handling**: Structured status codes
+- **Same data format**: Files match FTP format, so parsers work unchanged
 
 ## Protocol Detection
 

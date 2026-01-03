@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBetaMode } from '../../hooks/useBetaMode';
 import { formatDimension } from '../../utils/formatDimension';
 import type { UnitType } from '../../utils/formatDimension';
 import './ToolsPane.css';
 import { API_BASE_URL } from '../../config/api';
+import { ColorPicker } from './ColorPicker';
 
 interface Tool {
   pot_number?: string | number;
@@ -71,6 +72,18 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     table: null
   });
   const [toolsSummary, setToolsSummary] = useState<Array<{ tool_number: number; description: string }>>([]);
+  
+  // Color picker state
+  const [colorPickerState, setColorPickerState] = useState<{
+    show: boolean;
+    tool: Tool | null;
+    position: { top: number; left: number } | null;
+  }>({
+    show: false,
+    tool: null,
+    position: null,
+  });
+  const colorCellRefs = useRef<Map<string, HTMLTableCellElement>>(new Map());
   
   // Get current tools from cache based on active source
   const tools = toolsCache[toolSource];
@@ -288,6 +301,88 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const getToolDisplayName = (tool: Tool) => {
     // Return empty string if no tool_name, so it displays as blank
     return tool.tool_name || '';
+  };
+
+  const handleColorCellClick = (tool: Tool, event: React.MouseEvent<HTMLTableCellElement>) => {
+    // Only allow color changes in ATC view
+    if (toolSource !== 'atc' || !machineId || !tool.pot_number) {
+      return;
+    }
+
+    const cell = event.currentTarget;
+    const rect = cell.getBoundingClientRect();
+    
+    setColorPickerState({
+      show: true,
+      tool: tool,
+      position: {
+        top: rect.bottom + 8,
+        left: rect.left,
+      },
+    });
+  };
+
+  const handleColorSelect = async (color: number) => {
+    if (!colorPickerState.tool || !machineId || !colorPickerState.tool.pot_number) {
+      return;
+    }
+
+    const potNumber = typeof colorPickerState.tool.pot_number === 'string' 
+      ? parseInt(colorPickerState.tool.pot_number, 10)
+      : colorPickerState.tool.pot_number;
+    const toolNumber = colorPickerState.tool.tool_number;
+
+    // Optimistically update local state
+    setToolsCache(prev => ({
+      ...prev,
+      atc: prev.atc.map(tool =>
+        tool.pot_number === colorPickerState.tool!.pot_number &&
+        tool.tool_number === toolNumber
+          ? { ...tool, color }
+          : tool
+      ),
+    }));
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/machines/${machineId}/tools/atc/pot/${potNumber}/color?tool_number=${toolNumber}&color=${color}`,
+        {
+          method: 'PUT',
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to change tool color');
+      }
+
+      // Success - state already updated optimistically
+      // WebSocket will update with fresh data on next poll
+    } catch (error) {
+      console.error('Error changing tool color:', error);
+      
+      // Revert optimistic update
+      setToolsCache(prev => ({
+        ...prev,
+        atc: prev.atc.map(tool =>
+          tool.pot_number === colorPickerState.tool!.pot_number &&
+          tool.tool_number === toolNumber
+            ? { ...tool, color: colorPickerState.tool!.color }
+            : tool
+        ),
+      }));
+
+      // Show error (could use a toast notification here)
+      alert(`Failed to change tool color: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleColorPickerClose = () => {
+    setColorPickerState({
+      show: false,
+      tool: null,
+      position: null,
+    });
   };
 
   const isCurrentTool = (toolNum: number) => {
@@ -604,18 +699,33 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     <td className="tools-col-group">{tool.group ?? '──'}</td>
                     <td className="tools-col-life">{formatLife(tool.life)}</td>
                     <td className="tools-col-type">{formatToolType(tool.tool_type)}</td>
-                    <td className="tools-col-color">
+                    <td
+                      className={`tools-col-color ${toolSource === 'atc' && tool.pot_number ? 'tools-col-color-clickable' : ''}`}
+                      onClick={(e) => toolSource === 'atc' && tool.pot_number && handleColorCellClick(tool, e)}
+                      ref={(el) => {
+                        if (el && tool.pot_number) {
+                          const key = `${tool.pot_number}-${tool.tool_number}`;
+                          colorCellRefs.current.set(key, el);
+                        }
+                      }}
+                    >
                       {tool.color !== undefined && tool.color !== null ? (
                         <span className="color-display">
                           <span 
                             className="color-indicator" 
                             style={{ backgroundColor: getColorInfo(tool.color).hex }}
-                            title={getColorInfo(tool.color).name}
+                            title={toolSource === 'atc' && tool.pot_number ? `Click to change color: ${getColorInfo(tool.color).name}` : getColorInfo(tool.color).name}
                           />
                           <span className="color-name">{getColorInfo(tool.color).name}</span>
                         </span>
                       ) : (
-                        '──'
+                        toolSource === 'atc' && tool.pot_number ? (
+                          <span className="color-display color-display-empty" title="Click to set color">
+                            ──
+                          </span>
+                        ) : (
+                          '──'
+                        )
                       )}
                     </td>
                   </tr>
@@ -631,6 +741,16 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       <div className="terminal-box-footer">
         └{'─'.repeat(42)}┘
       </div>
+      
+      {/* Color Picker */}
+      {colorPickerState.show && colorPickerState.tool && (
+        <ColorPicker
+          currentColor={colorPickerState.tool.color ?? 0}
+          onColorSelect={handleColorSelect}
+          onClose={handleColorPickerClose}
+          position={colorPickerState.position || undefined}
+        />
+      )}
     </div>
   );
 };

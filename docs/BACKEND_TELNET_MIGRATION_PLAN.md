@@ -721,11 +721,147 @@ This phase creates reusable Cursor skills/workflows that enable reliable, repeat
    - **Performance monitoring**: Track response times and error rates for comparison. Where to store metrics? Should we log protocol performance per machine?
    - **Deprecation timeline**: When to remove FTP data read code entirely? After all data types migrated? Keep as reference implementation?
 
-6. **Phase 6: Enable Writes**
+6. **Phase 6: Enable Writes** ✅ **IN PROGRESS**
 
-   - Implement write operations (tool offsets, tool life, ATC)
-   - Add write endpoints to API
-   - Add safety checks and validation
+   **Status**: ATC tool color changes (CHGMAGC) implemented. Semaphore-based serialization and connection pooling established for robust, stable operations.
+
+   **Completed**:
+   - ✅ **ATC Tool Color Changes** - `CHGMAGC` command implemented
+     - API endpoint: `PUT /api/machines/{machine_id}/tools/atc/pot/{pot_number}/color`
+     - Frontend: Color picker UI integrated in ToolsPane
+     - Write operations use extended timeout (5 seconds) for reliability
+   - ✅ **Semaphore-Based Serialization** - Critical pattern for all Phase 6 operations
+     - Per-machine semaphore locks prevent conflicts between reads (polling) and writes (API)
+     - All telnet operations (reads and writes) are serialized per machine
+     - Pattern documented below for reuse in all future write operations
+   - ✅ **Connection Pooling** - Persistent connections for improved stability
+     - Connections are reused across operations instead of creating new ones each time
+     - Automatic health checks and reconnection on connection loss
+     - Significantly reduces connection churn and improves write operation reliability
+     - Pattern documented below
+
+   **Semaphore Pattern for Read/Write Serialization**:
+
+   The telnet client uses a global semaphore manager to serialize all operations per machine. This prevents conflicts when:
+   - WebSocket polling (reads) occurs simultaneously with API write operations
+   - Multiple write operations are attempted concurrently
+   - The machine only allows one active telnet connection
+
+   **Implementation**:
+   ```python
+   # Global lock manager (in telnet_client.py)
+   _telnet_locks: Dict[Tuple[str, int], asyncio.Semaphore] = {}
+   _locks_lock = asyncio.Lock()
+
+   async def _get_machine_lock(ip_address: str, port: int) -> asyncio.Semaphore:
+       """Get or create a semaphore lock for a specific machine."""
+       key = (ip_address, port)
+       async with _locks_lock:
+           if key not in _telnet_locks:
+               _telnet_locks[key] = asyncio.Semaphore(1)
+           return _telnet_locks[key]
+   ```
+
+   **Usage Pattern for Reads**:
+   ```python
+   async def load_data(self, data_name: str, ...) -> Optional[str]:
+       machine_lock = await _get_machine_lock(self.ip_address, self.port)
+       async with machine_lock:
+           # All telnet operations here are serialized
+           success, status, data = await self._send_command("LOD", data_name, ...)
+           return data
+   ```
+
+   **Usage Pattern for Writes**:
+   ```python
+   async def change_atc_tool_color(self, pot_number: int, ...) -> Tuple[bool, Optional[str]]:
+       machine_lock = await _get_machine_lock(self.ip_address, self.port)
+       async with machine_lock:
+           # Write operations use longer timeout (5 seconds)
+           success, status, _ = await self._send_command(
+               "CHGMAGC", arguments, verbose=True, read_timeout=5.0
+           )
+           return success, status
+   ```
+
+   **Key Points**:
+   - **All telnet operations must use the semaphore**: Both reads (`load_data`, `get_tool_table_data`, `get_atc_magazine_data`) and writes (`change_atc_tool_color`, future write methods) acquire the same machine lock
+   - **Write operations use longer timeout**: Write commands use `read_timeout=5.0` (vs 1.0 for reads) to allow more time for machine processing
+   - **Per-machine isolation**: Each machine has its own semaphore, so operations on different machines can proceed concurrently
+   - **Automatic serialization**: The semaphore ensures only one operation per machine at a time, preventing conflicts
+
+   **Connection Pooling Pattern**:
+
+   The telnet client uses a global connection pool to maintain persistent connections per machine. This dramatically improves stability by:
+   - **Reducing connection churn**: Connections are reused across operations instead of creating new ones
+   - **Faster operations**: No connect/disconnect overhead for each operation
+   - **Automatic recovery**: Connections auto-reconnect if lost
+   - **Health monitoring**: Connection health is checked before use
+
+   **Implementation**:
+   ```python
+   # Global connection pool (in telnet_client.py)
+   _telnet_connections: Dict[Tuple[str, int], CNCTelnetClient] = {}
+   _connections_lock = asyncio.Lock()
+
+   async def get_or_create_connection(ip_address: str, port: int = 10000, timeout: int = 10) -> CNCTelnetClient:
+       """Get or create a persistent telnet connection for a machine."""
+       key = (ip_address, port)
+       async with _connections_lock:
+           if key not in _telnet_connections:
+               client = CNCTelnetClient(ip_address, port, timeout=timeout)
+               _telnet_connections[key] = client
+           return _telnet_connections[key]
+   ```
+
+   **Usage Pattern**:
+   ```python
+   # Instead of creating new clients:
+   # telnet_client = CNCTelnetClient(...)  # OLD - creates new connection each time
+   # await telnet_client.disconnect()     # OLD - closes after each operation
+
+   # Use pooled connections:
+   from app.clients.telnet_client import get_or_create_connection
+   telnet_client = await get_or_create_connection(ip_address, port=10000)
+   # Use the connection for operations
+   data = await telnet_client.get_tool_table_data(...)
+   # Connection stays open in pool - don't disconnect!
+   ```
+
+   **Connection Health & Auto-Reconnect**:
+   ```python
+   async def connect(self) -> bool:
+       # Check if already connected and healthy
+       if self._connected and self.reader and self.writer:
+           if not self.writer.is_closing():
+               return True  # Reuse existing connection
+           # Connection is closing, reconnect
+       
+       # Connect or reconnect
+       self.reader, self.writer = await asyncio.open_connection(...)
+       self._connected = True
+       return True
+   ```
+
+   **Key Points**:
+   - **Connections persist**: Connections stay open in the pool for the lifetime of the application
+   - **Automatic health checks**: `connect()` checks if connection is alive before use
+   - **Auto-reconnect**: If connection is lost, it's automatically reconnected on next operation
+   - **No manual disconnects**: Operations should NOT call `disconnect()` - connections stay in pool
+   - **Works with semaphore**: Connection pooling works seamlessly with semaphore serialization
+   - **Per-machine pools**: Each machine has its own pooled connection
+
+   **Benefits**:
+   - **Improved stability**: Fewer connection attempts = fewer failure points
+   - **Better performance**: No connect/disconnect overhead
+   - **Robust writes**: Write operations are much more reliable with persistent connections
+   - **Automatic recovery**: Lost connections are automatically restored
+
+   **Remaining Write Operations**:
+   - ⏳ Tool offset writes (`WRTTOFS`)
+   - ⏳ Tool life writes (`WRTTLLF`)
+   - ⏳ ATC tool assignment changes (`CHGMAGM`, `CHGMAGS`, `CHGMAGK`, `CHGMAGD`)
+   - ⏳ Other write commands as needed
 
    **Open Questions & Clarifications**:
 
