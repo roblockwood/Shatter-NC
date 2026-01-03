@@ -92,7 +92,6 @@ For file transfers (G-code programs, etc.)
 ### 3. Potential Additional Protocols
 Based on manual documentation, may also support:
 - FOCAS (if equipped)
-- MTConnect (if configured)
 - Custom TCP/UDP protocols
 
 ## FTP File System Structure
@@ -172,7 +171,7 @@ Files that contain live machine data (updated every scan):
 ### Available Protocols:
 1. **HTTP (Port 80)** - Web interface for monitoring and data display
 2. **FTP (Port 21)** - File transfer and real-time data file access
-3. **Potential**: FOCAS, MTConnect (check manual for configuration)
+3. **Potential**: FOCAS (check manual for configuration)
 
 ### Recommended Access Methods:
 
