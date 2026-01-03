@@ -7,7 +7,6 @@ from app.models.machine import Machine
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
 from app.parsers.gcode_parser import parse_gcode
-from app.parsers.posni_parser import parse_posni
 import logging
 import io
 
@@ -21,10 +20,10 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
     """
     Get comprehensive real-time status for a machine.
 
-    Fetches data from HTTP endpoints including:
-    - Running log (program, cycle time, etc.)
-    - Work counters
-    - Alarms
+    Fetches data from Telnet including:
+    - MONTR: Running log (program, cycle time, etc.) and work counters
+    - PRD3: Machine operating status
+    - ALARM: Current alarms
     """
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not db_machine:
@@ -34,19 +33,119 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
         )
 
     try:
-        http_client = CNCHttpClient(
-            db_machine.ip_address,
-            port=db_machine.http_port,
-            timeout=5,
+        # Phase 5: Migrate to Telnet for MONTR and PRD3 data (replaces HTTP get_status_overview)
+        from app.clients.telnet_client import get_or_create_connection
+        from app.parsers.montr_parser_v2 import parse_montr_v2
+        from app.parsers.alarm_parser_v2 import parse_alarm_v2
+        from app.parsers.prd3_parser_v2 import parse_prd3_v2
+        from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
+        from datetime import datetime
+        
+        # Use pooled connection
+        telnet_client = await get_or_create_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=10
         )
-
-        # Get comprehensive status
-        status_data = http_client.get_status_overview(units=db_machine.units)
+        
+        # Detect control version
+        control_version = await telnet_client.detect_control_type()
+        
+        # Get MONTR data
+        montr_data = await telnet_client.get_monitor_data(verbose=False)
+        if not montr_data:
+            raise HTTPException(
+                status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Failed to fetch MONTR data - machine may be unreachable",
+            )
+        
+        parsed = parse_montr_v2(montr_data.encode('utf-8'), control_version=control_version)
+        
+        # Get PRD3 data (contains current status)
+        prd3_data = await telnet_client.get_prd3_data(control_version=control_version, verbose=False)
+        prd3_parsed = None
+        if prd3_data:
+            prd3_parsed = parse_prd3_v2(prd3_data.encode('utf-8'), control_version=control_version)
+        
+        # Format response
+        program_info = parsed.get("program_info", {})
+        time_info = parsed.get("time_info", {})
+        counters = parsed.get("counters", [])
+        
+        # Get status from PRD3
+        if prd3_parsed and prd3_parsed.get("current_status"):
+            current_status_data = prd3_parsed["current_status"]
+            status_code = current_status_data.get("current_status")
+            machine_status = current_status_data.get("status")
+            
+            # Override "off" to "standby" if machine is responding and has activity
+            if machine_status == "off":
+                has_power_on_time = time_info.get("power_on_time", "000000000") != "000000000"
+                has_program = bool(program_info.get("operation_program_no"))
+                if has_power_on_time or has_program:
+                    machine_status = "standby"
+        else:
+            machine_status = "operating" if program_info.get("operation_program_no") else "standby"
+        
+        # Format time strings
+        def format_time(time_str: str) -> str:
+            if not time_str or len(time_str) != 9:
+                return time_str
+            try:
+                return f"{time_str[0:2]}{time_str[2:4]}:{time_str[4:6]}.{time_str[6:9]}"
+            except (ValueError, IndexError):
+                return time_str
+        
+        status_data = {
+            "ip_address": db_machine.ip_address,
+            "timestamp": datetime.now().isoformat(),
+            "units": db_machine.units,
+            "program_name": program_info.get("operation_program_no", "----"),
+            "cycle_time": format_time(time_info.get("total_operation_time", "000000000")),
+            "cutting_time": format_time(time_info.get("operation_time", "000000000")),
+            "non_cutting_time": "000000:00.0",
+            "power_on_hours": format_time(time_info.get("power_on_time", "000000000")),
+            "operation_time": format_time(time_info.get("operation_time", "000000000")),
+            "status": machine_status,
+            "counters": [
+                {
+                    "counter_number": c.get("counter_number", i + 1),
+                    "count": c.get("count", 0),
+                    "current": c.get("current", 0),
+                    "end": c.get("end", 0),
+                    "end_warning": c.get("end_warning", 0),
+                }
+                for i, c in enumerate(counters)
+            ],
+        }
+        
+        # Get alarms from Telnet
+        try:
+            alarm_data_raw = await telnet_client.get_alarm_data(verbose=False)
+            if alarm_data_raw:
+                alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=None)
+                all_alarms = alarm_parsed.get("alarms", []) + alarm_parsed.get("loading_alarms", [])
+                # Enrich with lookup data
+                enriched_alarms = [enrich_alarm_with_lookup(alarm) for alarm in all_alarms]
+                status_data["alarms"] = enriched_alarms
+            else:
+                status_data["alarms"] = []
+        except Exception as e:
+            logger.warning(f"Failed to fetch alarms for machine {machine_id}: {e}")
+            status_data["alarms"] = []
+        
+        # Override status to 'error' if there are active alarms (unless machine is off)
+        if status_data.get("alarms") and machine_status != "off":
+            machine_status = "error"
+            status_data["status"] = "error"
+        
         status_data["machine_id"] = machine_id
         status_data["machine_name"] = db_machine.name
-
+        
         return status_data
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching status for machine {machine_id}: {e}")
         raise HTTPException(
@@ -57,7 +156,7 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{machine_id}/running-log")
 async def get_running_log(machine_id: int, db: Session = Depends(get_db)):
-    """Get running log data (time display)."""
+    """Get running log data (time display) from MONTR via Telnet."""
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not db_machine:
         raise HTTPException(
@@ -66,11 +165,49 @@ async def get_running_log(machine_id: int, db: Session = Depends(get_db)):
         )
 
     try:
-        http_client = CNCHttpClient(db_machine.ip_address, port=db_machine.http_port)
-        data = http_client.get_running_log()
-        data["machine_id"] = machine_id
+        from app.clients.telnet_client import get_or_create_connection
+        from app.parsers.montr_parser_v2 import parse_montr_v2
+        from datetime import datetime
+        
+        telnet_client = await get_or_create_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=10
+        )
+        
+        control_version = await telnet_client.detect_control_type()
+        montr_data = await telnet_client.get_monitor_data(verbose=False)
+        
+        if not montr_data:
+            raise HTTPException(
+                status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Failed to fetch MONTR data",
+            )
+        
+        parsed = parse_montr_v2(montr_data.encode('utf-8'), control_version=control_version)
+        time_info = parsed.get("time_info", {})
+        
+        def format_time(time_str: str) -> str:
+            if not time_str or len(time_str) != 9:
+                return time_str
+            try:
+                return f"{time_str[0:2]}{time_str[2:4]}:{time_str[4:6]}.{time_str[6:9]}"
+            except (ValueError, IndexError):
+                return time_str
+        
+        data = {
+            "machine_id": machine_id,
+            "cycle_time": format_time(time_info.get("total_operation_time", "000000000")),
+            "cutting_time": format_time(time_info.get("operation_time", "000000000")),
+            "non_cutting_time": "000000:00.0",
+            "power_on_hours": format_time(time_info.get("power_on_time", "000000000")),
+            "operation_time": format_time(time_info.get("operation_time", "000000000")),
+            "timestamp": datetime.now().isoformat(),
+        }
         return data
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching running log for machine {machine_id}: {e}")
         raise HTTPException(
@@ -81,7 +218,7 @@ async def get_running_log(machine_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{machine_id}/counters")
 async def get_work_counters(machine_id: int, db: Session = Depends(get_db)):
-    """Get workpiece counter data."""
+    """Get workpiece counter data from MONTR via Telnet."""
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not db_machine:
         raise HTTPException(
@@ -90,11 +227,46 @@ async def get_work_counters(machine_id: int, db: Session = Depends(get_db)):
         )
 
     try:
-        http_client = CNCHttpClient(db_machine.ip_address, port=db_machine.http_port)
-        data = http_client.get_work_counter()
-        data["machine_id"] = machine_id
+        from app.clients.telnet_client import get_or_create_connection
+        from app.parsers.montr_parser_v2 import parse_montr_v2
+        from datetime import datetime
+        
+        telnet_client = await get_or_create_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=10
+        )
+        
+        control_version = await telnet_client.detect_control_type()
+        montr_data = await telnet_client.get_monitor_data(verbose=False)
+        
+        if not montr_data:
+            raise HTTPException(
+                status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Failed to fetch MONTR data",
+            )
+        
+        parsed = parse_montr_v2(montr_data.encode('utf-8'), control_version=control_version)
+        counters = parsed.get("counters", [])
+        
+        data = {
+            "machine_id": machine_id,
+            "counters": [
+                {
+                    "counter_number": c.get("counter_number", i + 1),
+                    "count": c.get("count", 0),
+                    "current": c.get("current", 0),
+                    "end": c.get("end", 0),
+                    "end_warning": c.get("end_warning", 0),
+                }
+                for i, c in enumerate(counters)
+            ],
+            "timestamp": datetime.now().isoformat(),
+        }
         return data
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching counters for machine {machine_id}: {e}")
         raise HTTPException(
@@ -105,7 +277,7 @@ async def get_work_counters(machine_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{machine_id}/alarms")
 async def get_alarms(machine_id: int, db: Session = Depends(get_db)):
-    """Get alarm log data."""
+    """Get alarm log data from ALARM via Telnet."""
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not db_machine:
         raise HTTPException(
@@ -114,11 +286,45 @@ async def get_alarms(machine_id: int, db: Session = Depends(get_db)):
         )
 
     try:
-        http_client = CNCHttpClient(db_machine.ip_address, port=db_machine.http_port)
-        data = http_client.get_alarm_log()
-        data["machine_id"] = machine_id
+        from app.clients.telnet_client import get_or_create_connection
+        from app.parsers.alarm_parser_v2 import parse_alarm_v2
+        from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
+        from datetime import datetime
+        
+        telnet_client = await get_or_create_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=10
+        )
+        
+        alarm_data_raw = await telnet_client.get_alarm_data(verbose=False)
+        
+        if alarm_data_raw is None:
+            # No alarms or failed to fetch
+            data = {
+                "machine_id": machine_id,
+                "alarms": [],
+                "loading_alarms": [],
+                "timestamp": datetime.now().isoformat(),
+            }
+            return data
+        
+        alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=None)
+        
+        # Enrich alarms with lookup data
+        alarms = [enrich_alarm_with_lookup(alarm) for alarm in alarm_parsed.get("alarms", [])]
+        loading_alarms = [enrich_alarm_with_lookup(alarm) for alarm in alarm_parsed.get("loading_alarms", [])]
+        
+        data = {
+            "machine_id": machine_id,
+            "alarms": alarms,
+            "loading_alarms": loading_alarms,
+            "timestamp": datetime.now().isoformat(),
+        }
         return data
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching alarms for machine {machine_id}: {e}")
         raise HTTPException(
@@ -553,7 +759,7 @@ async def list_programs(
 @router.get("/{machine_id}/position")
 async def get_position(machine_id: int, db: Session = Depends(get_db)):
     """
-    Get current machine work offsets from POSNI1.NC file.
+    Get current machine work offsets from POSNI1.NC file via Telnet.
 
     Returns parsed work offsets (G54-G59) and extended offsets (X01-X48).
     """
@@ -565,20 +771,33 @@ async def get_position(machine_id: int, db: Session = Depends(get_db)):
         )
 
     try:
-        ftp_client = CNCFtpClient(
+        # Phase 5: Migrate to Telnet for position data (replaces FTP)
+        from app.clients.telnet_client import get_or_create_connection
+        from app.parsers.posni_parser_v2 import parse_posni_v2
+        
+        # Use pooled connection
+        telnet_client = await get_or_create_connection(
             ip_address=db_machine.ip_address,
-            port=db_machine.ftp_port,
-            username=db_machine.ftp_username,
-            password=db_machine.ftp_password,
+            port=10000,
+            timeout=10
         )
-        position_data = await ftp_client.get_position_data()
-
+        
+        # Get position data via Telnet
+        position_data = await telnet_client.get_position_data(units=db_machine.units, verbose=False)
+        
         if not position_data:
-            raise Exception("Failed to retrieve POSNI1.NC file")
-
-        # Parse the POSNI1.NC content
-        parsed = parse_posni(position_data.encode('utf-8'), units=db_machine.units)
-
+            raise HTTPException(
+                status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Failed to fetch POSNI1 data via Telnet",
+            )
+        
+        # Parse using schema-based parser
+        parsed = parse_posni_v2(
+            position_data.encode('utf-8'),
+            units=db_machine.units,
+            control_version=None  # Auto-detect
+        )
+        
         return {
             "machine_id": machine_id,
             "machine_name": db_machine.name,
@@ -589,6 +808,8 @@ async def get_position(machine_id: int, db: Session = Depends(get_db)):
             "units": parsed.get("units", db_machine.units),
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching position for machine {machine_id}: {e}")
         raise HTTPException(

@@ -172,7 +172,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       
       if (needsFetch) {
         // Only fetch as fallback - WebSocket should provide data
-        setIsLoadingTools(true);
+      setIsLoadingTools(true);
         
         const sourceParam = toolSource === 'atc' ? 'atc' : 'table';
         fetch(`${API_BASE_URL}/api/machines/${machineId}/tools?source=${sourceParam}`)
@@ -189,7 +189,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
             }
             return res.json();
           })
-          .then(data => {
+        .then(data => {
             if (data && data.tools) {
               // Update cache for this source
               setToolsCache(prev => ({
@@ -217,10 +217,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 }
                 return prev; // Keep existing cache
               });
-            }
-            setIsLoadingTools(false);
-          })
-          .catch(err => {
+          }
+          setIsLoadingTools(false);
+        })
+        .catch(err => {
             console.error(`Error fetching ${sourceParam} data:`, err);
             // Store error message for display
             const errorMessage = err instanceof Error ? err.message : `Failed to fetch ${sourceParam} data`;
@@ -229,8 +229,8 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               [toolSource]: errorMessage
             }));
             // Don't clear cache on error - keep previous data visible
-            setIsLoadingTools(false);
-          });
+          setIsLoadingTools(false);
+        });
       } else if (!cachedTools || cachedTools.length === 0) {
         // No data yet, but haven't waited long enough - show loading while waiting for WebSocket
         setIsLoadingTools(true);
@@ -520,7 +520,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
             direction: current.direction === 'asc' ? 'desc' : 'asc'
           }
         };
-      } else {
+    } else {
         // New column - default to ascending
         return {
           ...prev,
@@ -529,7 +529,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
             direction: 'asc'
           }
         };
-      }
+    }
     });
   };
 
@@ -722,9 +722,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                         toolSource === 'atc' && tool.pot_number ? (
                           <span className="color-display color-display-empty" title="Click to set color">
                             ──
-                          </span>
-                        ) : (
-                          '──'
+                        </span>
+                      ) : (
+                        '──'
                         )
                       )}
                     </td>
@@ -738,9 +738,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           </>
         )}
       </div>
-      <div className="terminal-box-footer">
-        └{'─'.repeat(42)}┘
-      </div>
+        <div className="terminal-box-footer">
+          └{'─'.repeat(42)}┘
+        </div>
       
       {/* Color Picker */}
       {colorPickerState.show && colorPickerState.tool && (

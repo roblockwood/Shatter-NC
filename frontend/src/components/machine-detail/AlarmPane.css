@@ -197,3 +197,45 @@
   background: var(--color-bg-elevated);
 }
 
+.alarm-code-tooltip {
+  pointer-events: auto;
+  max-width: 400px;
+  min-width: 250px;
+}
+
+.alarm-tooltip-content {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  padding: var(--spacing-sm);
+  box-shadow: var(--glow);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.4;
+}
+
+.alarm-tooltip-section {
+  margin-bottom: var(--spacing-xs);
+}
+
+.alarm-tooltip-section:last-child {
+  margin-bottom: 0;
+}
+
+.alarm-tooltip-label {
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  font-size: var(--font-xs);
+}
+
+.alarm-tooltip-text {
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.4;
+}
+

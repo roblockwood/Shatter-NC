@@ -70,10 +70,10 @@ Located in `backend/app/clients/http_client.py`
 
 **Endpoints Accessed**:
 
-- `/running_log` - Program name, cycle time, cutting time, power on hours
-- `/work_counter` - Workpiece counter data (4 counters)
+- `/running_log` - Program name, cycle time, cutting time, power on hours (deprecated - replaced by MONTR)
+- `/work_counter` - Workpiece counter data (4 counters) (deprecated - replaced by MONTR)
 - `/alarm_log` - Active alarms with severity levels
-- `/tool` - ATC (Automatic Tool Changer) tool table data
+- `/tool` - ATC (Automatic Tool Changer) tool table data (deprecated - replaced by ATCTL via Telnet)
 
 **Data Parsing**:
 
@@ -98,7 +98,7 @@ Located in `backend/app/clients/ftp_client.py`
 - `TOLNI1.NC` - Tool table file
 - `POSNI1.NC` - Position/work offsets
 - `ALARM.NC` - Alarm data
-- `MONTR.NC` - Monitor data
+- `MONTR.NC` - Monitor data (provides running log, time data, and workpiece counters)
 - Program files (e.g., `O2000.NC`)
 
 **Operations**:
@@ -167,8 +167,8 @@ graph TB
 1. Create HTTP client for machine
 2. Call `get_status_overview()` which:
 
-   - Fetches `/running_log` (critical - if fails, machine unreachable)
-   - Optionally fetches `/work_counter`, `/alarm_log`, `/tool`
+   - Fetches MONTR via Telnet (critical - if fails, machine unreachable)
+   - Optionally fetches `/alarm_log` via HTTP (not yet migrated to Telnet)
 
 3. Fetch program_name from mem.nc via FTP (first poll only, then cached)
 4. Calculate response time
@@ -258,9 +258,10 @@ sequenceDiagram
 
 **Program Name Source**:
 
-- Primary: `MEM.NC` file via FTP (most reliable)
-- Fallback: HTTP `/running_log` endpoint (less reliable)
-- Cached after first fetch to reduce FTP load
+- Primary: `MONTR.NC` file via Telnet (most reliable - provides operation_program_no)
+- Secondary: `MEM.NC` file via Telnet (also provides program_name)
+- Deprecated: HTTP `/running_log` endpoint (replaced by MONTR)
+- Cached after first fetch to reduce load
 
 **Concurrent Polling**:
 
@@ -315,11 +316,14 @@ Response: %R[Command(7)][Arguments(8)][Status(2)]\n[Data]\n[Checksum]%\n
 - `ATCTL` - ATC magazine configuration
 - `POSNI1`, `POSNI2`, etc. - Position/work offsets (same as POSNI1.NC via FTP)
 - `TOLNI1` - Tool table (same as TOLNI1.NC via FTP)
+- `MONTR` - Machine monitor data (replaces HTTP `/running_log` and `/work_counter`)
 - `SYSC89`, `SYSC94-99` - System data files
 - `PRD1`, `PRD2`, `PRD3` - Production data
 - `PANEL` - Panel status
 - `IO` - I/O status
 - `DRQALL` - Directory listing (not `LOD DIR` - that command doesn't exist in protocol)
+- **Note**: `WKCNTR` is not needed - workpiece counters are provided by MONTR (C01-C04 lines)
+- `ALARM` - Current alarm data (E01-E36, L01-L18)
 
 **Machine Model Detection**:
 
@@ -564,6 +568,22 @@ This phase creates reusable Cursor skills/workflows that enable reliable, repeat
       - Check performance impact
       - Document any breaking changes
 
+   1. **Legacy Cleanup** (Phase 7):
+
+      - **Verify Migration Complete**: Ensure all usages of legacy parser are updated to v2
+        - Search codebase for imports: `grep -r "from app.parsers.{legacy_parser}" backend/`
+        - Search for function calls: `grep -r "{legacy_parse_function}(" backend/`
+        - Check test files for references
+      - **Remove Legacy Parser File**: Delete `backend/app/parsers/{legacy_parser}.py`
+      - **Clean Up Imports**: Remove unused imports from all files
+        - Check `backend/app/api/status.py` and other API files
+        - Check `backend/app/services/polling.py` and other service files
+        - Check `backend/app/clients/*.py` files
+      - **Update Module Exports**: Remove legacy exports from `backend/app/parsers/__init__.py`
+      - **Run Tests**: Execute full test suite to verify no breakage
+      - **Update Documentation**: Remove references to legacy parsers from docs
+      - **Commit Cleanup**: Create a dedicated commit for cleanup (e.g., "chore: remove legacy {parser} after v2 migration")
+
 **Cursor Skills to Create**:
 
    - **Skill: Parse Schema Specification**
@@ -620,7 +640,7 @@ This phase creates reusable Cursor skills/workflows that enable reliable, repeat
 
 4. **Phase 4: Schema Definition** ✅ **IN PROGRESS**
 
-   **Status**: TOLN and ATCTL schemas defined and implemented. Working well in production.
+   **Status**: TOLN, ATCTL, and POSN schemas defined and implemented. Working well in production.
 
    **Completed**:
    - ✅ **TOLN (Tool Offset Table)** - Schema defined for C00 and D00 control versions
@@ -634,11 +654,26 @@ This phase creates reusable Cursor skills/workflows that enable reliable, repeat
      - Parser: `backend/app/parsers/atctl_parser_v2.py`
      - Handles spindle, pot, and stocker tool entries
      - Field mappings: tool_number, pot_number, group, tool_type, color, etc.
+   - ✅ **POSN (Position/Work Offsets)** - Schema defined for C00 and D00 control versions
+     - Schema file: `backend/app/schemas/cnc_data/posni_schema.py`
+     - Parser: `backend/app/parsers/posni_parser_v2.py`
+     - Supports both POSNI1 (inches) and POSNM1 (millimeters) based on `machine.units`
+     - Handles control version auto-detection (C00 vs D00)
+     - C00: G54-G59, X01-X48, H01, B01 offsets
+     - D00: G054-G059, X001-X300 offsets (3-digit format, up to 300 extended offsets)
+     - Field mappings: work_offsets, extended_offsets, fixture_offsets, rotary_offsets
+
+   - ✅ **MEM (Memory Operation)** - Schema defined for C00 and D00 control versions
+     - Schema file: `backend/app/schemas/cnc_data/mem_schema.py`
+     - Parser: `backend/app/parsers/mem_parser_v2.py`
+     - Handles control version auto-detection (C00 vs D00)
+     - C00: Program No. (4 bytes), Operation folder name (10 bytes)
+     - D00: Program (34 bytes), Operation folder name (35 bytes)
+     - Field mappings: program_name, operation_folder_name, operation_status, inner_pallet_status, spare_tool, mode, expansion
 
    **Remaining**:
-   - ⏳ POSN (Position/Work Offsets) - Schema definition pending
-   - ⏳ MEM (Memory/Program Info) - Schema definition pending
-   - ⏳ Other data files as needed
+   - ⏳ Other data files as needed (e.g., ALARM, PANEL, IO, etc.)
+   - ❌ **WKCNTR** - Not needed - workpiece counters are provided by MONTR (C01-C04 lines)
 
    **Implementation Details**:
    - Schema definitions use `FieldDefinition` dataclass with name, csv_index, data_type, required, description, validation
@@ -650,25 +685,35 @@ This phase creates reusable Cursor skills/workflows that enable reliable, repeat
    **Files Created**:
    - `backend/app/schemas/cnc_data/tolni_schema.py` - TOLN schema definitions
    - `backend/app/schemas/cnc_data/atctl_schema.py` - ATCTL schema definitions
+   - `backend/app/schemas/cnc_data/posni_schema.py` - POSN schema definitions
+   - `backend/app/schemas/cnc_data/mem_schema.py` - MEM schema definitions
+   - `backend/app/schemas/cnc_data/montr_schema.py` - MONTR schema definitions
    - `backend/app/parsers/tolni_parser_v2.py` - Schema-based TOLN parser
    - `backend/app/parsers/atctl_parser_v2.py` - Schema-based ATCTL parser
+   - `backend/app/parsers/posni_parser_v2.py` - Schema-based POSN parser
+   - `backend/app/parsers/mem_parser_v2.py` - Schema-based MEM parser
+   - `backend/app/parsers/montr_parser_v2.py` - Schema-based MONTR parser
    - `backend/tests/test_tolni_parser_v2.py` - TOLN parser tests
 
 5. **Phase 5: Replace HTTP/FTP Reads** ✅ **IN PROGRESS**
 
-   **Status**: TOLN and ATCTL successfully migrated to Telnet. Working well in production.
+   **Status**: TOLN, ATCTL, POSN, MEM, and MONTR successfully migrated to Telnet. Working well in production.
 
    **Commands Available for Replacement**:
 
    - ✅ `REDPRGN` - Replace HTTP `/running_log` parsing (program name, block number)
    - ✅ `REDPRG` - Replace HTTP `/running_log` parsing (program content)
    - ✅ `DRQALL` - Replace FTP directory listing (`list_files()`)
-   - ✅ `LOD MEM` - Replace FTP `get_memory_data()` (MEM.NC)
+   - ✅ `LOD MEM` - ✅ **COMPLETE** - Replace FTP `get_memory_data()` (MEM.NC)
    - ✅ `LOD TOLNI1` / `LOD TOLNM1` - ✅ **COMPLETE** - Replace FTP `get_tool_table_data()` (TOLNI1.NC/TOLNM1.NC)
    - ✅ `LOD ATCTL` / `LOD ATCTLD` - ✅ **COMPLETE** - Replace HTTP `/tool` (ATC Tool)
-   - ⏳ `LOD POSNI1` / `LOD POSNM1` - Replace FTP `get_position_data()` (POSNI1.NC/POSNM1.NC)
+   - ✅ `LOD POSNI1` / `LOD POSNM1` - ✅ **COMPLETE** - Replace FTP `get_position_data()` (POSNI1.NC/POSNM1.NC)
+   - ✅ `LOD MONTR` - ✅ **COMPLETE** - Replace HTTP `/running_log` and `/work_counter` (MONTR.NC provides both)
+   - ✅ `LOD ALARM` - ✅ **COMPLETE** - Replace HTTP `/alarm_log` (ALARM.NC)
+   - ✅ `LOD PRD3` / `LOD PRDD3` - ✅ **COMPLETE** - Machine status determination (PRD3.NC/PRDD3.NC)
    - ❌ `REDFILE` - Still needed for system information (memory usage, registrations)
    - ❌ `REDDATE` - Still needed for machine date/time
+   - ❌ `LOD WKCNTR` - **NOT NEEDED** - Workpiece counters are provided by MONTR (C01-C04 lines)
 
    **Migration Progress**:
 
@@ -688,24 +733,101 @@ This phase creates reusable Cursor skills/workflows that enable reliable, repeat
      - ATC data merged with TOLN data to provide complete tool information (diameter, length, etc.)
      - Response includes `protocol: "telnet"` field for tracking
 
+   - **POSN (Position/Work Offsets)** - ✅ **COMPLETE**
+     - Telnet client updated to use `LOD POSNI1` or `LOD POSNM1` based on `machine.units`
+     - Schema-based parser (`posni_parser_v2`) created and integrated
+     - Supports both C00 (G54-G59, X01-X48) and D00 (G054-G059, X001-X300) control versions
+     - API endpoint (`/api/machines/{id}/position`) now uses Telnet exclusively
+     - Programs validation endpoint updated to use Telnet for position data
+     - FTP deprecated for POSN data reads (kept only for NC file transfers)
+     - Response includes `protocol: "telnet"` and `control_version` fields for tracking
+
+   - **MEM (Memory Operation)** - ✅ **COMPLETE**
+     - Telnet client updated to use `LOD MEM`
+     - Schema-based parser (`mem_parser_v2`) created and integrated
+     - Supports both C00 and D00 control versions
+     - API endpoints (`/api/machines/{id}/tools`) now use Telnet for program_name
+     - Polling service `fetch_program_name()` now uses Telnet
+     - `/api/machines/{id}/refresh-program-name` endpoint updated to use Telnet
+     - HTTP client `get_status_overview_with_ftp()` updated to use Telnet for program_name
+     - FTP deprecated for MEM data reads (kept only for NC file transfers)
+     - Extracts program_name (O-number) and other memory operation fields
+
+   - **MONTR (Machine Monitor)** - ✅ **COMPLETE**
+     - Telnet client updated to use `LOD MONTR`
+     - Schema-based parser (`montr_parser_v2`) created and integrated
+     - Supports both C00 and D00 control versions
+     - Replaces HTTP `/running_log` endpoint (provides program info, time data)
+     - Replaces HTTP `/work_counter` endpoint (provides C01-C04 workpiece counters)
+     - API endpoints (`/api/machines/{id}/status`, `/api/machines/{id}/running-log`, `/api/machines/{id}/counters`) now use Telnet
+     - Polling service now uses Telnet for MONTR data instead of HTTP `get_status_overview()`
+     - HTTP `/running_log` and `/work_counter` deprecated for data reads
+     - Extracts: operation_program_no, edit_program_no, time data (total operation time, power on time, operation time), and workpiece counters (4 counters with count, current, end, end_warning)
+     - **Note**: WKCNTR data file is not needed - MONTR provides all workpiece counter data
+
+   - **ALARM (Current Alarm Data)** - ✅ **COMPLETE**
+     - Telnet client updated to use `LOD ALARM`
+     - Schema-based parser (`alarm_parser_v2`) created and integrated
+     - Supports both C00 and D00 control versions
+     - Replaces HTTP `/alarm_log` endpoint
+     - API endpoint (`/api/machines/{id}/alarms`) now uses Telnet
+     - Polling service now uses Telnet for ALARM data
+     - **Alarm Enrichment**: Alarms are enriched with detailed information from alarm code lookup tables:
+       - `description`: Human-readable alarm description
+       - `cause`: Root cause explanation
+       - `solution`: Recommended solution steps
+       - `stop_level`: Stop level (1-5, where 5 is most critical)
+       - `reset_level`: Reset level (1-5)
+     - **Lookup Tables**: Located in `backend/app/data/alarm_codes/`
+       - `section_11_7_alarm_code_list_c00.json` (C00 control)
+       - `section_2_13_alarm_code_list_d00.json` (D00 control)
+     - **Frontend Display**: AlarmPane displays alarms with:
+       - Severity-based sorting (highest stop_level first)
+       - Color coding by stop_level (level 5: bright red, level 1: cyan)
+       - Two-column layout (highest severity in left, others in right)
+       - Hover tooltip on alarm codes showing cause and solution
+     - Extracts: Alarm/operator messages (E01-E36) and loading system alarms (L01-L18)
+     - Handles comma-separated alarms on single lines
+
+   - **PRD3 (Production Data 3 - Status History)** - ✅ **COMPLETE**
+     - Telnet client updated to use `LOD PRD3` (C00) or `LOD PRDD3` (D00)
+     - Schema-based parser (`prd3_parser_v2`) created and integrated
+     - Supports both C00 and D00 control versions
+     - **Status Determination**: PRD3 provides accurate machine operating status
+       - Status codes: 1=off, 2=standby, 3=operating, 4=stopped, 5=error
+       - Mapped to frontend status strings: `off`, `standby`, `operating`, `stopped`, `error`
+     - **Status Override Logic**: 
+       - If PRD3 reports "off" (code 1) but machine is responding to Telnet and has power-on time or program info, status is overridden to "standby"
+       - If active alarms are present and status is not "off", status is overridden to "error"
+     - API endpoint (`/api/machines/{id}/status`) now uses PRD3 for status determination
+     - Polling service now uses PRD3 for status determination
+     - Extracts: Current status (C01 line) with start_date_time, current_status code, language, program_or_error_no, folder_name, memory_operation_type
+     - **Note**: PRD3 provides the most accurate machine status, replacing inference from program presence or MONTR data
+
    - **Polling Service** - ✅ **UPDATED**
-     - Polling service (`backend/app/services/polling.py`) now uses Telnet for tool data
+     - Polling service (`backend/app/services/polling.py`) now uses Telnet for tool data and MONTR data
      - Fetches both ATC and TABLE (TOLN) data via Telnet
+     - Fetches program_name from MEM via Telnet
+     - Fetches running log, counters, and program info from MONTR via Telnet
      - Merges ATC with TOLN data (same logic as API endpoint)
      - Broadcasts both `tools` (ATC) and `tool_table` (TABLE) via WebSocket
      - Includes timestamps for cache management
-     - HTTP `get_status_overview()` no longer includes tools (excluded by default)
+     - HTTP `get_status_overview()` no longer used for polling (replaced by MONTR)
 
    **Tasks**:
 
    - ✅ Replace FTP reads with telnet LOD commands for TOLN (tool table)
    - ✅ Replace HTTP reads with telnet LOD commands for ATCTL (ATC data)
    - ✅ Update polling service to use telnet client for tool data
-   - ⏳ Replace FTP reads with telnet LOD commands for POSN (position data)
-   - ⏳ Replace FTP reads with telnet LOD commands for MEM (memory data)
-   - ⏳ Replace HTTP reads with telnet commands (REDPRGN, REDPRG) for program info
+   - ✅ Replace FTP reads with telnet LOD commands for POSN (position data)
+   - ✅ Replace FTP reads with telnet LOD commands for MEM (memory data)
+   - ✅ Replace HTTP reads with telnet LOD commands for MONTR (running log and counters)
+   - ✅ Replace HTTP reads with telnet LOD commands for ALARM (alarm log)
+   - ✅ Replace status inference with telnet LOD commands for PRD3 (machine status determination)
+   - ⏳ Replace HTTP reads with telnet commands (REDPRGN, REDPRG) for program info (optional - MONTR already provides program name)
    - Keep FTP for file transfers (upload/download) until `SAV` command is implemented
    - **Deprecation Strategy**: As each data type migrates to Telnet, FTP/HTTP is deprecated for that data type. FTP remains available only for NC file transfers.
+   - **Note**: WKCNTR data file migration is not needed - MONTR provides all workpiece counter data (C01-C04 lines)
 
    **Migration Strategy**:
 
@@ -724,6 +846,53 @@ This phase creates reusable Cursor skills/workflows that enable reliable, repeat
 6. **Phase 6: Enable Writes** ✅ **IN PROGRESS**
 
    **Status**: ATC tool color changes (CHGMAGC) implemented. Semaphore-based serialization and connection pooling established for robust, stable operations.
+
+7. **Phase 7: Legacy Cleanup** ⏳ **PENDING**
+
+   **Status**: Not yet started. This phase removes unused legacy parsers after successful migration to schema-based v2 parsers.
+
+   **Purpose**: 
+   - Remove duplicate/unused legacy parser files after successful migration
+   - Clean up unused imports and exports
+   - Reduce codebase complexity and maintenance burden
+   - Ensure only active, schema-based parsers remain
+
+   **Cleanup Tasks**:
+
+   - ⏳ **Remove Legacy Parser Files**
+     - Delete `backend/app/parsers/mem_parser.py` (replaced by `mem_parser_v2.py`)
+     - Delete `backend/app/parsers/posni_parser.py` (replaced by `posni_parser_v2.py`)
+     - Delete `backend/app/parsers/tolni_parser.py` (replaced by `tolni_parser_v2.py`)
+     - Verify no remaining imports or usages before deletion
+
+   - ⏳ **Clean Up Imports**
+     - Remove unused imports from `backend/app/api/status.py` (e.g., `from app.parsers.posni_parser import parse_posni`)
+     - Update `backend/app/parsers/__init__.py` to remove legacy exports
+     - Search codebase for any remaining references to legacy parsers
+
+   - ⏳ **Update Documentation**
+     - Remove references to legacy parsers from documentation
+     - Update any examples or guides that reference old parsers
+     - Document the migration path for future reference
+
+   - ⏳ **Verification**
+     - Run full test suite to ensure no broken imports
+     - Verify all endpoints still work correctly
+     - Check for any test files that reference legacy parsers
+
+   **When to Execute**:
+   - After Phase 4/5 migration is complete and stable
+   - After all data types have been migrated to schema-based parsers
+   - After thorough testing confirms v2 parsers are working correctly
+   - Before starting new schema definitions to avoid confusion
+
+   **Cleanup Checklist** (per data type migration):
+   - [ ] Verify all usages migrated to v2 parser
+   - [ ] Remove legacy parser file
+   - [ ] Remove unused imports
+   - [ ] Update `__init__.py` exports
+   - [ ] Run tests to verify no breakage
+   - [ ] Update documentation
 
    **Completed**:
    - ✅ **ATC Tool Color Changes** - `CHGMAGC` command implemented
@@ -962,12 +1131,15 @@ Maintaining backward compatibility during migration is critical to avoid service
 
 **Current State**:
 
-- HTTP client: Used for `/running_log`, `/work_counter`, `/alarm_log`, `/tool` (located in `backend/app/clients/http_client.py`)
+- HTTP client: Used for `/alarm_log` (located in `backend/app/clients/http_client.py`)
+  - `/running_log` and `/work_counter` deprecated (replaced by MONTR via Telnet)
+  - `/tool` deprecated (replaced by ATCTL via Telnet)
 - FTP client: Used for `MEM.NC`, `TOLNI1.NC`, `POSNI1.NC`, file transfers (located in `backend/app/clients/ftp_client.py`)
 - Telnet client: ✅ **Phase 1 Complete** - `CNCTelnetClient` implemented in `backend/app/clients/telnet_client.py`
   - Supports: LOD (MEM, TOLNI1, POSNI1, ATCTL), REDPRGN, REDPRG, DRQALL
   - Tested with real machines
   - Ready for Phase 5 integration (replacing HTTP/FTP reads)
+- Legacy cleanup: ⏳ **Phase 7 Pending** - Remove unused legacy parsers after migration
 
 **Files to Review**:
 

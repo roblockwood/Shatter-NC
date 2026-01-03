@@ -258,5 +258,39 @@ corner_radius:
 
 ---
 
-**After providing schema specification, the parser will be generated automatically using the Phase 4 workflow.**
+## Migration Workflow (Phase 4 + Phase 7)
+
+**After providing schema specification, the parser will be generated automatically using the Phase 4 workflow. The workflow includes:**
+
+1. **Schema Definition** (Phase 4.1)
+   - Create schema file: `backend/app/schemas/cnc_data/{data_type}_schema.py`
+   - Define C00 and D00 control version schemas
+   - Document unit handling and field definitions
+
+2. **Parser Implementation** (Phase 4.2)
+   - Create v2 parser: `backend/app/parsers/{data_type}_parser_v2.py`
+   - Implement schema-based parsing with control version detection
+   - Add unit-aware filename selection (if applicable)
+
+3. **Endpoint Migration** (Phase 4.3)
+   - Update all endpoints to use v2 parser
+   - Migrate from FTP/HTTP to Telnet (Phase 5)
+   - Update polling service if applicable
+
+4. **Legacy Cleanup** (Phase 7) - **REQUIRED**
+   - **Verify all usages migrated**: Search codebase for legacy parser imports
+     ```bash
+     grep -r "from app.parsers.{legacy_parser}" backend/
+     grep -r "{legacy_parse_function}(" backend/
+     ```
+   - **Remove legacy parser file**: Delete `backend/app/parsers/{legacy_parser}.py`
+   - **Clean up imports**: Remove unused imports from:
+     - `backend/app/api/*.py`
+     - `backend/app/services/*.py`
+     - `backend/app/clients/*.py`
+   - **Update module exports**: Remove from `backend/app/parsers/__init__.py`
+   - **Run tests**: Verify no breakage
+   - **Update documentation**: Remove legacy parser references
+
+**Important**: Legacy cleanup is a required step for each data type migration. Do not skip this step - it prevents codebase bloat and confusion.
 
