@@ -243,6 +243,7 @@ async def validate_program(
         wcs_validation = _validate_wcs_offset(
             parsed["wcs_offset"],
             position_data,
+            units=machine.units,
             use_machine_tolerances=machine.use_machine_wcs_tolerances,
             tolerance_x=machine.tolerance_x,
             tolerance_y=machine.tolerance_y,
@@ -492,6 +493,7 @@ def _validate_tool(
 def _validate_wcs_offset(
     program_wcs: Dict[str, Any],
     machine_position_data: str,
+    units: str = 'in',
     use_machine_tolerances: bool = False,
     tolerance_x: float = 0.0394,
     tolerance_y: float = 0.0394,
@@ -545,11 +547,10 @@ def _validate_wcs_offset(
     # Store the primary tolerance for display
     tolerance = max(final_tolerance_x, final_tolerance_y, final_tolerance_z)
 
-    # Parse POSNI1.NC to get actual machine offset using schema-based parser v2
-    # Note: machine_position_data is a string from Telnet, units should be determined from context
-    # For now, default to 'in' (POSNI1) - this should be passed as a parameter in the future
+    # Parse POSNI1/POSNM1 to get actual machine offset using schema-based parser v2
+    # Use the units parameter to correctly parse the position data (POSNI1 for inches, POSNM1 for millimeters)
     from app.parsers.posni_parser_v2 import parse_posni_v2
-    parsed_posni = parse_posni_v2(machine_position_data.encode('utf-8'), units='in', control_version=None)
+    parsed_posni = parse_posni_v2(machine_position_data.encode('utf-8'), units=units, control_version=None)
     work_offsets = parsed_posni.get("work_offsets", {})
     actual_offset = work_offsets.get(work_offset)
 
