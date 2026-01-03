@@ -14,6 +14,85 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Global lock manager for serializing telnet operations per machine
+# Key: (ip_address, port) tuple, Value: asyncio.Semaphore
+_telnet_locks: Dict[Tuple[str, int], asyncio.Semaphore] = {}
+_locks_lock = asyncio.Lock()  # Lock for accessing the _telnet_locks dict
+
+# Global connection pool: Key: (ip_address, port) tuple, Value: CNCTelnetClient instance
+_telnet_connections: Dict[Tuple[str, int], 'CNCTelnetClient'] = {}
+_connections_lock = asyncio.Lock()  # Lock for accessing the _telnet_connections dict
+
+
+async def get_or_create_connection(ip_address: str, port: int = 10000, timeout: int = 10) -> 'CNCTelnetClient':
+    """
+    Get or create a persistent telnet connection for a machine.
+    
+    Connections are reused across operations to reduce connection churn and improve stability.
+    The connection will be automatically reconnected if it's lost.
+    
+    Args:
+        ip_address: Machine IP address
+        port: Telnet port (default 10000)
+        timeout: Connection timeout in seconds
+        
+    Returns:
+        CNCTelnetClient instance (may be new or reused)
+    """
+    key = (ip_address, port)
+    async with _connections_lock:
+        if key not in _telnet_connections:
+            client = CNCTelnetClient(ip_address, port, timeout=timeout)
+            _telnet_connections[key] = client
+            logger.debug(f"Created new pooled connection for {ip_address}:{port}")
+        else:
+            client = _telnet_connections[key]
+            # Check if connection is still alive
+            if not client._connected or not client.reader or not client.writer:
+                logger.debug(f"Connection pool entry exists but not connected, will reconnect on next operation")
+        return client
+
+
+async def close_connection(ip_address: str, port: int = 10000):
+    """
+    Close and remove a connection from the pool.
+    
+    This should be called when you want to explicitly close a connection,
+    such as on application shutdown or after an unrecoverable error.
+    
+    Args:
+        ip_address: Machine IP address
+        port: Telnet port (default 10000)
+    """
+    key = (ip_address, port)
+    async with _connections_lock:
+        if key in _telnet_connections:
+            client = _telnet_connections[key]
+            await client.disconnect()
+            del _telnet_connections[key]
+            logger.debug(f"Closed and removed pooled connection for {ip_address}:{port}")
+
+
+async def _get_machine_lock(ip_address: str, port: int) -> asyncio.Semaphore:
+    """
+    Get or create a semaphore lock for a specific machine.
+    
+    This ensures only one telnet operation happens at a time per machine,
+    preventing conflicts between reads (polling) and writes (color changes).
+    
+    Args:
+        ip_address: Machine IP address
+        port: Telnet port
+        
+    Returns:
+        Semaphore for this machine (value=1, so only one operation at a time)
+    """
+    key = (ip_address, port)
+    async with _locks_lock:
+        if key not in _telnet_locks:
+            _telnet_locks[key] = asyncio.Semaphore(1)
+        return _telnet_locks[key]
+
 
 # Completion Code Meanings (from Section 5.5.9.2 of Brother Protocol)
 COMPLETION_CODES = {
@@ -126,6 +205,7 @@ class CNCTelnetClient:
         self.writer: Optional[asyncio.StreamWriter] = None
         self.last_command_time: float = 0.0
         self._connected = False
+        self._cached_control_version: Optional[str] = None  # Cache detected control version
 
     @staticmethod
     def get_status_description(status_code: str) -> str:
@@ -155,42 +235,87 @@ class CNCTelnetClient:
 
     def _build_command(self, command: str, arguments: str = "", verbose: bool = False) -> bytes:
         """
-        Build a Brother protocol command frame.
-
-        Format: %C[Command(7)][Arguments(8)]  \r\n[Checksum]%\r\n
-
-        Args:
-            command: Command (will be padded to 7 chars)
-            arguments: Arguments (will be padded to 8 chars)
-            verbose: If True, log the command details
-
-        Returns:
-            Complete frame as bytes
+        Build a Brother protocol command frame per schema 5.5.9.1.
+        
+        Header (19 bytes): % i1 c1-c3 f1-f4 s1-s8 r1-r2
+        - %: Start symbol (1 byte)
+        - i1: Identifier 'C' for command (1 byte)
+        - c1-c3: Command type (3 bytes) - first 3 chars of command
+        - f1-f4: Function (4 bytes) - next 4 chars of command (padded)
+        - s1-s8: Message/arguments (8 bytes) - padded
+        - r1-r2: Completion code "00" for command (2 bytes)
+        
+        Footer: LF + checksum (2 digits) + %
+        Checksum: calculated from % in header to character before LF in footer
         """
-        # Pad command to 7 chars, arguments to 8 chars
+        # Pad command to 7 chars, then split into c1-c3 (3) and f1-f4 (4)
+        # f1-f4 should be left-justified (e.g., "LOD " -> "LOD " with space, "MAGC" -> "MAGC")
         cmd_padded = command.ljust(7)[:7]
+        cmd_type = cmd_padded[:3].ljust(3)[:3]  # c1-c3 (3 bytes), left-justified
+        function = cmd_padded[3:7].ljust(4)[:4]  # f1-f4 (4 bytes), left-justified
+        
+        # Pad arguments to 8 bytes (s1-s8)
         args_padded = arguments.ljust(8)[:8]
-
-        # Build command string
-        cmd_string = f"C{cmd_padded}{args_padded}  \r\n"
-
-        # Calculate checksum
-        checksum = self.calculate_checksum(cmd_string)
-
-        # Build complete frame: %[cmd_string][checksum]%\r\n
-        frame = f"%{cmd_string}{checksum}%\r\n"
+        
+        # Build header: % + C + c1-c3 + f1-f4 + s1-s8 + r1-r2
+        # r1-r2 is completion code "00" for commands (not the checksum)
+        header = f"%C{cmd_type}{function}{args_padded}00"
+        
+        # Calculate checksum on header data (from % to before LF in footer)
+        # Per schema: "from % in the header to the character before LF in the footer"
+        # This means: calculate on the entire header (including the %)
+        checksum = self.calculate_checksum(header)  # Already returns formatted string "00"-"15"
+        
+        # Build footer: LF + checksum + %
+        # In ASCII, LF is CR+LF (\r\n), so footer is "\r\n{checksum}%"
+        footer = f"\r\n{checksum}%"
+        
+        # Complete frame: header + footer
+        frame = f"{header}{footer}"
         frame_bytes = frame.encode('ascii')
 
         if verbose:
-            logger.info(f"Command: {command}, Arguments: {arguments}")
-            logger.info(f"Command frame (ASCII): {repr(frame)}")
-            logger.info(f"Command frame (hex): {frame_bytes.hex(' ')}")
-            logger.info(f"Command frame (bytes): {frame_bytes}")
+            logger.error(f"=== BUILDING COMMAND ===")
+            logger.error(f"Command: {command}, Arguments: '{arguments}'")
+            logger.error(f"Command padded: '{cmd_padded}' (7 bytes)")
+            logger.error(f"Header breakdown: % + C + '{cmd_type}' (c1-c3) + '{function}' (f1-f4) + '{args_padded}' (s1-s8) + '00' (r1-r2, completion code)")
+            logger.error(f"Checksum: '{checksum}' (calculated from header, goes in footer)")
+            logger.error(f"Checksum calculated from: C + '{cmd_type}' + '{function}' + '{args_padded}'")
+            logger.error(f"Header: '{header}' (length: {len(header)} bytes, should be 19)")
+            logger.error(f"Complete frame (ASCII): {repr(frame)}")
+            logger.error(f"Complete frame (hex): {frame_bytes.hex(' ')}")
+            logger.error(f"Complete frame (bytes length): {len(frame_bytes)}")
+            logger.error(f"Complete frame (raw): {frame_bytes}")
+            logger.error(f"=== END BUILD ===")
 
         return frame_bytes
 
     async def connect(self) -> bool:
-        """Establish TCP connection to the machine."""
+        """
+        Establish TCP connection to the machine.
+        
+        Supports persistent connections - if already connected and healthy, returns True.
+        Automatically reconnects if connection is lost.
+        """
+        # Check if already connected and healthy
+        if self._connected and self.reader and self.writer:
+            try:
+                # Check if writer is closing or closed
+                if self.writer.is_closing():
+                    logger.debug(f"Connection to {self.ip_address}:{self.port} is closing, reconnecting...")
+                    self._connected = False
+                    self.reader = None
+                    self.writer = None
+                else:
+                    # Connection appears healthy, reuse it
+                    return True
+            except Exception as e:
+                logger.debug(f"Connection health check failed for {self.ip_address}:{self.port}: {e}, reconnecting...")
+                self._connected = False
+                self.reader = None
+                self.writer = None
+        
+        # Connect (new connection or reconnection)
         try:
             self.reader, self.writer = await asyncio.wait_for(
                 asyncio.open_connection(self.ip_address, self.port),
@@ -223,7 +348,7 @@ class CNCTelnetClient:
                 self._connected = False
 
     async def _send_command(
-        self, command: str, arguments: str = "", verbose: bool = False
+        self, command: str, arguments: str = "", verbose: bool = False, read_timeout: float = 1.0
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Send a command and receive response.
@@ -253,14 +378,21 @@ class CNCTelnetClient:
             # Build and send frame
             frame = self._build_command(command, arguments, verbose=verbose)
             if verbose:
-                logger.info(f"Sending {len(frame)} bytes to {self.ip_address}:{self.port}")
+                logger.error(f"=== SENDING COMMAND ===")
+                logger.error(f"Command: {command}, Arguments: '{arguments}'")
+                logger.error(f"Sending {len(frame)} bytes to {self.ip_address}:{self.port}")
+                logger.error(f"Frame (hex): {frame.hex(' ')}")
+                logger.error(f"Frame (repr): {repr(frame)}")
+                logger.error(f"Frame (raw bytes): {frame}")
+                logger.error(f"Frame (ASCII readable): {frame.decode('ascii', errors='replace')}")
+                logger.error(f"=== END SEND ===")
             self.writer.write(frame)
             await self.writer.drain()
             self.last_command_time = asyncio.get_event_loop().time()
 
             # Receive response with robust reading to handle complete frames
             response = b''
-            read_timeout = 1.0  # Per-read timeout
+            # read_timeout is now a parameter (default 1.0, can be increased for write operations)
 
             while True:
                 try:
@@ -277,9 +409,17 @@ class CNCTelnetClient:
                 except asyncio.TimeoutError:
                     # Timeout on individual read, but we might have partial data
                     if response:
+                        # Only log partial responses if verbose - these are often normal for large data
+                        if verbose:
+                            logger.error(f"Partial response received before timeout: {len(response)} bytes")
+                            logger.error(f"Partial response (hex): {response.hex(' ')}")
+                            logger.error(f"Partial response (repr): {repr(response)}")
                         break
                     else:
-                        logger.error("Socket timeout - no data received")
+                        # Socket timeout with no data is an error - always log
+                        logger.warning(f"Socket timeout - no data received for command {command}")
+                        if verbose:
+                            logger.error(f"Command was: {command}, Arguments: '{arguments}'")
                         return False, None, None
 
             if not response:
@@ -290,13 +430,25 @@ class CNCTelnetClient:
             response_str = response.decode('ascii', errors='replace')
 
             # Extract status code and data
-            # Format: %R[Command(7)][Arguments(8)][StatusCode(2)]\n[Data]\n[Checksum]%
-            if len(response_str) < 20:
-                logger.error(f"Response too short: {response_str}")
+            # Response header format (19 bytes): %R[Command(7)][Arguments(8)][StatusCode(2)]
+            # Per schema: Header is 19 bytes, same as command but with 'R' instead of 'C'
+            # Format: %R c1-c3 f1-f4 s1-s8 r1-r2 (where r1-r2 is status code)
+            if len(response_str) < 19:
+                logger.error(f"Response too short: {len(response_str)} bytes, expected at least 19. Response: {repr(response_str[:50])}")
                 return False, None, None
 
+            # Response header: %R[cmd_type(3)][function(4)][args(8)][status(2)] = 19 bytes
+            # Status code is in r1-r2 position (bytes 17-18, 0-indexed)
             status_code = response_str[17:19]
             success = status_code == "00"
+            
+            if verbose:
+                logger.error(f"=== PARSING RESPONSE ===")
+                logger.error(f"Response length: {len(response_str)} bytes")
+                logger.error(f"Response header (first 19 bytes): {repr(response_str[:19])}")
+                logger.error(f"Status code (bytes 17-18): '{status_code}'")
+                logger.error(f"Full response (first 100 chars): {repr(response_str[:100])}")
+                logger.error(f"=== END RESPONSE PARSE ===")
 
             # Extract data between header and footer
             # Find first \n after header
@@ -378,49 +530,54 @@ class CNCTelnetClient:
         Returns:
             Data content as string, or None on failure
         """
-        for attempt in range(max_retries + 1):
-            try:
-                # Ensure connection (will reconnect if needed)
-                if not self._connected:
-                    connected = await self.connect()
-                    if not connected:
-                        if attempt < max_retries:
-                            wait_time = 0.5 * (attempt + 1)  # 0.5s, 1s, 1.5s
-                            logger.warning(f"Telnet connection failed for '{data_name}', retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
-                            await asyncio.sleep(wait_time)
-                            continue
-                        return None
+        # Acquire lock for this machine to serialize with writes
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            for attempt in range(max_retries + 1):
+                try:
+                    # Ensure connection (will reconnect if needed)
+                    if not self._connected:
+                        connected = await self.connect()
+                        if not connected:
+                            if attempt < max_retries:
+                                wait_time = 0.5 * (attempt + 1)  # 0.5s, 1s, 1.5s
+                                logger.warning(f"Telnet connection failed for '{data_name}', retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
+                                await asyncio.sleep(wait_time)
+                                continue
+                            return None
 
-                success, status, data = await self._send_command("LOD", data_name, verbose=verbose)
-                if success:
-                    return data
-                else:
-                    # Check if it's a transient error that might benefit from retry
-                    # Status codes like "40" (conflict due to communication using other port) might be retryable
-                    if status == "40" and attempt < max_retries:
+                    success, status, data = await self._send_command("LOD", data_name, verbose=verbose)
+                    if success:
+                        return data
+                    else:
+                        # Check if it's a transient error that might benefit from retry
+                        # Status codes like "40" (conflict due to communication using other port) might be retryable
+                        if status == "40" and attempt < max_retries:
+                            wait_time = 0.5 * (attempt + 1)
+                            logger.warning(f"Failed to load '{data_name}': status {status} (communication conflict), retrying in {wait_time}s")
+                            await asyncio.sleep(wait_time)
+                            # Mark connection as bad to force reconnection on next attempt
+                            self._connected = False
+                            continue
+                        else:
+                            logger.warning(f"Failed to load data '{data_name}': status {status}")
+                            return None
+                except (ConnectionError, TimeoutError, asyncio.TimeoutError) as e:
+                    if attempt < max_retries:
                         wait_time = 0.5 * (attempt + 1)
-                        logger.warning(f"Failed to load '{data_name}': status {status} (communication conflict), retrying in {wait_time}s")
+                        logger.warning(f"Connection error loading '{data_name}': {e}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
+                        # Mark connection as bad to force reconnection on next attempt
+                        self._connected = False
                         await asyncio.sleep(wait_time)
-                        # Disconnect to force reconnection
-                        await self.disconnect()
                         continue
                     else:
-                        logger.warning(f"Failed to load data '{data_name}': status {status}")
+                        logger.error(f"Error loading data '{data_name}' after {max_retries + 1} attempts: {e}")
                         return None
-            except (ConnectionError, TimeoutError, asyncio.TimeoutError) as e:
-                if attempt < max_retries:
-                    wait_time = 0.5 * (attempt + 1)
-                    logger.warning(f"Connection error loading '{data_name}': {e}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
-                    await self.disconnect()  # Force disconnect to clear bad connection
-                    await asyncio.sleep(wait_time)
-                    continue
-                else:
-                    logger.error(f"Error loading data '{data_name}' after {max_retries + 1} attempts: {e}")
+                except Exception as e:
+                    # Non-retryable errors (parsing, etc.) - fail immediately
+                    logger.error(f"Error loading data '{data_name}': {e}")
                     return None
-            except Exception as e:
-                # Non-retryable errors (parsing, etc.) - fail immediately
-                logger.error(f"Error loading data '{data_name}': {e}")
-                return None
         
         return None
 
@@ -452,19 +609,29 @@ class CNCTelnetClient:
         Get ATC magazine configuration from ATCTL (C00) or ATCTLD (D00).
         
         Args:
-            control_version: Control version ('C00' or 'D00'). If None, tries both.
+            control_version: Control version ('C00' or 'D00'). If None, auto-detects.
             verbose: If True, log command details
             
         Returns:
             ATC magazine data as string, or None on failure
         """
+        # If control_version not provided, detect it first (use cache if available)
+        if control_version is None:
+            if self._cached_control_version is None:
+                self._cached_control_version = await self.detect_control_type(verbose=False)  # Don't spam logs for detection
+                if verbose and self._cached_control_version:
+                    logger.info(f"Auto-detected control version: {self._cached_control_version}")
+            control_version = self._cached_control_version
+        
         # D00 uses ATCTLD, C00 uses ATCTL
         if control_version == "D00":
             data_name = "ATCTLD"
         elif control_version == "C00":
             data_name = "ATCTL"
         else:
-            # Try D00 first (newer), fallback to C00
+            # Detection failed - try both (D00 first, then C00)
+            if verbose:
+                logger.warning("Control version detection failed, trying ATCTLD first, then ATCTL")
             data = await self.load_data("ATCTLD", verbose=verbose)
             if data:
                 return data
@@ -558,13 +725,13 @@ class CNCTelnetClient:
                 size_start = 8
                 size_length = 3
                 size_in_bytes = False
-                logger.info("Auto-detected C00 format (11-byte entries)")
+                # Removed verbose logging - too noisy for websocket polling
             elif len(data) % 18 == 0:
                 entry_length = 18
                 size_start = 8
                 size_length = 10
                 size_in_bytes = True
-                logger.info("Auto-detected D00 format (18-byte entries)")
+                # Removed verbose logging - too noisy for websocket polling
             else:
                 # Try both formats and see which one produces valid entries
                 # Try C00 format first (more common)
@@ -577,13 +744,13 @@ class CNCTelnetClient:
                     size_start = 8
                     size_length = 3
                     size_in_bytes = False
-                    logger.info("Auto-detected C00 format (11-byte entries) based on parsing")
+                    # Removed verbose logging - too noisy for websocket polling
                 elif d00_entries:
                     entry_length = 18
                     size_start = 8
                     size_length = 10
                     size_in_bytes = True
-                    logger.info("Auto-detected D00 format (18-byte entries) based on parsing")
+                    # Removed verbose logging - too noisy for websocket polling
                 else:
                     logger.error(f"Could not determine directory listing format. Data length: {len(data)}")
                     return None
@@ -1634,6 +1801,104 @@ class CNCTelnetClient:
         except Exception as e:
             logger.error(f"Error getting macro variable range: {e}")
             return None
+
+    # ===== Write Commands (Phase 6) =====
+
+    async def change_atc_tool_color(
+        self,
+        pot_number: int,
+        tool_number: int,
+        color: int,
+        verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Change tool color in ATC magazine using CHGMAGC command.
+        
+        Args:
+            pot_number: Pot number (1-99, not spindle)
+            tool_number: Tool number in the pot (for verification)
+            color: Color value (0=None, 1=Blue, 2=Red, 3=Purple, 4=Green, 5=Light Blue, 6=Yellow, 7=White)
+            verbose: If True, log command details
+            
+        Returns:
+            Tuple of (success, status_code)
+        """
+        if not self._connected:
+            connected = await self.connect()
+            if not connected:
+                return False, None
+
+        # Validate inputs
+        if not 1 <= pot_number <= 99:
+            logger.error(f"Invalid pot number: {pot_number} (must be 1-99)")
+            return False, "30"  # Invalid tool/pot number
+        
+        if not 0 <= color <= 7:
+            logger.error(f"Invalid color value: {color} (must be 0-7)")
+            return False, "13"  # Data item not within allowed range
+
+        # Acquire lock for this machine to prevent conflicts with polling reads
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        try:
+            # Wait for lock (this will block if polling is currently reading)
+            async with machine_lock:
+                # Format based on schema:
+                # Example: %CCHGMAGC0204
+                # Breaking down: %C (frame type) + CHGMAG (command, 6 chars padded to 7) + C (k1) + 02 (m1m2) + 04 (t1t2)
+                # The _build_command method adds 'C' prefix, so command should be "CHGMAG" (6 chars)
+                # After padding: "CHGMAG " (7 chars)
+                # After 'C' prefix: "CCHGMAG " (correct!)
+                
+                pot_str = f"{pot_number:02d}"  # m1m2: magazine number (2 digits)
+                color_str = f"{color}"  # t1: color value (1 digit, 0-7)
+                
+                # Arguments format: m1m2 + t1 + padding = 8 chars
+                # Example: "021     " (pot 02, color 1, padded to 8 chars)
+                # NO 'C' prefix in arguments - the 'C' for color is in the command name (MAGC)
+                arguments = f"{pot_str}{color_str}      "[:8]  # "021     " (8 chars)
+                
+                # Use the standard _build_command method (same format as LOD, etc.)
+                # Command should be "CHGMAGC" (7 chars) to get:
+                # - c1-c3 = "CHG" (change)
+                # - f1-f4 = "MAGC" (magazine color, left-justified)
+                # The _build_command method adds 'C' prefix, so we send "CHGMAGC"
+                # Arguments: "021     " (pot 02, color 1, padded to 8 chars)
+                # Header: %C + CHG + MAGC + 021      + 00 = %CCHGMAGC021      00
+                # Checksum is in the footer, NOT in r1-r2
+                logger.error(f"=== CHGMAGC COMMAND DEBUG ===")
+                logger.error(f"CHGMAGC: pot={pot_number}, tool={tool_number}, color={color}")
+                logger.error(f"CHGMAGC: arguments string = '{arguments}' (length={len(arguments)}, should be 8)")
+                logger.error(f"CHGMAGC: command = 'CHGMAGC' (will become 'CCHGMAGC' with 'C' prefix)")
+                logger.error(f"CHGMAGC: Full command breakdown:")
+                logger.error(f"  - Input command: 'CHGMAGC' (7 bytes)")
+                logger.error(f"  - After padding: 'CHGMAGC' (7 bytes, no padding needed)")
+                logger.error(f"  - Split: c1-c3='CHG', f1-f4='MAGC'")
+                logger.error(f"  - With 'C' prefix: 'C' + 'CHG' + 'MAGC' = 'CCHGMAGC'")
+                # Build expected header format for debug (same as _build_command will do)
+                # Command "CHGMAGC" splits into: c1-c3='CHG', f1-f4='MAGC'
+                expected_header = f"%CCHG{'MAGC':<4}{arguments}00"
+                logger.error(f"  - Header breakdown: % + C + 'CHG' (c1-c3) + 'MAGC' (f1-f4) + '{arguments}' (s1-s8) + '00' (r1-r2)")
+                logger.error(f"  - Expected header: '{expected_header}' (length: {len(expected_header)} bytes, should be 19)")
+                logger.error(f"=== END CHGMAGC DEBUG ===")
+                
+                # Use standard _send_command which uses _build_command (same as LOD)
+                # verbose=True will show the complete frame being sent
+                # Use longer timeout (5 seconds) for write operations as they may take longer to process
+                success, status, _ = await self._send_command("CHGMAGC", arguments, verbose=True, read_timeout=5.0)
+                
+                if success:
+                    color_names = {0: "None", 1: "Blue", 2: "Red", 3: "Purple", 4: "Green", 5: "Light Blue", 6: "Yellow", 7: "White"}
+                    logger.info(f"Changed tool color in pot {pot_number} to {color_names.get(color, 'Unknown')}")
+                else:
+                    status_desc = self.get_status_description(status or "00")
+                    logger.warning(f"Failed to change tool color: {status_desc}")
+                
+                return success, status
+                
+        except Exception as e:
+            logger.error(f"Error changing tool color: {e}")
+            return False, None
 
     async def __aenter__(self):
         """Async context manager entry."""
