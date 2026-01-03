@@ -2,6 +2,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import routers
 from app.api import machines, status, programs, websocket, history, summary, tools
@@ -115,4 +118,12 @@ async def shutdown_event():
     print(f"Shutting down {settings.APP_NAME}")
     print("Stopping background polling service...")
     await polling_service.stop()
+    
+    # Ensure all Telnet connections are closed (backup cleanup)
+    try:
+        from app.clients.telnet_client import close_all_connections
+        await close_all_connections()
+    except Exception as e:
+        logger.warning(f"Error closing Telnet connections during shutdown: {e}")
+    
     print("Polling service stopped")

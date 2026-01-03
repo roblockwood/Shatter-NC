@@ -402,7 +402,6 @@ POST /api/machines/{machine_id}/detect-protocols
 
 Scans for:
 - **FOCAS** (Fanuc Open CNC API) - Ports 8192-8195
-- **MTConnect** - Ports 7878, 5000
 - **Other protocols** - Modbus TCP, OPC UA, Telnet, etc.
 
 **Response:**
@@ -413,7 +412,6 @@ Scans for:
   "ip_address": "192.168.86.89",
   "summary": {
     "focas_available": true,
-    "mtconnect_available": false,
     "other_protocols": []
   },
   "focas": {

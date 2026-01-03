@@ -224,7 +224,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     ftp_username: machine.ftp_username || '',
     ftp_password: machine.ftp_password || '',
     ftp_port: machine.ftp_port || 21,
-    http_port: machine.http_port || 80,
+    // http_port removed - Telnet port is always 10000
     path: machine.path !== undefined && machine.path !== null ? machine.path : '/program',
     poll_interval_seconds: machine.poll_interval_seconds || 5,
     enabled: machine.enabled !== false,
@@ -257,7 +257,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             ftp_username: fullMachineData.ftp_username || '',
             ftp_password: fullMachineData.ftp_password || '',
             ftp_port: fullMachineData.ftp_port || 21,
-            http_port: fullMachineData.http_port || 80,
+            // http_port removed - Telnet port is always 10000
             path: fullMachineData.path !== undefined && fullMachineData.path !== null ? fullMachineData.path : '/program',
             poll_interval_seconds: fullMachineData.poll_interval_seconds || 5,
             enabled: fullMachineData.enabled !== false,
@@ -352,7 +352,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         ftp_username: machine.ftp_username || '',
         ftp_password: machine.ftp_password || '',
         ftp_port: machine.ftp_port || 21,
-        http_port: machine.http_port || 80,
+        // http_port removed - Telnet port is always 10000
         path: machine.path !== undefined && machine.path !== null ? machine.path : '/program',
         poll_interval_seconds: machine.poll_interval_seconds || 5,
         enabled: machine.enabled !== false,
@@ -457,8 +457,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         } else {
           // Build error message from failed services
           const errors = [];
-          if (!result.http?.success) {
-            errors.push(`HTTP: ${result.http?.error || 'Connection failed'}`);
+          if (!result.telnet?.success) {
+            errors.push(`Telnet: ${result.telnet?.error || 'Connection failed'}`);
           }
           if (!result.ftp?.success) {
             errors.push(`FTP: ${result.ftp?.error || 'Connection failed'}`);
@@ -833,14 +833,14 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               />
             </div>
             <div>
-              <label>HTTP PORT:</label>
+              <label>COM PORT:</label>
               <input
                 type="number"
                 min="1"
                 max="65535"
-                value={editFormData.http_port}
-                onChange={(e) => setEditFormData({ ...editFormData, http_port: parseInt(e.target.value) })}
-                disabled={isEditSaving}
+                value={10000}
+                disabled={true}
+                title="Telnet communication port (fixed at 10000)"
               />
             </div>
           </div>

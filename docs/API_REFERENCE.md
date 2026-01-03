@@ -486,7 +486,7 @@ curl http://localhost:8000/api/machines/1/counters
 
 ### Get Alarms
 
-Get current alarms from machine.
+Get current alarms from machine. Alarms are enriched with detailed descriptions, causes, solutions, and severity levels from alarm code lookup tables.
 
 **Endpoint:** `GET /api/machines/{machine_id}/alarms`
 
@@ -501,21 +501,49 @@ Get current alarms from machine.
     {
       "code": "P504",
       "message": "PROGRAM NOT FOUND",
-      "program": "O2045",
-      "block_no": "N100",
+      "description": "The specified program number was not found in memory",
+      "category": "Program",
+      "number": "504",
+      "auxiliary": "",
       "severity": "error",
-      "level_class": "alarm_level_3"
+      "level_class": "alarm_level_3",
+      "stop_level": "3",
+      "reset_level": "1",
+      "cause": "The program number specified in the G-code does not exist in the machine's memory",
+      "solution": "Verify the program number is correct and the program has been loaded to the machine"
     }
   ],
+  "loading_alarms": [],
   "timestamp": "2025-01-15T14:30:00Z"
 }
 ```
 
-**Alarm Severity Levels:**
-- `info` - Informational (level 1)
-- `warning` - Warning (level 2)
-- `error` - Error (level 3)
-- `critical` - Critical (level 4)
+**Alarm Fields:**
+- `code` (string): Alarm code (e.g., "P504", "IO0518")
+- `message` (string): Original alarm message from machine
+- `description` (string): Human-readable description from alarm code lookup
+- `category` (string): Alarm category (e.g., "Program", "IO")
+- `number` (string): Alarm number portion of code
+- `auxiliary` (string): Auxiliary information
+- `severity` (string): Severity level string
+- `level_class` (string): Alarm level class
+- `stop_level` (string): Stop level (1-5, where 5 is most critical)
+- `reset_level` (string): Reset level (1-5)
+- `cause` (string): Root cause description from lookup
+- `solution` (string): Recommended solution from lookup
+
+**Alarm Severity Levels (stop_level):**
+- `1` - Informational (cyan)
+- `2` - Warning (orange/yellow)
+- `3` - Error (red-orange)
+- `4` - Critical (red)
+- `5` - Most Critical (bright red)
+
+**Data Source:**
+- **Telnet**: `LOD ALARM` command (replaces HTTP `/alarm_log`)
+- **Enrichment**: Alarm code lookup tables from `backend/app/data/alarm_codes/`
+  - `section_11_7_alarm_code_list_c00.json` (C00 control)
+  - `section_2_13_alarm_code_list_d00.json` (D00 control)
 
 **Example:**
 ```bash

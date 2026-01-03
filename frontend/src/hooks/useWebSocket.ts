@@ -12,7 +12,17 @@ interface MachineStatus {
   tools?: Array<{ tool_number: number; tool_name?: string; diameter?: number; length?: number; pot_number?: string | number; }>; // ATC data
   tool_table?: Array<{ tool_number: number; tool_name?: string; diameter?: number; length?: number; pot_number?: string | number; }>; // TABLE data
   current_tool?: number;
-  alarms?: Array<{ code: string; message: string }>;
+  alarms?: Array<{
+    code: string;
+    message: string;
+    description?: string;
+    severity?: string;
+    level_class?: string;
+    stop_level?: string;
+    reset_level?: string;
+    cause?: string;
+    solution?: string;
+  }>;
   units?: 'in' | 'mm';
   error?: string;
   poll_timestamp: string;

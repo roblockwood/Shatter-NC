@@ -9,7 +9,7 @@ from app.db.base import get_db
 from app.models.machine import Machine
 from app.models.program import Program, ProgramDeployment
 from app.parsers.gcode_parser import parse_gcode
-from app.parsers.posni_parser import get_work_offset
+# Note: get_work_offset from posni_parser is deprecated - use parse_posni_v2 instead
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
 from app.schemas.program import (
@@ -204,24 +204,32 @@ async def validate_program(
             warnings.append("No tool data in NC program and machine data unavailable")
 
     # Always fetch machine work offsets (even if no WCS in NC)
+    # Phase 5: Using Telnet for data reads (FTP deprecated for data, kept only for file transfers)
     position_data = None
     wcs_fetch_failed = False
     try:
-        ftp_client = CNCFtpClient(
-            machine.ip_address,
-            machine.ftp_port,
-            machine.ftp_username,
-            machine.ftp_password
+        from app.clients.telnet_client import get_or_create_connection
+        from app.parsers.posni_parser_v2 import parse_posni_v2
+        
+        # Use pooled connection (reused across operations)
+        telnet_client = await get_or_create_connection(
+            ip_address=machine.ip_address,
+            port=10000,
+            timeout=10
         )
-        position_data = await ftp_client.get_position_data()
+        
+        # Use machine.units to select correct data name (POSNI1 vs POSNM1)
+        position_data = await telnet_client.get_position_data(units=machine.units, verbose=False)
         
         if not position_data:
-            raise Exception("Could not retrieve POSNI1.NC from machine (file may not exist or FTP connection failed)")
+            raise Exception("Could not retrieve POSNI1.NC/POSNM1.NC from machine via Telnet (file may not exist or Telnet connection failed)")
+        
+        # Connection stays in pool - don't disconnect
     except Exception as e:
-        # Log FTP error but don't prevent other validation
+        # Log Telnet error but don't prevent other validation
         wcs_fetch_failed = True
         import traceback
-        error_msg = f"Could not fetch machine WCS data: {str(e)}"
+        error_msg = f"Could not fetch machine WCS data via Telnet: {str(e)}"
         warnings.append(error_msg)
         print(f"WCS Fetch Error: {error_msg}")
         print(traceback.format_exc())
@@ -235,6 +243,7 @@ async def validate_program(
         wcs_validation = _validate_wcs_offset(
             parsed["wcs_offset"],
             position_data,
+            units=machine.units,
             use_machine_tolerances=machine.use_machine_wcs_tolerances,
             tolerance_x=machine.tolerance_x,
             tolerance_y=machine.tolerance_y,
@@ -263,9 +272,10 @@ async def validate_program(
             # Machine data available - show machine WCS data
             warnings.append("No WCS offset found in NC program")
             # Get all available WCS offsets from machine and show first one as reference
-            from app.parsers.posni_parser import parse_posni
+            # Use schema-based parser v2
+            from app.parsers.posni_parser_v2 import parse_posni_v2
             
-            parsed_posni = parse_posni(position_data.encode('utf-8'), units=machine.units)
+            parsed_posni = parse_posni_v2(position_data.encode('utf-8'), units=machine.units, control_version=None)
             work_offsets = parsed_posni.get("work_offsets", {})
             
             # Create a validation result showing machine has WCS data but NC doesn't specify
@@ -483,6 +493,7 @@ def _validate_tool(
 def _validate_wcs_offset(
     program_wcs: Dict[str, Any],
     machine_position_data: str,
+    units: str = 'in',
     use_machine_tolerances: bool = False,
     tolerance_x: float = 0.0394,
     tolerance_y: float = 0.0394,
@@ -536,9 +547,12 @@ def _validate_wcs_offset(
     # Store the primary tolerance for display
     tolerance = max(final_tolerance_x, final_tolerance_y, final_tolerance_z)
 
-    # Parse POSNI1.NC to get actual machine offset
-    # Convert string to bytes for parser
-    actual_offset = get_work_offset(machine_position_data.encode('utf-8'), work_offset)
+    # Parse POSNI1/POSNM1 to get actual machine offset using schema-based parser v2
+    # Use the units parameter to correctly parse the position data (POSNI1 for inches, POSNM1 for millimeters)
+    from app.parsers.posni_parser_v2 import parse_posni_v2
+    parsed_posni = parse_posni_v2(machine_position_data.encode('utf-8'), units=units, control_version=None)
+    work_offsets = parsed_posni.get("work_offsets", {})
+    actual_offset = work_offsets.get(work_offset)
 
     if not actual_offset:
         return WCSValidationResult(
