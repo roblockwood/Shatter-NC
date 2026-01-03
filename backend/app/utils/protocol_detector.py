@@ -1,6 +1,6 @@
 """Protocol detection utility for Brother CNC machines.
 
-Detects available communication protocols including FOCAS, MTConnect, and other
+Detects available communication protocols including FOCAS and other
 control protocols that may be available on the machine.
 """
 import socket
@@ -21,12 +21,6 @@ class ProtocolDetector:
         8192,  # Alternative FOCAS port
         8194,  # FOCAS2
         8195,  # FOCAS3
-    ]
-
-    # MTConnect ports
-    MTCONNECT_PORTS = [
-        7878,  # Standard MTConnect port
-        5000,  # Alternative MTConnect port
     ]
 
     # Other common CNC control ports
@@ -151,11 +145,9 @@ class ProtocolDetector:
             "ip_address": self.ip_address,
             "scan_timestamp": datetime.now().isoformat(),
             "focas": {},
-            "mtconnect": {},
             "other_ports": [],
             "summary": {
                 "focas_available": False,
-                "mtconnect_available": False,
                 "other_protocols": [],
             }
         }
@@ -172,16 +164,6 @@ class ProtocolDetector:
             "ports_checked": self.FOCAS_PORTS,
             "results": focas_results,
         }
-
-        # Check MTConnect ports
-        logger.info(f"Scanning MTConnect ports on {self.ip_address}...")
-        mtconnect_results = self.scan_ports(self.MTCONNECT_PORTS)
-        results["mtconnect"] = {
-            "ports_checked": self.MTCONNECT_PORTS,
-            "results": mtconnect_results,
-        }
-        if any(r["open"] for r in mtconnect_results):
-            results["summary"]["mtconnect_available"] = True
 
         # Check other common ports
         logger.info(f"Scanning other common ports on {self.ip_address}...")
@@ -240,8 +222,6 @@ class ProtocolDetector:
                 ver_lower = ver_data.lower()
                 if "focas" in ver_lower:
                     results["hints"].append("VER.NC mentions FOCAS")
-                if "mtconnect" in ver_lower or "mtc" in ver_lower:
-                    results["hints"].append("VER.NC mentions MTConnect")
         except Exception as e:
             logger.warning(f"Could not read VER.NC: {e}")
 
@@ -279,7 +259,6 @@ class ProtocolDetector:
             "/protocols",
             "/api",
             "/focas",
-            "/mtconnect",
             "/status",
             "/info",
         ]
@@ -297,8 +276,6 @@ class ProtocolDetector:
                     response_lower = response.lower()
                     if "focas" in response_lower:
                         results["protocol_hints"].append(f"{endpoint} mentions FOCAS")
-                    if "mtconnect" in response_lower or "mtc" in response_lower:
-                        results["protocol_hints"].append(f"{endpoint} mentions MTConnect")
             except Exception:
                 pass
 

@@ -73,6 +73,28 @@ async def close_connection(ip_address: str, port: int = 10000):
             logger.debug(f"Closed and removed pooled connection for {ip_address}:{port}")
 
 
+async def close_all_connections():
+    """
+    Close all connections in the global connection pool.
+    
+    This should be called on application shutdown to ensure
+    all Telnet connections are properly closed.
+    """
+    async with _connections_lock:
+        connections_to_close = list(_telnet_connections.items())
+        _telnet_connections.clear()
+    
+    # Close connections outside the lock to avoid deadlock
+    for key, client in connections_to_close:
+        try:
+            await client.disconnect()
+            logger.debug(f"Closed pooled connection for {key[0]}:{key[1]}")
+        except Exception as e:
+            logger.warning(f"Error closing connection {key[0]}:{key[1]}: {e}")
+    
+    logger.info(f"Closed {len(connections_to_close)} Telnet connection(s) from pool")
+
+
 async def _get_machine_lock(ip_address: str, port: int) -> asyncio.Semaphore:
     """
     Get or create a semaphore lock for a specific machine.
@@ -600,9 +622,61 @@ class CNCTelnetClient:
         data_name = "TOLNI1" if units == 'in' else "TOLNM1"
         return await self.load_data(data_name, verbose=verbose)
 
-    async def get_position_data(self, verbose: bool = False) -> Optional[str]:
-        """Get position/work offsets from POSNI1."""
-        return await self.load_data("POSNI1", verbose=verbose)
+    async def get_position_data(self, units: str = 'in', verbose: bool = False) -> Optional[str]:
+        """
+        Get position/work offsets from POSNI1 (inches) or POSNM1 (millimeters).
+        
+        Args:
+            units: Unit system ('in' for inches, 'mm' for millimeters). Defaults to 'in'.
+            verbose: If True, log command details
+            
+        Returns:
+            Position data as string, or None on failure
+        """
+        data_name = "POSNI1" if units == 'in' else "POSNM1"
+        return await self.load_data(data_name, verbose=verbose)
+
+    async def get_monitor_data(self, verbose: bool = False) -> Optional[str]:
+        """
+        Get MONTR (Machine Monitor) data from CNC machine via Telnet.
+
+        Args:
+            verbose: If True, log command details
+
+        Returns:
+            Raw MONTR data as string, or None on failure
+        """
+        return await self.load_data("MONTR", verbose=verbose)
+
+    async def get_alarm_data(self, verbose: bool = False) -> Optional[str]:
+        """
+        Get ALARM (Current Alarm) data from CNC machine via Telnet.
+
+        Args:
+            verbose: If True, log command details
+
+        Returns:
+            Raw ALARM data as string, or None on failure
+        """
+        return await self.load_data("ALARM", verbose=verbose)
+
+    async def get_prd3_data(self, control_version: Optional[str] = None, verbose: bool = False) -> Optional[str]:
+        """
+        Get PRD3/PRDD3 (Production data 3 - Status history) data via Telnet.
+
+        Args:
+            control_version: Control version ('C00' or 'D00'). If None, uses detect_control_type().
+            verbose: If True, enable verbose logging
+
+        Returns:
+            PRD3/PRDD3 data as string, or None if failed
+        """
+        # Determine data name based on control version
+        if control_version is None:
+            control_version = await self.detect_control_type()
+        
+        data_name = "PRDD3" if control_version == "D00" else "PRD3"
+        return await self.load_data(data_name, verbose=verbose)
 
     async def get_atc_magazine_data(self, control_version: Optional[str] = None, verbose: bool = False) -> Optional[str]:
         """
