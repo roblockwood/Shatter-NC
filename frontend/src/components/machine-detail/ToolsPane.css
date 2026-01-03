@@ -257,6 +257,32 @@
   font-size: var(--font-xs);
 }
 
+.tools-col-color-clickable {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  position: relative;
+}
+
+.tools-col-color-clickable:hover {
+  background: var(--color-bg-elevated, rgba(255, 255, 255, 0.05));
+}
+
+.tools-col-color-clickable:active {
+  background: var(--color-bg-hover, rgba(255, 255, 255, 0.1));
+}
+
+.color-display-empty {
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.color-display-empty:hover {
+  background: var(--color-bg-elevated, rgba(255, 255, 255, 0.05));
+  color: var(--color-text-primary, #fff);
+}
+
 .tools-search-container {
   display: flex;
   align-items: center;
