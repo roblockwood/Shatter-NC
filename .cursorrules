@@ -1,0 +1,41 @@
+# Cursor Rules for Shatter-NC
+
+## Machine Testing
+
+When the user requests testing on a CNC machine (e.g., "test on machine", "test parser on machine", "test schema on machine"):
+
+1. **Stop Dev Container**: Stop the backend dev container to free up the Telnet connection:
+   ```bash
+   docker-compose -f docker-compose.dev.yml stop backend
+   ```
+
+2. **Run Test**: Execute the test with a fresh connection using `get_or_create_connection()`.
+
+3. **Restart Dev Container**: After testing, restart the backend:
+   ```bash
+   docker-compose -f docker-compose.dev.yml start backend
+   ```
+
+**Why**: The backend Docker container holds the Telnet connection (single connection limit per machine). Stopping the container ensures the connection is fully released for testing.
+
+**Alternative Pattern** (if you prefer programmatic connection management):
+```python
+from app.clients.telnet_client import close_connection, get_or_create_connection
+
+async def test_on_machine(ip_address: str, port: int = 10000):
+    try:
+        # Close existing connection
+        await close_connection(ip_address, port)
+        await asyncio.sleep(0.5)
+        
+        # Run test
+        client = await get_or_create_connection(ip_address, port, timeout=15)
+        # ... perform test ...
+        
+    finally:
+        # Clean up
+        await close_connection(ip_address, port)
+```
+
+**Reference**: See `.cursor/machine-testing-skill.md` for detailed workflow.
+
