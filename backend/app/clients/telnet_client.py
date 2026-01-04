@@ -507,36 +507,40 @@ class CNCTelnetClient:
         Returns:
             Dict with connection test results
         """
-        try:
-            start_time = datetime.now()
-            connected = await self.connect()
-            if not connected:
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            try:
+                start_time = datetime.now()
+                connected = await self.connect()
+                if not connected:
+                    return {
+                        "success": False,
+                        "error": "Failed to establish connection",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+
+                # Try a simple command to verify connection works (MEM is more reliable than DIR)
+                success, status, _ = await self._send_command("LOD", "MEM")
+                end_time = datetime.now()
+                latency = (end_time - start_time).total_seconds() * 1000
+
+                await self.disconnect()
+
                 return {
-                    "success": False,
-                    "error": "Failed to establish connection",
+                    "success": success,
+                    "latency_ms": round(latency, 2),
+                    "status_code": status,
                     "timestamp": datetime.now().isoformat(),
                 }
-
-            # Try a simple command to verify connection works (MEM is more reliable than DIR)
-            success, status, _ = await self._send_command("LOD", "MEM")
-            end_time = datetime.now()
-            latency = (end_time - start_time).total_seconds() * 1000
-
-            await self.disconnect()
-
-            return {
-                "success": success,
-                "latency_ms": round(latency, 2),
-                "status_code": status,
-                "timestamp": datetime.now().isoformat(),
-            }
-        except Exception as e:
-            await self.disconnect()
-            return {
-                "success": False,
-                "error": str(e),
-                "timestamp": datetime.now().isoformat(),
-            }
+            except Exception as e:
+                await self.disconnect()
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "timestamp": datetime.now().isoformat(),
+                }
 
     async def load_data(self, data_name: str, verbose: bool = False, max_retries: int = 2) -> Optional[str]:
         """
@@ -713,21 +717,10 @@ class CNCTelnetClient:
         
         return await self.load_data(data_name, verbose=verbose)
 
-    async def get_directory_listing(self, verbose: bool = False) -> Optional[str]:
+    async def _get_directory_listing_internal(self, verbose: bool = False) -> Optional[str]:
         """
-        Get directory listing using DRQALL command.
-        
-        Note: This replaces the invalid LOD DIR command. The protocol uses DRQALL
-        to request directory of all data in the current folder.
-        
-        Response format: Each entry is 18 characters (8-byte data name + 10-byte size),
-        all concatenated together without separators.
-        
-        Args:
-            verbose: If True, log command details
-            
-        Returns:
-            Directory listing as string (raw format), or None on failure
+        Internal method to get directory listing without acquiring lock.
+        Used when already within a lock context.
         """
         if not self._connected:
             connected = await self.connect()
@@ -746,6 +739,28 @@ class CNCTelnetClient:
         except Exception as e:
             logger.error(f"Error getting directory listing: {e}")
             return None
+
+    async def get_directory_listing(self, verbose: bool = False) -> Optional[str]:
+        """
+        Get directory listing using DRQALL command.
+        
+        Note: This replaces the invalid LOD DIR command. The protocol uses DRQALL
+        to request directory of all data in the current folder.
+        
+        Response format: Each entry is 18 characters (8-byte data name + 10-byte size),
+        all concatenated together without separators.
+        
+        Args:
+            verbose: If True, log command details
+            
+        Returns:
+            Directory listing as string (raw format), or None on failure
+        """
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            return await self._get_directory_listing_internal(verbose=verbose)
 
     async def parse_directory_listing(
         self, directory_data: str, control_type: Optional[str] = None
@@ -921,165 +936,169 @@ class CNCTelnetClient:
         Returns:
             "C00" or "D00" if detected, None if uncertain
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
-                return None
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
 
-        try:
-            # Get directory listing
-            directory_data = await self.get_directory_listing(verbose=verbose)
-            if not directory_data:
-                logger.warning("Failed to get directory listing for control type detection")
-                return None
+            try:
+                # Get directory listing (use internal version since we're already within lock)
+                directory_data = await self._get_directory_listing_internal(verbose=verbose)
+                if not directory_data:
+                    logger.warning("Failed to get directory listing for control type detection")
+                    return None
 
-            # Parse directory listing in BOTH formats to solve the catch-22
-            # We don't know the format yet, so try both
-            entries_c00 = await self.parse_directory_listing(directory_data, control_type="C00")
-            entries_d00 = await self.parse_directory_listing(directory_data, control_type="D00")
-            
-            if not entries_c00 and not entries_d00:
-                logger.warning("No entries found in directory listing with either format")
-                return None
+                # Parse directory listing in BOTH formats to solve the catch-22
+                # We don't know the format yet, so try both
+                entries_c00 = await self.parse_directory_listing(directory_data, control_type="C00")
+                entries_d00 = await self.parse_directory_listing(directory_data, control_type="D00")
+                
+                if not entries_c00 and not entries_d00:
+                    logger.warning("No entries found in directory listing with either format")
+                    return None
 
-            # Check for multiple file patterns to increase confidence
-            import re
-            
-            # C00 control indicators
-            prdc_pattern = re.compile(r'^PRDC\d+$')  # PRDC1, PRDC2, PRDC89, etc.
-            sysc_pattern = re.compile(r'^SYSC\d+$')  # SYSC89, SYSC94, SYSC99, etc.
-            
-            # D00 control indicators
-            prdd_pattern = re.compile(r'^PRDD\d+$')  # PRDD1, PRDD2, PRDD89, etc.
-            sysd_pattern = re.compile(r'^SYSD\d+$')  # SYSD89, SYSD94, SYSD99, etc.
-            
-            # Count indicators found in each format
-            c00_indicators_in_c00_format = []
-            d00_indicators_in_c00_format = []
-            c00_indicators_in_d00_format = []
-            d00_indicators_in_d00_format = []
-            
-            # Check C00 format results
-            if entries_c00:
-                for entry in entries_c00:
-                    name = entry.get('name', '')
-                    if prdc_pattern.match(name):
-                        c00_indicators_in_c00_format.append(name)
-                        if verbose:
-                            logger.info(f"Found C00 indicator (PRDC) in C00 format: {name}")
-                    elif sysc_pattern.match(name):
-                        c00_indicators_in_c00_format.append(name)
-                        if verbose:
-                            logger.info(f"Found C00 indicator (SYSC) in C00 format: {name}")
-                    elif prdd_pattern.match(name):
-                        d00_indicators_in_c00_format.append(name)
-                        if verbose:
-                            logger.info(f"Found D00 indicator (PRDD) in C00 format: {name}")
-                    elif sysd_pattern.match(name):
-                        d00_indicators_in_c00_format.append(name)
-                        if verbose:
-                            logger.info(f"Found D00 indicator (SYSD) in C00 format: {name}")
-            
-            # Check D00 format results
-            if entries_d00:
-                for entry in entries_d00:
-                    name = entry.get('name', '')
-                    if prdc_pattern.match(name):
-                        c00_indicators_in_d00_format.append(name)
-                        if verbose:
-                            logger.info(f"Found C00 indicator (PRDC) in D00 format: {name}")
-                    elif sysc_pattern.match(name):
-                        c00_indicators_in_d00_format.append(name)
-                        if verbose:
-                            logger.info(f"Found C00 indicator (SYSC) in D00 format: {name}")
-                    elif prdd_pattern.match(name):
-                        d00_indicators_in_d00_format.append(name)
-                        if verbose:
-                            logger.info(f"Found D00 indicator (PRDD) in D00 format: {name}")
-                    elif sysd_pattern.match(name):
-                        d00_indicators_in_d00_format.append(name)
-                        if verbose:
-                            logger.info(f"Found D00 indicator (SYSD) in D00 format: {name}")
-            
-            # Count indicators
-            c00_count_in_c00_format = len(c00_indicators_in_c00_format)
-            d00_count_in_c00_format = len(d00_indicators_in_c00_format)
-            c00_count_in_d00_format = len(c00_indicators_in_d00_format)
-            d00_count_in_d00_format = len(d00_indicators_in_d00_format)
-            
-            if verbose:
-                logger.info(f"C00 indicators in C00 format: {c00_count_in_c00_format} ({c00_indicators_in_c00_format})")
-                logger.info(f"D00 indicators in C00 format: {d00_count_in_c00_format} ({d00_indicators_in_c00_format})")
-                logger.info(f"C00 indicators in D00 format: {c00_count_in_d00_format} ({c00_indicators_in_d00_format})")
-                logger.info(f"D00 indicators in D00 format: {d00_count_in_d00_format} ({d00_indicators_in_d00_format})")
+                # Check for multiple file patterns to increase confidence
+                import re
+                
+                # C00 control indicators
+                prdc_pattern = re.compile(r'^PRDC\d+$')  # PRDC1, PRDC2, PRDC89, etc.
+                sysc_pattern = re.compile(r'^SYSC\d+$')  # SYSC89, SYSC94, SYSC99, etc.
+                
+                # D00 control indicators
+                prdd_pattern = re.compile(r'^PRDD\d+$')  # PRDD1, PRDD2, PRDD89, etc.
+                sysd_pattern = re.compile(r'^SYSD\d+$')  # SYSD89, SYSD94, SYSD99, etc.
+                
+                # Count indicators found in each format
+                c00_indicators_in_c00_format = []
+                d00_indicators_in_c00_format = []
+                c00_indicators_in_d00_format = []
+                d00_indicators_in_d00_format = []
+                
+                # Check C00 format results
+                if entries_c00:
+                    for entry in entries_c00:
+                        name = entry.get('name', '')
+                        if prdc_pattern.match(name):
+                            c00_indicators_in_c00_format.append(name)
+                            if verbose:
+                                logger.info(f"Found C00 indicator (PRDC) in C00 format: {name}")
+                        elif sysc_pattern.match(name):
+                            c00_indicators_in_c00_format.append(name)
+                            if verbose:
+                                logger.info(f"Found C00 indicator (SYSC) in C00 format: {name}")
+                        elif prdd_pattern.match(name):
+                            d00_indicators_in_c00_format.append(name)
+                            if verbose:
+                                logger.info(f"Found D00 indicator (PRDD) in C00 format: {name}")
+                        elif sysd_pattern.match(name):
+                            d00_indicators_in_c00_format.append(name)
+                            if verbose:
+                                logger.info(f"Found D00 indicator (SYSD) in C00 format: {name}")
+                
+                # Check D00 format results
+                if entries_d00:
+                    for entry in entries_d00:
+                        name = entry.get('name', '')
+                        if prdc_pattern.match(name):
+                            c00_indicators_in_d00_format.append(name)
+                            if verbose:
+                                logger.info(f"Found C00 indicator (PRDC) in D00 format: {name}")
+                        elif sysc_pattern.match(name):
+                            c00_indicators_in_d00_format.append(name)
+                            if verbose:
+                                logger.info(f"Found C00 indicator (SYSC) in D00 format: {name}")
+                        elif prdd_pattern.match(name):
+                            d00_indicators_in_d00_format.append(name)
+                            if verbose:
+                                logger.info(f"Found D00 indicator (PRDD) in D00 format: {name}")
+                        elif sysd_pattern.match(name):
+                            d00_indicators_in_d00_format.append(name)
+                            if verbose:
+                                logger.info(f"Found D00 indicator (SYSD) in D00 format: {name}")
+                
+                # Count indicators
+                c00_count_in_c00_format = len(c00_indicators_in_c00_format)
+                d00_count_in_c00_format = len(d00_indicators_in_c00_format)
+                c00_count_in_d00_format = len(c00_indicators_in_d00_format)
+                d00_count_in_d00_format = len(d00_indicators_in_d00_format)
+                
+                if verbose:
+                    logger.info(f"C00 indicators in C00 format: {c00_count_in_c00_format} ({c00_indicators_in_c00_format})")
+                    logger.info(f"D00 indicators in C00 format: {d00_count_in_c00_format} ({d00_indicators_in_c00_format})")
+                    logger.info(f"C00 indicators in D00 format: {c00_count_in_d00_format} ({c00_indicators_in_d00_format})")
+                    logger.info(f"D00 indicators in D00 format: {d00_count_in_d00_format} ({d00_indicators_in_d00_format})")
 
-            # Determine control type based on indicator counts
-            # Higher confidence when multiple indicators match in the correct format
-            
-            # Best case: C00 format finds C00 indicators, no D00 indicators
-            if c00_count_in_c00_format > 0 and d00_count_in_c00_format == 0:
-                confidence = "high" if c00_count_in_c00_format >= 2 else "medium"
-                if verbose:
-                    logger.info(f"Control type detected: C00 (confidence: {confidence}, {c00_count_in_c00_format} indicators in C00 format)")
-                return "C00"
-            
-            # Best case: D00 format finds D00 indicators, no C00 indicators
-            if d00_count_in_d00_format > 0 and c00_count_in_d00_format == 0:
-                confidence = "high" if d00_count_in_d00_format >= 2 else "medium"
-                if verbose:
-                    logger.info(f"Control type detected: D00 (confidence: {confidence}, {d00_count_in_d00_format} indicators in D00 format)")
-                return "D00"
-            
-            # Compare counts: use format that has more matching indicators
-            c00_score = c00_count_in_c00_format - d00_count_in_c00_format
-            d00_score = d00_count_in_d00_format - c00_count_in_d00_format
-            
-            if c00_score > d00_score and c00_score > 0:
-                confidence = "high" if c00_count_in_c00_format >= 2 else "medium"
-                if verbose:
-                    logger.info(f"Control type detected: C00 (confidence: {confidence}, score: {c00_score}, {c00_count_in_c00_format} C00 indicators vs {d00_count_in_c00_format} D00 indicators in C00 format)")
-                return "C00"
-            
-            if d00_score > c00_score and d00_score > 0:
-                confidence = "high" if d00_count_in_d00_format >= 2 else "medium"
-                if verbose:
-                    logger.info(f"Control type detected: D00 (confidence: {confidence}, score: {d00_score}, {d00_count_in_d00_format} D00 indicators vs {c00_count_in_d00_format} C00 indicators in D00 format)")
-                return "D00"
-            
-            # If we found indicators but in wrong format, that's suspicious
-            if c00_count_in_d00_format > 0 or d00_count_in_c00_format > 0:
-                logger.warning(f"Found control indicators in unexpected format - ambiguous (C00 in D00: {c00_count_in_d00_format}, D00 in C00: {d00_count_in_c00_format})")
-                # Still try to return something based on what we found
-                if c00_count_in_c00_format > 0:
-                    return "C00"
-                elif d00_count_in_d00_format > 0:
-                    return "D00"
-            
-            # Fallback: if no indicators found, use format that produces more valid entries
-            if entries_c00 and entries_d00:
-                if len(entries_c00) > len(entries_d00):
+                # Determine control type based on indicator counts
+                # Higher confidence when multiple indicators match in the correct format
+                
+                # Best case: C00 format finds C00 indicators, no D00 indicators
+                if c00_count_in_c00_format > 0 and d00_count_in_c00_format == 0:
+                    confidence = "high" if c00_count_in_c00_format >= 2 else "medium"
                     if verbose:
-                        logger.info("No control indicators found - defaulting to C00 format (more entries)")
+                        logger.info(f"Control type detected: C00 (confidence: {confidence}, {c00_count_in_c00_format} indicators in C00 format)")
                     return "C00"
+                
+                # Best case: D00 format finds D00 indicators, no C00 indicators
+                if d00_count_in_d00_format > 0 and c00_count_in_d00_format == 0:
+                    confidence = "high" if d00_count_in_d00_format >= 2 else "medium"
+                    if verbose:
+                        logger.info(f"Control type detected: D00 (confidence: {confidence}, {d00_count_in_d00_format} indicators in D00 format)")
+                    return "D00"
+                
+                # Compare counts: use format that has more matching indicators
+                c00_score = c00_count_in_c00_format - d00_count_in_c00_format
+                d00_score = d00_count_in_d00_format - c00_count_in_d00_format
+                
+                if c00_score > d00_score and c00_score > 0:
+                    confidence = "high" if c00_count_in_c00_format >= 2 else "medium"
+                    if verbose:
+                        logger.info(f"Control type detected: C00 (confidence: {confidence}, score: {c00_score}, {c00_count_in_c00_format} C00 indicators vs {d00_count_in_c00_format} D00 indicators in C00 format)")
+                    return "C00"
+                
+                if d00_score > c00_score and d00_score > 0:
+                    confidence = "high" if d00_count_in_d00_format >= 2 else "medium"
+                    if verbose:
+                        logger.info(f"Control type detected: D00 (confidence: {confidence}, score: {d00_score}, {d00_count_in_d00_format} D00 indicators vs {c00_count_in_d00_format} C00 indicators in D00 format)")
+                    return "D00"
+                
+                # If we found indicators but in wrong format, that's suspicious
+                if c00_count_in_d00_format > 0 or d00_count_in_c00_format > 0:
+                    logger.warning(f"Found control indicators in unexpected format - ambiguous (C00 in D00: {c00_count_in_d00_format}, D00 in C00: {d00_count_in_c00_format})")
+                    # Still try to return something based on what we found
+                    if c00_count_in_c00_format > 0:
+                        return "C00"
+                    elif d00_count_in_d00_format > 0:
+                        return "D00"
+                
+                # Fallback: if no indicators found, use format that produces more valid entries
+                if entries_c00 and entries_d00:
+                    if len(entries_c00) > len(entries_d00):
+                        if verbose:
+                            logger.info("No control indicators found - defaulting to C00 format (more entries)")
+                        return "C00"
+                    else:
+                        if verbose:
+                            logger.info("No control indicators found - defaulting to D00 format (more entries)")
+                        return "D00"
+                elif entries_c00:
+                    if verbose:
+                        logger.info("No control indicators found - defaulting to C00 format (only format with entries)")
+                    return "C00"
+                elif entries_d00:
+                    if verbose:
+                        logger.info("No control indicators found - defaulting to D00 format (only format with entries)")
+                    return "D00"
                 else:
-                    if verbose:
-                        logger.info("No control indicators found - defaulting to D00 format (more entries)")
-                    return "D00"
-            elif entries_c00:
-                if verbose:
-                    logger.info("No control indicators found - defaulting to C00 format (only format with entries)")
-                return "C00"
-            elif entries_d00:
-                if verbose:
-                    logger.info("No control indicators found - defaulting to D00 format (only format with entries)")
-                return "D00"
-            else:
-                logger.warning("No control indicators found and no valid entries - cannot determine control type")
-                return None
+                    logger.warning("No control indicators found and no valid entries - cannot determine control type")
+                    return None
 
-        except Exception as e:
-            logger.error(f"Error detecting control type: {e}")
-            return None
+            except Exception as e:
+                logger.error(f"Error detecting control type: {e}")
+                return None
 
     async def get_current_program_info(self, verbose: bool = False) -> Optional[Dict[str, Any]]:
         """
@@ -1097,48 +1116,52 @@ class CNCTelnetClient:
             - currently_executed_block_number: Currently executed block number (14 bytes)
             Or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
-                return None
-
-        try:
-            success, status, data = await self._send_command("REDPRGN", "", verbose=verbose)
-            if not success:
-                logger.warning(f"Failed to get current program info: status {status}")
-                return None
-
-            if not data:
-                return None
-
-            # Parse response: Header LF Currently executed program number Main program number Currently executed block number LF Footer
-            # The data returned by _send_command is already between the LFs
-            # Format: <4 bytes program><4 bytes main><14 bytes block> (all on one line)
-            # Remove any newlines and whitespace
-            data_line = data.replace('\n', '').replace('\r', '').strip()
-            
-            if len(data_line) < 22:  # Minimum: 4 + 4 + 14 = 22 bytes
-                logger.warning(f"Response too short for REDPRGN: {len(data_line)} bytes, data: {repr(data_line)}")
-                return None
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
 
             try:
-                # Extract the three fields (fixed width)
-                currently_executed = data_line[0:4].strip()
-                main_program = data_line[4:8].strip()
-                block_number = data_line[8:22].strip()
+                success, status, data = await self._send_command("REDPRGN", "", verbose=verbose)
+                if not success:
+                    logger.warning(f"Failed to get current program info: status {status}")
+                    return None
 
-                return {
-                    "currently_executed_program_number": currently_executed,
-                    "main_program_number": main_program,
-                    "currently_executed_block_number": block_number,
-                }
-            except (ValueError, IndexError) as e:
-                logger.error(f"Error parsing REDPRGN response: {e}, data: {repr(data_line)}")
+                if not data:
+                    return None
+
+                # Parse response: Header LF Currently executed program number Main program number Currently executed block number LF Footer
+                # The data returned by _send_command is already between the LFs
+                # Format: <4 bytes program><4 bytes main><14 bytes block> (all on one line)
+                # Remove any newlines and whitespace
+                data_line = data.replace('\n', '').replace('\r', '').strip()
+                
+                if len(data_line) < 22:  # Minimum: 4 + 4 + 14 = 22 bytes
+                    logger.warning(f"Response too short for REDPRGN: {len(data_line)} bytes, data: {repr(data_line)}")
+                    return None
+
+                try:
+                    # Extract the three fields (fixed width)
+                    currently_executed = data_line[0:4].strip()
+                    main_program = data_line[4:8].strip()
+                    block_number = data_line[8:22].strip()
+
+                    return {
+                        "currently_executed_program_number": currently_executed,
+                        "main_program_number": main_program,
+                        "currently_executed_block_number": block_number,
+                    }
+                except (ValueError, IndexError) as e:
+                    logger.error(f"Error parsing REDPRGN response: {e}, data: {repr(data_line)}")
+                    return None
+
+            except Exception as e:
+                logger.error(f"Error getting current program info: {e}")
                 return None
-
-        except Exception as e:
-            logger.error(f"Error getting current program info: {e}")
-            return None
 
     async def get_current_program_content(self, character_count: int = 100, verbose: bool = False) -> Optional[str]:
         """
@@ -1155,33 +1178,37 @@ class CNCTelnetClient:
         Returns:
             Program content as string, or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
+
+            if character_count < 1:
+                logger.warning(f"Invalid character count: {character_count}, must be >= 1")
                 return None
 
-        if character_count < 1:
-            logger.warning(f"Invalid character count: {character_count}, must be >= 1")
-            return None
-
-        try:
-            # Format character count as 8-character string (padded)
-            char_count_str = str(character_count).rjust(8)[:8]
-            
-            success, status, data = await self._send_command("REDPRG", char_count_str, verbose=verbose)
-            if success:
-                # Response format: Header LF Program LF Footer
-                # The data returned by _send_command is already the program content between the LFs
-                if data:
-                    # Remove any trailing newlines/whitespace but preserve the program content
-                    return data.rstrip()
+            try:
+                # Format character count as 8-character string (padded)
+                char_count_str = str(character_count).rjust(8)[:8]
+                
+                success, status, data = await self._send_command("REDPRG", char_count_str, verbose=verbose)
+                if success:
+                    # Response format: Header LF Program LF Footer
+                    # The data returned by _send_command is already the program content between the LFs
+                    if data:
+                        # Remove any trailing newlines/whitespace but preserve the program content
+                        return data.rstrip()
+                    return None
+                else:
+                    logger.warning(f"Failed to get program content: status {status}")
+                    return None
+            except Exception as e:
+                logger.error(f"Error getting program content: {e}")
                 return None
-            else:
-                logger.warning(f"Failed to get program content: status {status}")
-                return None
-        except Exception as e:
-            logger.error(f"Error getting program content: {e}")
-            return None
 
     async def _send_multipart_command(
         self, command: str, arguments: str = "", data_payload: str = "", verbose: bool = False
@@ -1320,47 +1347,51 @@ class CNCTelnetClient:
             - remaining_memory: Remaining capacity in bytes (10 bytes)
             Or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
-                return None
-
-        try:
-            success, status, data = await self._send_command("REDFILE", "", verbose=verbose)
-            if not success:
-                logger.warning(f"Failed to get file control data: status {status}")
-                return None
-
-            if not data:
-                return None
-
-            # Parse response: Header LF Number of registrations Number of possible registrations Memory usage Remaining memory LF Footer
-            # Format: <4 bytes><4 bytes><10 bytes><10 bytes>
-            data_line = data.replace('\n', '').replace('\r', '').strip()
-            
-            if len(data_line) < 28:  # Minimum: 4 + 4 + 10 + 10 = 28 bytes
-                logger.warning(f"Response too short for REDFILE: {len(data_line)} bytes")
-                return None
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
 
             try:
-                num_reg = data_line[0:4].strip()
-                num_possible = data_line[4:8].strip()
-                memory_usage = data_line[8:18].strip()
-                remaining = data_line[18:28].strip()
+                success, status, data = await self._send_command("REDFILE", "", verbose=verbose)
+                if not success:
+                    logger.warning(f"Failed to get file control data: status {status}")
+                    return None
 
-                return {
-                    "number_of_registrations": int(num_reg) if num_reg.isdigit() else 0,
-                    "number_of_possible_registrations": int(num_possible) if num_possible.isdigit() else 0,
-                    "memory_usage": int(memory_usage) if memory_usage.isdigit() else 0,
-                    "remaining_memory": int(remaining) if remaining.isdigit() else 0,
-                }
-            except (ValueError, IndexError) as e:
-                logger.error(f"Error parsing REDFILE response: {e}, data: {repr(data_line)}")
+                if not data:
+                    return None
+
+                # Parse response: Header LF Number of registrations Number of possible registrations Memory usage Remaining memory LF Footer
+                # Format: <4 bytes><4 bytes><10 bytes><10 bytes>
+                data_line = data.replace('\n', '').replace('\r', '').strip()
+                
+                if len(data_line) < 28:  # Minimum: 4 + 4 + 10 + 10 = 28 bytes
+                    logger.warning(f"Response too short for REDFILE: {len(data_line)} bytes")
+                    return None
+
+                try:
+                    num_reg = data_line[0:4].strip()
+                    num_possible = data_line[4:8].strip()
+                    memory_usage = data_line[8:18].strip()
+                    remaining = data_line[18:28].strip()
+
+                    return {
+                        "number_of_registrations": int(num_reg) if num_reg.isdigit() else 0,
+                        "number_of_possible_registrations": int(num_possible) if num_possible.isdigit() else 0,
+                        "memory_usage": int(memory_usage) if memory_usage.isdigit() else 0,
+                        "remaining_memory": int(remaining) if remaining.isdigit() else 0,
+                    }
+                except (ValueError, IndexError) as e:
+                    logger.error(f"Error parsing REDFILE response: {e}, data: {repr(data_line)}")
+                    return None
+
+            except Exception as e:
+                logger.error(f"Error getting file control data: {e}")
                 return None
-
-        except Exception as e:
-            logger.error(f"Error getting file control data: {e}")
-            return None
 
     async def get_date_time(self, verbose: bool = False) -> Optional[str]:
         """
@@ -1372,26 +1403,30 @@ class CNCTelnetClient:
         Returns:
             Date/time string (14 bytes: YYYYMMDDHHMMSS), or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
-                return None
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
 
-        try:
-            success, status, data = await self._send_command("REDDATE", "", verbose=verbose)
-            if success and data:
-                # Response format: Header LF Date LF Footer
-                # Date is 14 bytes: YYYYMMDDHHMMSS
-                date_str = data.replace('\n', '').replace('\r', '').strip()
-                if len(date_str) >= 14:
-                    return date_str[:14]
-                return date_str
-            else:
-                logger.warning(f"Failed to get date/time: status {status}")
+            try:
+                success, status, data = await self._send_command("REDDATE", "", verbose=verbose)
+                if success and data:
+                    # Response format: Header LF Date LF Footer
+                    # Date is 14 bytes: YYYYMMDDHHMMSS
+                    date_str = data.replace('\n', '').replace('\r', '').strip()
+                    if len(date_str) >= 14:
+                        return date_str[:14]
+                    return date_str
+                else:
+                    logger.warning(f"Failed to get date/time: status {status}")
+                    return None
+            except Exception as e:
+                logger.error(f"Error getting date/time: {e}")
                 return None
-        except Exception as e:
-            logger.error(f"Error getting date/time: {e}")
-            return None
 
     async def get_plc_signal(
         self, signal_type: str, signal_number: int, verbose: bool = False
@@ -1407,54 +1442,58 @@ class CNCTelnetClient:
         Returns:
             Signal value (int or bool depending on signal type), or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
+
+            try:
+                # Format arguments: k1k2k3k4 (4 chars signal type) + n1n2n3n4 (4 chars number)
+                # Signal type must be padded to 4 chars, number must be formatted appropriately
+                signal_type_padded = signal_type.ljust(4)[:4]
+                # Format number based on signal type (hex for X/Y/BX/BY, decimal for others)
+                if signal_type in ['X', 'Y', 'BX', 'BY']:
+                    number_str = f"{signal_number:04X}"[:4]  # Hex, 4 digits
+                else:
+                    number_str = f"{signal_number:04d}"[:4]  # Decimal, 4 digits
+                
+                arguments = f"{signal_type_padded}{number_str}"
+                
+                success, status, data = await self._send_command("REDPLCD", arguments, verbose=verbose)
+                if not success:
+                    logger.warning(f"Failed to get PLC signal: status {status}")
+                    return None
+
+                if not data:
+                    return None
+
+                # Parse value based on signal type
+                value_str = data.replace('\n', '').replace('\r', '').strip()
+                
+                # Determine value size based on signal type
+                if signal_type in ['X', 'Y', 'BX', 'BY', 'M'] or signal_type.startswith('LM'):
+                    # 1 byte: 0/1
+                    return value_str == '1' if value_str else False
+                elif signal_type in ['BDXL', 'BDYL', 'DL'] or signal_type.startswith('LDL'):
+                    # 11 bytes: long word
+                    try:
+                        return int(value_str) if value_str else 0
+                    except ValueError:
+                        return 0
+                else:
+                    # 6 bytes: word
+                    try:
+                        return int(value_str) if value_str else 0
+                    except ValueError:
+                        return 0
+
+            except Exception as e:
+                logger.error(f"Error getting PLC signal: {e}")
                 return None
-
-        try:
-            # Format arguments: k1k2k3k4 (4 chars signal type) + n1n2n3n4 (4 chars number)
-            # Signal type must be padded to 4 chars, number must be formatted appropriately
-            signal_type_padded = signal_type.ljust(4)[:4]
-            # Format number based on signal type (hex for X/Y/BX/BY, decimal for others)
-            if signal_type in ['X', 'Y', 'BX', 'BY']:
-                number_str = f"{signal_number:04X}"[:4]  # Hex, 4 digits
-            else:
-                number_str = f"{signal_number:04d}"[:4]  # Decimal, 4 digits
-            
-            arguments = f"{signal_type_padded}{number_str}"
-            
-            success, status, data = await self._send_command("REDPLCD", arguments, verbose=verbose)
-            if not success:
-                logger.warning(f"Failed to get PLC signal: status {status}")
-                return None
-
-            if not data:
-                return None
-
-            # Parse value based on signal type
-            value_str = data.replace('\n', '').replace('\r', '').strip()
-            
-            # Determine value size based on signal type
-            if signal_type in ['X', 'Y', 'BX', 'BY', 'M'] or signal_type.startswith('LM'):
-                # 1 byte: 0/1
-                return value_str == '1' if value_str else False
-            elif signal_type in ['BDXL', 'BDYL', 'DL'] or signal_type.startswith('LDL'):
-                # 11 bytes: long word
-                try:
-                    return int(value_str) if value_str else 0
-                except ValueError:
-                    return 0
-            else:
-                # 6 bytes: word
-                try:
-                    return int(value_str) if value_str else 0
-                except ValueError:
-                    return 0
-
-        except Exception as e:
-            logger.error(f"Error getting PLC signal: {e}")
-            return None
 
     async def get_plc_signal_range(
         self, signal_type: str, signal_number: int, data_size: int, verbose: bool = False
@@ -1471,78 +1510,82 @@ class CNCTelnetClient:
         Returns:
             List of signal values, or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
-                return None
-
-        try:
-            # Format arguments: k1k2k3k4 (4 chars signal type) + n1n2n3n4 (4 chars number)
-            signal_type_padded = signal_type.ljust(4)[:4]
-            if signal_type in ['X', 'Y', 'BX', 'BY']:
-                number_str = f"{signal_number:04X}"[:4]
-            else:
-                number_str = f"{signal_number:04d}"[:4]
-            
-            arguments = f"{signal_type_padded}{number_str}"
-            
-            # Data payload: Header LF Data size LF Footer
-            data_payload = f"\n{data_size:04d}\n"
-            
-            success, status, data = await self._send_multipart_command(
-                "REDPLCR", arguments, data_payload, verbose=verbose
-            )
-            if not success:
-                logger.warning(f"Failed to get PLC signal range: status {status}")
-                return None
-
-            if not data:
-                return None
-
-            # Parse response: Header LF Data size Set value Set value ... Set value LF Footer
-            # First 4 bytes are data size, then values follow
-            data_line = data.replace('\n', '').replace('\r', '').strip()
-            
-            if len(data_line) < 4:
-                return None
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
 
             try:
-                # Extract data size
-                returned_size = int(data_line[0:4])
-                
-                # Determine value size based on signal type
-                if signal_type in ['X', 'Y', 'BX', 'BY', 'M'] or signal_type.startswith('LM'):
-                    value_size = 1
-                elif signal_type in ['BDXL', 'BDYL', 'DL'] or signal_type.startswith('LDL'):
-                    value_size = 11
+                # Format arguments: k1k2k3k4 (4 chars signal type) + n1n2n3n4 (4 chars number)
+                signal_type_padded = signal_type.ljust(4)[:4]
+                if signal_type in ['X', 'Y', 'BX', 'BY']:
+                    number_str = f"{signal_number:04X}"[:4]
                 else:
-                    value_size = 6
+                    number_str = f"{signal_number:04d}"[:4]
                 
-                # Extract values
-                values = []
-                offset = 4
-                for i in range(returned_size):
-                    if offset + value_size > len(data_line):
-                        break
-                    value_str = data_line[offset:offset + value_size].strip()
-                    if value_size == 1:
-                        values.append(value_str == '1')
+                arguments = f"{signal_type_padded}{number_str}"
+                
+                # Data payload: Header LF Data size LF Footer
+                data_payload = f"\n{data_size:04d}\n"
+                
+                success, status, data = await self._send_multipart_command(
+                    "REDPLCR", arguments, data_payload, verbose=verbose
+                )
+                if not success:
+                    logger.warning(f"Failed to get PLC signal range: status {status}")
+                    return None
+
+                if not data:
+                    return None
+
+                # Parse response: Header LF Data size Set value Set value ... Set value LF Footer
+                # First 4 bytes are data size, then values follow
+                data_line = data.replace('\n', '').replace('\r', '').strip()
+                
+                if len(data_line) < 4:
+                    return None
+
+                try:
+                    # Extract data size
+                    returned_size = int(data_line[0:4])
+                    
+                    # Determine value size based on signal type
+                    if signal_type in ['X', 'Y', 'BX', 'BY', 'M'] or signal_type.startswith('LM'):
+                        value_size = 1
+                    elif signal_type in ['BDXL', 'BDYL', 'DL'] or signal_type.startswith('LDL'):
+                        value_size = 11
                     else:
-                        try:
-                            values.append(int(value_str))
-                        except ValueError:
-                            values.append(0)
-                    offset += value_size
-                
-                return values
+                        value_size = 6
+                    
+                    # Extract values
+                    values = []
+                    offset = 4
+                    for i in range(returned_size):
+                        if offset + value_size > len(data_line):
+                            break
+                        value_str = data_line[offset:offset + value_size].strip()
+                        if value_size == 1:
+                            values.append(value_str == '1')
+                        else:
+                            try:
+                                values.append(int(value_str))
+                            except ValueError:
+                                values.append(0)
+                        offset += value_size
+                    
+                    return values
 
-            except (ValueError, IndexError) as e:
-                logger.error(f"Error parsing REDPLCR response: {e}")
+                except (ValueError, IndexError) as e:
+                    logger.error(f"Error parsing REDPLCR response: {e}")
+                    return None
+
+            except Exception as e:
+                logger.error(f"Error getting PLC signal range: {e}")
                 return None
-
-        except Exception as e:
-            logger.error(f"Error getting PLC signal range: {e}")
-            return None
 
     async def get_all_data_bank_names(self, verbose: bool = False) -> Optional[list]:
         """
@@ -1554,33 +1597,37 @@ class CNCTelnetClient:
         Returns:
             List of data bank names (8 bytes each), or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
-                return None
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
 
-        try:
-            success, status, data = await self._send_command("REDCDBN", "", verbose=verbose)
-            if success and data:
-                # Response format: Header LF Data bank names (8 bytes each) ... LF Footer
-                data_line = data.replace('\n', '').replace('\r', '').strip()
-                
-                # Parse 8-byte entries
-                names = []
-                i = 0
-                while i + 8 <= len(data_line):
-                    name = data_line[i:i+8].strip()
-                    if name:
-                        names.append(name)
-                    i += 8
-                
-                return names if names else None
-            else:
-                logger.warning(f"Failed to get data bank names: status {status}")
+            try:
+                success, status, data = await self._send_command("REDCDBN", "", verbose=verbose)
+                if success and data:
+                    # Response format: Header LF Data bank names (8 bytes each) ... LF Footer
+                    data_line = data.replace('\n', '').replace('\r', '').strip()
+                    
+                    # Parse 8-byte entries
+                    names = []
+                    i = 0
+                    while i + 8 <= len(data_line):
+                        name = data_line[i:i+8].strip()
+                        if name:
+                            names.append(name)
+                        i += 8
+                    
+                    return names if names else None
+                else:
+                    logger.warning(f"Failed to get data bank names: status {status}")
+                    return None
+            except Exception as e:
+                logger.error(f"Error getting data bank names: {e}")
                 return None
-        except Exception as e:
-            logger.error(f"Error getting data bank names: {e}")
-            return None
 
     async def get_data_bank_name(self, data_bank_name: str, verbose: bool = False) -> Optional[str]:
         """
@@ -1593,26 +1640,30 @@ class CNCTelnetClient:
         Returns:
             Data bank name (8 bytes), or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
-                return None
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
 
-        try:
-            # Pad data bank name to 8 bytes
-            name_padded = data_bank_name.ljust(8)[:8]
-            
-            success, status, data = await self._send_command("REDCDSL", name_padded, verbose=verbose)
-            if success and data:
-                # Response format: Header LF Data bank name LF Footer
-                name = data.replace('\n', '').replace('\r', '').strip()
-                return name[:8] if name else None
-            else:
-                logger.warning(f"Failed to get data bank name: status {status}")
+            try:
+                # Pad data bank name to 8 bytes
+                name_padded = data_bank_name.ljust(8)[:8]
+                
+                success, status, data = await self._send_command("REDCDSL", name_padded, verbose=verbose)
+                if success and data:
+                    # Response format: Header LF Data bank name LF Footer
+                    name = data.replace('\n', '').replace('\r', '').strip()
+                    return name[:8] if name else None
+                else:
+                    logger.warning(f"Failed to get data bank name: status {status}")
+                    return None
+            except Exception as e:
+                logger.error(f"Error getting data bank name: {e}")
                 return None
-        except Exception as e:
-            logger.error(f"Error getting data bank name: {e}")
-            return None
 
     async def get_tool_compensation(
         self, tool_number: int, compensation_type: int, verbose: bool = False
@@ -1630,37 +1681,41 @@ class CNCTelnetClient:
         Returns:
             Compensation value as float, or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
-                return None
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
 
-        try:
-            # Format: n1n2 (tool 01-99) + k1 (type 0-7) + padding
-            tool_str = f"{tool_number:02d}"
-            type_str = str(compensation_type)
-            arguments = f"{tool_str}{type_str}      "[:8]  # Pad to 8 chars
-            
-            success, status, data = await self._send_command("REDTOFS", arguments, verbose=verbose)
-            if not success:
-                logger.warning(f"Failed to get tool compensation: status {status}")
-                return None
-
-            if not data:
-                return None
-
-            # Parse compensation value
-            # 9 bytes for types 0,2,4,6; 8 bytes for types 1,3,5,7
-            value_str = data.replace('\n', '').replace('\r', '').strip()
             try:
-                return float(value_str)
-            except ValueError:
-                logger.warning(f"Could not parse compensation value: {value_str}")
-                return None
+                # Format: n1n2 (tool 01-99) + k1 (type 0-7) + padding
+                tool_str = f"{tool_number:02d}"
+                type_str = str(compensation_type)
+                arguments = f"{tool_str}{type_str}      "[:8]  # Pad to 8 chars
+                
+                success, status, data = await self._send_command("REDTOFS", arguments, verbose=verbose)
+                if not success:
+                    logger.warning(f"Failed to get tool compensation: status {status}")
+                    return None
 
-        except Exception as e:
-            logger.error(f"Error getting tool compensation: {e}")
-            return None
+                if not data:
+                    return None
+
+                # Parse compensation value
+                # 9 bytes for types 0,2,4,6; 8 bytes for types 1,3,5,7
+                value_str = data.replace('\n', '').replace('\r', '').strip()
+                try:
+                    return float(value_str)
+                except ValueError:
+                    logger.warning(f"Could not parse compensation value: {value_str}")
+                    return None
+
+            except Exception as e:
+                logger.error(f"Error getting tool compensation: {e}")
+                return None
 
     async def get_tool_life(
         self, tool_number: int, life_type: int, verbose: bool = False
@@ -1676,38 +1731,42 @@ class CNCTelnetClient:
         Returns:
             Life value (int for types 1-3, int 1-4 for type 0), or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
-                return None
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
 
-        try:
-            tool_str = f"{tool_number:02d}"
-            type_str = str(life_type)
-            arguments = f"{tool_str}{type_str}      "[:8]
-            
-            success, status, data = await self._send_command("REDTLLF", arguments, verbose=verbose)
-            if not success:
-                logger.warning(f"Failed to get tool life: status {status}")
-                return None
-
-            if not data:
-                return None
-
-            value_str = data.replace('\n', '').replace('\r', '').strip()
             try:
-                if life_type == 0:
-                    # 1 byte: 1-4 (life unit)
-                    return int(value_str) if value_str.isdigit() else None
-                else:
-                    # 6 bytes: life value
-                    return int(value_str) if value_str.isdigit() else None
-            except ValueError:
-                return None
+                tool_str = f"{tool_number:02d}"
+                type_str = str(life_type)
+                arguments = f"{tool_str}{type_str}      "[:8]
+                
+                success, status, data = await self._send_command("REDTLLF", arguments, verbose=verbose)
+                if not success:
+                    logger.warning(f"Failed to get tool life: status {status}")
+                    return None
 
-        except Exception as e:
-            logger.error(f"Error getting tool life: {e}")
-            return None
+                if not data:
+                    return None
+
+                value_str = data.replace('\n', '').replace('\r', '').strip()
+                try:
+                    if life_type == 0:
+                        # 1 byte: 1-4 (life unit)
+                        return int(value_str) if value_str.isdigit() else None
+                    else:
+                        # 6 bytes: life value
+                        return int(value_str) if value_str.isdigit() else None
+                except ValueError:
+                    return None
+
+            except Exception as e:
+                logger.error(f"Error getting tool life: {e}")
+                return None
 
     async def get_hd_modal(self, verbose: bool = False) -> Optional[Dict[str, str]]:
         """
@@ -1719,38 +1778,42 @@ class CNCTelnetClient:
         Returns:
             Dictionary with 'h_modal' and 'd_modal' (3 bytes each), or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
-                return None
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
 
-        try:
-            success, status, data = await self._send_command("REDTOFM", "", verbose=verbose)
-            if not success:
-                logger.warning(f"Failed to get H/D modal: status {status}")
-                return None
+            try:
+                success, status, data = await self._send_command("REDTOFM", "", verbose=verbose)
+                if not success:
+                    logger.warning(f"Failed to get H/D modal: status {status}")
+                    return None
 
-            if not data:
-                return None
+                if not data:
+                    return None
 
-            # Parse response: Header LF H modal LF D modal Footer
-            # Format: <3 bytes H><3 bytes D>
-            data_line = data.replace('\n', '').replace('\r', '').strip()
-            
-            if len(data_line) >= 6:
-                h_modal = data_line[0:3].strip()
-                d_modal = data_line[3:6].strip()
-                return {
-                    "h_modal": h_modal,
-                    "d_modal": d_modal,
-                }
-            else:
-                logger.warning(f"Response too short for REDTOFM: {len(data_line)} bytes")
-                return None
+                # Parse response: Header LF H modal LF D modal Footer
+                # Format: <3 bytes H><3 bytes D>
+                data_line = data.replace('\n', '').replace('\r', '').strip()
+                
+                if len(data_line) >= 6:
+                    h_modal = data_line[0:3].strip()
+                    d_modal = data_line[3:6].strip()
+                    return {
+                        "h_modal": h_modal,
+                        "d_modal": d_modal,
+                    }
+                else:
+                    logger.warning(f"Response too short for REDTOFM: {len(data_line)} bytes")
+                    return None
 
-        except Exception as e:
-            logger.error(f"Error getting H/D modal: {e}")
-            return None
+            except Exception as e:
+                logger.error(f"Error getting H/D modal: {e}")
+                return None
 
     async def get_macro_variable(self, macro_number: int, verbose: bool = False) -> Optional[float]:
         """
@@ -1763,39 +1826,43 @@ class CNCTelnetClient:
         Returns:
             Macro variable value as float, or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
+
+            if macro_number < 500 or macro_number > 999:
+                logger.warning(f"Macro number {macro_number} out of range (500-999)")
                 return None
 
-        if macro_number < 500 or macro_number > 999:
-            logger.warning(f"Macro number {macro_number} out of range (500-999)")
-            return None
-
-        try:
-            # Format: n1n2n3 (macro number 500-999) + padding
-            macro_str = f"{macro_number:03d}"
-            arguments = f"{macro_str}     "[:8]  # Pad to 8 chars
-            
-            success, status, data = await self._send_command("REDMCNM", arguments, verbose=verbose)
-            if not success:
-                logger.warning(f"Failed to get macro variable: status {status}")
-                return None
-
-            if not data:
-                return None
-
-            # Parse value (12 bytes)
-            value_str = data.replace('\n', '').replace('\r', '').strip()
             try:
-                return float(value_str)
-            except ValueError:
-                logger.warning(f"Could not parse macro value: {value_str}")
-                return None
+                # Format: n1n2n3 (macro number 500-999) + padding
+                macro_str = f"{macro_number:03d}"
+                arguments = f"{macro_str}     "[:8]  # Pad to 8 chars
+                
+                success, status, data = await self._send_command("REDMCNM", arguments, verbose=verbose)
+                if not success:
+                    logger.warning(f"Failed to get macro variable: status {status}")
+                    return None
 
-        except Exception as e:
-            logger.error(f"Error getting macro variable: {e}")
-            return None
+                if not data:
+                    return None
+
+                # Parse value (12 bytes)
+                value_str = data.replace('\n', '').replace('\r', '').strip()
+                try:
+                    return float(value_str)
+                except ValueError:
+                    logger.warning(f"Could not parse macro value: {value_str}")
+                    return None
+
+            except Exception as e:
+                logger.error(f"Error getting macro variable: {e}")
+                return None
 
     async def get_macro_variable_range(
         self, start_macro: int, data_size: int, verbose: bool = False
@@ -1811,70 +1878,74 @@ class CNCTelnetClient:
         Returns:
             List of macro variable values (floats), or None on failure
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
+        # Acquire lock for this machine to serialize with other operations
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        async with machine_lock:
+            if not self._connected:
+                connected = await self.connect()
+                if not connected:
+                    return None
+
+            if start_macro < 500 or start_macro > 999:
+                logger.warning(f"Start macro {start_macro} out of range (500-999)")
                 return None
 
-        if start_macro < 500 or start_macro > 999:
-            logger.warning(f"Start macro {start_macro} out of range (500-999)")
-            return None
-
-        if data_size < 1 or data_size > 999:
-            logger.warning(f"Data size {data_size} out of range (1-999)")
-            return None
-
-        try:
-            # Format: n1n2n3 (macro number 500-999) + padding
-            macro_str = f"{start_macro:03d}"
-            arguments = f"{macro_str}     "[:8]
-            
-            # Data payload: Header LF Data size LF Footer
-            data_payload = f"\n{data_size:03d}\n"
-            
-            success, status, data = await self._send_multipart_command(
-                "REDMCNM", arguments, data_payload, verbose=verbose
-            )
-            if not success:
-                logger.warning(f"Failed to get macro variable range: status {status}")
-                return None
-
-            if not data:
-                return None
-
-            # Parse response: Header LF Data size Set value Set value ... Set value LF Footer
-            # First 3 bytes are data size, then 12-byte values follow
-            data_line = data.replace('\n', '').replace('\r', '').strip()
-            
-            if len(data_line) < 3:
+            if data_size < 1 or data_size > 999:
+                logger.warning(f"Data size {data_size} out of range (1-999)")
                 return None
 
             try:
-                # Extract data size
-                returned_size = int(data_line[0:3])
+                # Format: n1n2n3 (macro number 500-999) + padding
+                macro_str = f"{start_macro:03d}"
+                arguments = f"{macro_str}     "[:8]
                 
-                # Extract values (12 bytes each)
-                values = []
-                offset = 3
-                for i in range(returned_size):
-                    if offset + 12 > len(data_line):
-                        break
-                    value_str = data_line[offset:offset + 12].strip()
-                    try:
-                        values.append(float(value_str))
-                    except ValueError:
-                        values.append(0.0)
-                    offset += 12
+                # Data payload: Header LF Data size LF Footer
+                data_payload = f"\n{data_size:03d}\n"
                 
-                return values
+                success, status, data = await self._send_multipart_command(
+                    "REDMCNM", arguments, data_payload, verbose=verbose
+                )
+                if not success:
+                    logger.warning(f"Failed to get macro variable range: status {status}")
+                    return None
 
-            except (ValueError, IndexError) as e:
-                logger.error(f"Error parsing REDMCNM range response: {e}")
+                if not data:
+                    return None
+
+                # Parse response: Header LF Data size Set value Set value ... Set value LF Footer
+                # First 3 bytes are data size, then 12-byte values follow
+                data_line = data.replace('\n', '').replace('\r', '').strip()
+                
+                if len(data_line) < 3:
+                    return None
+
+                try:
+                    # Extract data size
+                    returned_size = int(data_line[0:3])
+                    
+                    # Extract values (12 bytes each)
+                    values = []
+                    offset = 3
+                    for i in range(returned_size):
+                        if offset + 12 > len(data_line):
+                            break
+                        value_str = data_line[offset:offset + 12].strip()
+                        try:
+                            values.append(float(value_str))
+                        except ValueError:
+                            values.append(0.0)
+                        offset += 12
+                    
+                    return values
+
+                except (ValueError, IndexError) as e:
+                    logger.error(f"Error parsing REDMCNM range response: {e}")
+                    return None
+
+            except Exception as e:
+                logger.error(f"Error getting macro variable range: {e}")
                 return None
-
-        except Exception as e:
-            logger.error(f"Error getting macro variable range: {e}")
-            return None
 
     # ===== Write Commands (Phase 6) =====
 
