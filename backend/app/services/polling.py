@@ -130,10 +130,18 @@ class MachinePoller:
                     if has_power_on_time or has_program:
                         logger.info(f"Machine {self.machine.id} - PRD3 reports 'off' but machine appears active (power_on_time={has_power_on_time}, program={has_program}), using 'standby'")
                         machine_status = "standby"
+                
+                # Update last known status when we successfully get PRD3 data
+                self.last_status = machine_status
             else:
-                # Fallback: infer from program presence (legacy behavior)
-                machine_status = "operating" if program_info.get("operation_program_no") else "standby"
-                logger.warning(f"Machine {self.machine.id} - PRD3 data not available, using fallback status: {machine_status}")
+                # PRD3 data not available - use last known status instead of defaulting to "operating"
+                if self.last_status:
+                    machine_status = self.last_status
+                    logger.warning(f"Machine {self.machine.id} - PRD3 data not available, using last known status: {machine_status}")
+                else:
+                    # No last status available - default to standby (safer than "operating")
+                    machine_status = "standby"
+                    logger.warning(f"Machine {self.machine.id} - PRD3 data not available and no last status, defaulting to: {machine_status}")
             
             # Format time strings (MONTR format: HHMMSSMMM, HTTP format: HHMM:SS.MMM)
             def format_time(time_str: str) -> str:
@@ -314,22 +322,22 @@ class MachinePoller:
             # Calculate response time
             response_time_ms = int((time.time() - poll_start_time) * 1000)
 
-            # Add metadata
+            # Add metadata (preserve is_online from status_data if already set)
             status_data.update({
                 "machine_id": self.machine.id,
                 "machine_name": self.machine.name,
                 "poll_timestamp": poll_timestamp.isoformat(),
-                "is_online": True,
                 "response_time_ms": response_time_ms,
             })
+            # is_online is already set in status_data based on PRD3 availability - don't override it
             
             # Ensure program_name is explicitly included (even if None)
             if "program_name" not in status_data:
                 status_data["program_name"] = None
 
-            # Update machine health
+            # Update machine health (use is_online from status_data, not hardcoded True)
             was_offline = not self.is_online or self.logged_offline_status
-            self.is_online = True
+            self.is_online = status_data.get("is_online", True)  # Use is_online from status_data
             self.consecutive_failures = 0
             self.last_poll_time = poll_timestamp
 
