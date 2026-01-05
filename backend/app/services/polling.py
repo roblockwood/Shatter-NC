@@ -93,6 +93,10 @@ class MachinePoller:
             # Detect control version once (cached in telnet_client)
             control_version = await telnet_client.detect_control_type()
             
+            # Machine is online if we successfully connected and can perform Telnet operations
+            # If we got here, we have a working Telnet connection
+            is_online = True
+            
             # Get MONTR data (replaces HTTP /running_log and /work_counter)
             montr_data = await telnet_client.get_monitor_data(verbose=False)
             if not montr_data:
@@ -157,6 +161,10 @@ class MachinePoller:
                 except (ValueError, IndexError):
                     return time_str
             
+            # is_online is already set to True after successful Telnet connection
+            # PRD3 failure doesn't mean machine is offline - it just means we can't get status
+            # Status will use last known value when PRD3 is unavailable
+            
             status_data = {
                 "ip_address": self.machine.ip_address,
                 "timestamp": datetime.now().isoformat(),
@@ -168,6 +176,7 @@ class MachinePoller:
                 "power_on_hours": format_time(time_info.get("power_on_time", "000000000")),
                 "operation_time": format_time(time_info.get("operation_time", "000000000")),
                 "status": machine_status,  # From PRD3: off, standby, operating, stopped, error
+                "is_online": is_online,  # True when any Telnet operation succeeds (machine is reachable)
                 "counters": [
                     {
                         "counter_number": c.get("counter_number", i + 1),
@@ -197,6 +206,20 @@ class MachinePoller:
             except Exception as e:
                 logger.warning(f"Machine {self.machine.id} - Failed to fetch alarms: {e}")
                 status_data["alarms"] = []
+            
+            # Get panel data from Telnet
+            try:
+                from app.parsers.panel_parser_v2 import parse_panel_v2
+                
+                panel_data_raw = await telnet_client.get_panel_data(verbose=False)
+                if panel_data_raw:
+                    panel_parsed = parse_panel_v2(panel_data_raw.encode('utf-8'), control_version=control_version)
+                    status_data["panel"] = panel_parsed
+                else:
+                    status_data["panel"] = None
+            except Exception as e:
+                logger.warning(f"Machine {self.machine.id} - Failed to fetch panel data: {e}")
+                status_data["panel"] = None
             
             # Override status to 'error' if there are active alarms (unless machine is off)
             if status_data.get("alarms") and machine_status != "off":
@@ -373,7 +396,10 @@ class MachinePoller:
                 error_message=str(e)
             ))
 
-            # Create offline status data for logging
+            # Get cached status from WebSocket manager to preserve data like panel, alarms, etc.
+            cached_status = self.websocket_manager.get_machine_status(self.machine.id) if self.websocket_manager else {}
+            
+            # Create offline status data for logging, preserving cached data
             offline_status_data = {
                 "machine_id": self.machine.id,
                 "machine_name": self.machine.name,
@@ -384,6 +410,11 @@ class MachinePoller:
                 "consecutive_failures": self.consecutive_failures,
                 "response_time_ms": response_time_ms,
                 "program_name": self.cached_program_name,  # Preserve cached program_name even when offline
+                # Preserve cached data that doesn't change frequently when offline
+                "panel": cached_status.get("panel"),  # Preserve panel data
+                "alarms": cached_status.get("alarms", []),  # Preserve alarms
+                "tool_table": cached_status.get("tool_table"),  # Preserve tool table
+                "current_tool": cached_status.get("current_tool"),  # Preserve current tool
             }
 
             # Only log offline transition if we've exceeded the threshold AND haven't already logged it

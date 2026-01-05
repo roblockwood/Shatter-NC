@@ -51,6 +51,10 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
         # Detect control version
         control_version = await telnet_client.detect_control_type()
         
+        # Machine is online if we successfully connected and can perform Telnet operations
+        # If we got here, we have a working Telnet connection
+        is_online = True
+        
         # Get MONTR data
         montr_data = await telnet_client.get_monitor_data(verbose=False)
         if not montr_data:
@@ -100,8 +104,9 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
             except (ValueError, IndexError):
                 return time_str
         
-        # Determine if machine is online based on whether we got PRD3 data
-        is_online = prd3_parsed is not None and prd3_parsed.get("current_status") is not None
+        # is_online is already set to True after successful Telnet connection
+        # PRD3 failure doesn't mean machine is offline - it just means we can't get status
+        # Status will use fallback when PRD3 is unavailable
         
         status_data = {
             "ip_address": db_machine.ip_address,
@@ -114,7 +119,7 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
             "power_on_hours": format_time(time_info.get("power_on_time", "000000000")),
             "operation_time": format_time(time_info.get("operation_time", "000000000")),
             "status": machine_status,
-            "is_online": is_online,  # False when PRD3 data is not available
+            "is_online": is_online,  # True when any Telnet operation succeeds (machine is reachable)
             "counters": [
                 {
                     "counter_number": c.get("counter_number", i + 1),

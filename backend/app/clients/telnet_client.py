@@ -664,6 +664,18 @@ class CNCTelnetClient:
         """
         return await self.load_data("ALARM", verbose=verbose)
 
+    async def get_panel_data(self, verbose: bool = False) -> Optional[str]:
+        """
+        Get PANEL (Operation Panel Data) data from CNC machine via Telnet.
+
+        Args:
+            verbose: If True, log command details
+
+        Returns:
+            Raw PANEL data as string, or None on failure
+        """
+        return await self.load_data("PANEL", verbose=verbose)
+
     async def get_prd3_data(self, control_version: Optional[str] = None, verbose: bool = False) -> Optional[str]:
         """
         Get PRD3/PRDD3 (Production data 3 - Status history) data via Telnet.
