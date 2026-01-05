@@ -2,7 +2,7 @@
  * Layout configuration types for machine detail panes
  */
 
-export type PaneId = 'statusTimeline' | 'alarms' | 'currentProgram' | 'tools' | 'cycleHistory';
+export type PaneId = 'statusTimeline' | 'alarms' | 'currentProgram' | 'tools' | 'cycleHistory' | 'panel';
 
 export interface PaneLayout {
   i: string;        // Pane ID: 'statusTimeline', 'alarms', 'currentProgram', 'tools', 'cycleHistory'
@@ -27,6 +27,7 @@ export const PANE_IDS = {
   CURRENT_PROGRAM: 'currentProgram' as const,
   TOOLS: 'tools' as const,
   CYCLE_HISTORY: 'cycleHistory' as const,
+  PANEL: 'panel' as const,
 } as const;
 
 // Default layout configuration matching current hardcoded structure
@@ -37,7 +38,7 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     y: 0,
     w: 12,
     h: 5,
-    minW: 6,
+    minW: 3,  // 25% minimum width (3/12 = 25%)
     minH: 3,
   },
   {
@@ -46,7 +47,7 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     y: 5,
     w: 6,
     h: 7,
-    minW: 4,
+    minW: 3,  // 25% minimum width (3/12 = 25%)
     minH: 4,
   },
   {
@@ -55,7 +56,7 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     y: 5,
     w: 6,
     h: 7,
-    minW: 4,
+    minW: 3,  // 25% minimum width (3/12 = 25%)
     minH: 4,
   },
   {
@@ -64,7 +65,7 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     y: 12,
     w: 6,
     h: 7,
-    minW: 4,
+    minW: 3,  // 25% minimum width (3/12 = 25%)
     minH: 4,
   },
   {
@@ -73,7 +74,16 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     y: 12,
     w: 6,
     h: 7,
-    minW: 4,
+    minW: 3,  // 25% minimum width (3/12 = 25%)
     minH: 4,
+  },
+  {
+    i: PANE_IDS.PANEL,
+    x: 0,
+    y: 19,
+    w: 12,
+    h: 8,
+    minW: 3,  // 25% minimum width (3/12 = 25%)
+    minH: 6,  // Minimum vertical size to prevent clipping
   },
 ];

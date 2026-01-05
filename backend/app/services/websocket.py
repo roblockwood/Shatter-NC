@@ -86,11 +86,28 @@ class WebSocketManager:
         # This ensures the status is available for API queries
         machine_id = status_data.get("machine_id")
         if machine_id:
-            # Preserve program_name from cache if new status doesn't have it
-            # (program_name is fetched less frequently via FTP)
+            # Preserve cached data that doesn't change frequently when not in new status
+            # This ensures data persists even when connection is temporarily lost
             cached = self.last_status.get(machine_id, {})
+            
+            # Preserve program_name from cache if new status doesn't have it
             if "program_name" in cached and "program_name" not in status_data:
                 status_data["program_name"] = cached["program_name"]
+            
+            # Preserve panel data from cache if new status doesn't have it
+            if "panel" in cached and "panel" not in status_data:
+                status_data["panel"] = cached["panel"]
+            
+            # Preserve alarms from cache if new status doesn't have it (but not if explicitly set to empty)
+            if "alarms" in cached and "alarms" not in status_data:
+                status_data["alarms"] = cached["alarms"]
+            
+            # Preserve tool table and current tool from cache if new status doesn't have it
+            if "tool_table" in cached and "tool_table" not in status_data:
+                status_data["tool_table"] = cached["tool_table"]
+            if "current_tool" in cached and "current_tool" not in status_data:
+                status_data["current_tool"] = cached["current_tool"]
+            
             self.last_status[machine_id] = status_data
 
         if not self.active_connections:
