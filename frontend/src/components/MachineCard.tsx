@@ -8,6 +8,7 @@ import { StatusTimeline } from './machine-detail/StatusTimeline';
 import { ToolsPane } from './machine-detail/ToolsPane';
 import { CurrentProgramPane } from './machine-detail/CurrentProgramPane';
 import { CycleHistoryPane } from './machine-detail/CycleHistoryPane';
+import { PanelPane } from './machine-detail/PanelPane';
 import { LayoutManager } from './machine-detail/LayoutManager';
 import { PANE_IDS } from '../types/layout';
 import './MachineCard.css';
@@ -40,6 +41,7 @@ interface MachineStatus {
   tool_table?: Tool[];  // TABLE data (TOLN)
   current_tool?: number;
   alarms?: Alarm[];
+  panel?: any;  // Panel data (doors, mode, overrides)
   error?: string;
   poll_timestamp: string;
   ip_address?: string;
@@ -674,6 +676,15 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                       onExpand={undefined}
                     />
                   </div>
+                ),
+              },
+              {
+                id: PANE_IDS.PANEL,
+                component: (
+                  <PanelPane 
+                    panelData={machine.panel}
+                    onExpand={undefined}
+                  />
                 ),
               },
             ]}
