@@ -141,40 +141,49 @@ export const CycleHistoryPane: React.FC<CycleHistoryPaneProps> = ({ machineId, o
             </div>
 
             {runs.length > 0 && (
-              <div className="cycle-runs">
-                <div className="runs-table-header">
-                  ┌────┬──────────────┬──────────┬─────────┬────────┐
-                </div>
-                <div className="runs-table-header-row">
-                  │ #  │ PROGRAM      │ START    │ DURATION│ PARTS  │
-                </div>
-                <div className="runs-table-divider">
-                  ├────┼──────────────┼──────────┼─────────┼────────┤
-                </div>
-                <div className="runs-table-body">
-                  {runs.slice(0, visibleCount).map((run, idx) => (
-                    <div key={run.id} className="runs-table-row">
-                      <div className="runs-row-content">
-                        │ {String(idx + 1).padStart(2, '0')} │ {run.program_name.padEnd(12).substring(0, 12)} │ {new Date(run.started_at).toLocaleTimeString().padStart(8)} │ {run.duration_seconds ? formatTime(run.duration_seconds).padStart(8) : '───────'.padStart(8)} │ {(run.parts_produced || 0).toString().padStart(6)} │
-                      </div>
-                    </div>
-                  ))}
-                  {hasMoreRuns && onExpand && (
-                    <div 
-                      className="runs-more" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onExpand();
-                      }}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      +{runs.length - visibleCount} MORE
-                    </div>
-                  )}
-                </div>
-                <div className="runs-table-footer">
-                  └────┴──────────────┴──────────┴─────────┴────────┘
-                </div>
+              <div className="validation-section">
+                <div className="section-header">PRODUCTION RUNS</div>
+                <table className="validation-table">
+                  <thead>
+                    <tr className="validation-table-header">
+                      <th>#</th>
+                      <th>PROGRAM</th>
+                      <th>START</th>
+                      <th>DURATION</th>
+                      <th>PARTS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {runs.slice(0, visibleCount).map((run, idx) => {
+                      const startTime = new Date(run.started_at).toLocaleTimeString();
+                      const duration = run.duration_seconds ? formatTime(run.duration_seconds) : '─';
+                      const parts = run.parts_produced || 0;
+                      return (
+                        <tr key={run.id} className="validation-table-row">
+                          <td>{String(idx + 1).padStart(2, '0')}</td>
+                          <td>{run.program_name || '─'}</td>
+                          <td>{startTime}</td>
+                          <td>{duration}</td>
+                          <td>{parts}</td>
+                        </tr>
+                      );
+                    })}
+                    {hasMoreRuns && onExpand && (
+                      <tr 
+                        className="validation-table-row runs-more"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onExpand();
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td colSpan={5} style={{ textAlign: 'center', color: 'var(--color-text-dim)', fontStyle: 'italic' }}>
+                          +{runs.length - visibleCount} MORE
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             )}
           </>
