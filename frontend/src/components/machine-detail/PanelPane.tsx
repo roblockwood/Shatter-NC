@@ -256,7 +256,7 @@ export const PanelPane: React.FC<PanelPaneProps> = ({ panelData, onExpand: _onEx
   };
 
   // Get door state label and status text
-  const getDoorLabel = (doorType: string, state?: number) => {
+  const getDoorLabel = (doorType: string) => {
     return doorType;
   };
 
@@ -294,19 +294,19 @@ export const PanelPane: React.FC<PanelPaneProps> = ({ panelData, onExpand: _onEx
               <div className="led-group">
                 <LED 
                   on={doors.outer_door !== undefined} 
-                  label={getDoorLabel("OUTER", doors.outer_door)}
+                  label={getDoorLabel("OUTER")}
                   color={getDoorLEDColor(doors.outer_door)}
                   statusText={getDoorStatusText(doors.outer_door)}
                 />
                 <LED 
                   on={doors.inner_door !== undefined} 
-                  label={getDoorLabel("INNER", doors.inner_door)}
+                  label={getDoorLabel("INNER")}
                   color={getDoorLEDColor(doors.inner_door)}
                   statusText={getDoorStatusText(doors.inner_door)}
                 />
                 <LED 
                   on={doors.side_door !== undefined} 
-                  label={getDoorLabel("SIDE", doors.side_door)}
+                  label={getDoorLabel("SIDE")}
                   color={getDoorLEDColor(doors.side_door)}
                   statusText={getDoorStatusText(doors.side_door)}
                 />
