@@ -75,14 +75,6 @@ const RAPID_OVERRIDE_LABELS: { [key: number]: string } = {
   9: 'PROHIBITED',
 };
 
-const ENABLE_LABELS: { [key: number]: string } = {
-  0: 'OFF',
-  1: 'MAIN OP',
-  2: 'HANDLE',
-  3: 'PENDANT',
-  4: 'MAGAZINE',
-  5: 'PALLET',
-};
 
 // LED Indicator Component
 const LED: React.FC<{ on: boolean; label: string; color?: string }> = ({ on, label, color = '#00ff00' }) => {
@@ -102,14 +94,10 @@ const LED: React.FC<{ on: boolean; label: string; color?: string }> = ({ on, lab
 const VerticalSlider: React.FC<{ 
   value: number; 
   label: string; 
-  max?: number; 
-  unit?: string;
   segments?: number; // Total number of segments (10 = 5 for 0-100%, 5 for 100-200%)
 }> = ({ 
   value, 
   label, 
-  max = 200,
-  unit = '%',
   segments = 10
 }) => {
   const isProhibited = value === 999;
@@ -226,6 +214,9 @@ const RapidTraverseSlider: React.FC<{
       </div>
       <div className={`slider-value-box slider-value-${sliderColor}`}>
         {displayValue}
+      </div>
+      <div className="slider-display">
+        {label}
       </div>
     </div>
   );
