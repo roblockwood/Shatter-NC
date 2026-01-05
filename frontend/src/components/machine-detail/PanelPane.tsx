@@ -77,7 +77,12 @@ const RAPID_OVERRIDE_LABELS: { [key: number]: string } = {
 
 
 // LED Indicator Component
-const LED: React.FC<{ on: boolean; label: string; color?: string }> = ({ on, label, color = '#00ff00' }) => {
+const LED: React.FC<{ on: boolean; label: string; color?: string; statusText?: string }> = ({ on, label, color = '#00ff00', statusText }) => {
+  const displayStatus = statusText !== undefined ? statusText : (on ? 'ON' : 'OFF');
+  const statusClass = statusText !== undefined 
+    ? (statusText === 'OPEN' ? 'led-status-on' : statusText === 'CLOSED' ? 'led-status-on' : (on ? 'led-status-on' : 'led-status-off'))
+    : (on ? 'led-status-on' : 'led-status-off');
+  
   return (
     <div className="led-indicator">
       <div className="led-label">{label}</div>
@@ -85,7 +90,7 @@ const LED: React.FC<{ on: boolean; label: string; color?: string }> = ({ on, lab
         <div className="led-glow"></div>
         <div className="led-inner"></div>
       </div>
-      <div className={`led-status ${on ? 'led-status-on' : 'led-status-off'}`}>{on ? 'ON' : 'OFF'}</div>
+      <div className={`led-status ${statusClass}`}>{displayStatus}</div>
     </div>
   );
 };
@@ -247,7 +252,17 @@ export const PanelPane: React.FC<PanelPaneProps> = ({ panelData, onExpand: _onEx
   // Determine LED colors based on state
   const getDoorLEDColor = (state?: number) => {
     if (state === undefined) return '#666666';
-    return state === 1 ? '#ff0000' : '#00ff00'; // Red for open, green for closed
+    return state === 1 ? '#ff0000' : '#00ff00'; // Red for open (1), green for closed (0)
+  };
+
+  // Get door state label and status text
+  const getDoorLabel = (doorType: string, state?: number) => {
+    return doorType;
+  };
+
+  const getDoorStatusText = (state?: number) => {
+    if (state === undefined) return 'UNKNOWN';
+    return state === 1 ? 'OPEN' : 'CLOSED';
   };
 
   const getSwitchLEDColor = (state?: number) => {
@@ -278,19 +293,22 @@ export const PanelPane: React.FC<PanelPaneProps> = ({ panelData, onExpand: _onEx
               <div className="panel-subsection-title">DOORS</div>
               <div className="led-group">
                 <LED 
-                  on={doors.outer_door === 1} 
-                  label="OUTER" 
+                  on={doors.outer_door !== undefined} 
+                  label={getDoorLabel("OUTER", doors.outer_door)}
                   color={getDoorLEDColor(doors.outer_door)}
+                  statusText={getDoorStatusText(doors.outer_door)}
                 />
                 <LED 
-                  on={doors.inner_door === 1} 
-                  label="INNER" 
+                  on={doors.inner_door !== undefined} 
+                  label={getDoorLabel("INNER", doors.inner_door)}
                   color={getDoorLEDColor(doors.inner_door)}
+                  statusText={getDoorStatusText(doors.inner_door)}
                 />
                 <LED 
-                  on={doors.side_door === 1} 
-                  label="SIDE" 
+                  on={doors.side_door !== undefined} 
+                  label={getDoorLabel("SIDE", doors.side_door)}
                   color={getDoorLEDColor(doors.side_door)}
+                  statusText={getDoorStatusText(doors.side_door)}
                 />
               </div>
             </div>
@@ -440,8 +458,6 @@ export const PanelPane: React.FC<PanelPaneProps> = ({ panelData, onExpand: _onEx
                 <VerticalSlider 
                   value={overrides.feedrate_override}
                   label="FEED"
-                  max={200}
-                  unit="%"
                   segments={10}
                 />
               )}
@@ -449,8 +465,6 @@ export const PanelPane: React.FC<PanelPaneProps> = ({ panelData, onExpand: _onEx
                 <VerticalSlider 
                   value={overrides.spindle_override}
                   label="SPINDLE"
-                  max={200}
-                  unit="%"
                   segments={10}
                 />
               )}
