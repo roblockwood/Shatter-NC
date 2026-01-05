@@ -85,7 +85,11 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
                 if has_power_on_time or has_program:
                     machine_status = "standby"
         else:
-            machine_status = "operating" if program_info.get("operation_program_no") else "standby"
+            # PRD3 data not available - default to standby (safer than "operating")
+            # Note: API endpoint doesn't have state, so we can't use last known status here
+            # The polling service handles last status persistence
+            machine_status = "standby"
+            logger.warning(f"PRD3 data not available for machine {machine_id}, defaulting to 'standby'")
         
         # Format time strings
         def format_time(time_str: str) -> str:
@@ -95,6 +99,9 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
                 return f"{time_str[0:2]}{time_str[2:4]}:{time_str[4:6]}.{time_str[6:9]}"
             except (ValueError, IndexError):
                 return time_str
+        
+        # Determine if machine is online based on whether we got PRD3 data
+        is_online = prd3_parsed is not None and prd3_parsed.get("current_status") is not None
         
         status_data = {
             "ip_address": db_machine.ip_address,
@@ -107,6 +114,7 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
             "power_on_hours": format_time(time_info.get("power_on_time", "000000000")),
             "operation_time": format_time(time_info.get("operation_time", "000000000")),
             "status": machine_status,
+            "is_online": is_online,  # False when PRD3 data is not available
             "counters": [
                 {
                     "counter_number": c.get("counter_number", i + 1),
