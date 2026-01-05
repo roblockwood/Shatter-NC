@@ -106,7 +106,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
 
   // Calculate smart height adjustment based on width change
   const calculateSmartHeight = useCallback(
-    (paneId: string, oldW: number, newW: number, oldH: number, minH: number): number => {
+    (_paneId: string, oldW: number, newW: number, oldH: number, minH: number): number => {
       // If width decreased, content will stack - increase height
       // If width increased, content will spread - decrease height
       const widthRatio = newW / oldW;
@@ -134,7 +134,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
 
   // Handle resize events with smart height adjustment
   const handleResize = useCallback(
-    (layout: Layout[], oldItem: Layout | null, newItem: Layout | null, placeholder: Layout | null, e: MouseEvent, element: HTMLElement) => {
+    (layout: Layout[], oldItem: Layout | null, newItem: Layout | null, _placeholder: Layout | null, _e: MouseEvent, _element: HTMLElement) => {
       if (!newItem || !oldItem || !isEditMode) return;
       
       // Check if width changed significantly (more than 0.5 grid units)
