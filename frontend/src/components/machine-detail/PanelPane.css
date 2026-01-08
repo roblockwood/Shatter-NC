@@ -195,7 +195,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(45px, 1fr));
   gap: var(--spacing-xs) var(--spacing-sm);
-  align-items: end;
+  align-items: stretch;
   justify-items: center;
   padding: var(--spacing-xs) 0;
   width: 100%;
@@ -206,10 +206,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--spacing-xs);
   width: 100%;
   max-width: 50px;
   min-width: 40px; /* Ensure sliders don't get too compressed */
+  height: 100%;
 }
 
 .slider-label {
@@ -217,7 +219,7 @@
   color: var(--color-text-secondary);
   text-align: center;
   white-space: nowrap;
-  margin-bottom: var(--spacing-xs);
+  flex-shrink: 0;
 }
 
 .slider-track-ascii {
@@ -228,16 +230,16 @@
   background: #0a0a0a;
   padding: 2px;
   width: 28px;
-  min-height: 80px;
+  margin-top: auto; /* Push track to bottom, keeping label at top */
+  /* Natural height based on segment count - no fixed height */
 }
 
 .slider-track-long {
-  min-height: 140px; /* More vertical space for 10 segments */
+  /* No fixed height - let it be natural based on segments */
 }
 
 .slider-segment {
-  flex: 1;
-  min-height: 14px;
+  height: 13px; /* Fixed height so all segments are the same size regardless of count */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -246,6 +248,7 @@
   line-height: 1;
   color: #666;
   background: #1a1a1a;
+  flex-shrink: 0;
 }
 
 .slider-segment-filled {
@@ -281,7 +284,7 @@
   font-size: var(--font-xs);
   font-family: var(--font-mono);
   font-weight: bold;
-  margin-top: var(--spacing-xs);
+  flex-shrink: 0;
 }
 
 .slider-value-grey {

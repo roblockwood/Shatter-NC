@@ -124,7 +124,6 @@ async def validate_program(
             "stock_size": None,
             "line_count": len(request.gcode_content.split('\n')),
             "file_size": len(request.gcode_content.encode('utf-8')),
-            "is_macro_program": False,  # Unknown if parser failed
         }
 
     # Initialize validation response
@@ -132,11 +131,6 @@ async def validate_program(
     errors = []
     tools_validation = {}
     wcs_validation = None
-    
-    # Check if this is a macro program - macros don't have tools/WCS to validate
-    is_macro = parsed.get("is_macro_program", False)
-    if is_macro:
-        warnings.append("Macro program detected - tool and WCS validation not applicable")
     
     # Always fetch machine tool data (even if no tools in NC)
     machine_tool_data = {}
@@ -148,29 +142,27 @@ async def validate_program(
         machine_tool_fetch_failed = True
         warnings.append(f"Could not fetch machine tool data: {str(e)}")
 
-    # Validate tools (skip for macro programs)
-    if is_macro:
-        # Macro programs don't have tools to validate
-        pass
-    elif parsed["tools"]:
-            # Validate each tool using appropriate tolerance source
-            for tool in parsed["tools"]:
-                tool_num = tool["tool_number"]
-                result = _validate_tool(
-                    tool,
-                    machine_tool_data,
-                    use_machine_tolerances=machine.use_machine_tool_tolerances,
-                    diameter_tolerance=machine.diameter_tolerance,
-                    length_tolerance_plus=machine.length_tolerance_plus,
-                    length_tolerance_minus=machine.length_tolerance_minus
-                )
-                # Only add tolerance values if using machine tolerances (function sets None for G-code mode)
-                if machine.use_machine_tool_tolerances:
-                    result.diameter_tolerance = machine.diameter_tolerance
-                    result.length_tolerance_plus = machine.length_tolerance_plus
-                    result.length_tolerance_minus = machine.length_tolerance_minus
-                tools_validation[tool_num] = result
+    # Validate tools
+    if parsed["tools"]:
+        # Validate each tool using appropriate tolerance source
+        for tool in parsed["tools"]:
+            tool_num = tool["tool_number"]
+            result = _validate_tool(
+                tool,
+                machine_tool_data,
+                use_machine_tolerances=machine.use_machine_tool_tolerances,
+                diameter_tolerance=machine.diameter_tolerance,
+                length_tolerance_plus=machine.length_tolerance_plus,
+                length_tolerance_minus=machine.length_tolerance_minus
+            )
+            # Only add tolerance values if using machine tolerances (function sets None for G-code mode)
+            if machine.use_machine_tool_tolerances:
+                result.diameter_tolerance = machine.diameter_tolerance
+                result.length_tolerance_plus = machine.length_tolerance_plus
+                result.length_tolerance_minus = machine.length_tolerance_minus
+            tools_validation[tool_num] = result
 
+            # Check each tool's validation result
             if not result.available:
                 errors.append(f"Tool T{tool_num:02d} not found in machine tool table")
             else:
@@ -180,28 +172,12 @@ async def validate_program(
                     errors.append(f"Tool T{tool_num:02d} too short (need {result.required_length:.4f}\", have {result.machine_tool_data.get('length', 0):.4f}\")")
     else:
         # No tools found in NC code
-        if not machine_tool_fetch_failed and len(machine_tool_data) > 0:
-            # Machine data available - show available tools
-            warnings.append("No tool data found in NC program")
-            
-            # Create entries for all available machine tools to show what's available
-            for tool_num, tool_data in machine_tool_data.items():
-                tools_validation[tool_num] = ToolValidationResult(
-                    tool_number=tool_num,
-                    required_diameter=0.0,  # Not specified in NC
-                    required_length=0.0,  # Not specified in NC
-                    available=True,
-                    diameter_match=False,  # N/A - not specified in NC
-                    length_sufficient=False,  # N/A - not specified in NC
-                    machine_tool_data=tool_data,
-                    warnings=["Tool not referenced in NC program"],
-                    diameter_tolerance=machine.diameter_tolerance,
-                    length_tolerance_plus=machine.length_tolerance_plus,
-                    length_tolerance_minus=machine.length_tolerance_minus
-                )
-        elif machine_tool_fetch_failed:
+        if machine_tool_fetch_failed:
             # Machine unreachable - add warning
             warnings.append("No tool data in NC program and machine data unavailable")
+        else:
+            # No tools in NC program
+            warnings.append("No tool data found in NC program")
 
     # Always fetch machine work offsets (even if no WCS in NC)
     # Phase 5: Using Telnet for data reads (FTP deprecated for data, kept only for file transfers)
@@ -234,11 +210,8 @@ async def validate_program(
         print(f"WCS Fetch Error: {error_msg}")
         print(traceback.format_exc())
 
-    # Validate WCS offset (skip for macro programs)
-    if is_macro:
-        # Macro programs don't have WCS offsets to validate
-        pass
-    elif parsed["wcs_offset"] and position_data:
+    # Validate WCS offset
+    if parsed["wcs_offset"] and position_data:
         # WCS found in NC code - validate against machine
         wcs_validation = _validate_wcs_offset(
             parsed["wcs_offset"],

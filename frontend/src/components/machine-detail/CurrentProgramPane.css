@@ -111,6 +111,19 @@
   color: var(--color-warning);
 }
 
+.program-filename-link {
+  color: var(--color-text-primary);
+  text-decoration: none;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid transparent;
+}
+
+.program-filename-link:hover {
+  color: var(--color-info);
+  border-bottom-color: var(--color-info);
+  text-shadow: var(--glow);
+}
+
 /* Validation Section */
 .validation-section {
   margin-top: var(--spacing-md);
