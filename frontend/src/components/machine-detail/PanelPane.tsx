@@ -65,17 +65,6 @@ const SCREEN_LABELS: { [key: number]: string } = {
   9: 'GRAPH',
 };
 
-const RAPID_OVERRIDE_LABELS: { [key: number]: string } = {
-  0: 'SPEED1',
-  1: 'SPEED2',
-  2: 'SPEED3',
-  3: 'SPEED4',
-  4: '100%',
-  5: '0%',
-  9: 'PROHIBITED',
-};
-
-
 // LED Indicator Component
 const LED: React.FC<{ on: boolean; label: string; color?: string; statusText?: string }> = ({ on, label, color = '#00ff00', statusText }) => {
   const displayStatus = statusText !== undefined ? statusText : (on ? 'ON' : 'OFF');
