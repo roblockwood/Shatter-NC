@@ -16,6 +16,7 @@ export const Dashboard = () => {
   const [expandedMachineId, setExpandedMachineId] = useState<number | null>(null);
   const [editingMachineId, setEditingMachineId] = useState<number | null>(null);
   const [pendingEditMachineId, setPendingEditMachineId] = useState<number | null>(null);
+  const [pendingCollapseMachineId, setPendingCollapseMachineId] = useState<number | null>(null);
   const [scrollToStatusMachineId, setScrollToStatusMachineId] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingMachine, setDeletingMachine] = useState<any>(null);
@@ -113,11 +114,14 @@ export const Dashboard = () => {
         <span
           className="machines-count clickable"
           onClick={() => {
-            // Collapse all cards and reset edit state
-            setExpandedMachineId(null);
-            setEditingMachineId(null);
-            setPendingEditMachineId(null);
-            setScrollToStatusMachineId(null);
+            // If a machine is being edited, check for unsaved changes first
+            if (editingMachineId !== null) {
+              setPendingCollapseMachineId(editingMachineId);
+            } else {
+              // No machine being edited, collapse immediately
+              setExpandedMachineId(null);
+              setScrollToStatusMachineId(null);
+            }
           }}
         >
           MACHINES: {machines.length}
@@ -170,6 +174,13 @@ export const Dashboard = () => {
                 onEditStart={() => setEditingMachineId(machine.machine_id)}
                 onEditEnd={() => {
                   setEditingMachineId(null);
+                  // If there's a pending collapse, execute it now
+                  if (pendingCollapseMachineId === machine.machine_id) {
+                    setExpandedMachineId(null);
+                    setScrollToStatusMachineId(null);
+                    setPendingCollapseMachineId(null);
+                    return;
+                  }
                   // If there's a pending edit, start it now
                   if (pendingEditMachineId !== null) {
                     setEditingMachineId(pendingEditMachineId);
@@ -183,6 +194,11 @@ export const Dashboard = () => {
                 onCancelEditSwitch={() => {
                   // User cancelled the switch - clear pending
                   setPendingEditMachineId(null);
+                }}
+                pendingCollapse={pendingCollapseMachineId === machine.machine_id}
+                onCancelCollapse={() => {
+                  // User cancelled the collapse - clear pending
+                  setPendingCollapseMachineId(null);
                 }}
                 onDelete={handleDeleteMachine}
                 scrollToStatus={scrollToStatusMachineId === machine.machine_id}
@@ -207,6 +223,13 @@ export const Dashboard = () => {
               onEditStart={() => setEditingMachineId(machine.machine_id)}
               onEditEnd={() => {
                 setEditingMachineId(null);
+                // If there's a pending collapse, execute it now
+                if (pendingCollapseMachineId === machine.machine_id) {
+                  setExpandedMachineId(null);
+                  setScrollToStatusMachineId(null);
+                  setPendingCollapseMachineId(null);
+                  return;
+                }
                 // If there's a pending edit, start it now
                 if (pendingEditMachineId !== null) {
                   setEditingMachineId(pendingEditMachineId);
@@ -220,6 +243,11 @@ export const Dashboard = () => {
               onCancelEditSwitch={() => {
                 // User cancelled the switch - clear pending
                 setPendingEditMachineId(null);
+              }}
+              pendingCollapse={pendingCollapseMachineId === machine.machine_id}
+              onCancelCollapse={() => {
+                // User cancelled the collapse - clear pending
+                setPendingCollapseMachineId(null);
               }}
               onDelete={handleDeleteMachine}
               scrollToStatus={scrollToStatusMachineId === machine.machine_id}
