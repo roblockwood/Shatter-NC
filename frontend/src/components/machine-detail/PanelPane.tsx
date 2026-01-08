@@ -88,11 +88,11 @@ const LED: React.FC<{ on: boolean; label: string; color?: string; statusText?: s
 const VerticalSlider: React.FC<{ 
   value: number; 
   label: string; 
-  segments?: number; // Total number of segments (10 = 5 for 0-100%, 5 for 100-200%)
+  segments?: number; // Total number of segments (20 = 10 for 0-100%, 10 for 100-200%)
 }> = ({ 
   value, 
   label, 
-  segments = 10
+  segments = 20
 }) => {
   const isProhibited = value === 999;
   
@@ -105,18 +105,30 @@ const VerticalSlider: React.FC<{
   const valueText = isProhibited ? 'XXX' : value.toString().padStart(3, '0');
   
   // Calculate which segments should be filled
-  // 10 segments total: segments 1-5 = 0-100% (20% each), segments 6-10 = 100-200% (20% each)
-  const segmentSize = 20; // 20% per segment
+  // 20 segments total: segments 1-10 = 0-100% (10% each), segments 11-20 = 100-200% (10% each)
+  const segmentSize = 10; // 10% per segment (20 segments for 0-200%)
+  const segmentsPer100 = segments / 2; // 10 segments for 0-100%
   const filledSegments = isProhibited ? 0 : Math.min(Math.ceil(percentage / segmentSize), segments);
   
-  // Determine color based on value
-  let sliderColor = 'grey';
-  if (isExact100) {
-    sliderColor = 'green';
-  } else if (isOver100) {
-    sliderColor = 'red';
+  // Determine overall color for value box - match highest filled segment color
+  let valueBoxColor = 'grey';
+  if (isProhibited) {
+    valueBoxColor = 'red';
+  } else if (filledSegments > segmentsPer100) {
+    // Above 100% - topmost segment is red (in 100-200% range)
+    valueBoxColor = 'red';
+  } else if (filledSegments === segmentsPer100) {
+    // Exactly 100% - all segments green
+    valueBoxColor = 'green';
+  } else if (filledSegments >= segmentsPer100 * 0.75) {
+    // 75%+ - all segments yellow
+    valueBoxColor = 'yellow';
+  } else if (filledSegments >= segmentsPer100 * 0.5) {
+    // 50%+ - all segments orange
+    valueBoxColor = 'orange';
   } else {
-    sliderColor = 'grey';
+    // < 50% - all segments grey
+    valueBoxColor = 'grey';
   }
   
   return (
@@ -125,34 +137,70 @@ const VerticalSlider: React.FC<{
       <div className="slider-track-ascii slider-track-long">
         {/* Build slider from top to bottom (segments) */}
         {Array.from({ length: segments }, (_, i) => {
-          const segmentNum = segments - i; // Count from top (segment 10, 9, 8, ..., 1)
+          const segmentNum = segments - i; // Count from top (segment 20, 19, 18, ..., 1)
           const isFilled = segmentNum <= filledSegments;
+          
+          // Determine per-segment color based on level
+          let segmentColor = 'grey';
+          if (isFilled) {
+            if (segmentNum <= segmentsPer100) {
+              // Segments 1-10: 0-100% range
+              if (isExact100) {
+                // At exactly 100%, all segments green
+                segmentColor = 'green';
+              } else if (isOver100) {
+                // Above 100%, all 0-100% segments green
+                segmentColor = 'green';
+              } else {
+                // Below 100%, all filled segments same color based on level (like rapid)
+                const filledInRange = Math.min(filledSegments, segmentsPer100);
+                if (filledInRange === segmentsPer100) {
+                  segmentColor = 'green'; // 100%
+                } else if (filledInRange >= segmentsPer100 * 0.75) {
+                  segmentColor = 'yellow'; // 75%+
+                } else if (filledInRange >= segmentsPer100 * 0.5) {
+                  segmentColor = 'orange'; // 50%+
+                } else {
+                  segmentColor = 'grey'; // < 50%
+                }
+              }
+            } else {
+              // Segments 11-20: 100-200% range - always red when filled
+              segmentColor = 'red';
+            }
+          }
+          
+          // Add subtle random brightness variation for analog noise effect (like old transistor radio)
+          // Use hash-like function for pseudo-random but consistent variation per segment
+          const hash = (segmentNum * 73 + 37) % 97; // Simple hash for pseudo-randomness
+          const brightnessVariation = 0.96 + (hash / 97) * 0.04; // Very subtle: 96% to 100%
           
           return (
             <div 
               key={segmentNum} 
-              className={`slider-segment slider-segment-${sliderColor} ${isFilled ? 'filled' : ''}`}
+              className={`slider-segment slider-segment-${segmentColor} ${isFilled ? 'filled' : ''}`}
+              style={isFilled ? { opacity: brightnessVariation, filter: `brightness(${brightnessVariation})` } : undefined}
             >
-              {isFilled ? '█' : '░'}
+              {isFilled ? '▓█▓' : '░░░'}
             </div>
           );
         })}
       </div>
-      <div className={`slider-value-box slider-value-${sliderColor}`}>
+      <div className={`slider-value-box slider-value-${valueBoxColor}`}>
         {valueText}
       </div>
     </div>
   );
 };
 
-// Rapid Traverse Slider (uses 8 segments: each switch fills 2 segments)
+// Rapid Traverse Slider (uses 20 segments: 0%, 25%, 50%, 75%, 100% fill 0, 5, 10, 15, 20 segments)
 const RapidTraverseSlider: React.FC<{ 
   value: number;
 }> = ({ 
   value 
 }) => {
   const isProhibited = value === 9;
-  const segments = 8; // 8 segments, each switch fills 2 segments
+  const segments = 20; // 20 segments, same as feed/spindle
   
   // Rapid traverse: 0 = 0%, 1 = 25%, 2 = 50%, 3 = 75%, 4 = 100%, 5 = 0%, 9 = prohibited
   let displayValue: string;
@@ -166,51 +214,79 @@ const RapidTraverseSlider: React.FC<{
     filledSegments = 0; // 0% - no segments
   } else if (value === 1) {
     displayValue = '001';
-    filledSegments = 2; // 25% - 2 segments
+    filledSegments = 5; // 25% - 5 segments out of 20
   } else if (value === 2) {
     displayValue = '002';
-    filledSegments = 4; // 50% - 4 segments
+    filledSegments = 10; // 50% - 10 segments out of 20
   } else if (value === 3) {
     displayValue = '003';
-    filledSegments = 6; // 75% - 6 segments
+    filledSegments = 15; // 75% - 15 segments out of 20
   } else if (value === 4) {
     displayValue = '100';
-    filledSegments = 8; // 100% - all 8 segments
+    filledSegments = 20; // 100% - all 20 segments
   } else {
     displayValue = '000';
     filledSegments = 0;
   }
   
-  // Determine color: grey for 0-3, green for 4/100%, red for prohibited
-  let sliderColor = 'grey';
-  if (value === 4) {
-    sliderColor = 'green';
-  } else if (isProhibited) {
-    sliderColor = 'red';
+  // Determine overall color for value box - match segment colors
+  let valueBoxColor = 'grey';
+  if (isProhibited) {
+    valueBoxColor = 'red';
+  } else if (filledSegments === segments) {
+    valueBoxColor = 'green'; // 100% = green
+  } else if (filledSegments >= segments * 0.75) {
+    valueBoxColor = 'yellow'; // 75%+ = yellow
+  } else if (filledSegments >= segments * 0.5) {
+    valueBoxColor = 'orange'; // 50%+ = orange
   } else {
-    sliderColor = 'grey';
+    valueBoxColor = 'grey'; // < 50% = grey
   }
   
   return (
     <div className="vertical-slider-ascii">
       <div className="slider-label">RAPID</div>
       <div className="slider-track-ascii slider-track-long">
-        {/* Build slider from top to bottom (8 segments, same height as feed/spindle) */}
+        {/* Build slider from top to bottom (20 segments, same height as feed/spindle) */}
         {Array.from({ length: segments }, (_, i) => {
-          const segmentNum = segments - i; // Count from top (segment 8, 7, 6, ..., 1)
+          const segmentNum = segments - i; // Count from top (segment 20, 19, 18, ..., 1)
           const isFilled = segmentNum <= filledSegments;
+          
+          // Determine per-segment color: all filled segments same color based on level
+          let segmentColor = 'grey';
+          if (isFilled) {
+            if (filledSegments === segments) {
+              // 100% - all segments green
+              segmentColor = 'green';
+            } else if (filledSegments >= segments * 0.75) {
+              // 75%+ - all segments yellow
+              segmentColor = 'yellow';
+            } else if (filledSegments >= segments * 0.5) {
+              // 50%+ - all segments orange
+              segmentColor = 'orange';
+            } else {
+              // < 50% - all segments grey
+              segmentColor = 'grey';
+            }
+          }
+          
+          // Add subtle random brightness variation for analog noise effect (like old transistor radio)
+          // Use hash-like function for pseudo-random but consistent variation per segment
+          const hash = (segmentNum * 73 + 37) % 97; // Simple hash for pseudo-randomness
+          const brightnessVariation = 0.96 + (hash / 97) * 0.04; // Very subtle: 96% to 100%
           
           return (
             <div 
               key={segmentNum} 
-              className={`slider-segment slider-segment-${sliderColor} ${isFilled ? 'filled' : ''}`}
+              className={`slider-segment slider-segment-${segmentColor} ${isFilled ? 'filled' : ''}`}
+              style={isFilled ? { opacity: brightnessVariation, filter: `brightness(${brightnessVariation})` } : undefined}
             >
-              {isFilled ? '█' : '░'}
+              {isFilled ? '▓█▓' : '░░░'}
             </div>
           );
         })}
       </div>
-      <div className={`slider-value-box slider-value-${sliderColor}`}>
+      <div className={`slider-value-box slider-value-${valueBoxColor}`}>
         {displayValue}
       </div>
     </div>
@@ -448,14 +524,14 @@ export const PanelPane: React.FC<PanelPaneProps> = ({ panelData, onExpand: _onEx
                 <VerticalSlider 
                   value={overrides.feedrate_override}
                   label="FEED"
-                  segments={10}
+                  segments={20}
                 />
               )}
               {overrides.spindle_override !== undefined && (
                 <VerticalSlider 
                   value={overrides.spindle_override}
                   label="SPINDLE"
-                  segments={10}
+                  segments={20}
                 />
               )}
             </div>
