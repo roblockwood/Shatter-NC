@@ -113,13 +113,15 @@ export const Dashboard = () => {
       <div className="fleet-overview">
         <span
           className="machines-count clickable"
-          onClick={() => setEditMode(!editMode)}
+          onClick={() => {
+            // Collapse all cards and reset edit state
+            setExpandedMachineId(null);
+            setEditingMachineId(null);
+            setPendingEditMachineId(null);
+            setScrollToStatusMachineId(null);
+          }}
         >
-          {editMode ? (
-            <span className="text-warning">[EDIT MODE]</span>
-          ) : (
-            <>MACHINES: {machines.length}</>
-          )}
+          MACHINES: {machines.length}
         </span>
         <span className="separator">│</span>
         <span
@@ -144,10 +146,6 @@ export const Dashboard = () => {
 
       {/* Machine Grid */}
       <div className="machine-grid">
-        {machines.length === 0 && isConnected && !editMode && (
-          <AsciiEmptyState onAddMachine={() => setEditMode(true)} />
-        )}
-
         {machines.length === 0 && !isConnected && (
           <AsciiLoadingScreen />
         )}
@@ -230,13 +228,9 @@ export const Dashboard = () => {
           ))
         )}
 
-        {/* Show AddMachineCard in edit mode, but only if no machine is expanded */}
-        {editMode && expandedMachineId === null && machines.length > 0 && (
-          <AddMachineCard onCancel={() => setEditMode(false)} onAdd={addMachine} />
-        )}
-
-        {editMode && expandedMachineId === null && machines.length === 0 && isConnected && (
-          <AddMachineCard onCancel={() => setEditMode(false)} onAdd={addMachine} fullWidth />
+        {/* Always show AddMachineCard when no machine is expanded */}
+        {expandedMachineId === null && (
+          <AddMachineCard onCancel={() => {}} onAdd={addMachine} />
         )}
       </div>
 
