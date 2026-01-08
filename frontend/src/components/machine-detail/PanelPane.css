@@ -239,11 +239,11 @@
 }
 
 .slider-segment {
-  height: 13px; /* Fixed height so all segments are the same size regardless of count */
+  height: 9px; /* Fixed height - reduced from 13px for more compact sliders */
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--font-sm);
+  font-size: 9px; /* Smaller font to fit reduced segment height */
   font-family: var(--font-mono);
   line-height: 1;
   color: #666;
@@ -273,6 +273,18 @@
   background: #2a1a1a;
 }
 
+/* Yellow segments (gradient middle-high) */
+.slider-segment-yellow.filled {
+  color: #ffff00;
+  background: #2a2a1a;
+}
+
+/* Orange segments (gradient middle-low) */
+.slider-segment-orange.filled {
+  color: #ff8800;
+  background: #2a1f1a;
+}
+
 .slider-value-box {
   width: 32px;
   height: 20px;
@@ -300,6 +312,16 @@
 .slider-value-red {
   color: #ff0000;
   border-color: #ff0000;
+}
+
+.slider-value-yellow {
+  color: #ffff00;
+  border-color: #ffff00;
+}
+
+.slider-value-orange {
+  color: #ff8800;
+  border-color: #ff8800;
 }
 
 /* Info Grid */
