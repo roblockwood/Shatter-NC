@@ -53,7 +53,7 @@ export const SaveConfirmModal: React.FC<SaveConfirmModalProps> = ({
           <pre>{FLOPPY_DISC_ASCII}</pre>
         </div>
         <div className="modal-message">
-          SAVE BEFORE EXITING?
+          CANCEL WITH SAVING CHANGES?
         </div>
         <div className="modal-warning">
           <div>MACHINE: "{machineName}"</div>

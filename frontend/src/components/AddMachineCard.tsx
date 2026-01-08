@@ -157,12 +157,14 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
 
   if (!isActive) {
     return (
-      <div
-        className={`add-machine-card ${fullWidth ? 'full-width' : ''}`}
-        onClick={() => setIsActive(true)}
-      >
+      <div className={`add-machine-card ${fullWidth ? 'full-width' : ''}`}>
         <div className="add-machine-content">
-          <div className="add-icon">+</div>
+          <div 
+            className="add-icon clickable-icon"
+            onClick={() => setIsActive(true)}
+          >
+            +
+          </div>
           <div className="add-text">[ ADD MACHINE ]</div>
         </div>
       </div>
@@ -256,14 +258,14 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
             />
           </div>
           <div>
-            <label>HTTP PORT:</label>
+            <label>COM PORT:</label>
             <input
               type="number"
               min="1"
               max="65535"
-              value={formData.http_port}
-              onChange={(e) => setFormData({ ...formData, http_port: parseInt(e.target.value) })}
-              disabled={isSaving}
+              value={10000}
+              disabled={true}
+              title="Telnet communication port (fixed at 10000)"
             />
           </div>
         </div>
