@@ -4,12 +4,17 @@
   padding: var(--spacing-lg);
   min-width: 320px;
   max-width: 400px;
-  cursor: pointer;
+  cursor: default;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 300px;
+  opacity: 0.2;
+}
+
+.add-machine-card:hover {
+  opacity: 1;
 }
 
 .add-machine-card.full-width {
@@ -17,12 +22,6 @@
   max-width: none;
   justify-self: center;
   width: 400px;
-}
-
-.add-machine-card:hover {
-  border-color: var(--color-text-primary);
-  background: var(--color-bg-elevated);
-  box-shadow: var(--glow);
 }
 
 .add-machine-content {
@@ -34,16 +33,24 @@
   color: var(--color-text-muted);
   margin-bottom: var(--spacing-md);
   opacity: 0.7;
+  transition: all 0.2s ease;
+}
+
+.add-icon.clickable-icon {
+  cursor: pointer;
+}
+
+.add-icon.clickable-icon:hover {
+  opacity: 1;
+  color: var(--color-text-primary);
+  transform: scale(1.1);
+  text-shadow: var(--glow);
 }
 
 .add-text {
   font-size: var(--font-lg);
   color: var(--color-text-primary);
   font-weight: 600;
-}
-
-.add-machine-card:hover .add-icon {
-  opacity: 1;
 }
 
 .add-machine-editing {

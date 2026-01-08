@@ -65,17 +65,6 @@ const SCREEN_LABELS: { [key: number]: string } = {
   9: 'GRAPH',
 };
 
-const RAPID_OVERRIDE_LABELS: { [key: number]: string } = {
-  0: 'SPEED1',
-  1: 'SPEED2',
-  2: 'SPEED3',
-  3: 'SPEED4',
-  4: '100%',
-  5: '0%',
-  9: 'PROHIBITED',
-};
-
-
 // LED Indicator Component
 const LED: React.FC<{ on: boolean; label: string; color?: string; statusText?: string }> = ({ on, label, color = '#00ff00', statusText }) => {
   const displayStatus = statusText !== undefined ? statusText : (on ? 'ON' : 'OFF');
@@ -156,38 +145,43 @@ const VerticalSlider: React.FC<{
   );
 };
 
-// Rapid Traverse Slider (1-4 only, 25% segments)
+// Rapid Traverse Slider (uses 8 segments: each switch fills 2 segments)
 const RapidTraverseSlider: React.FC<{ 
   value: number;
 }> = ({ 
   value 
 }) => {
   const isProhibited = value === 9;
+  const segments = 8; // 8 segments, each switch fills 2 segments
   
-  // Rapid traverse: 0-3 = speeds 1-4, 4 = 100%, 5 = 0%, 9 = prohibited
+  // Rapid traverse: 0 = 0%, 1 = 25%, 2 = 50%, 3 = 75%, 4 = 100%, 5 = 0%, 9 = prohibited
   let displayValue: string;
   let filledSegments: number = 0;
   
   if (isProhibited) {
     displayValue = 'XXX';
     filledSegments = 0;
+  } else if (value === 0 || value === 5) {
+    displayValue = '000';
+    filledSegments = 0; // 0% - no segments
+  } else if (value === 1) {
+    displayValue = '001';
+    filledSegments = 2; // 25% - 2 segments
+  } else if (value === 2) {
+    displayValue = '002';
+    filledSegments = 4; // 50% - 4 segments
+  } else if (value === 3) {
+    displayValue = '003';
+    filledSegments = 6; // 75% - 6 segments
   } else if (value === 4) {
     displayValue = '100';
-    filledSegments = 4; // All 4 segments (100%)
-  } else if (value === 5) {
-    displayValue = '000';
-    filledSegments = 0; // No segments (0%)
-  } else if (value >= 0 && value <= 3) {
-    displayValue = String(value + 1).padStart(3, '0'); // 1, 2, 3, 4
-    filledSegments = value + 1; // Fill 1-4 segments
+    filledSegments = 8; // 100% - all 8 segments
   } else {
     displayValue = '000';
     filledSegments = 0;
   }
   
-  const label = RAPID_OVERRIDE_LABELS[value] || 'UNKNOWN';
-  
-  // Determine color: grey for speeds 1-3, green for 4/100%, red for prohibited
+  // Determine color: grey for 0-3, green for 4/100%, red for prohibited
   let sliderColor = 'grey';
   if (value === 4) {
     sliderColor = 'green';
@@ -200,17 +194,16 @@ const RapidTraverseSlider: React.FC<{
   return (
     <div className="vertical-slider-ascii">
       <div className="slider-label">RAPID</div>
-      <div className="slider-track-ascii">
-        {/* Build slider from top to bottom (4 segments, 25% each) */}
-        {Array.from({ length: 4 }, (_, i) => {
-          const segmentNum = 4 - i; // Count from top (segment 4, 3, 2, 1)
+      <div className="slider-track-ascii slider-track-long">
+        {/* Build slider from top to bottom (8 segments, same height as feed/spindle) */}
+        {Array.from({ length: segments }, (_, i) => {
+          const segmentNum = segments - i; // Count from top (segment 8, 7, 6, ..., 1)
           const isFilled = segmentNum <= filledSegments;
-          const isActive = segmentNum === filledSegments;
           
           return (
             <div 
               key={segmentNum} 
-              className={`slider-segment slider-segment-${sliderColor} ${isFilled ? 'filled' : ''} ${isActive ? 'active' : ''}`}
+              className={`slider-segment slider-segment-${sliderColor} ${isFilled ? 'filled' : ''}`}
             >
               {isFilled ? '█' : '░'}
             </div>
@@ -219,9 +212,6 @@ const RapidTraverseSlider: React.FC<{
       </div>
       <div className={`slider-value-box slider-value-${sliderColor}`}>
         {displayValue}
-      </div>
-      <div className="slider-display">
-        {label}
       </div>
     </div>
   );
