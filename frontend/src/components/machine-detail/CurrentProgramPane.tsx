@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '../../config/api';
 import './CurrentProgramPane.css';
 
@@ -917,7 +918,14 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
               <>
                 <div className="program-row">
                   <span className="program-label">FILENAME:</span>
-                  <span className="program-value">{fileInfo.name}</span>
+                  <span className="program-value">
+                    <Link 
+                      to={`/files?machine=${machineId}&file=${encodeURIComponent(fileInfo.name)}`}
+                      className="program-filename-link"
+                    >
+                      {fileInfo.name}
+                    </Link>
+                  </span>
                 </div>
                 {fileInfo.size !== undefined && (
                   <div className="program-row">
@@ -949,7 +957,14 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
               </div>
               <div className="program-row">
                 <span className="program-label">FILENAME:</span>
-                <span className="program-value">{deployment!.deployed_filename}</span>
+                <span className="program-value">
+                  <Link 
+                    to={`/files?machine=${machineId}&file=${encodeURIComponent(deployment!.deployed_filename)}`}
+                    className="program-filename-link"
+                  >
+                    {deployment!.deployed_filename}
+                  </Link>
+                </span>
               </div>
               {program && (
                 <>

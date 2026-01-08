@@ -744,24 +744,6 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           <span className={`machine-name ${!machine.is_online ? 'text-error' : (machine.status?.toLowerCase() === 'operating' || machine.status?.toLowerCase().includes('running') ? 'text-glow' : 'text-muted')}`}>{machine.machine_name}</span>
         )}
         <div className="machine-header-actions">
-          {editMode && !isEditing && (
-            <>
-              <button
-                className="card-action-btn"
-                onClick={startEditing}
-                title={canEdit ? "Edit machine" : "Switch to edit this machine (will prompt to save current)"}
-              >
-                [=]
-              </button>
-              <button
-                className="card-action-btn delete"
-                onClick={() => onDelete?.(machine)}
-                title="Delete machine"
-              >
-                [X]
-              </button>
-            </>
-          )}
         </div>
       </div>
 
@@ -1040,6 +1022,13 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               disabled={!editFormData.ip_address || isEditSaving || isEditTesting}
             >
               {isEditTesting ? '[ TESTING... ]' : '[ TEST CONNECTION ]'}
+            </button>
+            <button
+              className="form-button delete"
+              onClick={() => onDelete?.(machine)}
+              disabled={isEditSaving}
+            >
+              [ DELETE ]
             </button>
             <button
               className="form-button cancel"
@@ -1490,8 +1479,19 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             {'─'.repeat(32)}
           </div>
 
-          <div className="machine-timestamp">
-            {machine.is_online ? 'LAST UPDATE' : 'LAST SEEN'}: {new Date(machine.poll_timestamp).toLocaleTimeString()}
+          <div className="machine-footer">
+            {!isEditing && (
+              <button
+                className="machine-edit-footer-btn"
+                onClick={startEditing}
+                title={canEdit ? "Edit machine" : "Switch to edit this machine (will prompt to save current)"}
+              >
+                [edit]
+              </button>
+            )}
+            <div className="machine-timestamp">
+              {machine.is_online ? 'LAST UPDATE' : 'LAST SEEN'}: {new Date(machine.poll_timestamp).toLocaleTimeString()}
+            </div>
           </div>
         </div>
       )}
