@@ -6,7 +6,6 @@ import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { SummaryModal } from '../components/modals/SummaryModal';
 import { SummaryPopup } from '../components/modals/SummaryPopup';
 import { AsciiLoadingScreen } from '../components/AsciiLoadingScreen';
-import { AsciiEmptyState } from '../components/AsciiEmptyState';
 import './Dashboard.css';
 import { useState, useRef, useEffect } from 'react';
 import { API_BASE } from '../config/api';
