@@ -68,6 +68,8 @@ interface MachineCardProps {
   onEditEnd?: () => void; // Called when editing ends
   onRequestEditSwitch?: () => void; // Called when trying to edit while another machine is being edited
   onCancelEditSwitch?: () => void; // Called when user cancels the edit switch
+  pendingCollapse?: boolean; // Whether a collapse is pending (will check for unsaved changes)
+  onCancelCollapse?: () => void; // Called when user cancels the collapse
   onDelete?: (machine: MachineStatus) => void;
   scrollToStatus?: boolean; // Flag to trigger scroll to status timeline
 }
@@ -79,12 +81,14 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   isEditing: isEditingProp = false,
   canEdit = true,
   pendingEditSwitch = false,
+  pendingCollapse = false,
   onExpand,
   onCollapse,
   onEditStart,
   onEditEnd,
   onRequestEditSwitch,
   onCancelEditSwitch,
+  onCancelCollapse,
   onDelete,
   scrollToStatus = false
 }) => {
@@ -395,6 +399,21 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       performEditCancel();
     }
   }, [pendingEditSwitch, isEditing, editMachineName, editFormData, machine]);
+
+  // Trigger save confirmation when collapse is pending
+  useEffect(() => {
+    if (!pendingCollapse || !isEditing) {
+      return;
+    }
+
+    // Check for unsaved changes - only show dialog if there are changes
+    if (hasUnsavedChanges()) {
+      setShowSaveConfirmModal(true);
+    } else {
+      // No unsaved changes, proceed with collapse
+      performEditCancel();
+    }
+  }, [pendingCollapse, isEditing, editMachineName, editFormData, machine]);
 
   // Handle Escape key to collapse expanded card or exit edit mode
   useEffect(() => {
@@ -1529,15 +1548,20 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           if (pendingEditSwitch) {
             onCancelEditSwitch?.();
           }
+          // If this was triggered by a pending collapse, cancel the collapse
+          if (pendingCollapse) {
+            onCancelCollapse?.();
+          }
         }}
         onConfirm={() => {
           setShowSaveConfirmModal(false);
           performEditCancel();
-          // Switch will happen via onEditEnd callback
+          // Switch will happen via onEditEnd callback if pendingEditSwitch
+          // Collapse will happen via onEditEnd callback if pendingCollapse
         }}
         onSave={() => {
           setShowSaveConfirmModal(false);
-          // Save will trigger onEditEnd which handles the switch
+          // Save will trigger onEditEnd which handles the switch or collapse
           handleEditSave();
         }}
         machineName={machine.machine_name || 'Unknown'}
