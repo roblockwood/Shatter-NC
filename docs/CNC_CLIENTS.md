@@ -4,7 +4,9 @@ Shatter includes three client libraries for communicating with Brother CNC machi
 
 ## HTTP Client
 
-The `CNCHttpClient` handles polling HTTP endpoints on the CNC web server.
+**⚠️ DEPRECATED FOR POLLING**: The HTTP client is deprecated for data polling operations. The polling service has been migrated to use Telnet (Port 10000) for all data operations. HTTP endpoints may still be used for protocol detection and legacy fallback scenarios.
+
+The `CNCHttpClient` handles HTTP endpoints on the CNC web server (primarily used for protocol detection now).
 
 **📖 See [WEBSERVER_ENDPOINTS.md](WEBSERVER_ENDPOINTS.md) for complete documentation of all available HTTP endpoints on the Brother CNC machine webserver.**
 
@@ -54,14 +56,16 @@ overview = client.get_status_overview()
 - `get_tool_data()` - Get ATC tool table (parsing incomplete)
 - `get_status_overview()` - Comprehensive status from all endpoints
 
-### Endpoints Polled
+### Endpoints (Deprecated for Polling)
 
-| Endpoint | Data Returned |
-|----------|---------------|
-| `/running_log` | Program name, cycle time, cutting time, power on hours, status |
-| `/work_counter` | Counter 1-4 values, targets, signals |
-| `/alarm_log` | Current alarms with codes and messages |
-| `/tool` | ATC tool table (needs HTML sample for parsing) |
+| Endpoint | Data Returned | Migration Status |
+|----------|---------------|------------------|
+| `/running_log` | Program name, cycle time, cutting time, power on hours, status | ✅ Replaced by MONTR via Telnet |
+| `/work_counter` | Counter 1-4 values, targets, signals | ✅ Replaced by MONTR via Telnet |
+| `/alarm_log` | Current alarms with codes and messages | ✅ Replaced by ALARM via Telnet |
+| `/tool` | ATC tool table (needs HTML sample for parsing) | ✅ Replaced by ATCTL via Telnet |
+
+**Note**: All data polling operations now use Telnet. HTTP endpoints are kept for legacy support and protocol detection only.
 
 ## FTP Client
 
@@ -270,7 +274,7 @@ When back on the network:
 
 The `CNCTelnetClient` handles direct data file reading and write operations via Protocol Type 2 (Port 10000).
 
-**📖 See [BACKEND_TELNET_MIGRATION_PLAN.md](BACKEND_TELNET_MIGRATION_PLAN.md) for complete documentation of the Telnet migration plan and protocol details.**
+**📖 See [archive/BACKEND_TELNET_MIGRATION_PLAN.md](archive/BACKEND_TELNET_MIGRATION_PLAN.md) for complete documentation of the Telnet migration plan and protocol details (archived - migration largely complete).**
 
 ### Features
 

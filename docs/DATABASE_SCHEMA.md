@@ -47,11 +47,12 @@ See [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) for configuration.
 machines (Machine Configuration)
 ├── id (PK)
 ├── name (UNIQUE)
+├── model (default: "Brother CNC")
 ├── ip_address
 ├── ftp_port, http_port
 ├── ftp_username, ftp_password
 ├── path
-├── tags (JSONB)
+├── tags (JSON)
 ├── poll_interval_seconds
 ├── enabled
 ├── units (in/mm)
@@ -60,6 +61,7 @@ machines (Machine Configuration)
 ├── tolerance_x, tolerance_y, tolerance_z
 ├── use_machine_tool_tolerances (boolean)
 ├── use_machine_wcs_tolerances (boolean)
+├── layout_config (JSON, nullable) - UI pane layout configuration
 ├── created_at, updated_at
 └── last_seen_at
 
@@ -91,6 +93,24 @@ program_deployments (O-Number Tracking)
 ├── is_current
 ├── replaced_at
 └── replaced_by (FK → program_deployments.id)
+
+tool_instances (Physical Tool Lifecycle Tracking)
+├── id (PK)
+├── machine_id (FK → machines.id)
+├── tool_number
+├── diameter
+├── corner_radius
+├── description
+├── length_total
+├── installed_at
+├── removed_at
+├── removal_reason (normal_wear, breakage, upgrade, scheduled)
+├── total_runtime_seconds
+├── total_parts_produced
+├── total_cycles
+├── is_active
+├── notes
+└── created_at
 
 ┌─────────────────────────────────────────────────────────────────┐
 │               TIME-SERIES TABLES (TimescaleDB)                   │
@@ -182,6 +202,8 @@ Machine configuration and metadata.
 | `tolerance_z` | Float | No | 0.0394 | WCS Z tolerance (±inches, ±1mm) |
 | `use_machine_tool_tolerances` | Boolean | No | FALSE | When TRUE, use machine-defined tool tolerances. When FALSE, use G-code defaults (exact diameter match, length ≥ required) |
 | `use_machine_wcs_tolerances` | Boolean | No | FALSE | When TRUE, use machine-defined WCS tolerances. When FALSE, use E parameter from G-code if present |
+| `units` | String(2) | No | 'in' | Measurement units: 'in' for inches, 'mm' for millimeters |
+| `layout_config` | JSON | Yes | NULL | UI pane layout configuration (custom layout for machine detail view) |
 | `created_at` | DateTime(TZ) | No | NOW() | Record creation time |
 | `updated_at` | DateTime(TZ) | Yes | - | Last update time |
 | `last_seen_at` | DateTime(TZ) | Yes | NULL | Last successful poll time |
@@ -355,6 +377,62 @@ JOIN programs p ON d.program_id = p.id
 WHERE d.machine_id = 1
   AND d.deployed_filename = 'O2000.nc'
 ORDER BY d.deployed_at DESC;
+```
+
+---
+
+### tool_instances
+
+Physical tool instance tracking for lifecycle management.
+
+**Table:** `tool_instances`
+
+**Location:** [tool_instance.py:8-57](../backend/app/models/tool_instance.py#L8-L57)
+
+**Purpose:** Tracks individual physical tools installed in machines, enabling tool life analysis, replacement history, cost tracking, and premature failure detection.
+
+**Note:** Initially unpopulated - infrastructure for future enhancement.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | Integer | No | AUTO | Primary key |
+| `machine_id` | Integer | No | - | FK → machines.id |
+| `tool_number` | Integer | No | - | Tool number in machine |
+| `diameter` | Float | No | - | Tool diameter |
+| `corner_radius` | Float | No | 0.0 | Corner radius |
+| `description` | String(500) | Yes | - | Tool description |
+| `length_total` | Float | Yes | - | Total tool length |
+| `installed_at` | DateTime(TZ) | No | NOW() | Installation timestamp |
+| `removed_at` | DateTime(TZ) | Yes | - | Removal timestamp |
+| `removal_reason` | String(100) | Yes | - | Removal reason: 'normal_wear', 'breakage', 'upgrade', 'scheduled' |
+| `total_runtime_seconds` | Integer | No | 0 | Total runtime in seconds |
+| `total_parts_produced` | Integer | No | 0 | Total parts produced |
+| `total_cycles` | Integer | No | 0 | Total cycles |
+| `is_active` | Boolean | No | TRUE | Active/removed status |
+| `notes` | Text | Yes | - | Additional notes |
+| `created_at` | DateTime(TZ) | No | NOW() | Record creation time |
+
+**Relationships:**
+- **Many-to-One:** `machine` (the machine this tool is installed in)
+
+**Indexes:**
+- `PRIMARY KEY (id)`
+- `INDEX (machine_id)`
+- `INDEX (is_active)`
+
+**Constraints:**
+- `CHECK (removed_at IS NULL OR removed_at >= installed_at)` - Valid removal date
+
+**Foreign Keys:**
+- `machine_id` → `machines.id` ON DELETE CASCADE
+
+**Example:**
+```sql
+-- Get active tools for a machine
+SELECT tool_number, diameter, description, installed_at, total_runtime_seconds
+FROM tool_instances
+WHERE machine_id = 1 AND is_active = TRUE
+ORDER BY tool_number;
 ```
 
 ---
