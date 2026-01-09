@@ -328,7 +328,7 @@ async def assign_tool_to_pot(
 
 ## Related Documentation
 
-- **Migration Plan**: `docs/BACKEND_TELNET_MIGRATION_PLAN.md` - Phase 6 details
+- **Migration Plan**: `docs/archive/BACKEND_TELNET_MIGRATION_PLAN.md` - Phase 6 details (archived - migration complete)
 - **Command Coverage**: `docs/TELNET_COMMAND_COVERAGE.md` - All Telnet commands
 - **Reference Implementation**: `brother_cnc_export/brother_cnc_client.py` - Working example
 
