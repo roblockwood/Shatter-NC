@@ -7,8 +7,6 @@ version: '3.8'
 #   1. Authenticate: echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 #   2. Start services: docker compose -f docker-compose.prod.yml up -d
 #   3. To update: docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
-#
-# Note: This file does NOT include Watchtower. For automatic updates, use docker-compose.prod-auto.yml instead.
 
 services:
   # PostgreSQL with TimescaleDB extension

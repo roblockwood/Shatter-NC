@@ -358,6 +358,160 @@ curl http://localhost:8000/api/machines/overview
 
 ---
 
+### Detect Machine Protocols
+
+Detect available communication protocols on a machine (HTTP, FTP, Telnet, FOCAS, etc.).
+
+**Endpoint:** `POST /api/machines/{machine_id}/detect-protocols`
+
+**Path Parameters:**
+- `machine_id` (int): Machine ID
+
+**Response (200 OK):**
+```json
+{
+  "machine_id": 1,
+  "machine_name": "Mill 1",
+  "http": {
+    "available": true,
+    "port": 80,
+    "endpoints": ["/", "/running_log", "/alarm_log", "/tool"]
+  },
+  "ftp": {
+    "available": true,
+    "port": 21,
+    "passive_mode": true
+  },
+  "telnet": {
+    "available": true,
+    "port": 10000,
+    "protocol_type": 2
+  },
+  "focas": {
+    "available": false
+  }
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8000/api/machines/1/detect-protocols
+```
+
+**Implementation:** [machines.py:170-229](../backend/app/api/machines.py#L170-L229)
+
+---
+
+### Get Machine Layout
+
+Get layout configuration for a specific machine.
+
+**Endpoint:** `GET /api/machines/{machine_id}/layout`
+
+**Path Parameters:**
+- `machine_id` (int): Machine ID
+
+**Response (200 OK):**
+```json
+{
+  "layout_config": {
+    "panes": [...],
+    "gridCols": 3
+  }
+}
+```
+
+**Response (200 OK, no layout):**
+```json
+{
+  "layout_config": null
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/api/machines/1/layout
+```
+
+**Implementation:** [machines.py:284-295](../backend/app/api/machines.py#L284-L295)
+
+---
+
+### Update Machine Layout
+
+Update layout configuration for a specific machine.
+
+**Endpoint:** `PUT /api/machines/{machine_id}/layout`
+
+**Path Parameters:**
+- `machine_id` (int): Machine ID
+
+**Request Body:**
+```json
+{
+  "panes": [...],
+  "gridCols": 3
+}
+```
+
+**Response (200 OK):** Updated layout configuration
+
+**Error Responses:**
+- `404 Not Found` - Machine not found
+
+**Example:**
+```bash
+curl -X PUT http://localhost:8000/api/machines/1/layout \
+  -H "Content-Type: application/json" \
+  -d '{"panes": [...], "gridCols": 3}'
+```
+
+**Implementation:** [machines.py:298-317](../backend/app/api/machines.py#L298-L317)
+
+---
+
+### Refresh Program Name
+
+Manually refresh the active program name from MEM for a machine via Telnet.
+
+**Endpoint:** `POST /api/machines/{machine_id}/refresh-program-name`
+
+**Path Parameters:**
+- `machine_id` (int): Machine ID
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Program name refreshed successfully",
+  "program_name": "O2045"
+}
+```
+
+**Response (200 OK, no program):**
+```json
+{
+  "success": false,
+  "message": "MEM file not found or empty via Telnet",
+  "program_name": null
+}
+```
+
+**Error Responses:**
+- `404 Not Found` - Machine not found
+- `500 Internal Server Error` - Telnet connection failed
+
+**Example:**
+```bash
+curl -X POST http://localhost:8000/api/machines/1/refresh-program-name
+```
+
+**Implementation:** [machines.py:320-391](../backend/app/api/machines.py#L320-L391)
+
+**Note:** This endpoint uses Telnet to fetch MEM data and updates the cached program name in the polling service. The updated status is broadcast via WebSocket.
+
+---
+
 ## Status API
 
 Real-time machine status, file operations, and CNC data retrieval.
@@ -556,12 +710,16 @@ curl http://localhost:8000/api/machines/1/alarms
 
 ### Get Tool Data
 
-Get ATC (Automatic Tool Changer) tool table.
+Get ATC (Automatic Tool Changer) tool table or tool offset table.
 
 **Endpoint:** `GET /api/machines/{machine_id}/tools`
 
 **Path Parameters:**
 - `machine_id` (int): Machine ID
+
+**Query Parameters:**
+- `source` (str, optional): Tool data source - `"atc"` (ATC magazine) or `"table"` (tool offset table). Default: `"atc"`
+- `raw_html` (bool, optional): Return raw HTML for debugging (default: false)
 
 **Response (200 OK):**
 ```json
@@ -572,16 +730,19 @@ Get ATC (Automatic Tool Changer) tool table.
       "tool_number": 1,
       "tool_name": ".250 3FL",
       "diameter": 0.25,
-      "length": 3.4494
+      "length": 3.4494,
+      "pot_number": 5
     },
     {
       "tool_number": 2,
       "tool_name": "1/2 ENDMILL",
       "diameter": 0.5,
-      "length": 4.0
+      "length": 4.0,
+      "pot_number": 10
     }
   ],
   "units": "in",
+  "protocol": "telnet",
   "timestamp": "2025-01-15T14:30:00Z"
 }
 ```
@@ -589,9 +750,62 @@ Get ATC (Automatic Tool Changer) tool table.
 **Example:**
 ```bash
 curl http://localhost:8000/api/machines/1/tools
+curl http://localhost:8000/api/machines/1/tools?source=table
 ```
 
-**Implementation:** [status.py:130-151](../backend/app/api/status.py#L130-L151)
+**Implementation:** [status.py:349-597](../backend/app/api/status.py#L349-L597)
+
+**Note:** This endpoint uses Telnet to fetch tool data. ATC source provides magazine data with pot assignments, TABLE source provides tool offset table data. When using TABLE source, pot numbers are merged from ATC data if available.
+
+---
+
+### Change Tool Color
+
+Change the color indicator for a tool in the ATC magazine.
+
+**Endpoint:** `PUT /api/machines/{machine_id}/tools/atc/pot/{pot_number}/color`
+
+**Path Parameters:**
+- `machine_id` (int): Machine ID
+- `pot_number` (int): Pot number (1-99)
+
+**Query Parameters:**
+- `tool_number` (int, required): Tool number in the pot (for verification)
+- `color` (int, required): Color value (0-7)
+  - `0` = None
+  - `1` = Blue
+  - `2` = Red
+  - `3` = Purple
+  - `4` = Green
+  - `5` = Light Blue
+  - `6` = Yellow
+  - `7` = White
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "pot_number": 5,
+  "tool_number": 10,
+  "color": 1,
+  "color_name": "Blue",
+  "message": "Tool color changed to Blue"
+}
+```
+
+**Error Responses:**
+- `400 Bad Request` - Invalid pot number (must be 1-99) or color value (must be 0-7)
+- `404 Not Found` - Machine not found
+- `500 Internal Server Error` - Telnet operation failed
+
+**Example:**
+```bash
+curl -X PUT "http://localhost:8000/api/machines/1/tools/atc/pot/5/color?tool_number=10&color=1"
+```
+
+**Implementation:** [status.py:641-725](../backend/app/api/status.py#L641-L725)
+
+**Note:** This endpoint uses Telnet `CHGMAGC` command to change tool colors. Write operations use extended timeout (5 seconds) and are serialized per-machine to prevent conflicts.
 
 ---
 
@@ -2259,6 +2473,75 @@ function Dashboard() {
 **Implementation:** [websocket.py:19-56](../backend/app/api/websocket.py#L19-L56)
 
 See [WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md) for detailed protocol documentation.
+
+---
+
+## Settings API
+
+Global application settings and preferences.
+
+**Base Path:** `/api/settings`
+
+### Get Global Layout
+
+Get global default layout configuration.
+
+**Endpoint:** `GET /api/settings/layout`
+
+**Response (200 OK):**
+```json
+{
+  "layout_config": {
+    "panes": [...],
+    "gridCols": 3
+  }
+}
+```
+
+**Response (200 OK, no layout):**
+```json
+{
+  "layout_config": null
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/api/settings/layout
+```
+
+**Implementation:** [settings.py:18-22](../backend/app/api/settings.py#L18-L22)
+
+**Note:** Global layout is used as default when machines don't have their own layout configuration. Currently stored in-memory.
+
+---
+
+### Update Global Layout
+
+Update global default layout configuration.
+
+**Endpoint:** `PUT /api/settings/layout`
+
+**Request Body:**
+```json
+{
+  "panes": [...],
+  "gridCols": 3
+}
+```
+
+**Response (200 OK):** Updated layout configuration
+
+**Example:**
+```bash
+curl -X PUT http://localhost:8000/api/settings/layout \
+  -H "Content-Type: application/json" \
+  -d '{"panes": [...], "gridCols": 3}'
+```
+
+**Implementation:** [settings.py:25-27](../backend/app/api/settings.py#L25-L27)
+
+**Note:** Global layout is stored in-memory. In production, this could be moved to a database settings table.
 
 ---
 
