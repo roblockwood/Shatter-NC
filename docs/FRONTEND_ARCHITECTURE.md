@@ -80,23 +80,50 @@ frontend/
 ├── src/
 │   ├── components/           # Reusable and feature components
 │   │   ├── ui/               # Core UI components (Modal, StatusIndicator, etc.)
+│   │   │   ├── Modal.tsx
+│   │   │   ├── StatusIndicator.tsx
+│   │   │   ├── ProgressBar.tsx
+│   │   │   ├── TerminalBox.tsx
+│   │   │   ├── Select.tsx
+│   │   │   ├── PollingOscilloscope.tsx
+│   │   │   └── StatusOscilloscope.tsx
+│   │   ├── machine-detail/   # Machine detail view panes
+│   │   │   ├── AlarmPane.tsx
+│   │   │   ├── ColorPicker.tsx
+│   │   │   ├── CurrentProgramPane.tsx
+│   │   │   ├── CycleHistoryPane.tsx
+│   │   │   ├── LayoutManager.tsx
+│   │   │   ├── PanelPane.tsx
+│   │   │   ├── StatusTimeline.tsx
+│   │   │   └── ToolsPane.tsx
+│   │   ├── modals/           # Modal components
+│   │   │   ├── summary/      # Summary modal components
+│   │   │   │   ├── MachineStatusRow.tsx
+│   │   │   │   ├── OnlineSummaryRow.tsx
+│   │   │   │   ├── OfflineSummaryRow.tsx
+│   │   │   │   ├── RunningSummaryRow.tsx
+│   │   │   │   └── TimeRangeSelector.tsx
+│   │   │   ├── SummaryModal.tsx
+│   │   │   └── SummaryPopup.tsx
 │   │   ├── MachineCard.tsx   # Machine status card component
 │   │   ├── AddMachineCard.tsx
 │   │   ├── ValidationResultModal.tsx
 │   │   ├── ToolListModal.tsx
-│   │   ├── SummaryModal.tsx
-│   │   ├── SummaryPopup.tsx
+│   │   ├── ToolDetailModal.tsx
 │   │   ├── DeleteConfirmModal.tsx
-│   │   ├── MachineStatusRow.tsx
-│   │   ├── OnlineSummaryRow.tsx
-│   │   ├── OfflineSummaryRow.tsx
-│   │   ├── RunningSummaryRow.tsx
-│   │   └── TimeRangeSelector.tsx
+│   │   ├── SaveConfirmModal.tsx
+│   │   ├── UploadConfirmationModal.tsx
+│   │   ├── AsciiEmptyState.tsx
+│   │   ├── AsciiLoadingScreen.tsx
+│   │   └── BetaRoute.tsx
 │   ├── pages/                # Top-level page components
 │   │   ├── Dashboard.tsx     # Fleet monitoring page
 │   │   └── FileBrowser.tsx   # File management page
 │   ├── hooks/                # Custom React hooks
-│   │   └── useWebSocket.ts   # WebSocket connection management
+│   │   ├── useWebSocket.ts   # WebSocket connection management
+│   │   └── useBetaMode.ts    # Beta mode activation hook
+│   ├── contexts/              # React contexts
+│   │   └── WebSocketContext.tsx  # WebSocket context provider
 │   ├── styles/               # Global styles
 │   │   └── terminal.css      # Terminal aesthetic styles
 │   ├── config/               # Configuration
@@ -207,13 +234,15 @@ function App() {
 **Routes:**
 - `/` - Dashboard (fleet monitoring)
 - `/files` - File Browser (FTP file management)
+- `/tools` - Tool Management (beta feature, requires beta mode activation)
 
 **Design Decisions:**
 1. **BrowserRouter** - Clean URLs without hash (`/files` not `/#/files`)
-2. **Simple routing** - Only 2 routes, no nested routes
-3. **Active link highlighting** - `useLocation` hook detects current route
-4. **Terminal aesthetic** - Box-drawing characters (`╠═╣`) for dividers
-5. **Inline Navigation component** - Keeps related code together
+2. **Simple routing** - 3 main routes, no nested routes
+3. **Beta mode routing** - Tool Management route protected by `BetaRoute` component
+4. **Active link highlighting** - `useLocation` hook detects current route
+5. **Terminal aesthetic** - Box-drawing characters (`╠═╣`) for dividers
+6. **Inline Navigation component** - Keeps related code together
 
 ---
 
@@ -805,12 +834,24 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
 #### Other UI Components
 
 **ProgressBar** - Progress indicator for file uploads
-- Location: `frontend/src/components/ui/ProgressBar.tsx`
+- Location: [ProgressBar.tsx](../frontend/src/components/ui/ProgressBar.tsx)
 - Features: Percentage display, terminal-style bar
 
 **TerminalBox** - Scrollable code/text display
-- Location: `frontend/src/components/ui/TerminalBox.tsx`
+- Location: [TerminalBox.tsx](../frontend/src/components/ui/TerminalBox.tsx)
 - Features: Monospace font, line numbers, syntax highlighting (future)
+
+**Select** - Dropdown select component
+- Location: [Select.tsx](../frontend/src/components/ui/Select.tsx)
+- Features: Terminal-styled select dropdown
+
+**PollingOscilloscope** - Visual polling status indicator
+- Location: [PollingOscilloscope.tsx](../frontend/src/components/ui/PollingOscilloscope.tsx)
+- Features: ASCII oscilloscope visualization of polling patterns
+
+**StatusOscilloscope** - Visual status timeline indicator
+- Location: [StatusOscilloscope.tsx](../frontend/src/components/ui/StatusOscilloscope.tsx)
+- Features: ASCII visualization of status changes over time
 
 ---
 
@@ -822,7 +863,7 @@ Domain-specific components built from UI primitives.
 
 Complex component displaying machine status with edit mode and validation.
 
-**Location:** [MachineCard.tsx:1-679](../frontend/src/components/ui/MachineCard.tsx#L1-L679)
+**Location:** [MachineCard.tsx:1-679](../frontend/src/components/MachineCard.tsx#L1-L679)
 
 **Props:**
 ```typescript
@@ -1011,13 +1052,60 @@ Modals for displaying aggregate statistics and summaries.
 
 ---
 
+#### Machine Detail Panes
+
+Components for the machine detail view (accessed from machine cards).
+
+**Location:** `frontend/src/components/machine-detail/`
+
+**Components:**
+- **AlarmPane** - Displays active alarms with severity-based sorting and color coding
+- **ColorPicker** - Color selection component for ATC tool colors
+- **CurrentProgramPane** - Shows current program information and deployment details
+- **CycleHistoryPane** - Displays cycle time history and trends
+- **LayoutManager** - Manages pane layout configuration for machine detail view
+- **PanelPane** - Displays panel status information
+- **StatusTimeline** - Visual timeline of machine status changes
+- **ToolsPane** - Tool management interface with ATC and tool table views
+
+**Related Documentation:**
+- See [TOOLS_PANE_DATA_COVERAGE.md](./TOOLS_PANE_DATA_COVERAGE.md) for tools pane details
+
+---
+
+#### Additional Modal Components
+
+**ToolDetailModal** - Detailed tool information modal
+- Location: [ToolDetailModal.tsx](../frontend/src/components/ToolDetailModal.tsx)
+- Features: Tool usage history, speed/feed analysis, machine usage statistics
+
+**SaveConfirmModal** - Confirmation modal for saving changes
+- Location: [SaveConfirmModal.tsx](../frontend/src/components/SaveConfirmModal.tsx)
+
+**UploadConfirmationModal** - Confirmation modal for file uploads
+- Location: [UploadConfirmationModal.tsx](../frontend/src/components/UploadConfirmationModal.tsx)
+
+**AsciiEmptyState** - Empty state component with ASCII art
+- Location: [AsciiEmptyState.tsx](../frontend/src/components/AsciiEmptyState.tsx)
+
+**AsciiLoadingScreen** - Loading screen with ASCII animation
+- Location: [AsciiLoadingScreen.tsx](../frontend/src/components/AsciiLoadingScreen.tsx)
+
+**BetaRoute** - Route wrapper for beta features requiring activation
+- Location: [BetaRoute.tsx](../frontend/src/components/BetaRoute.tsx)
+- Features: Protects beta routes, requires rapid logo clicks to activate
+
+---
+
 ## Custom Hooks
 
 ### useWebSocket
 
 Custom hook for managing WebSocket connection and machine state.
 
-**Location:** [useWebSocket.ts:1-129](../frontend/src/hooks/useWebSocket.ts#L1-L129)
+**Location:** [useWebSocket.ts](../frontend/src/hooks/useWebSocket.ts)
+
+**Note:** This hook is typically used via `WebSocketContext` rather than directly. See [State Management](#state-management) section for context usage.
 
 **Purpose:**
 - Establish WebSocket connection to backend
@@ -1171,6 +1259,46 @@ export const useWebSocket = (url: string) => {
 
 **Related Documentation:**
 - See [WEBSOCKET_PROTOCOL.md](./WEBSOCKET_PROTOCOL.md) for full protocol spec
+
+---
+
+### useBetaMode
+
+Hook for accessing and managing beta mode state.
+
+**Location:** [useBetaMode.ts](../frontend/src/hooks/useBetaMode.ts)
+
+**Purpose:**
+- Access beta mode state from context
+- Activate/deactivate beta mode via rapid logo clicks
+- Enable beta features (e.g., Tool Management page)
+
+**Hook Interface:**
+```typescript
+export const useBetaMode = () => {
+  return useBetaModeContext();
+};
+
+export const useBetaModeActivator = (
+  isBetaMode: boolean,
+  onActivate: () => void,
+  onDeactivate: () => void
+) => {
+  // Tracks rapid clicks (10 clicks within 5 seconds)
+  // Returns click handler function
+};
+```
+
+**Usage:**
+```typescript
+const { isBetaMode, activateBetaMode, deactivateBetaMode } = useBetaMode();
+const handleLogoClick = useBetaModeActivator(isBetaMode, activateBetaMode, deactivateBetaMode);
+```
+
+**Beta Mode Activation:**
+- Requires 10 rapid clicks on the logo within 5 seconds
+- Toggles beta mode on/off
+- Enables access to beta routes (e.g., `/tools`)
 
 ---
 

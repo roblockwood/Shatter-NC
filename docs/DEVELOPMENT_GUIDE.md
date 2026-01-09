@@ -432,7 +432,7 @@ shatter/
 │   ├── DOCKER_DEPLOYMENT.md
 │   ├── DEVELOPMENT_GUIDE.md      # This file
 │   ├── CONTRIBUTING.md
-│   ├── FUTURE_DOCUMENTATION.md
+│   ├── roadmap/FUTURE_DOCUMENTATION.md
 │   ├── CNC_CLIENTS.md
 │   ├── PROGRAM_VALIDATION.md
 │   ├── UX_DESIGN_GUIDE.md
@@ -747,7 +747,7 @@ export const ToolDisplay: React.FC<{tool: Tool, units: string}> = ({ tool, units
 };
 ```
 
-See [PHASE3_UNITS_IMPLEMENTATION_PLAN.md](PHASE3_UNITS_IMPLEMENTATION_PLAN.md) for complete implementation details.
+See [archive/PHASE3_UNITS_IMPLEMENTATION_PLAN.md](archive/PHASE3_UNITS_IMPLEMENTATION_PLAN.md) for complete implementation details (archived - implementation complete).
 
 ---
 

@@ -15,8 +15,9 @@ The Shatter backend is built on FastAPI, a modern Python web framework optimized
 | **Database** | PostgreSQL 14 + TimescaleDB | Relational + time-series data |
 | **Cache** | Redis 7+ | Session storage, rate limiting (future) |
 | **Async Runtime** | asyncio | Concurrent I/O operations |
-| **HTTP Client** | Raw sockets | Custom Brother CNC HTTP protocol |
-| **FTP Client** | ftplib (stdlib) | File operations via FTP |
+| **Telnet Client** | asyncio streams | Primary protocol for data polling (Port 10000) |
+| **HTTP Client** | Raw sockets | Legacy Brother CNC HTTP protocol (deprecated for polling) |
+| **FTP Client** | ftplib (stdlib) | File operations via FTP (file upload/download only) |
 | **Settings** | Pydantic Settings | Type-safe configuration |
 | **Logging** | Python logging | Structured application logs |
 
@@ -53,18 +54,19 @@ The Shatter backend is built on FastAPI, a modern Python web framework optimized
 │              │                    │                 │           │
 │  ┌───────────▼────────────────────▼─────────────────▼───────┐   │
 │  │ CNC Clients                                              │   │
-│  │  ┌───────────────┐          ┌──────────────┐            │   │
-│  │  │ CNCHttpClient │          │ CNCFtpClient │            │   │
-│  │  │ (Polling)     │          │ (File Ops)   │            │   │
-│  │  └───────┬───────┘          └──────┬───────┘            │   │
-│  └──────────┼─────────────────────────┼────────────────────┘   │
-└─────────────┼─────────────────────────┼──────────────────────┘
-              │                         │
-              ▼                         ▼
+│  │  ┌───────────────┐  ┌───────────────┐  ┌──────────────┐ │   │
+│  │  │CNCTelnetClient│  │ CNCHttpClient │  │ CNCFtpClient │ │   │
+│  │  │ (Primary)     │  │ (Legacy)      │  │ (File Ops)   │ │   │
+│  │  └───────┬───────┘  └───────┬───────┘  └──────┬───────┘ │   │
+│  └──────────┼──────────────────┼─────────────────┼──────────┘   │
+└─────────────┼──────────────────┼─────────────────┼──────────────┘
+              │                   │                 │
+              ▼                   ▼                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Brother CNC Machines                          │
-│  HTTP Endpoints (/running_log, /alarms, /counters)              │
-│  FTP Server (file upload/download/list)                         │
+│  Telnet (Port 10000): MONTR, PRD3, ALARM, tools, MEM, POSN     │
+│  FTP Server (Port 21): File upload/download/list                │
+│  HTTP (Port 80): Legacy endpoints (deprecated for polling)      │
 └─────────────────────────────────────────────────────────────────┘
               │
               ▼
@@ -337,88 +339,63 @@ async def _poll_all_machines(self):
 
 Each machine has a dedicated MachinePoller instance that handles polling and event logging.
 
-**Location:** [polling.py:16-275](../backend/app/services/polling.py#L16-L275)
+**Location:** [polling.py:16-420](../backend/app/services/polling.py#L16-L420)
+
+**Protocol Migration Status:** The polling service has been migrated to Telnet (Port 10000) for all data operations. HTTP endpoints are deprecated for polling. See [archive/BACKEND_TELNET_MIGRATION_PLAN.md](archive/BACKEND_TELNET_MIGRATION_PLAN.md) for migration details.
 
 #### Poll Execution
+
+**Note:** The polling service has been migrated to use Telnet (Port 10000) as the primary protocol for data fetching. HTTP endpoints are deprecated for polling (though HTTP client code remains for legacy support).
+
+The polling service now uses Telnet to fetch:
+- **MONTR** - Machine monitor data (program info, time data, workpiece counters)
+- **PRD3/PRDD3** - Production data (machine status determination)
+- **ALARM** - Current alarm data
+- **PANEL** - Panel status data
+- **Tool Data** - Both ATC (ATCTL) and TABLE (TOLNI1/TOLNM1) sources
+- **MEM** - Memory/program information (on-demand)
 
 ```python
 async def poll(self) -> Dict[str, Any]:
     """Poll machine status and return data."""
-    poll_start_time = time.time()
-    poll_timestamp = datetime.utcnow()
-
-    try:
-        logger.debug(f"Polling machine {self.machine.id} ({self.machine.name}) at {self.machine.ip_address}")
-        http_client = CNCHttpClient(
-            self.machine.ip_address,
-            port=self.machine.http_port,
-            timeout=5,
-        )
-
-        # Get comprehensive status
-        status_data = http_client.get_status_overview()
-
-        # Calculate response time
-        response_time_ms = int((time.time() - poll_start_time) * 1000)
-
-        # Add metadata
-        status_data.update({
-            "machine_id": self.machine.id,
-            "machine_name": self.machine.name,
-            "poll_timestamp": poll_timestamp.isoformat(),
-            "is_online": True,
-            "response_time_ms": response_time_ms,
-        })
-
-        # Update machine health
-        self.is_online = True
-        self.consecutive_failures = 0
-        self.last_poll_time = poll_timestamp
-
-        # Log events to database (non-blocking, in background)
-        asyncio.create_task(self._log_events_async(status_data, poll_timestamp, response_time_ms, success=True))
-
-        return status_data
-
-    except Exception as e:
-        self.consecutive_failures += 1
-        self.is_online = False
-
-        response_time_ms = int((time.time() - poll_start_time) * 1000)
-
-        logger.error(
-            f"Error polling machine {self.machine.id} ({self.machine.name}): {e} "
-            f"(failures: {self.consecutive_failures})"
-        )
-
-        # Log polling event for failed poll
-        asyncio.create_task(self._log_polling_event(
-            poll_timestamp,
-            success=False,
-            response_time_ms=response_time_ms,
-            error_message=str(e)
-        ))
-
-        return {
-            "machine_id": self.machine.id,
-            "machine_name": self.machine.name,
-            "poll_timestamp": poll_timestamp.isoformat(),
-            "is_online": False,
-            "error": str(e),
-            "consecutive_failures": self.consecutive_failures,
-            "response_time_ms": response_time_ms,
-        }
+    # Uses Telnet client with pooled connections
+    from app.clients.telnet_client import get_or_create_connection
+    
+    telnet_client = await get_or_create_connection(
+        ip_address=self.machine.ip_address,
+        port=10000,
+        timeout=10
+    )
+    
+    # Fetch MONTR data (replaces HTTP /running_log and /work_counter)
+    montr_data = await telnet_client.get_monitor_data(verbose=False)
+    
+    # Fetch PRD3 data (replaces status inference from HTTP)
+    prd3_data = await telnet_client.get_prd3_data(control_version=control_version, verbose=False)
+    
+    # Fetch ALARM data (replaces HTTP /alarm_log)
+    alarm_data = await telnet_client.get_alarm_data(verbose=False)
+    
+    # Fetch tool data via Telnet (replaces HTTP /tool and FTP TOLNI1.NC)
+    tool_table_content = await telnet_client.get_tool_table_data(units=self.machine.units, verbose=False)
+    atc_data = await telnet_client.get_atc_magazine_data(control_version=None, verbose=False)
+    
+    # ... parse and merge data ...
 ```
 
-**Location:** [polling.py:27-95](../backend/app/services/polling.py#L27-L95)
+**Location:** [polling.py:72-377](../backend/app/services/polling.py#L72-L377)
 
 **Flow:**
-1. Create CNCHttpClient for machine
-2. Call `get_status_overview()` to fetch data
-3. Calculate response time
-4. Update poller state (is_online, consecutive_failures)
-5. Launch background task to log events to database
-6. Return status data (for WebSocket broadcast)
+1. Get or create pooled Telnet connection for machine
+2. Fetch MONTR data (program info, time data, counters)
+3. Fetch PRD3 data (machine status)
+4. Fetch ALARM data (active alarms)
+5. Fetch tool data (ATC and TABLE sources)
+6. Parse and merge all data sources
+7. Calculate response time and update poller state
+8. Launch background task to log events to database
+9. Return status data (for WebSocket broadcast)
+10. Connection stays in pool for next poll (persistent connections)
 
 **Non-Blocking Design:** Event logging is launched as a background task (`asyncio.create_task()`) so it doesn't block the poll loop. This ensures slow database writes don't delay polling.
 

@@ -69,7 +69,7 @@ Open http://localhost:3000 and add your CNC machines through the web UI.
 
 ### Future Documentation
 
-- **[Future Documentation Plan](docs/FUTURE_DOCUMENTATION.md)** - Planned advanced topics (WebSocket protocol, testing, parsers)
+- **[Future Documentation Plan](docs/roadmap/FUTURE_DOCUMENTATION.md)** - Planned advanced topics (WebSocket protocol, testing, parsers)
 
 ## Development Status
 

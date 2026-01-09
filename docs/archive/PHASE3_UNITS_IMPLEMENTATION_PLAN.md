@@ -6,7 +6,7 @@ This plan implements units support throughout the Shatter-NC codebase, allowing 
 
 **Status**: ✅ **IMPLEMENTATION COMPLETE** (Core features)
 
-**Related**: [BACKEND_TELNET_MIGRATION_PLAN.md](BACKEND_TELNET_MIGRATION_PLAN.md) - Phase 3
+**Related**: [BACKEND_TELNET_MIGRATION_PLAN.md](./BACKEND_TELNET_MIGRATION_PLAN.md) - Phase 3 (archived - migration complete)
 
 ## Implementation Summary
 
@@ -410,7 +410,7 @@ export function getUnitSuffix(units: 'in' | 'mm'): string {
 
 #### 3.4.2: Update Migration Plan
 
-**File**: `docs/BACKEND_TELNET_MIGRATION_PLAN.md`
+**File**: `docs/archive/BACKEND_TELNET_MIGRATION_PLAN.md` (archived - migration complete)
 
 **Changes**:
 - Mark Phase 3 as "In Progress" or "Complete"
@@ -520,7 +520,7 @@ Phase 3 is complete when:
 
 ### Documentation
 - `docs/API_REFERENCE.md`
-- `docs/BACKEND_TELNET_MIGRATION_PLAN.md`
+- `docs/archive/BACKEND_TELNET_MIGRATION_PLAN.md` (archived)
 - `docs/DEVELOPMENT_GUIDE.md`
 
 ---
