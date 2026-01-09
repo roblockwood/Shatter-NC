@@ -493,7 +493,7 @@ Response: %R[Command(7)][Arguments(8)][Status(2)]\n[Data]\n[Checksum]%\n
    - ✅ API endpoints: All endpoints pass units to parsers and include units in responses
    - ✅ Frontend formatting: Created `formatDimension` utility for consistent unit display
 
-   **Implementation Plan**: See [PHASE3_UNITS_IMPLEMENTATION_PLAN.md](PHASE3_UNITS_IMPLEMENTATION_PLAN.md) for detailed task breakdown.
+   **Implementation Plan**: See [PHASE3_UNITS_IMPLEMENTATION_PLAN.md](./PHASE3_UNITS_IMPLEMENTATION_PLAN.md) for detailed task breakdown (archived - implementation complete).
 
    **Design Decision**: Changed from automatic detection (macro variable #302) to manual selection due to inability to reliably detect units from machine. Units are now configured per-machine in the setup UI.
 

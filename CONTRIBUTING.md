@@ -62,7 +62,7 @@ Before contributing, ensure you have:
    - `enhancement` - New features or improvements
    - `documentation` - Documentation improvements
 3. **Ask Questions**: If you're unsure about an issue, comment and ask for clarification
-4. **Check Roadmap**: Review [FUTURE_DOCUMENTATION.md](docs/FUTURE_DOCUMENTATION.md) for planned features
+4. **Check Roadmap**: Review [FUTURE_DOCUMENTATION.md](docs/roadmap/FUTURE_DOCUMENTATION.md) for planned features
 
 ---
 
@@ -574,7 +574,7 @@ Before submitting a PR with UI changes:
 
 ### Testing Requirements
 
-**Current Status:** Automated tests not yet implemented (see [FUTURE_DOCUMENTATION.md](docs/FUTURE_DOCUMENTATION.md))
+**Current Status:** Automated tests not yet implemented (see [FUTURE_DOCUMENTATION.md](docs/roadmap/FUTURE_DOCUMENTATION.md))
 
 #### Manual Testing Checklist
 
@@ -601,7 +601,7 @@ Until automated tests are in place, perform manual testing:
 
 #### Future Testing (Planned)
 
-When TESTING_GUIDE.md is implemented (see [FUTURE_DOCUMENTATION.md](docs/FUTURE_DOCUMENTATION.md)):
+When TESTING_GUIDE.md is implemented (see [FUTURE_DOCUMENTATION.md](docs/roadmap/FUTURE_DOCUMENTATION.md)):
 
 **Backend:**
 - Unit tests with `pytest`
@@ -724,7 +724,7 @@ Ready for re-review!
 
 ### Documentation Contributions
 
-See [FUTURE_DOCUMENTATION.md](docs/FUTURE_DOCUMENTATION.md) for planned documentation:
+See [FUTURE_DOCUMENTATION.md](docs/roadmap/FUTURE_DOCUMENTATION.md) for planned documentation:
 
 - **WEBSOCKET_PROTOCOL.md**: WebSocket message protocol specification
 - **TESTING_GUIDE.md**: Comprehensive testing strategy (HIGH PRIORITY)

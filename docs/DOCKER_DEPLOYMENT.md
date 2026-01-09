@@ -44,25 +44,23 @@ The Shatter CNC platform is deployed using Docker Compose with multiple configur
 
 ## Docker Compose Configurations
 
-Three Docker Compose files are provided for different scenarios:
+Two Docker Compose files are provided for different scenarios:
 
 | File | Use Case | Services | Frontend | Description |
 |------|----------|----------|----------|-------------|
-| **docker-compose.yml** | Development (full stack) | postgres, redis, backend, frontend | Vite dev server | Full stack with hot reload |
-| **docker-compose.prod.yml** | Production (build from source) | postgres, redis, backend, frontend, watchtower | Nginx static | Builds images locally from source code, includes Watchtower |
-| **docker-compose.prod-auto.yml** | Production (pre-built images) | postgres, redis, backend, frontend, watchtower | Nginx static | Uses pre-built images from GitHub Packages, includes Watchtower for auto-updates |
+| **docker-compose.dev.yml** | Development (full stack) | postgres, redis, backend, frontend | Vite dev server | Full stack with hot reload |
+| **docker-compose.prod.yml** | Production (pre-built images) | postgres, redis, backend, frontend | Nginx static | Pulls pre-built images from GitHub Packages |
 
 **Choosing a Configuration:**
 
-- **Development:** Use `docker-compose.yml` (full stack with hot reload)
-- **Production (local build):** Use `docker-compose.prod.yml` (builds images from source)
-- **Production (pre-built):** Use `docker-compose.prod-auto.yml` (pulls images from GitHub Packages)
+- **Development:** Use `docker-compose.dev.yml` (full stack with hot reload)
+- **Production:** Use `docker-compose.prod.yml` (pulls pre-built images from GitHub Packages)
 
 ---
 
 ## Architecture
 
-### Development Architecture (docker-compose.yml)
+### Development Architecture (docker-compose.dev.yml)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -208,14 +206,11 @@ nano .env.production
 
 **Step 3: Start production stack**
 
-Migration files are baked into the Docker image, so no additional setup is required. Watchtower is included for automatic container updates.
+Migration files are baked into the Docker image, so no additional setup is required.
 
 ```bash
 # Build and start (builds images from source)
 docker-compose -f docker-compose.prod.yml --env-file .env.production up -d --build
-
-# Or use pre-built images from GitHub Packages (requires authentication)
-docker-compose -f docker-compose.prod-auto.yml --env-file .env.production up -d
 ```
 
 **Step 4: Verify health**
@@ -321,7 +316,7 @@ psql -h localhost -U shatter_user -d shatter
 docker exec -it shatter-db psql -U shatter_user -d shatter
 ```
 
-**Location:** [docker-compose.yml:4-22](../docker-compose.yml#L4-L22)
+**Location:** [docker-compose.dev.yml:4-22](../docker-compose.dev.yml#L4-L22)
 
 ---
 
@@ -375,7 +370,7 @@ docker exec -it shatter-redis redis-cli
 - Not actively used yet
 - Future: Caching machine status, task queue for background jobs
 
-**Location:** [docker-compose.yml:70-78](../docker-compose.yml#L70-L78)
+**Location:** [docker-compose.dev.yml:70-78](../docker-compose.dev.yml#L70-L78)
 
 ---
 
@@ -452,7 +447,7 @@ docker-compose logs -f backend
 docker-compose logs backend | grep ERROR
 ```
 
-**Location:** [docker-compose.yml:25-48](../docker-compose.yml#L25-L48)
+**Location:** [docker-compose.dev.yml:25-48](../docker-compose.dev.yml#L25-L48)
 
 ---
 
@@ -525,7 +520,7 @@ args:
 
 If not set, frontend auto-detects based on browser hostname.
 
-**Location:** [docker-compose.yml:51-67](../docker-compose.yml#L51-L67)
+**Location:** [docker-compose.dev.yml:51-67](../docker-compose.dev.yml#L51-L67)
 
 ---
 
@@ -726,7 +721,7 @@ healthcheck:
 
 ### Default Network
 
-Development (`docker-compose.yml`) creates a default network:
+Development (`docker-compose.dev.yml`) creates a default network:
 
 ```yaml
 networks:
@@ -862,7 +857,7 @@ docker-compose up -d frontend
 **Minor version upgrade (safe):**
 
 ```bash
-# Update docker-compose.yml
+# Update docker-compose.dev.yml
 image: timescale/timescaledb:latest-pg15
 
 # Pull new image
@@ -1061,7 +1056,7 @@ Create external network for service isolation:
 # Create network
 docker network create shatter-external
 
-# Update docker-compose.yml
+# Update docker-compose.dev.yml
 networks:
   default:
     external: true
@@ -1147,61 +1142,6 @@ docker service ls
 
 ---
 
-## Automatic Container Updates with Watchtower
-
-Watchtower automatically monitors and updates containers when new images are available from GitHub Packages.
-
-### Setup
-
-1. **Authenticate with GitHub Packages** (required for private packages):
-   ```bash
-   # Create a Personal Access Token with 'read:packages' permission
-   echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
-   ```
-
-2. **Start services with auto-update enabled** (includes Watchtower):
-   ```bash
-   docker compose -f docker-compose.prod-auto.yml up -d
-   ```
-   
-   Watchtower is included as a service in `docker-compose.prod-auto.yml` and will start automatically.
-
-### How It Works
-
-- Watchtower polls for updates every 5 minutes (configurable)
-- Only containers with `com.centurylinklabs.watchtower.enable=true` label are updated
-- Containers are automatically restarted with new images
-- Old images are cleaned up to save disk space
-
-### Configuration
-
-**Containers that auto-update:**
-- `backend` - ✅ Enabled (has watchtower label)
-- `frontend` - ✅ Enabled (has watchtower label)
-
-**Containers that don't auto-update:**
-- `postgres` - ❌ Disabled (database updates are risky)
-- `redis` - ❌ Disabled (stable version)
-
-### Customization
-
-Edit the `watchtower` service in `docker-compose.prod-auto.yml` to customize:
-- **Poll interval**: Change `WATCHTOWER_POLL_INTERVAL` (default: 300 seconds = 5 minutes)
-- **Schedule**: Uncomment `command: --schedule "0 2 * * *"` to check daily at 2 AM
-- **Notifications**: Uncomment email notification settings to receive update alerts
-
-### Monitoring
-
-```bash
-# View Watchtower logs
-docker logs -f watchtower
-
-# Check which containers are being monitored
-docker ps --filter "label=com.centurylinklabs.watchtower.enable=true"
-```
-
----
-
 ## Related Documentation
 
 - [ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md) - Environment variable reference
@@ -1229,11 +1169,6 @@ docker-compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 docker-compose -f docker-compose.prod.yml logs -f
 docker-compose -f docker-compose.prod.yml down
 
-# Production (pre-built images)
-docker-compose -f docker-compose.prod-auto.yml --env-file .env.production up -d
-docker-compose -f docker-compose.prod-auto.yml logs -f
-docker-compose -f docker-compose.prod-auto.yml down
-
 # Maintenance
 docker-compose exec postgres psql -U shatter_user shatter  # Database CLI
 docker-compose exec backend bash                            # Backend shell
@@ -1249,4 +1184,3 @@ docker system df                                            # Disk usage
 | Backend | 8000 | 8000 |
 | PostgreSQL | 5432 | 5432 |
 | Redis | 6379 | 6379 |
-| Watchtower | N/A | N/A (no exposed ports) |
