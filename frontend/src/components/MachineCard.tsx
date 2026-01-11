@@ -34,6 +34,8 @@ interface MachineStatus {
   is_online: boolean;
   status?: string;
   program_name?: string;  // Active program O-number from machine (e.g., "O2045")
+  mem_mode?: number;  // MEM mode: 0=Manual, 1=MDI, 2=Memory, 3=Edit, 4=MDI manual, 5=Memory edit
+  mem_operation_status?: number;  // MEM operation_status: 0=Reset, 1=Operation, 2=Temporary stop, 3=Block stop
   cycle_time?: string;
   power_on_hours?: string;
   counters?: Array<{ counter_number: number; count: number }>;
@@ -676,13 +678,16 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 id: PANE_IDS.TOOLS,
                 component: (
                   <div ref={toolsPaneRef}>
-                    <ToolsPane 
-                      tools={machine.tools || []}
-                      toolTable={machine.tool_table || []}
-                      currentTool={machine.current_tool}
-                      machineId={machine.machine_id}
-                      units={(machine as any).units || 'in'}
-                    />
+            <ToolsPane
+              tools={machine.tools || []}
+              toolTable={machine.tool_table || []}
+              currentTool={machine.current_tool}
+              machineId={machine.machine_id}
+              units={(machine as any).units || 'in'}
+              machineStatus={machine.status}
+              memMode={(machine as any).mem_mode}
+              memOperationStatus={(machine as any).mem_operation_status}
+            />
                   </div>
                 ),
               },
@@ -1377,6 +1382,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     currentTool={machine.current_tool}
                     machineId={machine.machine_id}
                     units={(machine as any).units || machine.units || 'in'}
+                    machineStatus={machine.status}
                   />
                 </div>
               )}
