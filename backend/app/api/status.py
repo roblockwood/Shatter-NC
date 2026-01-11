@@ -4,6 +4,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
+from datetime import datetime
 from app.db.base import get_db
 from app.models.machine import Machine
 from app.clients.http_client import CNCHttpClient
@@ -15,6 +16,14 @@ import io
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Polling service will be injected from main.py
+polling_service = None
+
+def set_polling_service(service):
+    """Inject the polling service from main.py"""
+    global polling_service
+    polling_service = service
 
 
 class ColorChangeRequest(BaseModel):
@@ -689,6 +698,55 @@ async def get_tools(
         )
 
 
+@router.post("/{machine_id}/status/tools/refresh")
+async def refresh_tool_data(
+    machine_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Trigger immediate refresh of tool data (tool table and ATC magazine).
+    Returns updated tool data.
+    
+    This endpoint allows manual refresh of tool data without waiting for the slow polling cycle.
+    Useful when tool data may have changed (e.g., after tool changes on the machine).
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+    
+    if not polling_service:
+        raise HTTPException(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Polling service not available",
+        )
+    
+    try:
+        # Refresh tool data immediately
+        tool_data = await polling_service.refresh_tool_data(machine_id)
+        
+        return {
+            "machine_id": machine_id,
+            "machine_name": db_machine.name,
+            "tool_data": tool_data,
+            "refreshed_at": datetime.now().isoformat(),
+        }
+    except ValueError as e:
+        # Machine is not being polled
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error refreshing tool data for machine {machine_id}: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to refresh tool data: {str(e)}",
+        )
+
+
 @router.put("/{machine_id}/tools/atc/pot/{pot_number}/color")
 async def change_tool_color(
     machine_id: int,
@@ -797,6 +855,15 @@ async def change_tool_color(
                 status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail=error_response,
             )
+        
+        # Immediately refresh tool data after successful color change
+        if polling_service:
+            try:
+                await polling_service.refresh_tool_data(machine_id)
+                logger.debug(f"Refreshed tool data for machine {machine_id} after color change")
+            except Exception as e:
+                # Log but don't fail the request if refresh fails
+                logger.warning(f"Failed to refresh tool data after color change for machine {machine_id}: {e}")
         
         return {
             "success": True,
@@ -954,6 +1021,15 @@ async def batch_change_tool_colors(
         
         # Connection stays in pool for reuse - don't disconnect
         
+        # Immediately refresh tool data after batch color changes (if any were successful)
+        if successful > 0 and polling_service:
+            try:
+                await polling_service.refresh_tool_data(machine_id)
+                logger.debug(f"Refreshed tool data for machine {machine_id} after batch color changes ({successful} successful)")
+            except Exception as e:
+                # Log but don't fail the request if refresh fails
+                logger.warning(f"Failed to refresh tool data after batch color changes for machine {machine_id}: {e}")
+        
         return BatchColorChangeResponse(
             results=results,
             total=len(request.changes),
@@ -1062,6 +1138,14 @@ async def change_tool_assignment(
                 status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail=error_response,
             )
+        
+        # Immediately refresh tool data after successful assignment
+        if polling_service:
+            try:
+                await polling_service.refresh_tool_data(machine_id)
+                logger.debug(f"Refreshed tool data for machine {machine_id} after tool assignment")
+            except Exception as e:
+                logger.warning(f"Failed to refresh tool data after tool assignment for machine {machine_id}: {e}")
         
         return {
             "success": True,
@@ -1174,6 +1258,14 @@ async def change_tool_type(
                 detail=error_response,
             )
         
+        # Immediately refresh tool data after successful type change
+        if polling_service:
+            try:
+                await polling_service.refresh_tool_data(machine_id)
+                logger.debug(f"Refreshed tool data for machine {machine_id} after tool type change")
+            except Exception as e:
+                logger.warning(f"Failed to refresh tool data after tool type change for machine {machine_id}: {e}")
+        
         return {
             "success": True,
             "pot_number": pot_number,
@@ -1277,6 +1369,14 @@ async def delete_tool_from_pot(
                 status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail=error_response,
             )
+        
+        # Immediately refresh tool data after successful tool deletion
+        if polling_service:
+            try:
+                await polling_service.refresh_tool_data(machine_id)
+                logger.debug(f"Refreshed tool data for machine {machine_id} after tool deletion")
+            except Exception as e:
+                logger.warning(f"Failed to refresh tool data after tool deletion for machine {machine_id}: {e}")
         
         return {
             "success": True,
