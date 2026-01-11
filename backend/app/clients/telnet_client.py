@@ -439,14 +439,7 @@ class CNCTelnetClient:
             # Build and send frame
             frame = self._build_command(command, arguments, verbose=verbose)
             if verbose:
-                logger.error(f"=== SENDING COMMAND ===")
-                logger.error(f"Command: {command}, Arguments: '{arguments}'")
-                logger.error(f"Sending {len(frame)} bytes to {self.ip_address}:{self.port}")
-                logger.error(f"Frame (hex): {frame.hex(' ')}")
-                logger.error(f"Frame (repr): {repr(frame)}")
-                logger.error(f"Frame (raw bytes): {frame}")
-                logger.error(f"Frame (ASCII readable): {frame.decode('ascii', errors='replace')}")
-                logger.error(f"=== END SEND ===")
+                logger.debug(f"[TELNET] Sending {command} to {self.ip_address}: args={repr(arguments)}")
             self.writer.write(frame)
             await self.writer.drain()
             current_time = asyncio.get_event_loop().time()
@@ -483,9 +476,7 @@ class CNCTelnetClient:
                     if response:
                         # Only log partial responses if verbose - these are often normal for large data
                         if verbose:
-                            logger.error(f"Partial response received before timeout: {len(response)} bytes")
-                            logger.error(f"Partial response (hex): {response.hex(' ')}")
-                            logger.error(f"Partial response (repr): {repr(response)}")
+                            logger.debug(f"[TELNET] Partial response from {self.ip_address} ({len(response)} bytes): {repr(response)}")
                         break
                     else:
                         # Socket timeout with no data is an error - always log
@@ -515,12 +506,7 @@ class CNCTelnetClient:
             success = status_code == "00"
             
             if verbose:
-                logger.error(f"=== PARSING RESPONSE ===")
-                logger.error(f"Response length: {len(response_str)} bytes")
-                logger.error(f"Response header (first 19 bytes): {repr(response_str[:19])}")
-                logger.error(f"Status code (bytes 17-18): '{status_code}'")
-                logger.error(f"Full response (first 100 chars): {repr(response_str[:100])}")
-                logger.error(f"=== END RESPONSE PARSE ===")
+                logger.debug(f"[TELNET] {self.ip_address} response: status={status_code}, len={len(response_str)} bytes, header={repr(response_str[:19])}")
 
             # Extract data between header and footer
             # Find first \n after header
@@ -1369,9 +1355,7 @@ class CNCTelnetClient:
             frame_bytes = frame.encode('ascii')
 
             if verbose:
-                logger.info(f"Multipart command: {command}, Arguments: {arguments}, Data: {data_payload}")
-                logger.info(f"Command frame (ASCII): {repr(frame)}")
-                logger.info(f"Sending {len(frame_bytes)} bytes to {self.ip_address}:{self.port}")
+                logger.debug(f"[TELNET] Sending multipart {command} to {self.ip_address}: args={repr(arguments)}, data={repr(data_payload)}")
 
             self.writer.write(frame_bytes)
             await self.writer.drain()
@@ -1412,6 +1396,9 @@ class CNCTelnetClient:
 
             status_code = response_str[17:19]
             success = status_code == "00"
+
+            if verbose:
+                logger.debug(f"[TELNET] {self.ip_address} multipart response: status={status_code}, len={len(response_str)} bytes")
 
             first_newline = response_str.find('\n', 20)
             if first_newline == -1:
@@ -1927,17 +1914,18 @@ class CNCTelnetClient:
         # Acquire lock for this machine to prevent conflicts
         machine_lock = await _get_machine_lock(self.ip_address, self.port)
         
+        start_time = asyncio.get_event_loop().time()
         try:
             async with machine_lock:
                 # Use multipart command with longer timeout for write operations
                 success, status, _ = await self._send_multipart_command(
                     "WRTTLLF", arguments, data_payload, verbose=verbose
                 )
-                # Note: _send_multipart_command uses 1.0s timeout by default, but writes may need longer
-                # We could extend this later if needed
+                
+                duration_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
                 
                 if success:
-                    logger.info(f"Tool {tool_number} life ({life_type}) set to {life_value}")
+                    logger.info(f"[WRITE] Tool {tool_number} life ({life_type}) set to {life_value} ({duration_ms}ms)")
                 else:
                     status_desc = self.get_status_description(status or "00")
                     logger.warning(f"Failed to write tool life: {status_desc}")
@@ -2028,6 +2016,7 @@ class CNCTelnetClient:
         # Acquire lock for this machine to prevent conflicts
         machine_lock = await _get_machine_lock(self.ip_address, self.port)
         
+        start_time = asyncio.get_event_loop().time()
         try:
             async with machine_lock:
                 # Use multipart command with longer timeout for write operations
@@ -2035,8 +2024,10 @@ class CNCTelnetClient:
                     "WRTTOFS", arguments, offset_data, verbose=verbose
                 )
                 
+                duration_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
+                
                 if success:
-                    logger.info(f"Tool {tool_number} offset ({offset_type}) set to {value}")
+                    logger.info(f"[WRITE] Tool {tool_number} offset ({offset_type}) set to {value} ({duration_ms}ms)")
                 else:
                     status_desc = self.get_status_description(status or "00")
                     logger.warning(f"Failed to write tool offset: {status_desc}")
@@ -2264,56 +2255,25 @@ class CNCTelnetClient:
         # Acquire lock for this machine to prevent conflicts with polling reads
         machine_lock = await _get_machine_lock(self.ip_address, self.port)
         
+        start_time = asyncio.get_event_loop().time()
         try:
             # Wait for lock (this will block if polling is currently reading)
             async with machine_lock:
-                # Format based on schema:
-                # Example: %CCHGMAGC0204
-                # Breaking down: %C (frame type) + CHGMAG (command, 6 chars padded to 7) + C (k1) + 02 (m1m2) + 04 (t1t2)
-                # The _build_command method adds 'C' prefix, so command should be "CHGMAG" (6 chars)
-                # After padding: "CHGMAG " (7 chars)
-                # After 'C' prefix: "CCHGMAG " (correct!)
-                
                 pot_str = f"{pot_number:02d}"  # m1m2: magazine number (2 digits)
                 color_str = f"{color}"  # t1: color value (1 digit, 0-7)
                 
                 # Arguments format: m1m2 + t1 + padding = 8 chars
-                # Example: "021     " (pot 02, color 1, padded to 8 chars)
-                # NO 'C' prefix in arguments - the 'C' for color is in the command name (MAGC)
                 arguments = f"{pot_str}{color_str}      "[:8]  # "021     " (8 chars)
                 
-                # Use the standard _build_command method (same format as LOD, etc.)
-                # Command should be "CHGMAGC" (7 chars) to get:
-                # - c1-c3 = "CHG" (change)
-                # - f1-f4 = "MAGC" (magazine color, left-justified)
-                # The _build_command method adds 'C' prefix, so we send "CHGMAGC"
-                # Arguments: "021     " (pot 02, color 1, padded to 8 chars)
-                # Header: %C + CHG + MAGC + 021      + 00 = %CCHGMAGC021      00
-                # Checksum is in the footer, NOT in r1-r2
-                logger.error(f"=== CHGMAGC COMMAND DEBUG ===")
-                logger.error(f"CHGMAGC: pot={pot_number}, tool={tool_number}, color={color}")
-                logger.error(f"CHGMAGC: arguments string = '{arguments}' (length={len(arguments)}, should be 8)")
-                logger.error(f"CHGMAGC: command = 'CHGMAGC' (will become 'CCHGMAGC' with 'C' prefix)")
-                logger.error(f"CHGMAGC: Full command breakdown:")
-                logger.error(f"  - Input command: 'CHGMAGC' (7 bytes)")
-                logger.error(f"  - After padding: 'CHGMAGC' (7 bytes, no padding needed)")
-                logger.error(f"  - Split: c1-c3='CHG', f1-f4='MAGC'")
-                logger.error(f"  - With 'C' prefix: 'C' + 'CHG' + 'MAGC' = 'CCHGMAGC'")
-                # Build expected header format for debug (same as _build_command will do)
-                # Command "CHGMAGC" splits into: c1-c3='CHG', f1-f4='MAGC'
-                expected_header = f"%CCHG{'MAGC':<4}{arguments}00"
-                logger.error(f"  - Header breakdown: % + C + 'CHG' (c1-c3) + 'MAGC' (f1-f4) + '{arguments}' (s1-s8) + '00' (r1-r2)")
-                logger.error(f"  - Expected header: '{expected_header}' (length: {len(expected_header)} bytes, should be 19)")
-                logger.error(f"=== END CHGMAGC DEBUG ===")
-                
                 # Use standard _send_command which uses _build_command (same as LOD)
-                # verbose=True will show the complete frame being sent
                 # Use longer timeout (5 seconds) for write operations as they may take longer to process
-                success, status, _ = await self._send_command("CHGMAGC", arguments, verbose=True, read_timeout=5.0)
+                success, status, _ = await self._send_command("CHGMAGC", arguments, verbose=verbose, read_timeout=5.0)
+                
+                duration_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
                 
                 if success:
                     color_names = {0: "None", 1: "Blue", 2: "Red", 3: "Purple", 4: "Green", 5: "Light Blue", 6: "Yellow", 7: "White"}
-                    logger.info(f"Changed tool color in pot {pot_number} to {color_names.get(color, 'Unknown')}")
+                    logger.info(f"[WRITE] Changed tool color in pot {pot_number} to {color_names.get(color, 'Unknown')} ({duration_ms}ms)")
                 else:
                     status_desc = self.get_status_description(status or "00")
                     logger.warning(f"Failed to change tool color: {status_desc}")
@@ -2432,13 +2392,16 @@ class CNCTelnetClient:
         # Acquire lock for this machine to prevent conflicts with polling reads
         machine_lock = await _get_machine_lock(self.ip_address, self.port)
         
+        start_time = asyncio.get_event_loop().time()
         try:
             async with machine_lock:
                 # Use standard _send_command with longer timeout for write operations
                 success, status, _ = await self._send_command(command, arguments, verbose=verbose, read_timeout=5.0)
                 
+                duration_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
+                
                 if success:
-                    logger.info(f"Successfully executed {command} for magazine position {magazine_pos}")
+                    logger.info(f"[WRITE] Successfully executed {command} for magazine position {magazine_pos} ({duration_ms}ms)")
                 else:
                     status_desc = self.get_status_description(status or "00")
                     logger.warning(f"Failed {command}: {status_desc}")

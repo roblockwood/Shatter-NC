@@ -19,6 +19,14 @@ CREATE INDEX IF NOT EXISTS idx_polling_events_machine_time
 CREATE INDEX IF NOT EXISTS idx_polling_events_success
     ON polling_events (success);
 
+-- Enable compression for polling events
+ALTER TABLE polling_events SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'machine_id'
+);
+SELECT add_compression_policy('polling_events', INTERVAL '30 days', if_not_exists => TRUE);
+SELECT add_retention_policy('polling_events', INTERVAL '1 year', if_not_exists => TRUE);
+
 -- Grant permissions
 GRANT ALL PRIVILEGES ON TABLE polling_events TO shatter_user;
 

@@ -79,6 +79,8 @@ async def get_machine_status(
         )
 
     try:
+        import time
+        start_time = time.time()
         # Phase 5: Migrate to Telnet for MONTR and PRD3 data (replaces HTTP get_status_overview)
         from app.clients.telnet_client import get_or_create_connection
         from app.parsers.montr_parser_v2 import parse_montr_v2
@@ -174,6 +176,7 @@ async def get_machine_status(
             "operation_time": format_time(time_info.get("operation_time", "000000000")),
             "status": machine_status,
             "is_online": is_online,  # True when any Telnet operation succeeds (machine is reachable)
+            "response_time_ms": int((time.time() - start_time) * 1000),
             "counters": [
                 {
                     "counter_number": c.get("counter_number", i + 1),
@@ -429,6 +432,8 @@ async def get_tools(
         )
 
     try:
+        import time
+        start_time = time.time()
         if source == "table":
             # Fetch tool table from TOLNI1 (inches) or TOLNM1 (millimeters) via Telnet
             # Phase 5: Using Telnet for data reads (FTP deprecated for data, kept only for file transfers)
@@ -521,6 +526,7 @@ async def get_tools(
             parsed["machine_id"] = machine_id
             parsed["source"] = "tool_table"
             parsed["protocol"] = "telnet"  # Track which protocol was used
+            parsed["tool_response_time_ms"] = int((time.time() - start_time) * 1000)
             
             # Also fetch program_name from MEM while we have Telnet connection open
             try:
@@ -664,7 +670,8 @@ async def get_tools(
                 "protocol": "telnet",
                 "units": db_machine.units,  # Ensure units are included in response
                 "control_version": atc_parsed.get("control_version"),
-                "toln_source": data_name  # Track which TOLN file was used
+                "toln_source": data_name,  # Track which TOLN file was used
+                "tool_response_time_ms": int((time.time() - start_time) * 1000)
             }
             
             logger.info(f"ATC data merged: {len(tools)} tools, TOLN source={data_name}, units={db_machine.units}")
