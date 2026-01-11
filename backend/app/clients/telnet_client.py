@@ -14,10 +14,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Global lock manager for serializing telnet operations per machine
-# Key: (ip_address, port) tuple, Value: asyncio.Semaphore
-_telnet_locks: Dict[Tuple[str, int], asyncio.Semaphore] = {}
-_locks_lock = asyncio.Lock()  # Lock for accessing the _telnet_locks dict
+# Redis distributed locks are used instead of per-process semaphores
+# This ensures coordination across multiple worker processes
 
 # Global connection pool: Key: (ip_address, port) tuple, Value: CNCTelnetClient instance
 _telnet_connections: Dict[Tuple[str, int], 'CNCTelnetClient'] = {}
@@ -95,25 +93,33 @@ async def close_all_connections():
     logger.info(f"Closed {len(connections_to_close)} Telnet connection(s) from pool")
 
 
-async def _get_machine_lock(ip_address: str, port: int) -> asyncio.Semaphore:
+async def _get_machine_lock(ip_address: str, port: int):
     """
-    Get or create a semaphore lock for a specific machine.
+    Get Redis distributed lock for a specific machine.
     
     This ensures only one telnet operation happens at a time per machine,
     preventing conflicts between reads (polling) and writes (color changes).
+    Uses Redis distributed locks to coordinate across multiple worker processes.
     
     Args:
         ip_address: Machine IP address
         port: Telnet port
         
     Returns:
-        Semaphore for this machine (value=1, so only one operation at a time)
+        Redis Lock instance (supports async context manager)
     """
-    key = (ip_address, port)
-    async with _locks_lock:
-        if key not in _telnet_locks:
-            _telnet_locks[key] = asyncio.Semaphore(1)
-        return _telnet_locks[key]
+    from app.utils.redis_client import get_async_redis
+    from redis.asyncio.lock import Lock
+    
+    redis = await get_async_redis()
+    lock_key = f"telnet:lock:{ip_address}:{port}"
+    return Lock(
+        redis,
+        lock_key,
+        timeout=30,  # Lock expires after 30s (prevents deadlocks)
+        blocking_timeout=10,  # Wait up to 10s to acquire
+        sleep=0.1,  # Sleep interval between lock attempts
+    )
 
 
 # Completion Code Meanings (from Section 5.5.9.2 of Brother Protocol)
@@ -227,7 +233,7 @@ class CNCTelnetClient:
         self.writer: Optional[asyncio.StreamWriter] = None
         self.last_command_time: float = 0.0
         self._connected = False
-        self._cached_control_version: Optional[str] = None  # Cache detected control version
+        # Control version is cached in Redis (shared across all connections to same machine)
 
     @staticmethod
     def get_status_description(status_code: str) -> str:
@@ -409,10 +415,26 @@ class CNCTelnetClient:
 
         try:
             # Enforce minimum delay between commands to prevent machine overload
+            # Use Redis rate limit (shared across all connections to same machine)
             current_time = asyncio.get_event_loop().time()
-            elapsed = current_time - self.last_command_time
-            if elapsed < self.command_delay:
-                await asyncio.sleep(self.command_delay - elapsed)
+            try:
+                from app.utils.redis_client import get_redis
+                redis = get_redis()
+                rate_limit_key = f"ratelimit:telnet:{self.ip_address}:{self.port}"
+                last_command_time_str = redis.get(rate_limit_key)
+                if last_command_time_str:
+                    last_command_time = float(last_command_time_str)
+                    elapsed = current_time - last_command_time
+                    if elapsed < self.command_delay:
+                        await asyncio.sleep(self.command_delay - elapsed)
+                        current_time = asyncio.get_event_loop().time()  # Update time after sleep
+            except Exception as e:
+                # Redis unavailable - fall back to local rate limiting
+                logger.debug(f"Redis rate limit check failed, using local delay: {e}")
+                elapsed = current_time - self.last_command_time
+                if elapsed < self.command_delay:
+                    await asyncio.sleep(self.command_delay - elapsed)
+                    current_time = asyncio.get_event_loop().time()  # Update time after sleep
 
             # Build and send frame
             frame = self._build_command(command, arguments, verbose=verbose)
@@ -427,7 +449,18 @@ class CNCTelnetClient:
                 logger.error(f"=== END SEND ===")
             self.writer.write(frame)
             await self.writer.drain()
-            self.last_command_time = asyncio.get_event_loop().time()
+            current_time = asyncio.get_event_loop().time()
+            self.last_command_time = current_time
+            
+            # Update Redis rate limit tracking (shared across all connections)
+            try:
+                from app.utils.redis_client import get_redis
+                redis = get_redis()
+                rate_limit_key = f"ratelimit:telnet:{self.ip_address}:{self.port}"
+                redis.setex(rate_limit_key, 60, str(current_time))  # 60 second TTL
+            except Exception as e:
+                # Redis unavailable - continue without updating (local rate limiting still works)
+                logger.debug(f"Failed to update Redis rate limit tracking: {e}")
 
             # Receive response with robust reading to handle complete frames
             response = b''
@@ -722,13 +755,11 @@ class CNCTelnetClient:
         Returns:
             ATC magazine data as string, or None on failure
         """
-        # If control_version not provided, detect it first (use cache if available)
+        # If control_version not provided, detect it first (uses Redis cache)
         if control_version is None:
-            if self._cached_control_version is None:
-                self._cached_control_version = await self.detect_control_type(verbose=False)  # Don't spam logs for detection
-                if verbose and self._cached_control_version:
-                    logger.info(f"Auto-detected control version: {self._cached_control_version}")
-            control_version = self._cached_control_version
+            control_version = await self.detect_control_type(verbose=False)  # Don't spam logs for detection
+            if verbose and control_version:
+                logger.info(f"Auto-detected control version: {control_version}")
         
         # D00 uses ATCTLD, C00 uses ATCTL
         if control_version == "D00":
@@ -965,10 +996,39 @@ class CNCTelnetClient:
         Returns:
             "C00" or "D00" if detected, None if uncertain
         """
+        # Check Redis cache first (shared across all connections)
+        try:
+            from app.utils.redis_client import get_redis
+            redis = get_redis()
+            cache_key = f"machine:control_version:{self.ip_address}:{self.port}"
+            cached_version = redis.get(cache_key)
+            if cached_version:
+                detected_version = cached_version.decode('utf-8')
+                if verbose:
+                    logger.debug(f"Control version from Redis cache: {detected_version}")
+                return detected_version
+        except Exception as e:
+            # Redis unavailable - continue with detection
+            if verbose:
+                logger.debug(f"Redis cache unavailable, detecting control version: {e}")
+        
         # Acquire lock for this machine to serialize with other operations
         machine_lock = await _get_machine_lock(self.ip_address, self.port)
         
         async with machine_lock:
+            # Check cache again after acquiring lock (another process might have detected it)
+            try:
+                from app.utils.redis_client import get_redis
+                redis = get_redis()
+                cache_key = f"machine:control_version:{self.ip_address}:{self.port}"
+                cached_version = redis.get(cache_key)
+                if cached_version:
+                    detected_version = cached_version.decode('utf-8')
+                    if verbose:
+                        logger.debug(f"Control version from Redis cache (after lock): {detected_version}")
+                    return detected_version
+            except Exception:
+                pass  # Continue with detection
             if not self._connected:
                 connected = await self.connect()
                 if not connected:

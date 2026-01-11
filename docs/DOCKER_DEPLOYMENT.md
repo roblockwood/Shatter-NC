@@ -324,7 +324,7 @@ docker exec -it shatter-db psql -U shatter_user -d shatter
 
 **Image:** `redis:7-alpine`
 
-**Purpose:** Caching and task queue (optional)
+**Purpose:** Distributed locks, caching, and rate limiting (required)
 
 **Configuration:**
 
@@ -367,8 +367,10 @@ docker exec -it shatter-redis redis-cli
 ```
 
 **Current Usage:**
-- Not actively used yet
-- Future: Caching machine status, task queue for background jobs
+- **Distributed Locks**: Coordinates Telnet operations across multiple backend worker processes, preventing race conditions on CNC machines
+- **Machine Status Caching**: Stores latest machine status with TTLs (60s for full status, 5min for tool tables, 2min for panel data, 5min for program names, 1hr for control versions). Persists across worker restarts and enables data availability during failed polls
+- **Rate Limiting**: Enforces API endpoint rate limits (100 requests/minute per IP) and Telnet command rate limits per machine
+- **Required**: Application will fail to start if Redis is unavailable
 
 **Location:** [docker-compose.dev.yml:70-78](../docker-compose.dev.yml#L70-L78)
 
