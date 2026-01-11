@@ -2,6 +2,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel
 from app.db.base import get_db
 from app.models.machine import Machine
 from app.clients.http_client import CNCHttpClient
@@ -15,8 +17,42 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class ColorChangeRequest(BaseModel):
+    """Request to change a single tool color."""
+    pot_number: int
+    tool_number: int
+    color: int
+
+
+class BatchColorChangeRequest(BaseModel):
+    """Request to change multiple tool colors."""
+    changes: List[ColorChangeRequest]
+
+
+class ColorChangeResult(BaseModel):
+    """Result of a single color change operation."""
+    pot_number: int
+    tool_number: int
+    color: int
+    success: bool
+    error_code: Optional[str] = None
+    message: Optional[str] = None
+
+
+class BatchColorChangeResponse(BaseModel):
+    """Response from batch color change operation."""
+    results: List[ColorChangeResult]
+    total: int
+    successful: int
+    failed: int
+
+
 @router.get("/{machine_id}/status")
-async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
+async def get_machine_status(
+    machine_id: int,
+    include_mem: bool = Query(False, description="Include MEM data (mode, operation_status)"),
+    db: Session = Depends(get_db)
+):
     """
     Get comprehensive real-time status for a machine.
 
@@ -24,6 +60,7 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
     - MONTR: Running log (program, cycle time, etc.) and work counters
     - PRD3: Machine operating status
     - ALARM: Current alarms
+    - MEM: Mode and operation status (if include_mem=True)
     """
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not db_machine:
@@ -38,6 +75,7 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
         from app.parsers.montr_parser_v2 import parse_montr_v2
         from app.parsers.alarm_parser_v2 import parse_alarm_v2
         from app.parsers.prd3_parser_v2 import parse_prd3_v2
+        from app.parsers.mem_parser_v2 import parse_mem_v2
         from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
         from datetime import datetime
         
@@ -70,6 +108,13 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
         prd3_parsed = None
         if prd3_data:
             prd3_parsed = parse_prd3_v2(prd3_data.encode('utf-8'), control_version=control_version)
+        
+        # Get MEM data if requested (for mode and operation_status)
+        mem_parsed = None
+        if include_mem:
+            mem_data = await telnet_client.get_memory_data(verbose=False)
+            if mem_data:
+                mem_parsed = parse_mem_v2(mem_data.encode('utf-8'), control_version=control_version)
         
         # Format response
         program_info = parsed.get("program_info", {})
@@ -154,6 +199,12 @@ async def get_machine_status(machine_id: int, db: Session = Depends(get_db)):
         
         status_data["machine_id"] = machine_id
         status_data["machine_name"] = db_machine.name
+        
+        # Add MEM data if requested
+        if include_mem and mem_parsed:
+            status_data["mode"] = mem_parsed.get("mode")
+            status_data["operation_status"] = mem_parsed.get("operation_status")
+            status_data["operation_folder_name"] = mem_parsed.get("operation_folder_name")
         
         return status_data
 
@@ -676,6 +727,21 @@ async def change_tool_color(
         )
 
     try:
+        # Validate machine state before operation
+        from app.services.machine_state_validator import MachineStateValidator
+        validator = MachineStateValidator()
+        is_safe, error_message, status_data = await validator.validate_safe_for_write(
+            machine_id=machine_id,
+            operation_type="tool_color",
+            db=db
+        )
+        
+        if not is_safe:
+            raise HTTPException(
+                status_code=http_status.HTTP_409_CONFLICT,
+                detail=error_message or "Machine is not in a safe state for this operation",
+            )
+        
         from app.clients.telnet_client import CNCTelnetClient
         
         # Use pooled connection (reused across operations)
@@ -697,15 +763,41 @@ async def change_tool_color(
         
         logger.info(f"Color change result: success={success}, status_code={status_code}")
         
+        # Audit log the operation
+        from app.services.audit_logger import AuditLogger
+        color_names = {0: "None", 1: "Blue", 2: "Red", 3: "Purple", 4: "Green", 5: "Light Blue", 6: "Yellow", 7: "White"}
+        status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
+        AuditLogger.log_tool_modification(
+            machine_id=machine_id,
+            operation_type="tool_color",
+            operation_details={
+                "pot_number": pot_number,
+                "tool_number": tool_number,
+                "new_color": color,
+                "new_color_name": color_names.get(color, "Unknown"),
+            },
+            success=success,
+            error_message=status_desc,
+            machine_state=status_data
+        )
+        
         if not success:
-            status_desc = CNCTelnetClient.get_status_description(status_code or "00")
             logger.error(f"Failed to change tool color for pot {pot_number}, tool {tool_number}, color {color}: {status_desc} (status={status_code})")
+            
+            # Build structured error response
+            error_response = {
+                "error_code": status_code or "unknown",
+                "message": f"Failed to change tool color: {status_desc}",
+                "can_retry": status_code in ("32", "36", "37", "63") if status_code else False
+            }
+            if status_data:
+                error_response["machine_state"] = status_data
+            
             raise HTTPException(
                 status_code=http_status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to change tool color: {status_desc}",
+                detail=error_response,
             )
         
-        color_names = {0: "None", 1: "Blue", 2: "Red", 3: "Purple", 4: "Green", 5: "Light Blue", 6: "Yellow", 7: "White"}
         return {
             "success": True,
             "pot_number": pot_number,
@@ -719,6 +811,806 @@ async def change_tool_color(
         raise
     except Exception as e:
         logger.error(f"Error changing tool color for machine {machine_id}: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.put("/{machine_id}/tools/atc/colors/batch", response_model=BatchColorChangeResponse)
+async def batch_change_tool_colors(
+    machine_id: int,
+    request: BatchColorChangeRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Batch change tool colors in ATC magazine.
+    
+    Validates machine state once, then processes all changes sequentially.
+    This is more efficient than making multiple individual requests.
+    
+    Args:
+        machine_id: Machine ID
+        request: Batch request containing list of color changes
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    # Validate inputs
+    if not request.changes:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="No changes provided",
+        )
+    
+    for change in request.changes:
+        if not 1 <= change.pot_number <= 99:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid pot number: {change.pot_number} (must be 1-99)",
+            )
+        if not 0 <= change.color <= 7:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid color value: {change.color} (must be 0-7)",
+            )
+
+    try:
+        # Frontend performs validation using cached WebSocket data
+        # No backend validation needed - machine will reject with error codes if unsafe
+        
+        from app.clients.telnet_client import CNCTelnetClient, get_or_create_connection
+        from app.services.audit_logger import AuditLogger
+        
+        # Use pooled connection (reused for all operations)
+        telnet_client = await get_or_create_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=10
+        )
+        
+        color_names = {0: "None", 1: "Blue", 2: "Red", 3: "Purple", 4: "Green", 5: "Light Blue", 6: "Yellow", 7: "White"}
+        results = []
+        successful = 0
+        failed = 0
+        
+        # Process all changes sequentially (Telnet semaphore ensures serialization anyway)
+        for change in request.changes:
+            try:
+                success, status_code = await telnet_client.change_atc_tool_color(
+                    pot_number=change.pot_number,
+                    tool_number=change.tool_number,
+                    color=change.color,
+                    verbose=False
+                )
+                
+                # Audit log each operation
+                status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
+                AuditLogger.log_tool_modification(
+                    machine_id=machine_id,
+                    operation_type="tool_color",
+                    operation_details={
+                        "pot_number": change.pot_number,
+                        "tool_number": change.tool_number,
+                        "new_color": change.color,
+                        "new_color_name": color_names.get(change.color, "Unknown"),
+                    },
+                    success=success,
+                    error_message=status_desc,
+                    machine_state=None  # Frontend handles validation, no need to pass state
+                )
+                
+                if success:
+                    results.append(ColorChangeResult(
+                        pot_number=change.pot_number,
+                        tool_number=change.tool_number,
+                        color=change.color,
+                        success=True,
+                        message=f"Tool color changed to {color_names.get(change.color, 'Unknown')}"
+                    ))
+                    successful += 1
+                else:
+                    error_msg = status_desc or f"Failed with status code {status_code}"
+                    results.append(ColorChangeResult(
+                        pot_number=change.pot_number,
+                        tool_number=change.tool_number,
+                        color=change.color,
+                        success=False,
+                        error_code=status_code or "unknown",
+                        message=error_msg
+                    ))
+                    failed += 1
+                    logger.error(f"Failed to change tool color for pot {change.pot_number}, tool {change.tool_number}, color {change.color}: {error_msg}")
+            
+            except Exception as e:
+                # Individual change failed - continue with others
+                error_msg = str(e)
+                results.append(ColorChangeResult(
+                    pot_number=change.pot_number,
+                    tool_number=change.tool_number,
+                    color=change.color,
+                    success=False,
+                    error_code="exception",
+                    message=error_msg
+                ))
+                failed += 1
+                logger.error(f"Exception changing tool color for pot {change.pot_number}, tool {change.tool_number}: {e}")
+        
+        # Connection stays in pool for reuse - don't disconnect
+        
+        return BatchColorChangeResponse(
+            results=results,
+            total=len(request.changes),
+            successful=successful,
+            failed=failed
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in batch color change: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to batch change tool colors: {str(e)}",
+        )
+
+
+@router.put("/{machine_id}/tools/atc/pot/{pot_number}/tool")
+async def change_tool_assignment(
+    machine_id: int,
+    pot_number: int,
+    tool_number: int = Query(..., description="New tool number to assign"),
+    db: Session = Depends(get_db)
+):
+    """
+    Assign or change tool number in an ATC pot (CHGMAGM).
+    
+    Args:
+        machine_id: Machine ID
+        pot_number: Pot number (1-99)
+        tool_number: Tool number to assign (1-999)
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    if not 1 <= pot_number <= 99:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid pot number: {pot_number} (must be 1-99)",
+        )
+    
+    if not 1 <= tool_number <= 999:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid tool number: {tool_number} (must be 1-999)",
+        )
+
+    try:
+        # Validate machine state
+        from app.services.machine_state_validator import MachineStateValidator
+        validator = MachineStateValidator()
+        is_safe, error_message, status_data = await validator.validate_safe_for_write(
+            machine_id=machine_id,
+            operation_type="tool_assignment",
+            db=db
+        )
+        
+        if not is_safe:
+            raise HTTPException(
+                status_code=http_status.HTTP_409_CONFLICT,
+                detail=error_message or "Machine is not in a safe state for this operation",
+            )
+        
+        from app.clients.telnet_client import get_or_create_connection
+        telnet_client = await get_or_create_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=10
+        )
+        
+        success, status_code = await telnet_client.assign_tool_to_pot(
+            pot_number=pot_number,
+            tool_number=tool_number,
+            verbose=True
+        )
+        
+        # Audit log the operation
+        from app.services.audit_logger import AuditLogger
+        from app.clients.telnet_client import CNCTelnetClient
+        status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
+        AuditLogger.log_tool_modification(
+            machine_id=machine_id,
+            operation_type="tool_assignment",
+            operation_details={
+                "pot_number": pot_number,
+                "new_tool_number": tool_number,
+            },
+            success=success,
+            error_message=status_desc,
+            machine_state=status_data
+        )
+        
+        if not success:
+            error_response = {
+                "error_code": status_code or "unknown",
+                "message": f"Failed to assign tool: {status_desc}",
+                "can_retry": status_code in ("32", "36", "37", "63") if status_code else False
+            }
+            if status_data:
+                error_response["machine_state"] = status_data
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=error_response,
+            )
+        
+        return {
+            "success": True,
+            "pot_number": pot_number,
+            "tool_number": tool_number,
+            "message": f"Tool {tool_number} assigned to pot {pot_number}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error assigning tool: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.put("/{machine_id}/tools/atc/pot/{pot_number}/type")
+async def change_tool_type(
+    machine_id: int,
+    pot_number: int,
+    tool_type: int = Query(..., description="Tool type (1=Standard, 2=Large, 3=Medium)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Change tool type for an ATC pot (CHGMAGK).
+    
+    Args:
+        machine_id: Machine ID
+        pot_number: Pot number (1-99)
+        tool_type: Tool type (1=Standard, 2=Large, 3=Medium)
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    if not 1 <= pot_number <= 99:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid pot number: {pot_number} (must be 1-99)",
+        )
+    
+    if tool_type not in (1, 2, 3):
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid tool type: {tool_type} (must be 1=Standard, 2=Large, 3=Medium)",
+        )
+
+    try:
+        # Validate machine state
+        from app.services.machine_state_validator import MachineStateValidator
+        validator = MachineStateValidator()
+        is_safe, error_message, status_data = await validator.validate_safe_for_write(
+            machine_id=machine_id,
+            operation_type="tool_type",
+            db=db
+        )
+        
+        if not is_safe:
+            raise HTTPException(
+                status_code=http_status.HTTP_409_CONFLICT,
+                detail=error_message or "Machine is not in a safe state for this operation",
+            )
+        
+        from app.clients.telnet_client import get_or_create_connection
+        telnet_client = await get_or_create_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=10
+        )
+        
+        success, status_code = await telnet_client.change_tool_type(
+            pot_number=pot_number,
+            tool_type=tool_type,
+            verbose=True
+        )
+        
+        # Audit log the operation
+        from app.services.audit_logger import AuditLogger
+        from app.clients.telnet_client import CNCTelnetClient
+        status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
+        type_names = {1: "Standard", 2: "Large", 3: "Medium"}
+        AuditLogger.log_tool_modification(
+            machine_id=machine_id,
+            operation_type="tool_type",
+            operation_details={
+                "pot_number": pot_number,
+                "new_tool_type": tool_type,
+                "new_tool_type_name": type_names.get(tool_type, "Unknown"),
+            },
+            success=success,
+            error_message=status_desc,
+            machine_state=status_data
+        )
+        
+        if not success:
+            error_response = {
+                "error_code": status_code or "unknown",
+                "message": f"Failed to change tool type: {status_desc}",
+                "can_retry": status_code in ("32", "36", "37", "63") if status_code else False
+            }
+            if status_data:
+                error_response["machine_state"] = status_data
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=error_response,
+            )
+        
+        return {
+            "success": True,
+            "pot_number": pot_number,
+            "tool_type": tool_type,
+            "tool_type_name": type_names.get(tool_type, "Unknown"),
+            "message": f"Tool type changed to {type_names.get(tool_type, 'Unknown')}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error changing tool type: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.delete("/{machine_id}/tools/atc/pot/{pot_number}")
+async def delete_tool_from_pot(
+    machine_id: int,
+    pot_number: int,
+    tool_number: int = Query(None, description="Tool number for verification (optional)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Remove/delete tool from an ATC pot (CHGMAGD).
+    
+    Args:
+        machine_id: Machine ID
+        pot_number: Pot number (0-99, 0=spindle)
+        tool_number: Tool number for verification (optional)
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    if not 0 <= pot_number <= 99:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid pot number: {pot_number} (must be 0-99)",
+        )
+
+    try:
+        # Validate machine state
+        from app.services.machine_state_validator import MachineStateValidator
+        validator = MachineStateValidator()
+        is_safe, error_message, status_data = await validator.validate_safe_for_write(
+            machine_id=machine_id,
+            operation_type="tool_delete",
+            db=db
+        )
+        
+        if not is_safe:
+            raise HTTPException(
+                status_code=http_status.HTTP_409_CONFLICT,
+                detail=error_message or "Machine is not in a safe state for this operation",
+            )
+        
+        from app.clients.telnet_client import get_or_create_connection
+        telnet_client = await get_or_create_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=10
+        )
+        
+        success, status_code = await telnet_client.remove_tool_from_pot(
+            pot_number=pot_number,
+            tool_number=tool_number,
+            verbose=True
+        )
+        
+        # Audit log the operation
+        from app.services.audit_logger import AuditLogger
+        from app.clients.telnet_client import CNCTelnetClient
+        status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
+        AuditLogger.log_tool_modification(
+            machine_id=machine_id,
+            operation_type="tool_delete",
+            operation_details={
+                "pot_number": pot_number,
+                "tool_number": tool_number,
+            },
+            success=success,
+            error_message=status_desc,
+            machine_state=status_data
+        )
+        
+        if not success:
+            error_response = {
+                "error_code": status_code or "unknown",
+                "message": f"Failed to remove tool: {status_desc}",
+                "can_retry": status_code in ("32", "36", "37", "63") if status_code else False
+            }
+            if status_data:
+                error_response["machine_state"] = status_data
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=error_response,
+            )
+        
+        return {
+            "success": True,
+            "pot_number": pot_number,
+            "message": f"Tool removed from pot {pot_number}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error removing tool: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.put("/{machine_id}/tools/spindle")
+async def change_spindle_tool(
+    machine_id: int,
+    tool_number: int = Query(..., description="Tool number for spindle (0-999, 0=no tool)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Change the tool in the spindle (CHGMAGS).
+    
+    Args:
+        machine_id: Machine ID
+        tool_number: Tool number for spindle (0-999, 0=no tool)
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    if not 0 <= tool_number <= 999:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid tool number: {tool_number} (must be 0-999)",
+        )
+
+    try:
+        # Validate machine state
+        from app.services.machine_state_validator import MachineStateValidator
+        validator = MachineStateValidator()
+        is_safe, error_message, status_data = await validator.validate_safe_for_write(
+            machine_id=machine_id,
+            operation_type="spindle_tool",
+            db=db
+        )
+        
+        if not is_safe:
+            raise HTTPException(
+                status_code=http_status.HTTP_409_CONFLICT,
+                detail=error_message or "Machine is not in a safe state for this operation",
+            )
+        
+        from app.clients.telnet_client import get_or_create_connection
+        telnet_client = await get_or_create_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=10
+        )
+        
+        success, status_code = await telnet_client.change_spindle_tool(
+            tool_number=tool_number,
+            verbose=True
+        )
+        
+        # Audit log the operation
+        from app.services.audit_logger import AuditLogger
+        from app.clients.telnet_client import CNCTelnetClient
+        status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
+        AuditLogger.log_tool_modification(
+            machine_id=machine_id,
+            operation_type="spindle_tool",
+            operation_details={
+                "new_tool_number": tool_number,
+            },
+            success=success,
+            error_message=status_desc,
+            machine_state=status_data
+        )
+        
+        if not success:
+            error_response = {
+                "error_code": status_code or "unknown",
+                "message": f"Failed to change spindle tool: {status_desc}",
+                "can_retry": status_code in ("32", "36", "37", "63") if status_code else False
+            }
+            if status_data:
+                error_response["machine_state"] = status_data
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=error_response,
+            )
+        
+        return {
+            "success": True,
+            "tool_number": tool_number,
+            "message": f"Spindle tool changed to {tool_number if tool_number > 0 else 'none'}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error changing spindle tool: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.put("/{machine_id}/tools/{tool_number}/life")
+async def set_tool_life(
+    machine_id: int,
+    tool_number: int,
+    life_value: int = Query(..., description="Life value (0-999999)"),
+    life_type: str = Query("TIME", description="Life type (TIME or COUNT)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Set tool life value (WRTTLLF).
+    
+    Args:
+        machine_id: Machine ID
+        tool_number: Tool number (1-99)
+        life_value: Life value (0-999999)
+        life_type: Life type ('TIME' or 'COUNT')
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    if not 1 <= tool_number <= 99:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid tool number: {tool_number} (must be 1-99)",
+        )
+    
+    if not 0 <= life_value <= 999999:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid life value: {life_value} (must be 0-999999)",
+        )
+    
+    if life_type not in ("TIME", "COUNT"):
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid life_type: {life_type} (must be TIME or COUNT)",
+        )
+
+    try:
+        # Validate machine state
+        from app.services.machine_state_validator import MachineStateValidator
+        validator = MachineStateValidator()
+        is_safe, error_message, status_data = await validator.validate_safe_for_write(
+            machine_id=machine_id,
+            operation_type="tool_life",
+            db=db
+        )
+        
+        if not is_safe:
+            raise HTTPException(
+                status_code=http_status.HTTP_409_CONFLICT,
+                detail=error_message or "Machine is not in a safe state for this operation",
+            )
+        
+        from app.clients.telnet_client import get_or_create_connection
+        telnet_client = await get_or_create_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=10
+        )
+        
+        success, status_code = await telnet_client.write_tool_life(
+            tool_number=tool_number,
+            life_value=life_value,
+            life_type=life_type,
+            verbose=True
+        )
+        
+        # Audit log the operation
+        from app.services.audit_logger import AuditLogger
+        from app.clients.telnet_client import CNCTelnetClient
+        status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
+        AuditLogger.log_tool_modification(
+            machine_id=machine_id,
+            operation_type="tool_life",
+            operation_details={
+                "tool_number": tool_number,
+                "new_life_value": life_value,
+                "life_type": life_type,
+            },
+            success=success,
+            error_message=status_desc,
+            machine_state=status_data
+        )
+        
+        if not success:
+            error_response = {
+                "error_code": status_code or "unknown",
+                "message": f"Failed to set tool life: {status_desc}",
+                "can_retry": status_code in ("32", "36", "37", "63") if status_code else False
+            }
+            if status_data:
+                error_response["machine_state"] = status_data
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=error_response,
+            )
+        
+        return {
+            "success": True,
+            "tool_number": tool_number,
+            "life_value": life_value,
+            "life_type": life_type,
+            "message": f"Tool {tool_number} life ({life_type}) set to {life_value}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting tool life: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.put("/{machine_id}/tools/{tool_number}/offset")
+async def set_tool_offset(
+    machine_id: int,
+    tool_number: int,
+    offset_type: str = Query(..., description="Offset type (H=Length, D=Diameter, W=Wear)"),
+    value: float = Query(..., description="Offset value in mm"),
+    db: Session = Depends(get_db)
+):
+    """
+    Set tool offset value (WRTTOFS).
+    
+    Args:
+        machine_id: Machine ID
+        tool_number: Tool number (1-99)
+        offset_type: Offset type ('H'=Length, 'D'=Diameter, 'W'=Wear)
+        value: Offset value in mm (or inches depending on machine units)
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    if not 1 <= tool_number <= 99:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid tool number: {tool_number} (must be 1-99)",
+        )
+    
+    if offset_type not in ("H", "D", "W"):
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid offset_type: {offset_type} (must be H, D, or W)",
+        )
+
+    try:
+        # Validate machine state
+        from app.services.machine_state_validator import MachineStateValidator
+        validator = MachineStateValidator()
+        is_safe, error_message, status_data = await validator.validate_safe_for_write(
+            machine_id=machine_id,
+            operation_type="tool_offset",
+            db=db
+        )
+        
+        if not is_safe:
+            raise HTTPException(
+                status_code=http_status.HTTP_409_CONFLICT,
+                detail=error_message or "Machine is not in a safe state for this operation",
+            )
+        
+        from app.clients.telnet_client import get_or_create_connection
+        telnet_client = await get_or_create_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=10
+        )
+        
+        success, status_code = await telnet_client.write_tool_offset(
+            tool_number=tool_number,
+            offset_type=offset_type,
+            value=value,
+            verbose=True
+        )
+        
+        # Audit log the operation
+        from app.services.audit_logger import AuditLogger
+        from app.clients.telnet_client import CNCTelnetClient
+        status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
+        offset_names = {"H": "Length", "D": "Diameter", "W": "Wear"}
+        AuditLogger.log_tool_modification(
+            machine_id=machine_id,
+            operation_type="tool_offset",
+            operation_details={
+                "tool_number": tool_number,
+                "offset_type": offset_type,
+                "offset_type_name": offset_names.get(offset_type, "Unknown"),
+                "new_value": value,
+            },
+            success=success,
+            error_message=status_desc,
+            machine_state=status_data
+        )
+        
+        if not success:
+            error_response = {
+                "error_code": status_code or "unknown",
+                "message": f"Failed to set tool offset: {status_desc}",
+                "can_retry": status_code in ("32", "36", "37", "63") if status_code else False
+            }
+            if status_data:
+                error_response["machine_state"] = status_data
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=error_response,
+            )
+        
+        return {
+            "success": True,
+            "tool_number": tool_number,
+            "offset_type": offset_type,
+            "offset_type_name": offset_names.get(offset_type, "Unknown"),
+            "value": value,
+            "message": f"Tool {tool_number} {offset_names.get(offset_type, 'offset')} offset set to {value}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting tool offset: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),

@@ -240,6 +240,23 @@ class CNCTelnetClient:
         return status_code == "00"
 
     @staticmethod
+    def can_retry(status_code: str) -> bool:
+        """
+        Check if an operation can be retried based on status code.
+        
+        Retryable codes (60-99) are typically temporary state/condition errors.
+        Non-retryable codes (01-59) are permanent errors.
+        """
+        if not status_code:
+            return False
+        try:
+            code_num = int(status_code)
+            # Codes 60-99 are typically temporary/state conditions that can be retried
+            return 60 <= code_num <= 99
+        except ValueError:
+            return False
+
+    @staticmethod
     def calculate_checksum(data: str) -> str:
         """
         Calculate Brother protocol checksum.
@@ -1780,6 +1797,176 @@ class CNCTelnetClient:
                 logger.error(f"Error getting tool life: {e}")
                 return None
 
+    async def write_tool_life(
+        self,
+        tool_number: int,
+        life_value: int,
+        life_type: str = 'TIME',
+        verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Write/set tool life value using WRTTLLF command.
+        
+        Uses multipart command format with separate data payload.
+        
+        Args:
+            tool_number: Tool number (1-99)
+            life_value: Life value (0-999999)
+            life_type: Type code ('TIME' or 'COUNT')
+                - 'TIME' = Time-based life (type 3)
+                - 'COUNT' = Count-based life (type 1)
+            verbose: If True, log command details
+            
+        Returns:
+            Tuple of (success, status_code)
+        """
+        if not self._connected:
+            connected = await self.connect()
+            if not connected:
+                return False, None
+        
+        # Validate inputs
+        if not 1 <= tool_number <= 99:
+            logger.error(f"Tool number {tool_number} out of valid range (1-99)")
+            return False, "30"
+        
+        if life_value < 0 or life_value > 999999:
+            logger.error(f"Life value {life_value} out of valid range (0-999999)")
+            return False, "13"
+        
+        # Map life type to protocol code
+        # 0 = life unit, 1 = initial, 2 = warning, 3 = life (actual)
+        type_code = '3' if life_type == 'TIME' else ('1' if life_type == 'COUNT' else '3')
+        
+        # Format arguments: tool_number (01-99) + type_code
+        arguments = f"{tool_number:02d}{type_code}    "[:8]
+        
+        # Format data payload: life value as 6-digit decimal
+        data_payload = f"{life_value:06d}"
+        
+        # Acquire lock for this machine to prevent conflicts
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        try:
+            async with machine_lock:
+                # Use multipart command with longer timeout for write operations
+                success, status, _ = await self._send_multipart_command(
+                    "WRTTLLF", arguments, data_payload, verbose=verbose
+                )
+                # Note: _send_multipart_command uses 1.0s timeout by default, but writes may need longer
+                # We could extend this later if needed
+                
+                if success:
+                    logger.info(f"Tool {tool_number} life ({life_type}) set to {life_value}")
+                else:
+                    status_desc = self.get_status_description(status or "00")
+                    logger.warning(f"Failed to write tool life: {status_desc}")
+                
+                return success, status
+                
+        except Exception as e:
+            logger.error(f"Error writing tool life: {e}")
+            return False, None
+
+    async def clear_tool_life(
+        self,
+        tool_number: int,
+        verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Clear/reset tool life counter for a tool.
+        
+        Implemented as write_tool_life with value 0.
+        
+        Args:
+            tool_number: Tool number (1-99)
+            verbose: If True, log command details
+            
+        Returns:
+            Tuple of (success, status_code)
+        """
+        return await self.write_tool_life(tool_number, 0, 'TIME', verbose)
+
+    async def write_tool_offset(
+        self,
+        tool_number: int,
+        offset_type: str,
+        value: float,
+        verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Write tool offset data using WRTTOFS command.
+        
+        Uses multipart command format with separate data payload.
+        
+        Args:
+            tool_number: Tool number (1-99)
+            offset_type: Type of offset:
+                'H' = Tool length offset (type 0)
+                'D' = Diameter/cutter compensation offset (type 2)
+                'W' = Wear offset (type 1)
+            value: New offset value in mm (or inches depending on machine units)
+            verbose: If True, log command details
+            
+        Returns:
+            Tuple of (success, status_code)
+        """
+        if not self._connected:
+            connected = await self.connect()
+            if not connected:
+                return False, None
+        
+        # Validate inputs
+        if not 1 <= tool_number <= 99:
+            logger.error(f"Tool number {tool_number} out of valid range (1-99)")
+            return False, "30"
+        
+        # Map offset type to protocol value
+        type_map = {'H': '0', 'D': '2', 'W': '1'}
+        if offset_type not in type_map:
+            logger.error(f"Invalid offset type '{offset_type}'. Use 'H', 'D', or 'W'")
+            return False, "01"
+        
+        k1 = type_map[offset_type]
+        
+        # Warn if value is extreme
+        if abs(value) > 500:
+            logger.warning(f"Offset value {value}mm is unusually large for {offset_type}")
+        
+        # Format arguments: tool_number (01-99) + type_code
+        tool_str = f"{tool_number:02d}"
+        arguments = f"{tool_str}{k1}     "[:8]  # Tool 01-99, type code, then 5 spaces = 8 chars
+        
+        # Format offset data with decimal point, padded to exact size
+        # For types 0, 2 (H, D): 9 bytes total with trailing spaces
+        # For type 1 (W): 8 bytes
+        if k1 in ['0', '2']:
+            offset_data = f"{value:.4f}".ljust(9)[:9]
+        else:  # k1 == '1' (W)
+            offset_data = f"{value:.4f}".ljust(8)[:8]
+        
+        # Acquire lock for this machine to prevent conflicts
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        try:
+            async with machine_lock:
+                # Use multipart command with longer timeout for write operations
+                success, status, _ = await self._send_multipart_command(
+                    "WRTTOFS", arguments, offset_data, verbose=verbose
+                )
+                
+                if success:
+                    logger.info(f"Tool {tool_number} offset ({offset_type}) set to {value}")
+                else:
+                    status_desc = self.get_status_description(status or "00")
+                    logger.warning(f"Failed to write tool offset: {status_desc}")
+                
+                return success, status
+                
+        except Exception as e:
+            logger.error(f"Error writing tool offset: {e}")
+            return False, None
+
     async def get_hd_modal(self, verbose: bool = False) -> Optional[Dict[str, str]]:
         """
         Get H/D modal values using REDTOFM command.
@@ -2056,6 +2243,233 @@ class CNCTelnetClient:
         except Exception as e:
             logger.error(f"Error changing tool color: {e}")
             return False, None
+
+    async def change_atc_tool_assignment(
+        self,
+        magazine_pos: int,
+        tool_num: Optional[int],
+        change_type: str,
+        new_value: Optional[int] = None,
+        verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Change tool configuration in ATC magazine using CHGMAG commands.
+        
+        This is a generic method that supports all CHGMAG operations:
+        - 'M': Change tool number (CHGMAGM)
+        - 'S': Change spindle/main tool (CHGMAGS)
+        - 'K': Change tool type (CHGMAGK)
+        - 'C': Change color (CHGMAGC) - Note: use change_atc_tool_color() for better interface
+        - 'D': Delete/remove tool (CHGMAGD)
+        
+        Args:
+            magazine_pos: Magazine position (0=spindle, 1-99=pots)
+            tool_num: Current tool number in position (for verification, optional)
+            change_type: Type of change ('M', 'S', 'K', 'C', 'D')
+            new_value: New value for the change (tool number, type, or color depending on change_type)
+            verbose: If True, log command details
+            
+        Returns:
+            Tuple of (success, status_code)
+        """
+        if not self._connected:
+            connected = await self.connect()
+            if not connected:
+                return False, None
+        
+        # Validate inputs
+        if not isinstance(magazine_pos, int) or not 0 <= magazine_pos <= 99:
+            logger.error(f"Invalid magazine position: {magazine_pos} (must be 0-99)")
+            return False, "30"  # Invalid tool/pot number
+        
+        if change_type not in ['M', 'S', 'K', 'C', 'D']:
+            logger.error(f"Invalid change_type: {change_type} (must be M, S, K, C, or D)")
+            return False, "01"  # Invalid data
+        
+        # Warn about spindle tool changes
+        if magazine_pos == 0 and change_type != 'S':
+            logger.warning(f"Magazine position 0 (spindle) specified for non-spindle operation (type: {change_type})")
+        
+        # Format magazine position (2 digits)
+        mag_str = f"{magazine_pos:02d}"
+        
+        # Build arguments based on change_type
+        if change_type == 'M':  # Change tool number (CHGMAGM)
+            if new_value is None or not isinstance(new_value, int):
+                logger.error(f"CHGMAGM requires new_value (tool number)")
+                return False, "01"  # Invalid data
+            if not 1 <= new_value <= 999:
+                logger.error(f"Tool number {new_value} out of valid range (1-999)")
+                return False, "30"  # Invalid tool/pot number
+            # Format: mag_pos(2) + M(1) + new_tool(3) + padding(2) = 8 chars
+            # Example: "05M042  " for pot 5, tool 42
+            arguments = f"{mag_str}M{new_value:03d}  "[:8]
+            command = "CHGMAGM"
+            
+        elif change_type == 'S':  # Change spindle/main tool (CHGMAGS)
+            if new_value is None or not isinstance(new_value, int):
+                logger.error(f"CHGMAGS requires new_value (spindle tool)")
+                return False, "01"
+            if not 0 <= new_value <= 999:
+                logger.error(f"Spindle tool {new_value} out of valid range (0-999)")
+                return False, "30"
+            if magazine_pos != 0:
+                logger.warning(f"CHGMAGS typically uses magazine position 0 (spindle), got {magazine_pos}")
+            # Format: mag_pos(2) + S(1) + new_tool(3) + padding(2) = 8 chars
+            arguments = f"{mag_str}S{new_value:03d}  "[:8]
+            command = "CHGMAGS"
+            
+        elif change_type == 'K':  # Change tool type (CHGMAGK)
+            if new_value is None or not isinstance(new_value, int):
+                logger.error(f"CHGMAGK requires new_value (tool type)")
+                return False, "01"
+            if not 1 <= new_value <= 3:
+                logger.error(f"Tool type {new_value} out of valid range (1=Standard, 2=Large, 3=Medium)")
+                return False, "13"  # Data item not within allowed range
+            # Format: mag_pos(2) + K(1) + type(1) + padding(4) = 8 chars
+            # Example: "05K2    " for pot 5, type 2 (Large)
+            arguments = f"{mag_str}K{new_value}      "[:8]
+            command = "CHGMAGK"
+            
+        elif change_type == 'C':  # Change color (CHGMAGC)
+            if new_value is None or not isinstance(new_value, int):
+                logger.error(f"CHGMAGC requires new_value (color)")
+                return False, "01"
+            if not 0 <= new_value <= 7:
+                logger.error(f"Color {new_value} out of valid range (0-7)")
+                return False, "13"
+            # Format: mag_pos(2) + C(1) + color(1) + padding(4) = 8 chars
+            # Example: "05C2    " for pot 5, color 2 (Red)
+            arguments = f"{mag_str}C{new_value}      "[:8]
+            command = "CHGMAGC"
+            
+        else:  # change_type == 'D' - Delete tool (CHGMAGD)
+            # Format: mag_pos(2) + D(1) + padding(5) = 8 chars
+            # Example: "05D     " for pot 5
+            arguments = f"{mag_str}D       "[:8]
+            command = "CHGMAGD"
+        
+        # Acquire lock for this machine to prevent conflicts with polling reads
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        
+        try:
+            async with machine_lock:
+                # Use standard _send_command with longer timeout for write operations
+                success, status, _ = await self._send_command(command, arguments, verbose=verbose, read_timeout=5.0)
+                
+                if success:
+                    logger.info(f"Successfully executed {command} for magazine position {magazine_pos}")
+                else:
+                    status_desc = self.get_status_description(status or "00")
+                    logger.warning(f"Failed {command}: {status_desc}")
+                
+                return success, status
+                
+        except Exception as e:
+            logger.error(f"Error executing {command}: {e}")
+            return False, None
+
+    async def assign_tool_to_pot(
+        self,
+        pot_number: int,
+        tool_number: int,
+        verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Simplified wrapper: Assign a tool to an ATC pot.
+        
+        Args:
+            pot_number: Pot number (1-99, not spindle)
+            tool_number: Tool number to assign (1-999)
+            verbose: If True, log command details
+            
+        Returns:
+            Tuple of (success, status_code)
+        """
+        if pot_number == 0:
+            logger.error("Cannot assign to spindle (pot 0). Use change_spindle_tool() instead.")
+            return False, "30"
+        
+        return await self.change_atc_tool_assignment(
+            magazine_pos=pot_number,
+            tool_num=None,
+            change_type='M',
+            new_value=tool_number,
+            verbose=verbose
+        )
+
+    async def remove_tool_from_pot(
+        self,
+        pot_number: int,
+        tool_number: Optional[int] = None,
+        verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Simplified wrapper: Remove tool from ATC pot.
+        
+        Args:
+            pot_number: Pot number (0-99, 0=spindle)
+            tool_number: Tool number for verification (optional)
+            verbose: If True, log command details
+            
+        Returns:
+            Tuple of (success, status_code)
+        """
+        return await self.change_atc_tool_assignment(
+            magazine_pos=pot_number,
+            tool_num=tool_number,
+            change_type='D',
+            new_value=None,
+            verbose=verbose
+        )
+
+    async def change_tool_type(
+        self,
+        pot_number: int,
+        tool_type: int,
+        verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Simplified wrapper: Change tool type for a pot.
+        
+        Args:
+            pot_number: Pot number (1-99)
+            tool_type: Tool type (1=Standard, 2=Large, 3=Medium)
+            verbose: If True, log command details
+            
+        Returns:
+            Tuple of (success, status_code)
+        """
+        return await self.change_atc_tool_assignment(
+            magazine_pos=pot_number,
+            tool_num=None,
+            change_type='K',
+            new_value=tool_type,
+            verbose=verbose
+        )
+
+    async def change_spindle_tool(
+        self,
+        tool_number: int,
+        verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Simplified wrapper: Change the tool in the spindle.
+        
+        Args:
+            tool_number: Tool number for spindle (0-999, 0=no tool)
+            verbose: If True, log command details
+            
+        Returns:
+            Tuple of (success, status_code)
+        """
+        return await self.change_atc_tool_assignment(
+            magazine_pos=0,
+            tool_num=None,
+            change_type='S',
+            new_value=tool_number,
+            verbose=verbose
+        )
 
     async def __aenter__(self):
         """Async context manager entry."""

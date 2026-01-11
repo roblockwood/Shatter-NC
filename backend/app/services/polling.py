@@ -110,6 +110,17 @@ class MachinePoller:
             if prd3_data:
                 prd3_parsed = parse_prd3_v2(prd3_data.encode('utf-8'), control_version=control_version)
             
+            # Get MEM data to check mode and operation_status (needed for frontend validation)
+            mem_parsed = None
+            try:
+                from app.parsers.mem_parser_v2 import parse_mem_v2
+                mem_data = await telnet_client.get_memory_data(verbose=False)
+                if mem_data:
+                    mem_parsed = parse_mem_v2(mem_data.encode('utf-8'), control_version=control_version)
+            except Exception as e:
+                logger.warning(f"Machine {self.machine.id} - Failed to fetch MEM data: {e}")
+                # Continue without MEM data - frontend will handle gracefully
+            
             # Format response to match HTTP client format
             program_info = parsed.get("program_info", {})
             time_info = parsed.get("time_info", {})
@@ -225,6 +236,15 @@ class MachinePoller:
             if status_data.get("alarms") and machine_status != "off":
                 machine_status = "error"
                 status_data["status"] = "error"
+            
+            # Add MEM mode and operation_status for frontend validation
+            if mem_parsed:
+                mode = mem_parsed.get("mode")
+                operation_status = mem_parsed.get("operation_status")
+                if mode is not None:
+                    status_data["mem_mode"] = mode
+                if operation_status is not None:
+                    status_data["mem_operation_status"] = operation_status
 
             # Fetch tool data via Telnet (fresh data, same as API endpoint)
             try:
