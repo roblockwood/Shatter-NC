@@ -20,6 +20,8 @@ class MachinePoller:
         self.machine = machine
         self.websocket_manager = websocket_manager
         self.last_poll_time: Optional[datetime] = None
+        self.last_fast_poll_time: Optional[datetime] = None  # Track last fast poll for per-machine intervals
+        self.last_tool_poll_time: Optional[datetime] = None  # Track last tool data poll for slow polling
         self.consecutive_failures = 0
         self.is_online = False
         self.last_status: Optional[str] = None  # Track status transitions in-memory
@@ -69,13 +71,208 @@ class MachinePoller:
         
         return None
 
+    async def poll_tool_data(self) -> Dict[str, Any]:
+        """
+        Poll tool table and ATC magazine data (slow polling operation).
+        
+        Returns:
+            Dictionary containing tool data:
+            - tools: List of merged ATC tools
+            - tool_table: List of tool table entries
+            - current_tool: Current tool in spindle
+            - tools_timestamp: ISO timestamp of when data was fetched
+            - tool_table_timestamp: ISO timestamp of when data was fetched
+        """
+        poll_start_time = time.time()
+        poll_timestamp = datetime.utcnow()
+        tool_data = {}
+        step_times = {}
+        
+        try:
+            logger.debug(f"[TOOL_POLL] Machine {self.machine.id} ({self.machine.name}) - Starting tool data poll")
+            
+            from app.clients.telnet_client import get_or_create_connection
+            from app.parsers.atctl_parser_v2 import parse_atctl_v2
+            from app.parsers.tolni_parser_v2 import parse_tolni_v2
+            
+            # Use pooled connection
+            step_start = time.time()
+            telnet_client = await get_or_create_connection(
+                ip_address=self.machine.ip_address,
+                port=10000,
+                timeout=10
+            )
+            step_times['get_connection'] = time.time() - step_start
+            
+            # Detect control version (uses Redis cache)
+            step_start = time.time()
+            control_version = await telnet_client.detect_control_type()
+            step_times['detect_control'] = time.time() - step_start
+            
+            # Get tool table data first (needed for both ATC merge and TABLE display)
+            step_start = time.time()
+            tool_table_content = await telnet_client.get_tool_table_data(units=self.machine.units, verbose=False)
+            step_times['get_tool_table'] = time.time() - step_start
+            
+            if tool_table_content:
+                step_start = time.time()
+                tool_table_parsed = parse_tolni_v2(
+                    tool_table_content.encode('utf-8'),
+                    units=self.machine.units,
+                    control_version=None  # Auto-detect
+                )
+                step_times['parse_tool_table'] = time.time() - step_start
+                
+                # Get ATC magazine data (pot/tool mappings) for merging
+                step_start = time.time()
+                atc_data = await telnet_client.get_atc_magazine_data(control_version=None, verbose=False)
+                step_times['get_atc'] = time.time() - step_start
+                
+                # Start with pure TOLN (table) data
+                tool_table_tools = tool_table_parsed.get("tools", [])
+                
+                if atc_data:
+                    step_start = time.time()
+                    atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=None)
+                    step_times['parse_atc'] = time.time() - step_start
+                    
+                    step_start = time.time()
+                    # Create reverse lookup: tool_number -> ATCTL data (for TABLE view)
+                    # This includes: pot_number, group, tool_type, color
+                    atc_lookup = {}
+                    current_tool = None
+                    
+                    for atc_tool in atc_parsed.get("tools", []):
+                        tool_num = atc_tool.get("tool_number")
+                        pot_number = atc_tool.get("pot_number")
+                        
+                        # Extract current_tool from spindle
+                        if pot_number and (str(pot_number).upper() == "SPINDLE" or pot_number == 0):
+                            if tool_num and tool_num > 0 and tool_num != 255:
+                                current_tool = tool_num
+                        
+                        # Build lookup for ATCTL data (skip spindle and invalid tools)
+                        if tool_num and tool_num > 0 and tool_num != 255:
+                            if pot_number and str(pot_number).upper() != "SPINDLE":
+                                atc_lookup[tool_num] = {
+                                    "pot_number": pot_number,
+                                    "group": atc_tool.get("group"),
+                                    "tool_type": atc_tool.get("tool_type"),
+                                    "color": atc_tool.get("color"),
+                                }
+                    
+                    if current_tool:
+                        tool_data["current_tool"] = current_tool
+                    
+                    # Merge ATCTL data into TABLE tools (reverse merge: TOLN -> ATCTL)
+                    # This adds: pot_number, group, tool_type, color
+                    for tool in tool_table_tools:
+                        tool_num = tool.get("tool_number")
+                        if tool_num and tool_num in atc_lookup:
+                            atc_info = atc_lookup[tool_num]
+                            tool["pot_number"] = atc_info["pot_number"]
+                            if atc_info.get("group") is not None:
+                                tool["group"] = atc_info["group"]
+                            if atc_info.get("tool_type") is not None:
+                                tool["tool_type"] = atc_info["tool_type"]
+                            if atc_info.get("color") is not None:
+                                tool["color"] = atc_info["color"]
+                    
+                    # Merge ATC positions with tool details (forward merge: ATCTL -> TOLN)
+                    tools = []
+                    tool_lookup = {}
+                    
+                    # Create lookup by tool number from TOLN data
+                    for tool in tool_table_tools:
+                        tool_num = tool.get("tool_number")
+                        if tool_num:
+                            tool_lookup[tool_num] = tool
+                    
+                    # Merge ATC tools with tool details from TOLN
+                    # Match by tool_number to correlate pot position with tool data
+                    # Only include tools that have valid TOLN data
+                    for atc_tool in atc_parsed.get("tools", []):
+                        tool_num = atc_tool.get("tool_number")
+                        pot_number = atc_tool.get("pot_number")
+                        
+                        if tool_num and tool_num > 0 and tool_num != 255:  # Skip "not set" and "cap setting"
+                            if tool_num in tool_lookup:
+                                tol_tool = tool_lookup[tool_num]
+                                merged_tool = {
+                                    "pot_number": pot_number,
+                                    "tool_number": tool_num,
+                                    "tool_name": tol_tool.get("tool_name"),
+                                    "diameter": tol_tool.get("diameter"),
+                                    "length": tol_tool.get("length"),
+                                    "group": atc_tool.get("group"),
+                                    "life": None,  # Not in ATCTL
+                                    "tool_type": atc_tool.get("tool_type"),
+                                    "color": atc_tool.get("color"),
+                                }
+                                tools.append(merged_tool)
+                    
+                    tool_data["tools"] = tools
+                    tool_data["tools_timestamp"] = poll_timestamp.isoformat()
+                    step_times['merge_tools'] = time.time() - step_start
+                    logger.debug(f"Machine {self.machine.id} - Fetched {len(tools)} ATC tools and {len(tool_table_tools)} table tools via Telnet (slow poll)")
+                else:
+                    logger.warning(f"Machine {self.machine.id} - No ATC data available via Telnet")
+                
+                # Store TABLE data with pot numbers merged (if ATC data was available)
+                tool_data["tool_table"] = tool_table_tools
+                tool_data["tool_table_timestamp"] = poll_timestamp.isoformat()
+                
+                # Update Redis cache with tool data
+                step_start = time.time()
+                if self.websocket_manager:
+                    # Use websocket_manager's cache update logic
+                    from app.utils.redis_client import get_redis
+                    import json
+                    try:
+                        redis = get_redis()
+                        
+                        # Update full status cache if it exists (merge tool data)
+                        cache_key = f"machine:status:{self.machine.id}"
+                        cached_status = redis.get(cache_key)
+                        if cached_status:
+                            status_data = json.loads(cached_status.decode('utf-8'))
+                            status_data.update(tool_data)
+                            redis.setex(cache_key, 60, json.dumps(status_data).encode('utf-8'))
+                        
+                        # Update tool table cache (5min TTL)
+                        tool_table_key = f"machine:tool_table:{self.machine.id}"
+                        redis.setex(
+                            tool_table_key,
+                            300,  # 5 minutes
+                            json.dumps(tool_table_tools).encode('utf-8')
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to update Redis cache with tool data for machine {self.machine.id}: {e}")
+                step_times['update_cache'] = time.time() - step_start
+                
+                # Log timing summary
+                total_time = time.time() - poll_start_time
+                total_time_ms = int(total_time * 1000)
+                step_summary = ", ".join([f"{step}: {time_ms * 1000:.1f}ms" for step, time_ms in 
+                                         sorted(step_times.items(), key=lambda x: x[1], reverse=True) 
+                                         if time_ms > 0.001])  # Only show steps > 1ms
+                logger.debug(f"[TOOL_POLL] Machine {self.machine.id} ({self.machine.name}) - Tool poll completed in {total_time_ms}ms | Steps: {step_summary}")
+            else:
+                logger.warning(f"Machine {self.machine.id} - No tool table data available via Telnet")
+        except Exception as e:
+            logger.warning(f"Machine {self.machine.id} - Failed to fetch tool data via Telnet: {e}")
+            # Return empty dict on failure
+        
+        return tool_data
+
     async def poll(self) -> Dict[str, Any]:
         """Poll machine status and return data."""
         poll_start_time = time.time()
         poll_timestamp = datetime.utcnow()
+        step_times = {}
 
         try:
-            logger.debug(f"Polling machine {self.machine.id} ({self.machine.name}) at {self.machine.ip_address}")
+            logger.debug(f"[POLL] Machine {self.machine.id} ({self.machine.name}) - Starting fast poll")
             
             # Phase 5: Migrate to Telnet for MONTR and PRD3 data (replaces HTTP get_status_overview)
             from app.clients.telnet_client import get_or_create_connection
@@ -84,39 +281,55 @@ class MachinePoller:
             from app.parsers.prd3_parser_v2 import parse_prd3_v2
             
             # Use pooled connection (reused across operations)
+            step_start = time.time()
             telnet_client = await get_or_create_connection(
                 ip_address=self.machine.ip_address,
                 port=10000,
                 timeout=10
             )
+            step_times['get_connection'] = time.time() - step_start
             
             # Detect control version once (cached in telnet_client)
+            step_start = time.time()
             control_version = await telnet_client.detect_control_type()
+            step_times['detect_control'] = time.time() - step_start
             
             # Machine is online if we successfully connected and can perform Telnet operations
             # If we got here, we have a working Telnet connection
             is_online = True
             
             # Get MONTR data (replaces HTTP /running_log and /work_counter)
+            step_start = time.time()
             montr_data = await telnet_client.get_monitor_data(verbose=False)
+            step_times['get_montr'] = time.time() - step_start
             if not montr_data:
                 raise ConnectionError("Failed to fetch MONTR data - machine may be unreachable")
             
+            step_start = time.time()
             parsed = parse_montr_v2(montr_data.encode('utf-8'), control_version=control_version)
+            step_times['parse_montr'] = time.time() - step_start
             
             # Get PRD3 data (contains current status)
+            step_start = time.time()
             prd3_data = await telnet_client.get_prd3_data(control_version=control_version, verbose=False)
+            step_times['get_prd3'] = time.time() - step_start
             prd3_parsed = None
             if prd3_data:
+                step_start = time.time()
                 prd3_parsed = parse_prd3_v2(prd3_data.encode('utf-8'), control_version=control_version)
+                step_times['parse_prd3'] = time.time() - step_start
             
             # Get MEM data to check mode and operation_status (needed for frontend validation)
             mem_parsed = None
             try:
+                step_start = time.time()
                 from app.parsers.mem_parser_v2 import parse_mem_v2
                 mem_data = await telnet_client.get_memory_data(verbose=False)
+                step_times['get_mem'] = time.time() - step_start
                 if mem_data:
+                    step_start = time.time()
                     mem_parsed = parse_mem_v2(mem_data.encode('utf-8'), control_version=control_version)
+                    step_times['parse_mem'] = time.time() - step_start
             except Exception as e:
                 logger.warning(f"Machine {self.machine.id} - Failed to fetch MEM data: {e}")
                 # Continue without MEM data - frontend will handle gracefully
@@ -202,15 +415,19 @@ class MachinePoller:
             
             # Get alarms from Telnet (Phase 5: Migrate to Telnet)
             try:
+                step_start = time.time()
                 from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
                 
                 alarm_data_raw = await telnet_client.get_alarm_data(verbose=False)
+                step_times['get_alarms'] = time.time() - step_start
                 if alarm_data_raw:
+                    step_start = time.time()
                     alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=control_version)
                     # Convert to format expected by frontend (combine alarms and loading_alarms)
                     all_alarms = alarm_parsed.get("alarms", []) + alarm_parsed.get("loading_alarms", [])
                     # Enrich with lookup data (description, cause, solution, stop_level, reset_level)
                     enriched_alarms = [enrich_alarm_with_lookup(alarm, control_version) for alarm in all_alarms]
+                    step_times['parse_enrich_alarms'] = time.time() - step_start
                     status_data["alarms"] = enriched_alarms
                 else:
                     status_data["alarms"] = []
@@ -220,11 +437,15 @@ class MachinePoller:
             
             # Get panel data from Telnet
             try:
+                step_start = time.time()
                 from app.parsers.panel_parser_v2 import parse_panel_v2
                 
                 panel_data_raw = await telnet_client.get_panel_data(verbose=False)
+                step_times['get_panel'] = time.time() - step_start
                 if panel_data_raw:
+                    step_start = time.time()
                     panel_parsed = parse_panel_v2(panel_data_raw.encode('utf-8'), control_version=control_version)
+                    step_times['parse_panel'] = time.time() - step_start
                     status_data["panel"] = panel_parsed
                 else:
                     status_data["panel"] = None
@@ -246,124 +467,84 @@ class MachinePoller:
                 if operation_status is not None:
                     status_data["mem_operation_status"] = operation_status
 
-            # Fetch tool data via Telnet (fresh data, same as API endpoint)
+            # Load tool data from Redis cache (fetched by slow polling or immediate refresh)
+            # Tool data is polled separately at slower intervals to reduce fast poll overhead
+            step_start = time.time()
             try:
-                from app.parsers.atctl_parser_v2 import parse_atctl_v2
-                from app.parsers.tolni_parser_v2 import parse_tolni_v2
+                from app.utils.redis_client import get_redis
+                import json
+                redis = get_redis()
                 
-                # Reuse the same pooled connection from above
-                
-                # Get tool table data first (needed for both ATC merge and TABLE display)
-                data_name = "TOLNI1" if self.machine.units == 'in' else "TOLNM1"
-                tool_table_content = await telnet_client.get_tool_table_data(units=self.machine.units, verbose=False)
-                
-                if tool_table_content:
-                    tool_table_parsed = parse_tolni_v2(
-                        tool_table_content.encode('utf-8'),
-                        units=self.machine.units,
-                        control_version=None  # Auto-detect
-                    )
-                    
-                    # Get ATC magazine data (pot/tool mappings) for merging
-                    atc_data = await telnet_client.get_atc_magazine_data(control_version=None, verbose=False)
-                    
-                    # Start with pure TOLN (table) data
-                    tool_table_tools = tool_table_parsed.get("tools", [])
-                    
-                    if atc_data:
-                        atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=None)
-                        
-                        # Create reverse lookup: tool_number -> ATCTL data (for TABLE view)
-                        # This includes: pot_number, group, tool_type, color
-                        atc_lookup = {}
-                        for atc_tool in atc_parsed.get("tools", []):
-                            tool_num = atc_tool.get("tool_number")
-                            pot_number = atc_tool.get("pot_number")
-                            
-                            # Extract current_tool from spindle
-                            if pot_number and (str(pot_number).upper() == "SPINDLE" or pot_number == 0):
-                                if tool_num and tool_num > 0 and tool_num != 255:
-                                    status_data["current_tool"] = tool_num
-                            
-                            # Build lookup for ATCTL data (skip spindle and invalid tools)
-                            if tool_num and tool_num > 0 and tool_num != 255:
-                                if pot_number and str(pot_number).upper() != "SPINDLE":
-                                    atc_lookup[tool_num] = {
-                                        "pot_number": pot_number,
-                                        "group": atc_tool.get("group"),
-                                        "tool_type": atc_tool.get("tool_type"),
-                                        "color": atc_tool.get("color"),
-                                    }
-                        
-                        # Merge ATCTL data into TABLE tools (reverse merge: TOLN -> ATCTL)
-                        # This adds: pot_number, group, tool_type, color
-                        for tool in tool_table_tools:
-                            tool_num = tool.get("tool_number")
-                            if tool_num and tool_num in atc_lookup:
-                                atc_data = atc_lookup[tool_num]
-                                tool["pot_number"] = atc_data["pot_number"]
-                                if atc_data.get("group") is not None:
-                                    tool["group"] = atc_data["group"]
-                                if atc_data.get("tool_type") is not None:
-                                    tool["tool_type"] = atc_data["tool_type"]
-                                if atc_data.get("color") is not None:
-                                    tool["color"] = atc_data["color"]
-                        
-                        # Merge ATC positions with tool details (forward merge: ATCTL -> TOLN)
-                        tools = []
-                        tool_lookup = {}
-                        
-                        # Create lookup by tool number from TOLN data
-                        for tool in tool_table_tools:
-                            tool_num = tool.get("tool_number")
-                            if tool_num:
-                                tool_lookup[tool_num] = tool
-                        
-                        # Merge ATC tools with tool details from TOLN
-                        # Match by tool_number to correlate pot position with tool data
-                        # Only include tools that have valid TOLN data
-                        for atc_tool in atc_parsed.get("tools", []):
-                            tool_num = atc_tool.get("tool_number")
-                            pot_number = atc_tool.get("pot_number")
-                            
-                            if tool_num and tool_num > 0 and tool_num != 255:  # Skip "not set" and "cap setting"
-                                if tool_num in tool_lookup:
-                                    tol_tool = tool_lookup[tool_num]
-                                    merged_tool = {
-                                        "pot_number": pot_number,
-                                        "tool_number": tool_num,
-                                        "tool_name": tol_tool.get("tool_name"),
-                                        "diameter": tol_tool.get("diameter"),
-                                        "length": tol_tool.get("length"),
-                                        "group": atc_tool.get("group"),
-                                        "life": None,  # Not in ATCTL
-                                        "tool_type": atc_tool.get("tool_type"),
-                                        "color": atc_tool.get("color"),
-                                    }
-                                    tools.append(merged_tool)
-                        
-                        status_data["tools"] = tools
-                        status_data["tools_timestamp"] = poll_timestamp.isoformat()
-                        logger.debug(f"Machine {self.machine.id} - Fetched {len(tools)} ATC tools and {len(tool_table_tools)} table tools via Telnet")
-                    else:
-                        logger.warning(f"Machine {self.machine.id} - No ATC data available via Telnet")
-                    
-                    # Store TABLE data with pot numbers merged (if ATC data was available)
-                    status_data["tool_table"] = tool_table_tools
-                    status_data["tool_table_timestamp"] = poll_timestamp.isoformat()
-                    # Connection stays open in pool for next operation
+                # Try to get tool data from full status cache first
+                cache_key = f"machine:status:{self.machine.id}"
+                cached_status = redis.get(cache_key)
+                step_times['load_tool_cache'] = time.time() - step_start
+                if cached_status:
+                    cached_data = json.loads(cached_status.decode('utf-8'))
+                    # Extract tool-related fields from cached status
+                    if "tools" in cached_data:
+                        status_data["tools"] = cached_data["tools"]
+                    if "tool_table" in cached_data:
+                        status_data["tool_table"] = cached_data["tool_table"]
+                    if "current_tool" in cached_data:
+                        status_data["current_tool"] = cached_data["current_tool"]
+                    if "tools_timestamp" in cached_data:
+                        status_data["tools_timestamp"] = cached_data["tools_timestamp"]
+                        status_data["tool_data_timestamp"] = cached_data["tools_timestamp"]  # Alias for clarity
+                    if "tool_table_timestamp" in cached_data:
+                        status_data["tool_table_timestamp"] = cached_data["tool_table_timestamp"]
                 else:
-                    logger.warning(f"Machine {self.machine.id} - No tool table data available via Telnet")
+                    # Full cache miss - try tool table cache directly
+                    tool_table_key = f"machine:tool_table:{self.machine.id}"
+                    tool_table_data = redis.get(tool_table_key)
+                    if tool_table_data:
+                        status_data["tool_table"] = json.loads(tool_table_data.decode('utf-8'))
+                    
+                    # Fall back to websocket manager cache for any missing tool data
+                    if self.websocket_manager:
+                        ws_status = self.websocket_manager.get_machine_status(self.machine.id)
+                        if "tools" in ws_status:
+                            status_data["tools"] = ws_status["tools"]
+                        if "tool_table" in ws_status and "tool_table" not in status_data:
+                            status_data["tool_table"] = ws_status["tool_table"]
+                        if "current_tool" in ws_status:
+                            status_data["current_tool"] = ws_status["current_tool"]
+                        if "tools_timestamp" in ws_status:
+                            status_data["tools_timestamp"] = ws_status["tools_timestamp"]
+                            status_data["tool_data_timestamp"] = ws_status["tools_timestamp"]
+                    if "tool_table_timestamp" in ws_status:
+                        status_data["tool_table_timestamp"] = ws_status["tool_table_timestamp"]
             except Exception as e:
-                logger.warning(f"Machine {self.machine.id} - Failed to fetch tool data via Telnet: {e}")
-                # Continue without tool data - don't fail the entire poll
-                # Tools will be empty/undefined, which is fine
+                # Redis unavailable - fall back to websocket manager cache
+                if 'load_tool_cache' not in step_times:
+                    step_times['load_tool_cache'] = time.time() - step_start
+                logger.debug(f"Failed to load tool data from Redis cache for machine {self.machine.id}, using websocket manager cache: {e}")
+                if self.websocket_manager:
+                    ws_status = self.websocket_manager.get_machine_status(self.machine.id)
+                    if "tools" in ws_status:
+                        status_data["tools"] = ws_status["tools"]
+                    if "tool_table" in ws_status:
+                        status_data["tool_table"] = ws_status["tool_table"]
+                    if "current_tool" in ws_status:
+                        status_data["current_tool"] = ws_status["current_tool"]
+                    if "tools_timestamp" in ws_status:
+                        status_data["tools_timestamp"] = ws_status["tools_timestamp"]
+                        status_data["tool_data_timestamp"] = ws_status["tools_timestamp"]
+                    if "tool_table_timestamp" in ws_status:
+                        status_data["tool_table_timestamp"] = ws_status["tool_table_timestamp"]
 
             # Program name is already set from MONTR data (operation_program_no)
             # No need to fetch from MEM separately - MONTR is more reliable
 
             # Calculate response time
-            response_time_ms = int((time.time() - poll_start_time) * 1000)
+            total_time = time.time() - poll_start_time
+            response_time_ms = int(total_time * 1000)
+
+            # Log step timing summary
+            step_summary = ", ".join([f"{step}: {time_ms * 1000:.1f}ms" for step, time_ms in 
+                                     sorted(step_times.items(), key=lambda x: x[1], reverse=True) 
+                                     if time_ms > 0.001])  # Only show steps > 1ms
+            logger.debug(f"[POLL] Machine {self.machine.id} ({self.machine.name}) - Fast poll completed in {response_time_ms}ms | Steps: {step_summary}")
 
             # Add metadata (preserve is_online from status_data if already set)
             status_data.update({
@@ -383,8 +564,7 @@ class MachinePoller:
             self.is_online = status_data.get("is_online", True)  # Use is_online from status_data
             self.consecutive_failures = 0
             self.last_poll_time = poll_timestamp
-
-            logger.debug(f"Successfully polled machine {self.machine.id} ({self.machine.name}) in {response_time_ms}ms")
+            self.last_fast_poll_time = poll_timestamp  # Track fast poll time for per-machine intervals
 
             # Log events to database (non-blocking, in background)
             # Only log status events if we have a status (machine is online)
@@ -735,6 +915,7 @@ class PollingService:
         self.websocket_manager = websocket_manager
         self.pollers: Dict[int, MachinePoller] = {}
         self.polling_task: Optional[asyncio.Task] = None
+        self.tool_polling_task: Optional[asyncio.Task] = None  # Separate task for slow tool polling
         self.is_running = False
 
     async def start(self):
@@ -744,16 +925,32 @@ class PollingService:
             return
 
         self.is_running = True
+        
+        # Pre-populate control version cache for all enabled machines (non-blocking)
+        # This avoids detecting control version on every poll
+        asyncio.create_task(self._prepopulate_control_versions())
+        
         self.polling_task = asyncio.create_task(self._poll_loop())
-        logger.info("Polling service started")
+        self.tool_polling_task = asyncio.create_task(self._tool_poll_loop())  # Start slow polling loop
+        logger.info("Polling service started (fast and slow polling loops)")
 
     async def stop(self):
         """Stop the polling service."""
         self.is_running = False
+        
+        # Stop fast polling loop
         if self.polling_task:
             self.polling_task.cancel()
             try:
                 await self.polling_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Stop slow tool polling loop
+        if self.tool_polling_task:
+            self.tool_polling_task.cancel()
+            try:
+                await self.tool_polling_task
             except asyncio.CancelledError:
                 pass
         
@@ -764,22 +961,34 @@ class PollingService:
         except Exception as e:
             logger.warning(f"Error closing Telnet connections during polling service stop: {e}")
         
-        logger.info("Polling service stopped")
+        logger.info("Polling service stopped (fast and slow polling loops)")
 
     async def _poll_loop(self):
-        """Main polling loop."""
+        """Main polling loop with per-machine intervals."""
         while self.is_running:
             try:
                 await self._poll_all_machines()
 
-                # Wait for next polling interval (default 5 seconds)
-                await asyncio.sleep(5)
+                # Calculate minimum poll interval across all enabled machines
+                # Use this for loop sleep to check machines frequently enough
+                db = SessionLocal()
+                try:
+                    machines = db.query(Machine).filter(Machine.enabled == True).all()
+                    if machines:
+                        min_interval = min(m.poll_interval_seconds for m in machines)
+                    else:
+                        min_interval = 5  # Default if no machines
+                finally:
+                    db.close()
+                
+                # Sleep for minimum interval (ensures we check machines frequently enough)
+                await asyncio.sleep(min_interval)
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"Error in polling loop: {e}")
-                await asyncio.sleep(5)
+                await asyncio.sleep(5)  # Use default on error
 
     async def _poll_all_machines(self):
         """Poll all enabled machines concurrently."""
@@ -814,10 +1023,32 @@ class PollingService:
                     if old_ip != machine.ip_address:
                         logger.info(f"Updated machine {machine.id} ({machine.name}) IP: {old_ip} -> {machine.ip_address}")
 
-            # Poll all machines concurrently
+            # Poll machines whose interval has elapsed (per-machine intervals)
+            now = datetime.utcnow()
+            machines_to_poll = []
+            for machine in machines:
+                poller = self.pollers.get(machine.id)
+                if not poller:
+                    continue
+                
+                # Check if machine's poll interval has elapsed
+                interval_seconds = machine.poll_interval_seconds
+                if poller.last_fast_poll_time is None:
+                    # Never polled before - poll now
+                    machines_to_poll.append(machine)
+                else:
+                    elapsed = (now - poller.last_fast_poll_time).total_seconds()
+                    if elapsed >= interval_seconds:
+                        machines_to_poll.append(machine)
+            
+            if not machines_to_poll:
+                logger.debug(f"No machines ready for polling (intervals not elapsed)")
+                return
+            
+            # Poll machines whose intervals have elapsed (concurrently)
             poll_tasks = [
                 self.pollers[machine.id].poll()
-                for machine in machines
+                for machine in machines_to_poll
             ]
 
             results = await asyncio.gather(*poll_tasks, return_exceptions=True)
@@ -831,7 +1062,123 @@ class PollingService:
                 # Broadcast to all connected clients
                 await self.websocket_manager.broadcast_status(result)
 
-            logger.debug(f"Polled {len(machines)} machines")
+            logger.debug(f"Polled {len(machines_to_poll)} of {len(machines)} machines (per-machine intervals)")
+
+        finally:
+            db.close()
+
+    async def _tool_poll_loop(self):
+        """Slow polling loop for tool table and ATC magazine data."""
+        while self.is_running:
+            try:
+                await self._poll_all_tool_data()
+
+                # Calculate minimum tool poll interval across all enabled machines
+                # Use this for loop sleep to check machines frequently enough
+                db = SessionLocal()
+                try:
+                    machines = db.query(Machine).filter(Machine.enabled == True).all()
+                    if machines:
+                        min_interval = min(m.tool_poll_interval_seconds for m in machines)
+                    else:
+                        min_interval = 30  # Default if no machines
+                finally:
+                    db.close()
+                
+                # Sleep for minimum interval (ensures we check machines frequently enough)
+                await asyncio.sleep(min_interval)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in tool polling loop: {e}")
+                await asyncio.sleep(30)  # Use default on error
+
+    async def _poll_all_tool_data(self):
+        """Poll tool data for machines whose tool poll interval has elapsed."""
+        db = SessionLocal()
+        try:
+            # Get all enabled machines
+            machines = db.query(Machine).filter(Machine.enabled == True).all()
+
+            if not machines:
+                logger.debug("No enabled machines for tool data polling")
+                return
+
+            # Update pollers for current machines (same logic as fast polling)
+            current_machine_ids = {m.id for m in machines}
+
+            # Remove pollers for deleted/disabled machines
+            for machine_id in list(self.pollers.keys()):
+                if machine_id not in current_machine_ids:
+                    del self.pollers[machine_id]
+
+            # Add pollers for new machines
+            for machine in machines:
+                if machine.id not in self.pollers:
+                    self.pollers[machine.id] = MachinePoller(machine, self.websocket_manager)
+                else:
+                    # Always update machine reference with fresh DB data to catch config changes
+                    self.pollers[machine.id].machine = machine
+
+            # Poll machines whose tool poll interval has elapsed
+            now = datetime.utcnow()
+            machines_to_poll = []
+            for machine in machines:
+                poller = self.pollers.get(machine.id)
+                if not poller:
+                    continue
+                
+                # Check if machine's tool poll interval has elapsed
+                interval_seconds = machine.tool_poll_interval_seconds
+                if poller.last_tool_poll_time is None:
+                    # Never polled tool data before - poll now
+                    machines_to_poll.append(machine)
+                else:
+                    elapsed = (now - poller.last_tool_poll_time).total_seconds()
+                    if elapsed >= interval_seconds:
+                        machines_to_poll.append(machine)
+            
+            if not machines_to_poll:
+                logger.debug(f"No machines ready for tool data polling (intervals not elapsed)")
+                return
+            
+            # Poll tool data for machines whose intervals have elapsed (concurrently)
+            poll_tasks = [
+                self.pollers[machine.id].poll_tool_data()
+                for machine in machines_to_poll
+            ]
+
+            results = await asyncio.gather(*poll_tasks, return_exceptions=True)
+
+            # Update last tool poll time and broadcast tool data updates
+            for i, (machine, result) in enumerate(zip(machines_to_poll, results)):
+                poller = self.pollers.get(machine.id)
+                if not poller:
+                    continue
+                
+                if isinstance(result, Exception):
+                    logger.error(f"Tool data polling failed for machine {machine.id}: {result}")
+                    continue
+                
+                # Update last tool poll time on success
+                if result:  # Only update if we got data back
+                    poller.last_tool_poll_time = now
+                    
+                    # Broadcast tool data update (merge with existing status data)
+                    if self.websocket_manager:
+                        # Get existing status and merge tool data
+                        existing_status = self.websocket_manager.get_machine_status(machine.id) or {}
+                        merged_status = {**existing_status, **result}
+                        merged_status["machine_id"] = machine.id
+                        merged_status["machine_name"] = machine.name
+                        
+                        # Broadcast the merged status
+                        await self.websocket_manager.broadcast_status(merged_status)
+                        
+                        logger.debug(f"Polled tool data for machine {machine.id} ({machine.name})")
+
+            logger.debug(f"Polled tool data for {len(machines_to_poll)} of {len(machines)} machines")
 
         finally:
             db.close()
@@ -848,6 +1195,90 @@ class PollingService:
             "last_poll_time": poller.last_poll_time.isoformat() if poller.last_poll_time else None,
             "consecutive_failures": poller.consecutive_failures,
         }
+
+    async def refresh_tool_data(self, machine_id: int) -> Dict[str, Any]:
+        """
+        Immediately refresh tool data for a specific machine.
+        
+        Args:
+            machine_id: Machine ID to refresh tool data for
+            
+        Returns:
+            Dictionary containing refreshed tool data
+            
+        Raises:
+            ValueError: If machine is not being polled
+        """
+        poller = self.pollers.get(machine_id)
+        if not poller:
+            raise ValueError(f"Machine {machine_id} is not being polled")
+        
+        # Poll tool data immediately
+        tool_data = await poller.poll_tool_data()
+        
+        # Update last tool poll time
+        poller.last_tool_poll_time = datetime.utcnow()
+        
+        # Merge with existing status and broadcast
+        if tool_data and self.websocket_manager:
+            existing_status = self.websocket_manager.get_machine_status(machine_id) or {}
+            merged_status = {**existing_status, **tool_data}
+            merged_status["machine_id"] = machine_id
+            merged_status["machine_name"] = poller.machine.name
+            
+            # Broadcast the merged status
+            await self.websocket_manager.broadcast_status(merged_status)
+        
+        return tool_data
+
+    async def _prepopulate_control_versions(self):
+        """
+        Pre-populate control version cache for all enabled machines on startup.
+        This avoids detecting control version on every poll (saves ~1200ms per poll).
+        """
+        db = SessionLocal()
+        try:
+            machines = db.query(Machine).filter(Machine.enabled == True).all()
+            if not machines:
+                logger.debug("No enabled machines to pre-populate control versions for")
+                return
+            
+            logger.info(f"Pre-populating control version cache for {len(machines)} enabled machine(s)...")
+            
+            from app.clients.telnet_client import get_or_create_connection
+            
+            # Detect control version for each machine (concurrently, but with locks)
+            async def detect_for_machine(m):
+                try:
+                    telnet_client = await get_or_create_connection(
+                        ip_address=m.ip_address,
+                        port=10000,
+                        timeout=10
+                    )
+                    # This will detect and cache the control version
+                    control_version = await telnet_client.detect_control_type(verbose=False)
+                    if control_version:
+                        logger.info(f"Pre-populated control version for machine {m.id} ({m.name}): {control_version}")
+                    else:
+                        logger.warning(f"Failed to detect control version for machine {m.id} ({m.name})")
+                except Exception as e:
+                    logger.warning(f"Failed to pre-populate control version for machine {m.id} ({m.name}): {e}")
+            
+            # Create tasks with proper closure (use default argument to capture machine)
+            tasks = []
+            for machine in machines:
+                async def detect(m=machine):  # Default argument captures current value
+                    await detect_for_machine(m)
+                tasks.append(detect())
+            
+            # Run all detections concurrently (each will use its own lock)
+            await asyncio.gather(*tasks, return_exceptions=True)
+            
+            logger.info(f"Control version cache pre-population complete")
+        except Exception as e:
+            logger.error(f"Error during control version cache pre-population: {e}")
+        finally:
+            db.close()
 
     def get_all_status(self) -> Dict[int, Dict[str, Any]]:
         """Get status for all machines."""

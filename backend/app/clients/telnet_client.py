@@ -111,13 +111,13 @@ async def _get_machine_lock(ip_address: str, port: int):
     from app.utils.redis_client import get_async_redis
     from redis.asyncio.lock import Lock
     
-    redis = await get_async_redis()
+    redis = get_async_redis()
     lock_key = f"telnet:lock:{ip_address}:{port}"
     return Lock(
         redis,
         lock_key,
-        timeout=30,  # Lock expires after 30s (prevents deadlocks)
-        blocking_timeout=10,  # Wait up to 10s to acquire
+        timeout=60,  # Lock expires after 60s (allows longer polling operations, prevents deadlocks)
+        blocking_timeout=15,  # Wait up to 15s to acquire (more time for concurrent operations)
         sleep=0.1,  # Sleep interval between lock attempts
     )
 
@@ -1124,66 +1124,86 @@ class CNCTelnetClient:
                 # Determine control type based on indicator counts
                 # Higher confidence when multiple indicators match in the correct format
                 
+                # Determine detected version and cache it
+                detected_version = None
+                
                 # Best case: C00 format finds C00 indicators, no D00 indicators
                 if c00_count_in_c00_format > 0 and d00_count_in_c00_format == 0:
                     confidence = "high" if c00_count_in_c00_format >= 2 else "medium"
                     if verbose:
                         logger.info(f"Control type detected: C00 (confidence: {confidence}, {c00_count_in_c00_format} indicators in C00 format)")
-                    return "C00"
+                    detected_version = "C00"
                 
                 # Best case: D00 format finds D00 indicators, no C00 indicators
-                if d00_count_in_d00_format > 0 and c00_count_in_d00_format == 0:
+                elif d00_count_in_d00_format > 0 and c00_count_in_d00_format == 0:
                     confidence = "high" if d00_count_in_d00_format >= 2 else "medium"
                     if verbose:
                         logger.info(f"Control type detected: D00 (confidence: {confidence}, {d00_count_in_d00_format} indicators in D00 format)")
-                    return "D00"
+                    detected_version = "D00"
                 
                 # Compare counts: use format that has more matching indicators
-                c00_score = c00_count_in_c00_format - d00_count_in_c00_format
-                d00_score = d00_count_in_d00_format - c00_count_in_d00_format
-                
-                if c00_score > d00_score and c00_score > 0:
-                    confidence = "high" if c00_count_in_c00_format >= 2 else "medium"
-                    if verbose:
-                        logger.info(f"Control type detected: C00 (confidence: {confidence}, score: {c00_score}, {c00_count_in_c00_format} C00 indicators vs {d00_count_in_c00_format} D00 indicators in C00 format)")
-                    return "C00"
-                
-                if d00_score > c00_score and d00_score > 0:
-                    confidence = "high" if d00_count_in_d00_format >= 2 else "medium"
-                    if verbose:
-                        logger.info(f"Control type detected: D00 (confidence: {confidence}, score: {d00_score}, {d00_count_in_d00_format} D00 indicators vs {c00_count_in_d00_format} C00 indicators in D00 format)")
-                    return "D00"
-                
-                # If we found indicators but in wrong format, that's suspicious
-                if c00_count_in_d00_format > 0 or d00_count_in_c00_format > 0:
-                    logger.warning(f"Found control indicators in unexpected format - ambiguous (C00 in D00: {c00_count_in_d00_format}, D00 in C00: {d00_count_in_c00_format})")
-                    # Still try to return something based on what we found
-                    if c00_count_in_c00_format > 0:
-                        return "C00"
-                    elif d00_count_in_d00_format > 0:
-                        return "D00"
-                
-                # Fallback: if no indicators found, use format that produces more valid entries
-                if entries_c00 and entries_d00:
-                    if len(entries_c00) > len(entries_d00):
-                        if verbose:
-                            logger.info("No control indicators found - defaulting to C00 format (more entries)")
-                        return "C00"
-                    else:
-                        if verbose:
-                            logger.info("No control indicators found - defaulting to D00 format (more entries)")
-                        return "D00"
-                elif entries_c00:
-                    if verbose:
-                        logger.info("No control indicators found - defaulting to C00 format (only format with entries)")
-                    return "C00"
-                elif entries_d00:
-                    if verbose:
-                        logger.info("No control indicators found - defaulting to D00 format (only format with entries)")
-                    return "D00"
                 else:
-                    logger.warning("No control indicators found and no valid entries - cannot determine control type")
-                    return None
+                    c00_score = c00_count_in_c00_format - d00_count_in_c00_format
+                    d00_score = d00_count_in_d00_format - c00_count_in_d00_format
+                    
+                    if c00_score > d00_score and c00_score > 0:
+                        confidence = "high" if c00_count_in_c00_format >= 2 else "medium"
+                        if verbose:
+                            logger.info(f"Control type detected: C00 (confidence: {confidence}, score: {c00_score}, {c00_count_in_c00_format} C00 indicators vs {d00_count_in_c00_format} D00 indicators in C00 format)")
+                        detected_version = "C00"
+                    
+                    elif d00_score > c00_score and d00_score > 0:
+                        confidence = "high" if d00_count_in_d00_format >= 2 else "medium"
+                        if verbose:
+                            logger.info(f"Control type detected: D00 (confidence: {confidence}, score: {d00_score}, {d00_count_in_d00_format} D00 indicators vs {c00_count_in_d00_format} C00 indicators in D00 format)")
+                        detected_version = "D00"
+                    
+                    # If we found indicators but in wrong format, that's suspicious
+                    elif c00_count_in_d00_format > 0 or d00_count_in_c00_format > 0:
+                        logger.warning(f"Found control indicators in unexpected format - ambiguous (C00 in D00: {c00_count_in_d00_format}, D00 in C00: {d00_count_in_c00_format})")
+                        # Still try to return something based on what we found
+                        if c00_count_in_c00_format > 0:
+                            detected_version = "C00"
+                        elif d00_count_in_d00_format > 0:
+                            detected_version = "D00"
+                    
+                    # Fallback: if no indicators found, use format that produces more valid entries
+                    elif entries_c00 and entries_d00:
+                        if len(entries_c00) > len(entries_d00):
+                            if verbose:
+                                logger.info("No control indicators found - defaulting to C00 format (more entries)")
+                            detected_version = "C00"
+                        else:
+                            if verbose:
+                                logger.info("No control indicators found - defaulting to D00 format (more entries)")
+                            detected_version = "D00"
+                    elif entries_c00:
+                        if verbose:
+                            logger.info("No control indicators found - defaulting to C00 format (only format with entries)")
+                        detected_version = "C00"
+                    elif entries_d00:
+                        if verbose:
+                            logger.info("No control indicators found - defaulting to D00 format (only format with entries)")
+                        detected_version = "D00"
+                    else:
+                        logger.warning("No control indicators found and no valid entries - cannot determine control type")
+                        return None
+                
+                # Cache the detected version in Redis (1 hour TTL - control version doesn't change)
+                if detected_version:
+                    try:
+                        from app.utils.redis_client import get_redis
+                        redis = get_redis()
+                        cache_key = f"machine:control_version:{self.ip_address}:{self.port}"
+                        redis.setex(cache_key, 3600, detected_version)  # 1 hour TTL
+                        if verbose:
+                            logger.debug(f"Cached control type for {self.ip_address}:{self.port} in Redis: {detected_version}")
+                    except Exception as e:
+                        # Redis unavailable - continue without caching
+                        if verbose:
+                            logger.debug(f"Failed to cache control version in Redis: {e}")
+                
+                return detected_version
 
             except Exception as e:
                 logger.error(f"Error detecting control type: {e}")
