@@ -30,6 +30,7 @@ class Settings(BaseSettings):
 
     # CNC Polling
     DEFAULT_POLL_INTERVAL: int = 5  # seconds
+    DEFAULT_TOOL_POLL_INTERVAL: int = 30  # seconds (tool table/ATC polling, separate from fast status polling)
 
     # Security (optional)
     SECRET_KEY: Optional[str] = None

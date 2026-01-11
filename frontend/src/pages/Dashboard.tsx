@@ -310,8 +310,6 @@ export const Dashboard = () => {
           <span className="prompt">&gt;</span>
           <span className="cursor">STATUS: {editMode ? 'EDIT MODE' : 'MONITORING'}</span>
           <span className="separator">│</span>
-          <span className="text-dim">REFRESH: 5s</span>
-          <span className="separator">│</span>
           <span className="text-dim">{new Date().toLocaleTimeString()}</span>
           <span className="separator">│</span>
           <StatusIndicator
