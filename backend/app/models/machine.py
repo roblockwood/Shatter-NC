@@ -21,6 +21,7 @@ class Machine(Base):
     path = Column(String(255), default="/PROGRAM")
     tags = Column(JSON, nullable=True)  # ["production", "floor-a"]
     poll_interval_seconds = Column(Integer, default=5)
+    tool_poll_interval_seconds = Column(Integer, default=30)  # Tool table/ATC polling interval (slower than fast poll)
     enabled = Column(Boolean, default=True)
 
     # Validation tolerances (in inches)

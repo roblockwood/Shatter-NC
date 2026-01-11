@@ -35,3 +35,41 @@ export async function refreshProgramName(machineId: number): Promise<RefreshProg
   }
 }
 
+export interface RefreshToolDataResponse {
+  machine_id: number;
+  machine_name: string;
+  tool_data: {
+    tools?: Array<any>;
+    tool_table?: Array<any>;
+    current_tool?: number;
+    tools_timestamp?: string;
+    tool_table_timestamp?: string;
+  };
+  refreshed_at: string;
+}
+
+/**
+ * Manually refresh tool data (tool table and ATC magazine) for a machine
+ */
+export async function refreshToolData(machineId: number): Promise<RefreshToolDataResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/machines/${machineId}/status/tools/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to refresh tool data: ${response.statusText} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error refreshing tool data:', error);
+    throw error;
+  }
+}
+

@@ -12,6 +12,7 @@ interface MachineData {
   http_port?: number;
   path?: string;
   poll_interval_seconds?: number;
+  tool_poll_interval_seconds?: number;
   enabled?: boolean;
   model?: string;
   diameter_tolerance?: number;
@@ -44,6 +45,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
     http_port: 80,
     path: '/PROGRAM',
     poll_interval_seconds: 5,
+    tool_poll_interval_seconds: 30,
     enabled: true,
     model: 'Brother CNC',
     diameter_tolerance: 0.010,
@@ -294,6 +296,21 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
             />
             <span className="form-hint">seconds</span>
           </div>
+          <div>
+            <label>TOOL POLL INTERVAL:</label>
+            <input
+              type="number"
+              min="1"
+              max="600"
+              value={formData.tool_poll_interval_seconds}
+              onChange={(e) => setFormData({ ...formData, tool_poll_interval_seconds: parseInt(e.target.value) })}
+              disabled={isSaving}
+            />
+            <span className="form-hint">seconds</span>
+          </div>
+        </div>
+
+        <div className="form-row-inline">
           <div className="form-checkbox">
             <input
               type="checkbox"

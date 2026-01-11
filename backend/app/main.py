@@ -4,6 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 import logging
 
+# Configure logging level from settings
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 logger = logging.getLogger(__name__)
 
 # Import routers
@@ -102,9 +108,10 @@ app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"
 # Inject websocket manager into websocket router
 websocket.set_websocket_manager(websocket_manager)
 
-# Inject polling service into summary and machines routers
+# Inject polling service into summary, machines, and status routers
 summary.set_polling_service(polling_service)
 machines.set_polling_service(polling_service)
+status.set_polling_service(polling_service)
 
 
 @app.on_event("startup")
