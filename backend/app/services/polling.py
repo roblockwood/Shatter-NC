@@ -495,11 +495,21 @@ class MachinePoller:
                 # Log status event for offline transition (non-blocking)
                 asyncio.create_task(self._log_events_async(offline_status_data, poll_timestamp, response_time_ms, success=False))
                 self.logged_offline_status = True
+                # Set heartbeat timer so we can track offline heartbeats
+                self.last_heartbeat_time = poll_timestamp
                 logger.info(
                     f"Machine {self.machine.id} ({self.machine.name}) marked offline "
                     f"after {self.consecutive_failures} consecutive failures "
                     f"(previous status: {previous_status})"
                 )
+            
+            # Log offline heartbeat if machine is already logged as offline and 5 minutes have passed
+            if self.logged_offline_status and self.last_heartbeat_time is not None:
+                time_since_heartbeat = poll_timestamp - self.last_heartbeat_time
+                if time_since_heartbeat >= timedelta(minutes=self.heartbeat_interval_minutes):
+                    # Log offline heartbeat (status="off", previous_status="off")
+                    asyncio.create_task(self._log_offline_heartbeat(offline_status_data, poll_timestamp))
+                    self.last_heartbeat_time = poll_timestamp
 
             return offline_status_data
 
@@ -594,6 +604,25 @@ class MachinePoller:
         except Exception as e:
             logger.error(f"Failed to log status event: {e}")
             raise
+
+    async def _log_offline_heartbeat(self, status_data: Dict[str, Any], poll_timestamp: datetime):
+        """Log offline heartbeat status event (status="off", previous_status="off")."""
+        db = SessionLocal()
+        try:
+            # Log offline heartbeat with status="off" and previous_status="off"
+            heartbeat_status_data = {
+                **status_data,
+                "previous_status": "off",  # Explicitly set to "off" for heartbeat
+                "status": "off",
+            }
+            await self._log_status_event(db, heartbeat_status_data, "off")
+            db.commit()
+            logger.debug(f"Logged offline heartbeat for machine {self.machine.id}")
+        except Exception as e:
+            logger.error(f"Failed to log offline heartbeat for machine {self.machine.id}: {e}")
+            db.rollback()
+        finally:
+            db.close()
 
     async def _log_alarms(self, db: Session, status_data: Dict[str, Any]):
         """
