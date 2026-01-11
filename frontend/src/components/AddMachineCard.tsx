@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './AddMachineCard.css';
 import { API_BASE } from '../config/api';
 import { Select } from './ui/Select';
@@ -30,10 +30,25 @@ interface AddMachineCardProps {
   onCancel?: () => void;
   onAdd?: (machine: any) => void;
   fullWidth?: boolean;
+  onActiveChange?: (active: boolean) => void;
 }
 
-export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel: onCancelProp, fullWidth = false }) => {
+export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel: onCancelProp, fullWidth = false, onActiveChange }) => {
   const [isActive, setIsActive] = useState(false);
+
+  // Reset state when component unmounts (user navigates away)
+  React.useEffect(() => {
+    return () => {
+      if (isActive && onActiveChange) {
+        onActiveChange(false);
+      }
+    };
+  }, [isActive, onActiveChange]);
+
+  // Notify parent when active state changes
+  useEffect(() => {
+    onActiveChange?.(isActive);
+  }, [isActive, onActiveChange]);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<MachineData>({
@@ -176,13 +191,25 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
   return (
     <div className={`machine-card add-machine-editing ${fullWidth ? 'full-width' : ''}`}>
       <div className="machine-card-header">
-        <input
-          className="machine-name-input"
-          placeholder="NEW MACHINE"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          disabled={isSaving}
-        />
+        <div className="machine-header-edit-row">
+          <input
+            className="machine-name-input"
+            placeholder="NEW MACHINE"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            disabled={isSaving}
+          />
+          <div className="form-checkbox machine-header-checkbox">
+            <input
+              type="checkbox"
+              id="enabled-new-header"
+              checked={formData.enabled}
+              onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
+              disabled={isSaving}
+            />
+            <label htmlFor="enabled-new-header">ENABLED</label>
+          </div>
+        </div>
         <div className="machine-header-actions">
           <button
             className="card-action-btn"
@@ -207,138 +234,133 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
         ├{'─'.repeat(30)}┤
       </div>
 
-      <div className="machine-edit-form">
-        {error && (
-          <div className="form-error text-error">
-            {error}
+      {/* Horizontal Form Sections */}
+      <div className="form-sections-horizontal">
+        {/* Network Configuration Section */}
+        <div className="network-config-section">
+          <div className="network-config-header">NETWORK CONFIGURATION</div>
+
+          {error && (
+            <div className="form-error text-error">
+              {error}
+            </div>
+          )}
+
+          {/* Basic Settings */}
+          <div className="form-row-inline">
+            <div style={{ flex: '0 0 auto', minWidth: '200px' }}>
+              <label>UNITS:</label>
+              <Select
+                value={formData.units || 'in'}
+                onChange={(value) => setFormData({ ...formData, units: value })}
+                disabled={isSaving}
+                options={[
+                  { value: 'in', label: 'INCHES (in)' },
+                  { value: 'mm', label: 'MILLIMETERS (mm)' },
+                ]}
+              />
+            </div>
           </div>
-        )}
 
-        <div className="form-row">
-          <label>IP:</label>
-          <input
-            type="text"
-            value={formData.ip_address}
-            onChange={(e) => setFormData({ ...formData, ip_address: e.target.value })}
-            placeholder="192.168.1.100"
-            disabled={isSaving}
-          />
-        </div>
-
-        <div className="form-row">
-          <label>FTP USER:</label>
-          <input
-            type="text"
-            value={formData.ftp_username}
-            onChange={(e) => setFormData({ ...formData, ftp_username: e.target.value })}
-            placeholder="anonymous"
-            disabled={isSaving}
-          />
-        </div>
-
-        <div className="form-row">
-          <label>FTP PASS:</label>
-          <input
-            type="password"
-            value={formData.ftp_password}
-            onChange={(e) => setFormData({ ...formData, ftp_password: e.target.value })}
-            placeholder="anonymous"
-            disabled={isSaving}
-          />
-        </div>
-
-        <div className="form-row-inline">
-          <div>
-            <label>FTP PORT:</label>
+          <div className="form-row">
+            <label>IP:</label>
             <input
-              type="number"
-              min="1"
-              max="65535"
-              value={formData.ftp_port}
-              onChange={(e) => setFormData({ ...formData, ftp_port: parseInt(e.target.value) })}
+              type="text"
+              value={formData.ip_address}
+              onChange={(e) => setFormData({ ...formData, ip_address: e.target.value })}
+              placeholder="192.168.1.100"
               disabled={isSaving}
             />
           </div>
-          <div>
-            <label>COM PORT:</label>
+
+          <div className="form-row">
+            <label>FTP USER:</label>
             <input
-              type="number"
-              min="1"
-              max="65535"
-              value={10000}
-              disabled={true}
-              title="Telnet communication port (fixed at 10000)"
+              type="text"
+              value={formData.ftp_username}
+              onChange={(e) => setFormData({ ...formData, ftp_username: e.target.value })}
+              placeholder="anonymous"
+              disabled={isSaving}
             />
           </div>
-        </div>
 
-        <div className="form-row">
-          <label>FTP PATH:</label>
-          <input
-            type="text"
-            value={formData.path}
-            onChange={(e) => setFormData({ ...formData, path: e.target.value })}
-            placeholder="/PROGRAM"
-            disabled={isSaving}
-          />
-        </div>
+          <div className="form-row">
+            <label>FTP PASS:</label>
+            <input
+              type="password"
+              value={formData.ftp_password}
+              onChange={(e) => setFormData({ ...formData, ftp_password: e.target.value })}
+              placeholder="anonymous"
+              disabled={isSaving}
+            />
+          </div>
+
+          <div className="form-row">
+            <label>FTP PATH:</label>
+            <input
+              type="text"
+              value={formData.path}
+              onChange={(e) => setFormData({ ...formData, path: e.target.value })}
+              placeholder="/PROGRAM"
+              disabled={isSaving}
+            />
+          </div>
 
           <div className="form-row-inline">
-          <div>
-            <label>POLL INTERVAL:</label>
-            <input
-              type="number"
-              min="1"
-              max="300"
-              value={formData.poll_interval_seconds}
-              onChange={(e) => setFormData({ ...formData, poll_interval_seconds: parseInt(e.target.value) })}
-              disabled={isSaving}
-            />
-            <span className="form-hint">seconds</span>
+            <div>
+              <label>FTP PORT:</label>
+              <input
+                type="number"
+                min="1"
+                max="65535"
+                value={formData.ftp_port}
+                onChange={(e) => setFormData({ ...formData, ftp_port: parseInt(e.target.value) })}
+                disabled={isSaving}
+              />
+            </div>
+            <div>
+              <label>COM PORT:</label>
+              <input
+                type="number"
+                min="1"
+                max="65535"
+                value={10000}
+                disabled={true}
+                title="Telnet communication port (fixed at 10000)"
+              />
+            </div>
           </div>
-          <div>
-            <label>TOOL POLL INTERVAL:</label>
-            <input
-              type="number"
-              min="1"
-              max="600"
-              value={formData.tool_poll_interval_seconds}
-              onChange={(e) => setFormData({ ...formData, tool_poll_interval_seconds: parseInt(e.target.value) })}
-              disabled={isSaving}
-            />
-            <span className="form-hint">seconds</span>
-          </div>
-        </div>
 
-        <div className="form-row-inline">
-          <div className="form-checkbox">
-            <input
-              type="checkbox"
-              id="enabled"
-              checked={formData.enabled}
-              onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-              disabled={isSaving}
-            />
-            <label htmlFor="enabled">ENABLED</label>
+          <div className="form-row-inline">
+            <div>
+              <label>POLL INTERVAL (s):</label>
+              <input
+                type="number"
+                min="1"
+                max="300"
+                value={formData.poll_interval_seconds}
+                onChange={(e) => setFormData({ ...formData, poll_interval_seconds: parseInt(e.target.value) })}
+                disabled={isSaving}
+              />
+            </div>
+            <div>
+              <label>TOOL POLL INTERVAL (s):</label>
+              <input
+                type="number"
+                min="1"
+                max="600"
+                value={formData.tool_poll_interval_seconds}
+                onChange={(e) => setFormData({ ...formData, tool_poll_interval_seconds: parseInt(e.target.value) })}
+                disabled={isSaving}
+              />
+            </div>
           </div>
-        </div>
 
-        <div className="form-row">
-          <label>UNITS:</label>
-          <Select
-            value={formData.units || 'in'}
-            onChange={(value) => setFormData({ ...formData, units: value })}
-            disabled={isSaving}
-            options={[
-              { value: 'in', label: 'INCHES (in)' },
-              { value: 'mm', label: 'MILLIMETERS (mm)' },
-            ]}
-          />
         </div>
 
         {/* Tolerances Section */}
         <div className="tolerances-section">
-          <div className="tolerances-header">VALIDATION TOLERANCES (inches)</div>
+          <div className="tolerances-header">VALIDATION TOLERANCES ({formData.units === 'mm' ? 'mm' : 'inches'})</div>
 
           {/* Tool Tolerances Group */}
           <div className="tolerance-group">
@@ -468,7 +490,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
           </div>
         </div>
 
-        <div className="form-actions">
+      <div className="form-actions">
           <button
             className="form-button cancel"
             onClick={handleCancel}
