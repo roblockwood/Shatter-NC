@@ -5,7 +5,17 @@ import { formatDimension } from '../../utils/formatDimension';
 import type { UnitType } from '../../utils/formatDimension';
 import './ToolsPane.css';
 import { API_BASE_URL } from '../../config/api';
-import { ColorPicker } from './ColorPicker';
+import { ColorSelect } from './ColorSelect';
+
+// Define type locally to avoid Vite import issues
+type ToolModificationOperationType = 
+  | 'color' 
+  | 'tool_number' 
+  | 'tool_type' 
+  | 'delete' 
+  | 'life' 
+  | 'offset' 
+  | 'spindle';
 
 interface Tool {
   pot_number?: string | number;
@@ -26,6 +36,9 @@ interface ToolsPaneProps {
   machineId?: number;
   source?: 'atc' | 'table';
   units?: UnitType;
+  machineStatus?: string;  // Status from WebSocket polling (e.g., "operating", "standby", "error")
+  memMode?: number;  // MEM mode from WebSocket polling: 0=Manual, 1=MDI, 2=Memory, 3=Edit, 4=MDI manual, 5=Memory edit
+  memOperationStatus?: number;  // MEM operation_status from WebSocket polling: 0=Reset, 1=Operation, 2=Temporary stop, 3=Block stop
 }
 
 type SortColumn = 'pot_number' | 'tool_number' | 'tool_name' | 'diameter' | 'length' | 'group' | 'life' | 'tool_type' | 'color';
@@ -37,7 +50,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   currentTool, 
   machineId,
   source: initialSource = 'atc',
-  units = 'in'
+  units = 'in',
+  machineStatus,
+  memMode,
+  memOperationStatus: _memOperationStatus
 }) => {
   // Cache sort settings separately for each view (ATC and TABLE)
   const [sortSettings, setSortSettings] = useState<{
@@ -73,17 +89,39 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   });
   const [toolsSummary, setToolsSummary] = useState<Array<{ tool_number: number; description: string }>>([]);
   
-  // Color picker state
-  const [colorPickerState, setColorPickerState] = useState<{
-    show: boolean;
-    tool: Tool | null;
-    position: { top: number; left: number } | null;
-  }>({
-    show: false,
-    tool: null,
-    position: null,
-  });
-  const colorCellRefs = useRef<Map<string, HTMLTableCellElement>>(new Map());
+  // Track pending changes (changes not yet pushed to server)
+  const [pendingChanges, setPendingChanges] = useState<Map<string, { tool: Tool; field: string; oldValue: any; newValue: any; operationType: ToolModificationOperationType }>>(new Map());
+  const [isPushingChanges, setIsPushingChanges] = useState(false);
+  const [pushComplete, setPushComplete] = useState(false);
+  // Track recently pushed items to prevent stale WebSocket data from overwriting confirmed values
+  const recentlyPushedRef = useRef<Map<string, { potNumber: number; toolNumber: number; color: number; timestamp: number }>>(new Map());
+  
+  // Determine if machine is safe for push operations based on cached status
+  const isMachineSafeForPush = useMemo(() => {
+    if (!machineStatus && memMode === undefined) return true; // Default to safe if status unknown
+    const status = machineStatus?.toLowerCase();
+    // Block PRD3 status "operating" (machine is actively running)
+    if (status === 'operating') {
+      return false;
+    }
+    // Block MEM mode 2 (Memory operation - actively running program)
+    if (memMode === 2) {
+      return false;
+    }
+    return true;
+  }, [machineStatus, memMode]);
+
+  const machineStateReason = useMemo(() => {
+    if (!machineStatus && memMode === undefined) return undefined;
+    const status = machineStatus?.toLowerCase();
+    if (status === 'operating') {
+      return 'Machine is currently running a program. Stop the program before making changes.';
+    }
+    if (memMode === 2) {
+      return 'Machine is running a program (Memory operation mode). Stop the program before making changes.';
+    }
+    return undefined;
+  }, [machineStatus, memMode]);
   
   // Get current tools from cache based on active source
   const tools = toolsCache[toolSource];
@@ -95,10 +133,76 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     if (machineId) {
       // Update ATC cache from WebSocket
       if (initialTools && initialTools.length > 0) {
-        setToolsCache(prev => ({
-          ...prev,
-          atc: initialTools
-        }));
+        setToolsCache(prev => {
+          // If we're pushing changes, merge WebSocket data but preserve optimistic values for tools being pushed
+          if (isPushingChanges) {
+            // Merge: use WebSocket data for tools NOT being pushed, keep optimistic values for tools being pushed
+            const toolsBeingPushed = new Set(
+              Array.from(pendingChanges.keys()).map(key => {
+                const parts = key.split('-');
+                return `${parts[0]}-${parts[1]}`; // pot_number-tool_number
+              })
+            );
+            
+            return {
+              ...prev,
+              atc: initialTools.map(serverTool => {
+                const toolKey = `${serverTool.pot_number}-${serverTool.tool_number}`;
+                if (toolsBeingPushed.has(toolKey)) {
+                  // This tool is being pushed - find it in current cache to preserve optimistic value
+                  const cachedTool = prev.atc.find(t => 
+                    t.pot_number === serverTool.pot_number && 
+                    t.tool_number === serverTool.tool_number
+                  );
+                  return cachedTool || serverTool; // Use cached (optimistic) value if available
+                }
+                return serverTool; // Use fresh WebSocket data for other tools
+              })
+            };
+          } else {
+            // Not pushing - merge WebSocket data but preserve pending changes and recently pushed items
+            // Start with server tools, then apply pending changes and protect recently pushed items
+            const merged = initialTools.map(serverTool => {
+              const toolKey = `${serverTool.pot_number}-${serverTool.tool_number}`;
+              
+              // Check if this tool was recently pushed - protect from stale WebSocket data
+              const recentlyPushed = recentlyPushedRef.current.get(toolKey);
+              if (recentlyPushed) {
+                // Check if WebSocket data matches our pushed value (confirmation)
+                if (serverTool.color === recentlyPushed.color) {
+                  // WebSocket confirms our value - remove from recentlyPushed tracking
+                  recentlyPushedRef.current.delete(toolKey);
+                  return serverTool;
+                } else {
+                  // WebSocket has stale data - keep our confirmed value from cache
+                  const cachedTool = prev.atc.find(t => 
+                    t.pot_number === serverTool.pot_number && 
+                    t.tool_number === serverTool.tool_number
+                  );
+                  if (cachedTool && cachedTool.color === recentlyPushed.color) {
+                    return cachedTool; // Use cached (confirmed) value
+                  }
+                  // Fallback to recently pushed value
+                  return { ...serverTool, color: recentlyPushed.color };
+                }
+              }
+              
+              // Check if this tool has a pending change
+              const changeKey = `${serverTool.pot_number}-${serverTool.tool_number}-color`;
+              const change = pendingChanges.get(changeKey);
+              if (change) {
+                // Has pending change - apply the optimistic newValue to the server tool
+                return { ...serverTool, color: change.newValue };
+              }
+              return serverTool; // No pending change - use fresh WebSocket data
+            });
+            
+            return {
+              ...prev,
+              atc: merged
+            };
+          }
+        });
         setCacheTimestamps(prev => ({
           ...prev,
           atc: Date.now()
@@ -108,6 +212,22 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           ...prev,
           atc: null
         }));
+        // Clear pending changes that match the fresh data (server has confirmed the change)
+        // Only do this if we're NOT pushing (to avoid clearing during push)
+        if (!isPushingChanges) {
+          setPendingChanges(prev => {
+            const next = new Map(prev);
+            initialTools.forEach(serverTool => {
+              const changeKey = `${serverTool.pot_number}-${serverTool.tool_number}-color`;
+              const change = next.get(changeKey);
+              if (change && serverTool.color === change.newValue) {
+                // Server has our change, remove from pending
+                next.delete(changeKey);
+              }
+            });
+            return next;
+          });
+        }
       }
       
       // Update TABLE cache from WebSocket
@@ -127,7 +247,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         }));
       }
     }
-  }, [initialTools, initialToolTable, machineId]);
+  }, [initialTools, initialToolTable, machineId, isPushingChanges, pendingChanges]);
   const navigate = useNavigate();
   const { isBetaMode } = useBetaMode();
 
@@ -149,26 +269,19 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     }
   }, [isBetaMode]);
 
+
   // Rely on WebSocket data - no automatic fetching to avoid Telnet conflicts
   // WebSocket provides fresh data every 5 seconds via polling service
-  // Only fetch as fallback if WebSocket data doesn't arrive within timeout
+  // Only fetch as fallback if WebSocket connection appears broken (cache >60s stale)
   useEffect(() => {
     if (machineId && toolSource) {
-      const cachedTools = toolsCache[toolSource];
       const cacheTimestamp = cacheTimestamps[toolSource];
       const now = Date.now();
-      const INITIAL_LOAD_TIMEOUT = 10000; // 10 seconds - wait for WebSocket to provide data
       const STALE_THRESHOLD = 60000; // 60 seconds - only fetch if WebSocket is clearly broken
       
       // Check if we need to fetch (fallback only):
-      // 1. No cached data AND we've waited long enough for WebSocket (10s)
-      // 2. Cache is very stale (>60s - indicating WebSocket is broken)
-      const needsFetch = (
-        (!cachedTools || cachedTools.length === 0) && 
-        cacheTimestamp && (now - cacheTimestamp) > INITIAL_LOAD_TIMEOUT
-      ) || (
-        cacheTimestamp && (now - cacheTimestamp) > STALE_THRESHOLD
-      );
+      // Cache is very stale (>60s - indicating WebSocket connection is broken)
+      const needsFetch = cacheTimestamp && (now - cacheTimestamp) > STALE_THRESHOLD;
       
       if (needsFetch) {
         // Only fetch as fallback - WebSocket should provide data
@@ -231,11 +344,8 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
             // Don't clear cache on error - keep previous data visible
           setIsLoadingTools(false);
         });
-      } else if (!cachedTools || cachedTools.length === 0) {
-        // No data yet, but haven't waited long enough - show loading while waiting for WebSocket
-        setIsLoadingTools(true);
       } else {
-        // Have cached data - no fetch needed, WebSocket will keep it fresh
+        // Have cached data or waiting for WebSocket - no fetch needed
         setIsLoadingTools(false);
       }
     }
@@ -303,86 +413,199 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     return tool.tool_name || '';
   };
 
-  const handleColorCellClick = (tool: Tool, event: React.MouseEvent<HTMLTableCellElement>) => {
+  const handleColorChange = (tool: Tool, newColor: number) => {
     // Only allow color changes in ATC view
     if (toolSource !== 'atc' || !machineId || !tool.pot_number) {
       return;
     }
 
-    const cell = event.currentTarget;
-    const rect = cell.getBoundingClientRect();
-    
-    setColorPickerState({
-      show: true,
-      tool: tool,
-      position: {
-        top: rect.bottom + 8,
-        left: rect.left,
-      },
-    });
-  };
-
-  const handleColorSelect = async (color: number) => {
-    if (!colorPickerState.tool || !machineId || !colorPickerState.tool.pot_number) {
+    const oldValue = tool.color ?? 0;
+    if (newColor === oldValue) {
+      // Remove from pending changes if reverting to original
+      const changeKey = `${tool.pot_number}-${tool.tool_number}-color`;
+      setPendingChanges(prev => {
+        const next = new Map(prev);
+        next.delete(changeKey);
+        return next;
+      });
+      
+      // Update local cache to show original value
+      setToolsCache(prev => ({
+        ...prev,
+        atc: prev.atc.map(t =>
+          t.pot_number === tool.pot_number && t.tool_number === tool.tool_number
+            ? { ...t, color: oldValue }
+            : t
+        ),
+      }));
       return;
     }
 
-    const potNumber = typeof colorPickerState.tool.pot_number === 'string' 
-      ? parseInt(colorPickerState.tool.pot_number, 10)
-      : colorPickerState.tool.pot_number;
-    const toolNumber = colorPickerState.tool.tool_number;
+    // Add to pending changes
+    const changeKey = `${tool.pot_number}-${tool.tool_number}-color`;
+    setPendingChanges(prev => {
+      const next = new Map(prev);
+      next.set(changeKey, {
+        tool,
+        field: 'color',
+        oldValue,
+        newValue: newColor,
+        operationType: 'color' as ToolModificationOperationType,
+      });
+      return next;
+    });
 
-    // Optimistically update local state
+    // Update local cache optimistically
     setToolsCache(prev => ({
       ...prev,
-      atc: prev.atc.map(tool =>
-        tool.pot_number === colorPickerState.tool!.pot_number &&
-        tool.tool_number === toolNumber
-          ? { ...tool, color }
-          : tool
+      atc: prev.atc.map(t =>
+        t.pot_number === tool.pot_number && t.tool_number === tool.tool_number
+          ? { ...t, color: newColor }
+          : t
       ),
     }));
+  };
+
+  const handlePushChanges = async () => {
+    if (pendingChanges.size === 0 || !machineId || isPushingChanges) {
+      return;
+    }
+
+    setIsPushingChanges(true);
+    setPushComplete(false);
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/machines/${machineId}/tools/atc/pot/${potNumber}/color?tool_number=${toolNumber}&color=${color}`,
-        {
-          method: 'PUT',
+      // Backend validator handles machine state validation - no need to check here
+      // Process all pending changes
+      const changeArray = Array.from(pendingChanges.values());
+      
+      // Separate color changes from other operation types
+      const colorChanges = changeArray.filter(c => c.operationType === 'color');
+      const otherChanges = changeArray.filter(c => c.operationType !== 'color');
+      
+      // Process color changes in batch (more efficient)
+      let colorResults: any[] = [];
+      if (colorChanges.length > 0) {
+        const batchRequest = {
+          changes: colorChanges.map(change => {
+            const potNumber = change.tool.pot_number
+              ? (typeof change.tool.pot_number === 'string'
+                  ? parseInt(change.tool.pot_number, 10)
+                  : change.tool.pot_number)
+              : undefined;
+            if (!potNumber) throw new Error('Pot number required');
+            return {
+              pot_number: potNumber,
+              tool_number: change.tool.tool_number,
+              color: change.newValue
+            };
+          })
+        };
+        
+        const batchResponse = await fetch(
+          `${API_BASE_URL}/api/machines/${machineId}/tools/atc/colors/batch`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(batchRequest)
+          }
+        );
+        
+        if (!batchResponse.ok) {
+          const error = await batchResponse.json();
+          throw new Error(typeof error.detail === 'string' ? error.detail : (error.detail?.message || 'Batch operation failed'));
         }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to change tool color');
+        
+        const batchData = await batchResponse.json();
+        colorResults = batchData.results || [];
+        
+        // Check for failures in batch
+        const batchFailures = colorResults.filter((r: any) => !r.success);
+        if (batchFailures.length > 0) {
+          const errorMessages = batchFailures.map((f: any) => 
+            `Pot ${f.pot_number}: ${f.message || 'Unknown error'}`
+          ).join('; ');
+          throw new Error(`Some color changes failed: ${errorMessages}`);
+        }
+        
+        // Update cache with confirmed results immediately (don't wait for next poll)
+        setToolsCache(prev => {
+          const updated = {
+            ...prev,
+            atc: prev.atc.map(tool => {
+              const result = colorResults.find((r: any) => 
+                r.pot_number === tool.pot_number && 
+                r.tool_number === tool.tool_number &&
+                r.success
+              );
+              if (result) {
+                // Track this as recently pushed to protect from stale WebSocket data
+                const toolKey = `${result.pot_number}-${result.tool_number}`;
+                recentlyPushedRef.current.set(toolKey, {
+                  potNumber: result.pot_number,
+                  toolNumber: result.tool_number,
+                  color: result.color,
+                  timestamp: Date.now()
+                });
+                return { ...tool, color: result.color };
+              }
+              return tool;
+            })
+          };
+          return updated;
+        });
+        
+        // Show success state briefly before clearing pending changes
+        setIsPushingChanges(false);
+        setPushComplete(true);
+        setTimeout(() => {
+          // Clear pending changes after success animation
+          setPendingChanges(prev => {
+            const next = new Map(prev);
+            colorResults.forEach((result: any) => {
+              if (result.success) {
+                const changeKey = `${result.pot_number}-${result.tool_number}-color`;
+                next.delete(changeKey);
+              }
+            });
+            return next;
+          });
+          setPushComplete(false);
+        }, 1500); // Show success for 1500ms, then clear
+      }
+      
+      // Process other operation types individually (if any)
+      // Currently only color changes are supported, but this structure allows for future operation types
+      if (otherChanges.length > 0) {
+        throw new Error(`Unsupported operation types: ${otherChanges.map(c => c.operationType).join(', ')}`);
       }
 
-      // Success - state already updated optimistically
-      // WebSocket will update with fresh data on next poll
     } catch (error) {
-      console.error('Error changing tool color:', error);
-      
-      // Revert optimistic update
-      setToolsCache(prev => ({
-        ...prev,
-        atc: prev.atc.map(tool =>
-          tool.pot_number === colorPickerState.tool!.pot_number &&
-          tool.tool_number === toolNumber
-            ? { ...tool, color: colorPickerState.tool!.color }
-            : tool
-        ),
-      }));
-
-      // Show error (could use a toast notification here)
-      alert(`Failed to change tool color: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Error pushing changes:', error);
+      alert(`Failed to push changes: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsPushingChanges(false);
     }
   };
 
-  const handleColorPickerClose = () => {
-    setColorPickerState({
-      show: false,
-      tool: null,
-      position: null,
+  const handleDiscardChanges = () => {
+    if (pendingChanges.size === 0) return;
+
+    // Revert all pending changes
+    setToolsCache(prev => {
+      const atc = prev.atc.map(tool => {
+        const changeKey = `${tool.pot_number}-${tool.tool_number}-color`;
+        const change = pendingChanges.get(changeKey);
+        if (change) {
+          return { ...tool, color: change.oldValue };
+        }
+        return tool;
+      });
+      return { ...prev, atc };
     });
+
+    // Clear pending changes
+    setPendingChanges(new Map());
   };
 
   const isCurrentTool = (toolNum: number) => {
@@ -571,6 +794,42 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 </button>
               </div>
             )}
+            {pendingChanges.size > 0 && (
+              <div className="tools-pending-actions" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className="tools-action-btn tools-discard-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDiscardChanges();
+                  }}
+                  disabled={isPushingChanges}
+                  title="Discard all pending changes"
+                >
+                  DISCARD ({pendingChanges.size})
+                </button>
+                <button
+                  className={`tools-action-btn tools-push-btn ${!isMachineSafeForPush ? 'disabled' : ''} ${isPushingChanges ? 'pushing' : ''} ${pushComplete ? 'complete' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePushChanges();
+                  }}
+                  disabled={isPushingChanges || !isMachineSafeForPush}
+                  title={
+                    !isMachineSafeForPush
+                      ? `Cannot push changes: ${machineStateReason || 'Machine is not in a safe state'}`
+                      : 'Push all pending changes to machine'
+                  }
+                >
+                  {pushComplete
+                    ? '✓ PUSHED'
+                    : isPushingChanges 
+                    ? 'PUSHING...' 
+                    : !isMachineSafeForPush
+                    ? `BLOCKED (${pendingChanges.size})`
+                    : `PUSH (${pendingChanges.size})`}
+                </button>
+              </div>
+            )}
             <span>┐</span>
           </div>
         </div>
@@ -700,31 +959,26 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     <td className="tools-col-life">{formatLife(tool.life)}</td>
                     <td className="tools-col-type">{formatToolType(tool.tool_type)}</td>
                     <td
-                      className={`tools-col-color ${toolSource === 'atc' && tool.pot_number ? 'tools-col-color-clickable' : ''}`}
-                      onClick={(e) => toolSource === 'atc' && tool.pot_number && handleColorCellClick(tool, e)}
-                      ref={(el) => {
-                        if (el && tool.pot_number) {
-                          const key = `${tool.pot_number}-${tool.tool_number}`;
-                          colorCellRefs.current.set(key, el);
-                        }
-                      }}
+                      className="tools-col-color"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      {tool.color !== undefined && tool.color !== null ? (
-                        <span className="color-display">
-                          <span 
-                            className="color-indicator" 
-                            style={{ backgroundColor: getColorInfo(tool.color).hex }}
-                            title={toolSource === 'atc' && tool.pot_number ? `Click to change color: ${getColorInfo(tool.color).name}` : getColorInfo(tool.color).name}
-                          />
-                          <span className="color-name">{getColorInfo(tool.color).name}</span>
-                        </span>
+                      {toolSource === 'atc' && tool.pot_number && machineId ? (
+                        <ColorSelect
+                          value={tool.color ?? 0}
+                          onChange={(newColor) => handleColorChange(tool, newColor)}
+                        />
                       ) : (
-                        toolSource === 'atc' && tool.pot_number ? (
-                          <span className="color-display color-display-empty" title="Click to set color">
-                            ──
-                        </span>
-                      ) : (
-                        '──'
+                        tool.color !== undefined && tool.color !== null ? (
+                          <span className="color-display">
+                            <span 
+                              className="color-indicator" 
+                              style={{ backgroundColor: getColorInfo(tool.color).hex }}
+                              title={getColorInfo(tool.color).name}
+                            />
+                            <span className="color-name">{getColorInfo(tool.color).name}</span>
+                          </span>
+                        ) : (
+                          '──'
                         )
                       )}
                     </td>
@@ -742,15 +996,6 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           └{'─'.repeat(42)}┘
         </div>
       
-      {/* Color Picker */}
-      {colorPickerState.show && colorPickerState.tool && (
-        <ColorPicker
-          currentColor={colorPickerState.tool.color ?? 0}
-          onColorSelect={handleColorSelect}
-          onClose={handleColorPickerClose}
-          position={colorPickerState.position || undefined}
-        />
-      )}
     </div>
   );
 };

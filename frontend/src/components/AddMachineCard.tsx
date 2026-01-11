@@ -158,11 +158,11 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
   if (!isActive) {
     return (
       <div className={`add-machine-card ${fullWidth ? 'full-width' : ''}`}>
-        <div className="add-machine-content">
-          <div 
-            className="add-icon clickable-icon"
-            onClick={() => setIsActive(true)}
-          >
+        <div 
+          className="add-machine-content clickable-content"
+          onClick={() => setIsActive(true)}
+        >
+          <div className="add-icon clickable-icon">
             +
           </div>
           <div className="add-text">[ ADD MACHINE ]</div>
