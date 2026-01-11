@@ -453,6 +453,29 @@ class MachinePoller:
                 logger.warning(f"Machine {self.machine.id} - Failed to fetch panel data: {e}")
                 status_data["panel"] = None
             
+            # Get macro variables from Telnet (macros #500-999)
+            try:
+                step_start = time.time()
+                macro_values = await telnet_client.get_macro_variable_range(500, 500, verbose=False)
+                step_times['get_macros'] = time.time() - step_start
+                if macro_values:
+                    # Convert list to dictionary mapping macro number to value
+                    macros_dict = {}
+                    for i, value in enumerate(macro_values):
+                        macro_num = 500 + i
+                        macros_dict[str(macro_num)] = value
+
+                    status_data["macros"] = macros_dict
+                    status_data["macros_timestamp"] = poll_timestamp.isoformat()
+                    logger.debug(f"Machine {self.machine.id} - Fetched {len(macro_values)} macro variables (#500-999) via Telnet")
+                else:
+                    status_data["macros"] = {}
+                    status_data["macros_timestamp"] = None
+            except Exception as e:
+                logger.warning(f"Machine {self.machine.id} - Failed to fetch macro variables: {e}")
+                status_data["macros"] = {}
+                status_data["macros_timestamp"] = None
+            
             # Override status to 'error' if there are active alarms (unless machine is off)
             if status_data.get("alarms") and machine_status != "off":
                 machine_status = "error"
@@ -657,6 +680,8 @@ class MachinePoller:
                 "alarms": cached_status.get("alarms", []),  # Preserve alarms
                 "tool_table": cached_status.get("tool_table"),  # Preserve tool table
                 "current_tool": cached_status.get("current_tool"),  # Preserve current tool
+                "macros": cached_status.get("macros", {}),  # Preserve macro variables
+                "macros_timestamp": cached_status.get("macros_timestamp"),  # Preserve macro timestamp
             }
 
             # Only log offline transition if we've exceeded the threshold AND haven't already logged it
