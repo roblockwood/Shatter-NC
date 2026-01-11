@@ -6,6 +6,8 @@ interface MachineStatus {
   is_online: boolean;
   status?: string;
   program_name?: string;  // Active program O-number from machine (e.g., "O2045")
+  mem_mode?: number;  // MEM mode: 0=Manual, 1=MDI, 2=Memory, 3=Edit, 4=MDI manual, 5=Memory edit
+  mem_operation_status?: number;  // MEM operation_status: 0=Reset, 1=Operation, 2=Temporary stop, 3=Block stop
   cycle_time?: string;
   power_on_hours?: string;
   counters?: Array<{ counter_number: number; count: number }>;
