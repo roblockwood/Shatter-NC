@@ -61,6 +61,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add rate limiting middleware
+from app.middleware.rate_limit import RateLimitMiddleware
+app.add_middleware(RateLimitMiddleware)
+
 
 @app.get("/")
 async def root():
@@ -107,6 +111,12 @@ machines.set_polling_service(polling_service)
 async def startup_event():
     """Run on application startup."""
     print(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+    
+    # Initialize Redis (required) - raises RuntimeError on failure
+    from app.utils.redis_client import init_redis
+    init_redis()  # Raises RuntimeError if Redis is unavailable
+    print("Redis client initialized")
+    
     print("Starting background polling service...")
     await polling_service.start()
     print("Polling service started - monitoring all enabled machines")
@@ -125,5 +135,12 @@ async def shutdown_event():
         await close_all_connections()
     except Exception as e:
         logger.warning(f"Error closing Telnet connections during shutdown: {e}")
+    
+    # Close Redis connection
+    try:
+        from app.utils.redis_client import close_redis
+        await close_redis()
+    except Exception as e:
+        logger.warning(f"Error closing Redis connection during shutdown: {e}")
     
     print("Polling service stopped")
