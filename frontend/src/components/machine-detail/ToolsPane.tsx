@@ -53,7 +53,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   units = 'in',
   machineStatus,
   memMode,
-  memOperationStatus
+  memOperationStatus: _memOperationStatus
 }) => {
   // Cache sort settings separately for each view (ATC and TABLE)
   const [sortSettings, setSortSettings] = useState<{
