@@ -28,6 +28,7 @@ export const Dashboard = () => {
     isOpen: boolean;
     type: 'online' | 'offline' | 'running' | 'machines' | null;
   }>({ isOpen: false, type: null });
+  const [isAddingMachine, setIsAddingMachine] = useState(false);
 
   const runningRef = useRef<HTMLSpanElement>(null);
   const machinesRef = useRef<HTMLSpanElement>(null);
@@ -165,8 +166,9 @@ export const Dashboard = () => {
                 isExpanded={expandedMachineId === machine.machine_id}
                 isEditing={editingMachineId === machine.machine_id}
                 canEdit={editingMachineId === null || editingMachineId === machine.machine_id}
-                pendingEditSwitch={editingMachineId === machine.machine_id && pendingEditMachineId !== null}
-                onExpand={() => setExpandedMachineId(machine.machine_id)}
+              pendingEditSwitch={editingMachineId === machine.machine_id && pendingEditMachineId !== null}
+              isAnyMachineEditing={editingMachineId !== null || isAddingMachine}
+              onExpand={() => setExpandedMachineId(machine.machine_id)}
                 onCollapse={() => {
                   setExpandedMachineId(null);
                   setScrollToStatusMachineId(null);
@@ -205,7 +207,7 @@ export const Dashboard = () => {
               />
             ))
         ) : (
-          // When no machine is expanded, show all machine cards
+          // When no machine is expanded, show all machine cards (individual cards hide themselves when editing/adding)
           machines.map((machine) => (
             <MachineCard
               key={machine.machine_id}
@@ -215,6 +217,7 @@ export const Dashboard = () => {
               isEditing={editingMachineId === machine.machine_id}
               canEdit={editingMachineId === null || editingMachineId === machine.machine_id}
               pendingEditSwitch={editingMachineId === machine.machine_id && pendingEditMachineId !== null}
+              isAnyMachineEditing={editingMachineId !== null || isAddingMachine}
               onExpand={() => setExpandedMachineId(machine.machine_id)}
               onCollapse={() => {
                 setExpandedMachineId(null);
@@ -255,9 +258,9 @@ export const Dashboard = () => {
           ))
         )}
 
-        {/* Show AddMachineCard when no machine is expanded, but hide during loading */}
-        {expandedMachineId === null && (machines.length > 0 || isConnected) && (
-          <AddMachineCard onCancel={() => {}} onAdd={addMachine} />
+        {/* Always show AddMachineCard in grid, but hide when editing or when machine is expanded */}
+        {(machines.length > 0 || isConnected) && expandedMachineId === null && editingMachineId === null && (
+          <AddMachineCard onCancel={() => {}} onAdd={addMachine} onActiveChange={setIsAddingMachine} />
         )}
       </div>
 

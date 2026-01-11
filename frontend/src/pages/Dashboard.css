@@ -40,7 +40,8 @@
   align-content: start;
 }
 
-.machine-grid .machine-card.expanded {
+.machine-grid .machine-card.expanded,
+.machine-grid .machine-card.edit-mode {
   grid-column: 1 / -1; /* Span all columns */
   grid-row: span 2;
   width: 100%;
