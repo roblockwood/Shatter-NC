@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { API_BASE_URL } from '../../config/api';
 import './AlarmPane.css';
 
 interface Alarm {
@@ -35,11 +34,11 @@ interface AlarmPaneProps {
 
 export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId, currentAlarms, onExpand, isExpanded = false }) => {
   const [alarms, setAlarms] = useState<Alarm[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [hoveredAlarm, setHoveredAlarm] = useState<Alarm | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
 
-  // Prioritize currentAlarms prop (from WebSocket) - update immediately when it changes
+  // Update from WebSocket data - websocket always provides alarms (even if empty array)
   useEffect(() => {
     if (currentAlarms !== undefined) {
       // Always update from prop, even if empty array (handles alarm clearing)
@@ -58,42 +57,12 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId, currentAlarms, 
         : [];
       setAlarms(mappedAlarms);
       setLoading(false);
-      return; // Don't fetch if we have prop data
+    } else {
+      // If currentAlarms is undefined, show empty state (websocket will provide data soon)
+      setAlarms([]);
+      setLoading(false);
     }
   }, [currentAlarms]);
-
-  // Only fetch from API if currentAlarms is not provided (fallback)
-  useEffect(() => {
-    // Skip fetch if we have currentAlarms prop (WebSocket data takes priority)
-    if (currentAlarms !== undefined) {
-      return;
-    }
-
-    const fetchAlarms = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(`${API_BASE_URL}/api/machines/${machineId}/alarms?active_only=true`);
-        if (response.ok) {
-          const data = await response.json();
-          // API returns { alarms: [...] } or just array
-          const alarmArray = Array.isArray(data) ? data : (data.alarms || []);
-          setAlarms(Array.isArray(alarmArray) ? alarmArray : []);
-        } else {
-          setAlarms([]);
-        }
-      } catch (error) {
-        console.error('Error fetching alarms:', error);
-        setAlarms([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAlarms();
-    // Refresh every 30 seconds only if not using WebSocket data
-    const interval = setInterval(fetchAlarms, 30000);
-    return () => clearInterval(interval);
-  }, [machineId, currentAlarms]);
 
   const getSeverityLevel = (alarm: Alarm): number => {
     // Use stop_level exclusively (higher number = more severe)
