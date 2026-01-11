@@ -42,9 +42,10 @@ export const buildApiUrl = (path: string): string => {
   return `${API_BASE_URL}/${cleanPath}`;
 };
 
-console.log('API Configuration:', {
-  API_BASE_URL,
-  API_BASE,
-  WS_URL,
-  hostname: window.location.hostname,
-});
+// Debug logging (remove in production)
+// console.log('API Configuration:', {
+//   API_BASE_URL,
+//   API_BASE,
+//   WS_URL,
+//   hostname: window.location.hostname,
+// });
