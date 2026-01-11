@@ -272,24 +272,16 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
   // Rely on WebSocket data - no automatic fetching to avoid Telnet conflicts
   // WebSocket provides fresh data every 5 seconds via polling service
-  // Only fetch as fallback if WebSocket data doesn't arrive within timeout
+  // Only fetch as fallback if WebSocket connection appears broken (cache >60s stale)
   useEffect(() => {
     if (machineId && toolSource) {
-      const cachedTools = toolsCache[toolSource];
       const cacheTimestamp = cacheTimestamps[toolSource];
       const now = Date.now();
-      const INITIAL_LOAD_TIMEOUT = 10000; // 10 seconds - wait for WebSocket to provide data
       const STALE_THRESHOLD = 60000; // 60 seconds - only fetch if WebSocket is clearly broken
       
       // Check if we need to fetch (fallback only):
-      // 1. No cached data AND we've waited long enough for WebSocket (10s)
-      // 2. Cache is very stale (>60s - indicating WebSocket is broken)
-      const needsFetch = (
-        (!cachedTools || cachedTools.length === 0) && 
-        cacheTimestamp && (now - cacheTimestamp) > INITIAL_LOAD_TIMEOUT
-      ) || (
-        cacheTimestamp && (now - cacheTimestamp) > STALE_THRESHOLD
-      );
+      // Cache is very stale (>60s - indicating WebSocket connection is broken)
+      const needsFetch = cacheTimestamp && (now - cacheTimestamp) > STALE_THRESHOLD;
       
       if (needsFetch) {
         // Only fetch as fallback - WebSocket should provide data
@@ -352,11 +344,8 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
             // Don't clear cache on error - keep previous data visible
           setIsLoadingTools(false);
         });
-      } else if (!cachedTools || cachedTools.length === 0) {
-        // No data yet, but haven't waited long enough - show loading while waiting for WebSocket
-        setIsLoadingTools(true);
       } else {
-        // Have cached data - no fetch needed, WebSocket will keep it fresh
+        // Have cached data or waiting for WebSocket - no fetch needed
         setIsLoadingTools(false);
       }
     }
