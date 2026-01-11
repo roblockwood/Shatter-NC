@@ -64,7 +64,9 @@
 
 .add-machine-editing {
   min-height: auto;
-  max-width: none;
+  width: 85vw;
+  max-width: 1400px;
+  padding: var(--spacing-sm);
 }
 
 .machine-name-input {
@@ -76,10 +78,10 @@
   font-size: var(--font-lg);
   font-weight: 700;
   text-transform: uppercase;
-  padding: 4px 0;
-  flex: 1;
+  padding: var(--spacing-xs) var(--spacing-sm);
   outline: none;
-  width: 100%;
+  min-width: 200px;
+  width: auto;
 }
 
 .machine-name-input::placeholder {
@@ -91,11 +93,139 @@
   text-shadow: var(--glow);
 }
 
-.machine-edit-form {
+.add-machine-editing .machine-edit-form {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: 0;
+}
+
+.add-machine-editing .form-sections-horizontal {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--spacing-sm);
-  padding: var(--spacing-md) 0;
+  margin: var(--spacing-xs) 0;
+  align-items: flex-start;
+}
+
+.add-machine-editing .network-config-section {
+  padding: var(--spacing-lg);
+  background: rgba(0, 255, 0, 0.05);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-warning);
+  align-self: start;
+}
+
+.add-machine-editing .network-config-header {
+  font-weight: bold;
+  color: var(--color-warning);
+  font-size: var(--font-md);
+  margin-bottom: var(--spacing-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.add-machine-editing .tolerances-section {
+  padding: var(--spacing-lg);
+  background: rgba(0, 255, 0, 0.05);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-warning);
+  align-self: start;
+}
+
+.add-machine-editing .tolerances-header {
+  font-weight: bold;
+  color: var(--color-warning);
+  font-size: var(--font-md);
+  margin-bottom: var(--spacing-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.add-machine-editing .form-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
+}
+
+.add-machine-editing .form-row-inline {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.add-machine-editing .tolerance-group {
+  margin-bottom: 12px;
+}
+
+.add-machine-editing .tolerance-group:last-child {
+  margin-bottom: 0;
+}
+
+.add-machine-editing .tolerance-subgroup {
+  display: inline-block;
+  vertical-align: top;
+  width: calc(50% - 8px);
+  margin-right: 16px;
+  margin-bottom: 12px;
+}
+
+.add-machine-editing .tolerance-subgroup:nth-child(2n) {
+  margin-right: 0;
+}
+
+.add-machine-editing .tolerance-field {
+  display: inline-block;
+  vertical-align: top;
+  width: 80px;
+  margin: 0 8px 4px 0;
+}
+
+.add-machine-editing .tolerance-field input {
+  padding: 4px 8px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  transition: all 0.2s ease;
+  height: 28px;
+}
+
+.add-machine-editing .tolerance-group-row {
+  margin: 4px 0;
+}
+
+.add-machine-editing .form-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+  justify-content: center;
+}
+
+.add-machine-editing .form-button {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--color-text-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  min-width: 140px;
+}
+
+/* Responsive: horizontal form sections collapse on smaller screens */
+@media (max-width: 1300px) {
+  .add-machine-editing .form-sections-horizontal {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-lg);
+  }
 }
 
 .form-error {
@@ -442,12 +572,7 @@
   display: none;
 }
 
-.tolerance-subgroup {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  margin-bottom: var(--spacing-xs);
-}
+/* Generic tolerance-subgroup rule removed - handled by specific edit mode rules */
 
 .tolerance-hint {
   font-size: var(--font-xs);
@@ -458,30 +583,24 @@
   line-height: 1.4;
 }
 
-.tolerance-group-row {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
+/* Generic tolerance-group-row rule removed - handled by specific edit mode rules */
 
-.tolerance-field {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1 1 calc(50% - 2px);
-  min-width: 0;
-}
+/* Generic tolerance-field rule removed - handled by specific edit mode rules */
 
 .tolerance-field-inline {
+  display: flex;
   flex-direction: row;
   align-items: center;
   gap: 4px;
+  width: 100%;
 }
 
 .tolerance-field-inline label {
   flex-shrink: 0;
   min-width: fit-content;
   white-space: nowrap;
+  width: 16px;
+  text-align: center;
 }
 
 .tolerance-field-inline input {

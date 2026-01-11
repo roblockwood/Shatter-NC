@@ -143,3 +143,71 @@ class PollingEvent(Base):
 
     def __repr__(self):
         return f"<PollingEvent(machine_id={self.machine_id}, time={self.time}, success={self.success})>"
+
+
+class MacroHistory(Base):
+    """Historical record of macro variables (TimescaleDB hypertable)."""
+
+    __tablename__ = "macro_history"
+
+    time = Column(DateTime(timezone=True), primary_key=True, nullable=False)
+    machine_id = Column(Integer, ForeignKey("machines.id", ondelete="CASCADE"), primary_key=True, nullable=False, index=True)
+    data = Column(JSONB, nullable=False)
+    change_type = Column(String(20), nullable=False)  # 'change' or 'heartbeat'
+
+    # Relationships
+    machine = relationship("Machine")
+
+    def __repr__(self):
+        return f"<MacroHistory(machine_id={self.machine_id}, time={self.time}, type='{self.change_type}')>"
+
+
+class ToolTableHistory(Base):
+    """Historical record of tool table snapshots (TimescaleDB hypertable)."""
+
+    __tablename__ = "tool_table_history"
+
+    time = Column(DateTime(timezone=True), primary_key=True, nullable=False)
+    machine_id = Column(Integer, ForeignKey("machines.id", ondelete="CASCADE"), primary_key=True, nullable=False, index=True)
+    data = Column(JSONB, nullable=False)
+    change_type = Column(String(20), nullable=False)  # 'change' or 'heartbeat'
+
+    # Relationships
+    machine = relationship("Machine")
+
+    def __repr__(self):
+        return f"<ToolTableHistory(machine_id={self.machine_id}, time={self.time}, type='{self.change_type}')>"
+
+
+class PanelHistory(Base):
+    """Historical record of machine panel state (TimescaleDB hypertable)."""
+
+    __tablename__ = "panel_history"
+
+    time = Column(DateTime(timezone=True), primary_key=True, nullable=False)
+    machine_id = Column(Integer, ForeignKey("machines.id", ondelete="CASCADE"), primary_key=True, nullable=False, index=True)
+    data = Column(JSONB, nullable=False)
+    change_type = Column(String(20), nullable=False)  # 'change' or 'heartbeat'
+
+    # Relationships
+    machine = relationship("Machine")
+
+    def __repr__(self):
+        return f"<PanelHistory(machine_id={self.machine_id}, time={self.time}, type='{self.change_type}')>"
+
+
+class CounterHistory(Base):
+    """Historical record of machine counters (TimescaleDB hypertable)."""
+
+    __tablename__ = "counter_history"
+
+    time = Column(DateTime(timezone=True), primary_key=True, nullable=False)
+    machine_id = Column(Integer, ForeignKey("machines.id", ondelete="CASCADE"), primary_key=True, nullable=False, index=True)
+    data = Column(JSONB, nullable=False)
+    change_type = Column(String(20), nullable=False)  # 'change' or 'heartbeat'
+
+    # Relationships
+    machine = relationship("Machine")
+
+    def __repr__(self):
+        return f"<CounterHistory(machine_id={self.machine_id}, time={self.time}, type='{self.change_type}')>"

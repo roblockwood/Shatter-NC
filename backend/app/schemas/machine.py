@@ -89,4 +89,6 @@ class MachineStatus(BaseModel):
     cycle_time_seconds: Optional[int] = None
     cutting_time_seconds: Optional[int] = None
     power_on_hours: Optional[float] = None
+    response_time_ms: Optional[int] = None
+    tool_response_time_ms: Optional[int] = None
     timestamp: datetime

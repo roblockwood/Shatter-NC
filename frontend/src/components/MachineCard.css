@@ -20,6 +20,16 @@
   cursor: default;
 }
 
+.machine-card.edit-mode {
+  width: 85vw;
+  max-width: 1400px;
+  padding: var(--spacing-sm);
+}
+
+.machine-card.hidden-when-editing {
+  display: none;
+}
+
 .machine-card-header {
   display: flex;
   justify-content: space-between;
@@ -59,13 +69,31 @@
   font-weight: 700;
   text-transform: uppercase;
   padding: var(--spacing-xs) var(--spacing-sm);
-  flex: 1;
+  min-width: 200px;
+  width: auto;
   transition: all 0.2s ease;
 }
 
 .machine-name-edit:focus {
   outline: none;
   box-shadow: 0 0 10px rgba(0, 255, 0, 0.1);
+}
+
+.machine-header-edit-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  width: 100%;
+}
+
+.machine-header-checkbox {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+.machine-header-checkbox label {
+  font-size: var(--font-sm);
+  font-weight: 600;
 }
 
 .machine-header-actions {
@@ -103,7 +131,7 @@
 .machine-edit-form {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
 }
 
 .form-error,
@@ -125,10 +153,11 @@
   border: 1px solid var(--color-success);
 }
 
-.form-row {
+.machine-card.edit-mode .form-row {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
 }
 
 .form-row label {
@@ -233,9 +262,10 @@
   color: var(--color-text-primary);
 }
 
-.form-row-inline {
+.machine-card.edit-mode .form-row-inline {
   display: flex;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
 }
 
 .form-row-inline > div {
@@ -277,6 +307,28 @@
 .form-row-inline input[type="password"],
 .form-row-inline input[type="number"] {
   color: var(--color-text-primary);
+}
+
+.input-with-metric {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-metric input {
+  flex: 1;
+  padding-right: 45px !important; /* Make room for the metric */
+}
+
+.input-metric {
+  position: absolute;
+  right: var(--spacing-sm);
+  font-size: 10px;
+  color: var(--color-text-dim);
+  pointer-events: none;
+  font-weight: 600;
+  text-transform: lowercase;
+  opacity: 0.7;
 }
 
 /* Fix autofill styling */
@@ -358,25 +410,27 @@
   cursor: pointer;
 }
 
-.form-actions {
+.machine-card.edit-mode .form-actions {
   display: flex;
   gap: var(--spacing-sm);
-  margin-top: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+  justify-content: center;
 }
 
-.form-button {
+.machine-card.edit-mode .form-button {
   flex: 1;
   background: transparent;
   border: 1px solid var(--color-text-primary);
   color: var(--color-text-primary);
   font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-md);
+  padding: var(--spacing-sm) var(--spacing-md);
   cursor: pointer;
   transition: all 0.2s ease;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 600;
+  min-width: 140px;
 }
 
 .form-button:hover:not(:disabled) {
@@ -460,6 +514,7 @@
   display: flex;
   justify-content: space-between;
   font-size: var(--font-md);
+  padding: var(--spacing-xs) 0;
 }
 
 .machine-row .label {
@@ -480,7 +535,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: var(--spacing-xs);
+  margin-top: var(--spacing-sm);
 }
 
 .machine-edit-footer-btn {
@@ -676,20 +731,20 @@
   cursor: not-allowed;
 }
 
-/* Tolerance Settings Section */
-.tolerances-section {
-  margin: var(--spacing-md) 0;
-  padding: var(--spacing-md);
+/* Tolerance Settings Section - Edit Mode Only */
+.machine-card.edit-mode .tolerances-section {
+  padding: var(--spacing-lg);
   background: rgba(0, 255, 0, 0.05);
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--color-warning);
+  align-self: start;
 }
 
-.tolerances-header {
+.machine-card.edit-mode .tolerances-header {
   font-weight: bold;
   color: var(--color-warning);
-  font-size: var(--font-sm);
-  margin-bottom: var(--spacing-sm);
+  font-size: var(--font-md);
+  margin-bottom: var(--spacing-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -700,22 +755,23 @@
   gap: var(--spacing-md);
 }
 
-.tolerance-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  margin-bottom: var(--spacing-sm);
+.machine-card.edit-mode .tolerance-group {
+  margin-bottom: 12px;
+}
+
+.machine-card.edit-mode .tolerance-group:last-child {
+  margin-bottom: 0;
 }
 
 .tolerance-group-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: 2px;
 }
 
-.tolerance-group-label {
-  font-size: var(--font-xs);
+.machine-card.edit-mode .tolerance-group-label {
+  font-size: var(--font-sm);
   color: var(--color-text-muted);
   font-weight: bold;
   text-transform: uppercase;
@@ -786,11 +842,16 @@
   display: none;
 }
 
-.tolerance-subgroup {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  margin-bottom: var(--spacing-xs);
+.machine-card.edit-mode .tolerance-subgroup {
+  display: inline-block;
+  vertical-align: top;
+  width: calc(50% - 8px);
+  margin-right: 16px;
+  margin-bottom: 12px;
+}
+
+.machine-card.edit-mode .tolerance-subgroup:nth-child(2n) {
+  margin-right: 0;
 }
 
 .tolerance-hint {
@@ -802,30 +863,31 @@
   line-height: 1.4;
 }
 
-.tolerance-group-row {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+.machine-card.edit-mode .tolerance-group-row {
+  margin: 4px 0;
 }
 
-.tolerance-field {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1 1 calc(50% - 2px);
-  min-width: 0;
+.machine-card.edit-mode .tolerance-field {
+  display: inline-block;
+  vertical-align: top;
+  width: 80px;
+  margin: 0 8px 4px 0;
 }
 
 .tolerance-field-inline {
+  display: flex;
   flex-direction: row;
   align-items: center;
   gap: 4px;
+  width: 100%;
 }
 
 .tolerance-field-inline label {
   flex-shrink: 0;
   min-width: fit-content;
   white-space: nowrap;
+  width: 16px;
+  text-align: center;
 }
 
 .tolerance-field-inline input {
@@ -839,15 +901,15 @@
   font-weight: 600;
 }
 
-.tolerance-field input {
-  padding: 3px 6px;
+.machine-card.edit-mode .tolerance-field input {
+  padding: 4px 8px;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   color: var(--color-text-primary);
   font-family: var(--font-mono);
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
   transition: all 0.2s ease;
-  height: 24px;
+  height: 28px;
 }
 
 .tolerance-field input:focus {
@@ -872,20 +934,29 @@
   -moz-appearance: textfield;
 }
 
-/* Network Configuration Section */
-.network-config-section {
-  margin: var(--spacing-md) 0;
-  padding: var(--spacing-md);
+/* Form Layout Sections - Edit Mode Only */
+.machine-card.edit-mode .form-sections-horizontal {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-sm);
+  margin: var(--spacing-xs) 0;
+  align-items: flex-start;
+}
+
+/* Network Configuration Section - Edit Mode Only */
+.machine-card.edit-mode .network-config-section {
+  padding: var(--spacing-lg);
   background: rgba(0, 255, 0, 0.05);
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--color-warning);
+  align-self: start;
 }
 
-.network-config-header {
+.machine-card.edit-mode .network-config-header {
   font-weight: bold;
   color: var(--color-warning);
-  font-size: var(--font-sm);
-  margin-bottom: var(--spacing-sm);
+  font-size: var(--font-md);
+  margin-bottom: var(--spacing-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -954,8 +1025,13 @@
   grid-column: 1 / -1;
 }
 
-/* Responsive: 2 columns -> 1 column */
-@media (max-width: 900px) {
+/* Responsive: horizontal form sections collapse on smaller screens */
+@media (max-width: 1300px) {
+  .machine-card.edit-mode .form-sections-horizontal {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-lg);
+  }
+
   .expanded-panes-top,
   .expanded-panes-bottom {
     grid-template-columns: 1fr;
