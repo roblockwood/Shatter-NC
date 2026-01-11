@@ -623,7 +623,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       
       // Refresh will trigger via WebSocket update, but we can also update cache timestamps
       // to force a refresh if WebSocket is delayed
-      setCacheTimestamps(prev => ({
+      setCacheTimestamps(() => ({
         atc: Date.now(),
         table: Date.now()
       }));
