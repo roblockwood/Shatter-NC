@@ -46,6 +46,8 @@ interface MachineStatus {
   panel?: any;  // Panel data (doors, mode, overrides)
   error?: string;
   poll_timestamp: string;
+  response_time_ms?: number;
+  tool_response_time_ms?: number;
   ip_address?: string;
   ftp_username?: string;
   ftp_password?: string;
@@ -74,11 +76,12 @@ interface MachineCardProps {
   onCancelCollapse?: () => void; // Called when user cancels the collapse
   onDelete?: (machine: MachineStatus) => void;
   scrollToStatus?: boolean; // Flag to trigger scroll to status timeline
+  isAnyMachineEditing?: boolean; // Whether any machine is currently being edited
 }
 
-export const MachineCard: React.FC<MachineCardProps> = ({ 
-  machine, 
-  editMode = false, 
+export const MachineCard: React.FC<MachineCardProps> = ({
+  machine,
+  editMode = false,
   isExpanded = false,
   isEditing: isEditingProp = false,
   canEdit = true,
@@ -92,7 +95,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   onCancelEditSwitch,
   onCancelCollapse,
   onDelete,
-  scrollToStatus = false
+  scrollToStatus = false,
+  isAnyMachineEditing = false
 }) => {
   // Debug: Log machine status for debugging name color (only log when status actually changes)
   // Removed excessive logging - uncomment if needed for debugging
@@ -757,16 +761,29 @@ export const MachineCard: React.FC<MachineCardProps> = ({
 
   // Render compact view
   return (
-    <div className={`machine-card ${isExpanded ? 'expanded' : ''}`} onClick={handleCardClick}>
+    <div className={`machine-card ${isExpanded ? 'expanded' : ''} ${isEditing ? 'edit-mode' : ''} ${isAnyMachineEditing && !isEditing ? 'hidden-when-editing' : ''}`} onClick={handleCardClick}>
       <div className="machine-card-header">
         {isEditing ? (
-          <input
-            type="text"
-            value={editMachineName}
-            onChange={(e) => setEditMachineName(e.target.value)}
-            className="machine-name-edit"
-            disabled={isEditSaving}
-          />
+          <div className="machine-header-edit-row">
+            <input
+              type="text"
+              value={editMachineName}
+              onChange={(e) => setEditMachineName(e.target.value)}
+              className="machine-name-edit"
+              disabled={isEditSaving}
+              placeholder="MACHINE NAME"
+            />
+            <div className="form-checkbox machine-header-checkbox">
+              <input
+                type="checkbox"
+                id={`enabled-${machine.machine_id}`}
+                checked={editFormData.enabled}
+                onChange={(e) => setEditFormData({ ...editFormData, enabled: e.target.checked })}
+                disabled={isEditSaving}
+              />
+              <label htmlFor={`enabled-${machine.machine_id}`}>ENABLED</label>
+            </div>
+          </div>
         ) : (
           <span className={`machine-name ${!machine.is_online ? 'text-error' : (machine.status?.toLowerCase() === 'operating' || machine.status?.toLowerCase().includes('running') ? 'text-glow' : 'text-muted')}`}>{machine.machine_name}</span>
         )}
@@ -792,136 +809,137 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             </div>
           )}
 
-          {/* Network Configuration Section */}
-          <div className="network-config-section">
-            <div className="network-config-header">NETWORK CONFIGURATION</div>
+          {/* Basic Settings */}
+          <div className="form-row-inline">
+            <div style={{ flex: '0 0 auto', minWidth: '200px' }}>
+              <label>UNITS:</label>
+              <Select
+                value={editFormData.units}
+                onChange={(value) => setEditFormData({ ...editFormData, units: value })}
+                disabled={isEditSaving}
+                options={[
+                  { value: 'in', label: 'INCHES (in)' },
+                  { value: 'mm', label: 'MILLIMETERS (mm)' },
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* Horizontal Form Sections */}
+          <div className="form-sections-horizontal">
+            {/* Network Configuration Section */}
+            <div className="network-config-section">
+              <div className="network-config-header">NETWORK CONFIGURATION</div>
+
+              <div className="form-row">
+                <label>IP:</label>
+              <input
+                type="text"
+                value={editFormData.ip_address}
+                onChange={(e) => setEditFormData({ ...editFormData, ip_address: e.target.value })}
+                placeholder="192.168.1.100"
+                disabled={isEditSaving}
+              />
+            </div>
 
             <div className="form-row">
-              <label>IP:</label>
-            <input
-              type="text"
-              value={editFormData.ip_address}
-              onChange={(e) => setEditFormData({ ...editFormData, ip_address: e.target.value })}
-              placeholder="192.168.1.100"
-              disabled={isEditSaving}
-            />
-          </div>
-
-          <div className="form-row">
-            <label>FTP USER:</label>
-            <input
-              type="text"
-              value={editFormData.ftp_username}
-              onChange={(e) => setEditFormData({ ...editFormData, ftp_username: e.target.value })}
-              placeholder="anonymous"
-              disabled={isEditSaving}
-            />
-          </div>
-
-          <div className="form-row">
-            <label>FTP PASS:</label>
-            <input
-              type="password"
-              value={editFormData.ftp_password}
-              onChange={(e) => setEditFormData({ ...editFormData, ftp_password: e.target.value })}
-              placeholder="anonymous"
-              disabled={isEditSaving}
-            />
-          </div>
-
-          <div className="form-row">
-            <label>FTP PATH:</label>
-            <input
-              type="text"
-              value={editFormData.path}
-              onChange={(e) => setEditFormData({ ...editFormData, path: e.target.value })}
-              placeholder="/program"
-              disabled={isEditSaving}
-            />
-          </div>
-
-          <div className="form-row-inline">
-            <div>
-              <label>FTP PORT:</label>
+              <label>FTP USER:</label>
               <input
-                type="number"
-                min="1"
-                max="65535"
-                value={editFormData.ftp_port}
-                onChange={(e) => setEditFormData({ ...editFormData, ftp_port: parseInt(e.target.value) })}
+                type="text"
+                value={editFormData.ftp_username}
+                onChange={(e) => setEditFormData({ ...editFormData, ftp_username: e.target.value })}
+                placeholder="anonymous"
                 disabled={isEditSaving}
               />
             </div>
-            <div>
-              <label>COM PORT:</label>
-              <input
-                type="number"
-                min="1"
-                max="65535"
-                value={10000}
-                disabled={true}
-                title="Telnet communication port (fixed at 10000)"
-              />
-            </div>
-          </div>
 
-          <div className="form-row-inline">
-            <div>
-              <label>POLL INTERVAL:</label>
+            <div className="form-row">
+              <label>FTP PASS:</label>
               <input
-                type="number"
-                min="1"
-                max="300"
-                value={editFormData.poll_interval_seconds}
-                onChange={(e) => setEditFormData({ ...editFormData, poll_interval_seconds: parseInt(e.target.value) })}
+                type="password"
+                value={editFormData.ftp_password}
+                onChange={(e) => setEditFormData({ ...editFormData, ftp_password: e.target.value })}
+                placeholder="anonymous"
                 disabled={isEditSaving}
               />
-              <span className="form-hint">seconds</span>
             </div>
-            <div>
-              <label>TOOL POLL INTERVAL:</label>
+
+            <div className="form-row">
+              <label>FTP PATH:</label>
               <input
-                type="number"
-                min="1"
-                max="600"
-                value={editFormData.tool_poll_interval_seconds}
-                onChange={(e) => setEditFormData({ ...editFormData, tool_poll_interval_seconds: parseInt(e.target.value) })}
+                type="text"
+                value={editFormData.path}
+                onChange={(e) => setEditFormData({ ...editFormData, path: e.target.value })}
+                placeholder="/program"
                 disabled={isEditSaving}
               />
-              <span className="form-hint">seconds</span>
             </div>
-          </div>
 
-          <div className="form-row-inline">
-            <div className="form-checkbox">
-              <input
-                type="checkbox"
-                id={`enabled-${machine.machine_id}`}
-                checked={editFormData.enabled}
-                onChange={(e) => setEditFormData({ ...editFormData, enabled: e.target.checked })}
-                disabled={isEditSaving}
-              />
-              <label htmlFor={`enabled-${machine.machine_id}`}>ENABLED</label>
+            <div className="form-row-inline">
+              <div>
+                <label>FTP PORT:</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="65535"
+                  value={editFormData.ftp_port}
+                  onChange={(e) => setEditFormData({ ...editFormData, ftp_port: parseInt(e.target.value) })}
+                  disabled={isEditSaving}
+                />
+              </div>
+              <div>
+                <label>COM PORT:</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="65535"
+                  value={10000}
+                  disabled={true}
+                  title="Telnet communication port (fixed at 10000)"
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="form-row">
-            <label>UNITS:</label>
-            <Select
-              value={editFormData.units}
-              onChange={(value) => setEditFormData({ ...editFormData, units: value })}
-              disabled={isEditSaving}
-              options={[
-                { value: 'in', label: 'INCHES (in)' },
-                { value: 'mm', label: 'MILLIMETERS (mm)' },
-              ]}
-            />
-          </div>
-          </div>
+            {/* Polling Intervals - Network Settings */}
+            <div className="form-row-inline">
+              <div>
+                <label>POLL INTERVAL (s):</label>
+                <div className="input-with-metric">
+                  <input
+                    type="number"
+                    min="1"
+                    max="300"
+                    value={editFormData.poll_interval_seconds}
+                    onChange={(e) => setEditFormData({ ...editFormData, poll_interval_seconds: parseInt(e.target.value) })}
+                    disabled={isEditSaving}
+                  />
+                  {machine.response_time_ms !== undefined && (
+                    <span className="input-metric">{(machine.response_time_ms / 1000).toFixed(1)}s</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label>TOOL POLL INTERVAL (s):</label>
+                <div className="input-with-metric">
+                  <input
+                    type="number"
+                    min="1"
+                    max="600"
+                    value={editFormData.tool_poll_interval_seconds}
+                    onChange={(e) => setEditFormData({ ...editFormData, tool_poll_interval_seconds: parseInt(e.target.value) })}
+                    disabled={isEditSaving}
+                  />
+                  {machine.tool_response_time_ms !== undefined && (
+                    <span className="input-metric">{(machine.tool_response_time_ms / 1000).toFixed(1)}s</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            </div>
 
-          {/* Tolerances Section */}
-          <div className="tolerances-section">
-            <div className="tolerances-header">VALIDATION TOLERANCES (inches)</div>
+            {/* Tolerances Section */}
+            <div className="tolerances-section">
+            <div className="tolerances-header">VALIDATION TOLERANCES ({editFormData.units === 'mm' ? 'mm' : 'inches'})</div>
 
             {/* Tool Tolerances Group */}
             <div className="tolerance-group">
@@ -1049,6 +1067,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 </div>
               )}
             </div>
+          </div>
           </div>
 
           {editTestResult && (
