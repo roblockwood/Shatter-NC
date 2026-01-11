@@ -109,6 +109,47 @@ class WebSocketManager:
                 status_data["current_tool"] = cached["current_tool"]
             
             self.last_status[machine_id] = status_data
+            
+            # Write to Redis cache for persistence across workers and restarts
+            try:
+                from app.utils.redis_client import get_redis
+                redis = get_redis()
+                
+                # Write full status cache (60s TTL)
+                cache_key = f"machine:status:{machine_id}"
+                redis.setex(
+                    cache_key,
+                    60,  # 60 second TTL
+                    json.dumps(status_data).encode('utf-8')
+                )
+                
+                # Write extended caches with longer TTLs for stable data
+                if "tool_table" in status_data and status_data["tool_table"] is not None:
+                    tool_table_key = f"machine:tool_table:{machine_id}"
+                    redis.setex(
+                        tool_table_key,
+                        300,  # 5 minutes
+                        json.dumps(status_data["tool_table"]).encode('utf-8')
+                    )
+                
+                if "panel" in status_data and status_data["panel"] is not None:
+                    panel_key = f"machine:panel:{machine_id}"
+                    redis.setex(
+                        panel_key,
+                        120,  # 2 minutes
+                        json.dumps(status_data["panel"]).encode('utf-8')
+                    )
+                
+                if "program_name" in status_data and status_data["program_name"] is not None:
+                    program_name_key = f"machine:program_name:{machine_id}"
+                    redis.setex(
+                        program_name_key,
+                        300,  # 5 minutes
+                        status_data["program_name"].encode('utf-8') if isinstance(status_data["program_name"], str) else str(status_data["program_name"]).encode('utf-8')
+                    )
+            except Exception as e:
+                # Log but don't fail if Redis write fails
+                logger.warning(f"Failed to write status to Redis cache for machine {machine_id}: {e}")
 
         if not self.active_connections:
             return
@@ -145,5 +186,26 @@ class WebSocketManager:
         return len(self.active_connections)
 
     def get_machine_status(self, machine_id: int) -> Dict[str, Any]:
-        """Get cached status for a specific machine."""
+        """Get cached status for a specific machine (in-memory cache)."""
+        return self.last_status.get(machine_id, {})
+    
+    def get_machine_status_from_cache(self, machine_id: int) -> Dict[str, Any]:
+        """
+        Get cached status for a specific machine from Redis (with fallback to in-memory cache).
+        
+        This method checks Redis cache first (persists across workers and restarts),
+        then falls back to in-memory cache if Redis is unavailable or has cache miss.
+        """
+        try:
+            from app.utils.redis_client import get_redis
+            import json
+            redis = get_redis()
+            cache_key = f"machine:status:{machine_id}"
+            cached_data = redis.get(cache_key)
+            if cached_data:
+                return json.loads(cached_data.decode('utf-8'))
+        except Exception as e:
+            logger.debug(f"Failed to read from Redis cache for machine {machine_id}, falling back to in-memory cache: {e}")
+        
+        # Fall back to in-memory cache
         return self.last_status.get(machine_id, {})
