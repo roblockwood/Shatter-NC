@@ -255,8 +255,8 @@ export const Dashboard = () => {
           ))
         )}
 
-        {/* Always show AddMachineCard when no machine is expanded */}
-        {expandedMachineId === null && (
+        {/* Show AddMachineCard when no machine is expanded, but hide during loading */}
+        {expandedMachineId === null && (machines.length > 0 || isConnected) && (
           <AddMachineCard onCancel={() => {}} onAdd={addMachine} />
         )}
       </div>

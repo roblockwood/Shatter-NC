@@ -28,6 +28,10 @@
   text-align: center;
 }
 
+.add-machine-content.clickable-content {
+  cursor: pointer;
+}
+
 .add-icon {
   font-size: 48px;
   color: var(--color-text-muted);
@@ -40,7 +44,7 @@
   cursor: pointer;
 }
 
-.add-icon.clickable-icon:hover {
+.add-machine-content.clickable-content:hover .add-icon.clickable-icon {
   opacity: 1;
   color: var(--color-text-primary);
   transform: scale(1.1);
@@ -51,6 +55,11 @@
   font-size: var(--font-lg);
   color: var(--color-text-primary);
   font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.add-machine-content.clickable-content:hover .add-text {
+  text-shadow: var(--glow);
 }
 
 .add-machine-editing {
