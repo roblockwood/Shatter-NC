@@ -44,12 +44,10 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
         const loadedLayout = await fetchMachineLayout(machineId);
         console.log('Loaded layout for machine', machineId, loadedLayout);
         setLayout(loadedLayout);
-        previousLayoutRef.current = loadedLayout;
       } catch (error) {
         console.error('Error loading layout:', error);
         const defaultLayout = getDefaultLayout();
         setLayout(defaultLayout);
-        previousLayoutRef.current = defaultLayout;
       } finally {
         setIsLoading(false);
       }
@@ -101,82 +99,6 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
     return result;
   }, [layout, isEditMode]);
 
-  // Track previous layout to detect width changes
-  const previousLayoutRef = React.useRef<PaneLayout[]>([]);
-
-  // Calculate smart height adjustment based on width change
-  const calculateSmartHeight = useCallback(
-    (_paneId: string, oldW: number, newW: number, oldH: number, minH: number): number => {
-      // If width decreased, content will stack - increase height
-      // If width increased, content will spread - decrease height
-      const widthRatio = newW / oldW;
-      
-      // Heuristic: height adjustment factor (more aggressive for narrower widths)
-      // When width shrinks by 50%, height might need to increase by ~40-50%
-      // When width grows by 50%, height might decrease by ~20-30%
-      let heightAdjustment = 0;
-      
-      if (widthRatio < 1) {
-        // Width decreased - need more vertical space
-        // Inverse relationship: 50% width = ~150% height needed
-        heightAdjustment = oldH * (1 - widthRatio) * 1.2;
-      } else if (widthRatio > 1) {
-        // Width increased - can reduce vertical space
-        // Less aggressive: 200% width = ~85% height needed
-        heightAdjustment = -oldH * (widthRatio - 1) * 0.3;
-      }
-      
-      const newH = Math.max(minH, Math.round(oldH + heightAdjustment));
-      return newH;
-    },
-    []
-  );
-
-  // Handle resize events with smart height adjustment
-  const handleResize = useCallback(
-    (layout: Layout[], oldItem: Layout | null, newItem: Layout | null, _placeholder: Layout | null, _e: MouseEvent, _element: HTMLElement) => {
-      if (!newItem || !oldItem || !isEditMode) return;
-      
-      // Check if width changed significantly (more than 0.5 grid units)
-      const widthChanged = Math.abs(newItem.w - oldItem.w) > 0.5;
-      
-      if (widthChanged) {
-        const currentPane = layout.find(item => item.i === newItem.i);
-        if (!currentPane) return;
-        
-        const previousPane = previousLayoutRef.current.find(p => p.i === currentPane.i);
-        if (!previousPane) return;
-        
-        // Calculate new height based on width change
-        const newH = calculateSmartHeight(
-          currentPane.i,
-          previousPane.w,
-          currentPane.w,
-          previousPane.h,
-          currentPane.minH || 1
-        );
-        
-        // Update the layout item
-        currentPane.h = newH;
-        
-        // Update our layout state
-        const updatedLayout: PaneLayout[] = layout.map(item => ({
-          i: item.i as PaneId,
-          x: item.x,
-          y: item.y,
-          w: item.w,
-          h: item.i === currentPane.i ? newH : item.h,
-          minW: item.minW,
-          minH: item.minH,
-          static: item.static,
-        }));
-        
-        setLayout(updatedLayout);
-      }
-    },
-    [isEditMode, calculateSmartHeight]
-  );
-
   // Handle layout change
   const handleLayoutChange = useCallback(
     (currentLayout: Layout[]) => {
@@ -190,9 +112,6 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
         minH: item.minH,
         static: item.static,
       }));
-
-      // Update previous layout ref for smart resizing
-      previousLayoutRef.current = newLayout;
 
       setLayout(newLayout);
       // Save when layout changes (debounced) - only if in edit mode
@@ -262,7 +181,6 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
           isResizable={isEditMode}
           draggableHandle={isEditMode ? ".drag-handle" : ""}
           onLayoutChange={handleLayoutChange}
-          onResize={handleResize}
           margin={[16, 16]}
           containerPadding={[0, 0]}
           preventCollision={false}
