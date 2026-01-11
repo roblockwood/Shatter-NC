@@ -36,7 +36,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-shatter_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       REDIS_HOST: redis
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
       DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-5}
     ports:
       - "${BACKEND_PORT:-8000}:8000"

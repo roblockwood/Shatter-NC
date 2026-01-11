@@ -3,10 +3,19 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple, List
 from sqlalchemy.orm import Session
 from app.models.machine import Machine
-from app.models.event import MachineStatusEvent, AlarmEvent, ProductionRun, PollingEvent
+from app.models.event import (
+    MachineStatusEvent, 
+    AlarmEvent, 
+    ProductionRun, 
+    PollingEvent,
+    MacroHistory,
+    ToolTableHistory,
+    PanelHistory,
+    CounterHistory
+)
 from app.clients.http_client import CNCHttpClient
 from app.db.base import SessionLocal
 
@@ -33,6 +42,18 @@ class MachinePoller:
         # Cache for program_name from mem.nc (fetched on-demand, not during regular polling)
         self.cached_program_name: Optional[str] = None
         self.program_name_fetched = False  # Track if we've fetched program_name at least once
+
+        # Extended history state tracking (Log-on-Change + Heartbeat)
+        self.last_macros: Optional[Dict[str, Any]] = None
+        self.last_tool_table: Optional[List[Dict[str, Any]]] = None
+        self.last_panel: Optional[Dict[str, Any]] = None
+        self.last_counters: Optional[List[Dict[str, Any]]] = None
+
+        # Tracking last log times for heartbeat (5-minute interval)
+        self.last_macro_log_time: Optional[datetime] = None
+        self.last_tool_table_log_time: Optional[datetime] = None
+        self.last_panel_log_time: Optional[datetime] = None
+        self.last_counter_log_time: Optional[datetime] = None
 
     async def fetch_program_name(self) -> Optional[str]:
         """
@@ -253,6 +274,7 @@ class MachinePoller:
                 # Log timing summary
                 total_time = time.time() - poll_start_time
                 total_time_ms = int(total_time * 1000)
+                tool_data["tool_response_time_ms"] = total_time_ms
                 step_summary = ", ".join([f"{step}: {time_ms * 1000:.1f}ms" for step, time_ms in 
                                          sorted(step_times.items(), key=lambda x: x[1], reverse=True) 
                                          if time_ms > 0.001])  # Only show steps > 1ms
@@ -453,6 +475,29 @@ class MachinePoller:
                 logger.warning(f"Machine {self.machine.id} - Failed to fetch panel data: {e}")
                 status_data["panel"] = None
             
+            # Get macro variables from Telnet (macros #500-999)
+            try:
+                step_start = time.time()
+                macro_values = await telnet_client.get_macro_variable_range(500, 500, verbose=False)
+                step_times['get_macros'] = time.time() - step_start
+                if macro_values:
+                    # Convert list to dictionary mapping macro number to value
+                    macros_dict = {}
+                    for i, value in enumerate(macro_values):
+                        macro_num = 500 + i
+                        macros_dict[str(macro_num)] = value
+
+                    status_data["macros"] = macros_dict
+                    status_data["macros_timestamp"] = poll_timestamp.isoformat()
+                    logger.debug(f"Machine {self.machine.id} - Fetched {len(macro_values)} macro variables (#500-999) via Telnet")
+                else:
+                    status_data["macros"] = {}
+                    status_data["macros_timestamp"] = None
+            except Exception as e:
+                logger.warning(f"Machine {self.machine.id} - Failed to fetch macro variables: {e}")
+                status_data["macros"] = {}
+                status_data["macros_timestamp"] = None
+            
             # Override status to 'error' if there are active alarms (unless machine is off)
             if status_data.get("alarms") and machine_status != "off":
                 machine_status = "error"
@@ -493,6 +538,8 @@ class MachinePoller:
                         status_data["tool_data_timestamp"] = cached_data["tools_timestamp"]  # Alias for clarity
                     if "tool_table_timestamp" in cached_data:
                         status_data["tool_table_timestamp"] = cached_data["tool_table_timestamp"]
+                    if "tool_response_time_ms" in cached_data:
+                        status_data["tool_response_time_ms"] = cached_data["tool_response_time_ms"]
                 else:
                     # Full cache miss - try tool table cache directly
                     tool_table_key = f"machine:tool_table:{self.machine.id}"
@@ -514,6 +561,8 @@ class MachinePoller:
                             status_data["tool_data_timestamp"] = ws_status["tools_timestamp"]
                     if "tool_table_timestamp" in ws_status:
                         status_data["tool_table_timestamp"] = ws_status["tool_table_timestamp"]
+                    if "tool_response_time_ms" in ws_status:
+                        status_data["tool_response_time_ms"] = ws_status["tool_response_time_ms"]
             except Exception as e:
                 # Redis unavailable - fall back to websocket manager cache
                 if 'load_tool_cache' not in step_times:
@@ -532,6 +581,8 @@ class MachinePoller:
                         status_data["tool_data_timestamp"] = ws_status["tools_timestamp"]
                     if "tool_table_timestamp" in ws_status:
                         status_data["tool_table_timestamp"] = ws_status["tool_table_timestamp"]
+                    if "tool_response_time_ms" in ws_status:
+                        status_data["tool_response_time_ms"] = ws_status["tool_response_time_ms"]
 
             # Program name is already set from MONTR data (operation_program_no)
             # No need to fetch from MEM separately - MONTR is more reliable
@@ -657,6 +708,9 @@ class MachinePoller:
                 "alarms": cached_status.get("alarms", []),  # Preserve alarms
                 "tool_table": cached_status.get("tool_table"),  # Preserve tool table
                 "current_tool": cached_status.get("current_tool"),  # Preserve current tool
+                "macros": cached_status.get("macros", {}),  # Preserve macro variables
+                "macros_timestamp": cached_status.get("macros_timestamp"),  # Preserve macro timestamp
+                "tool_response_time_ms": cached_status.get("tool_response_time_ms"),  # Preserve tool polling metric
             }
 
             # Only log offline transition if we've exceeded the threshold AND haven't already logged it
@@ -753,6 +807,10 @@ class MachinePoller:
             # Log production run start/end (Q4)
             await self._log_production_run(db, status_data)
 
+            # Log extended history (macros, tool table, panel, counters)
+            if success:
+                await self._log_extended_history(db, status_data, poll_timestamp)
+
             db.commit()
         except Exception as e:
             logger.error(f"Error logging events for machine {self.machine.id}: {e}")
@@ -784,6 +842,107 @@ class MachinePoller:
         except Exception as e:
             logger.error(f"Failed to log status event: {e}")
             raise
+
+    async def _log_extended_history(self, db: Session, status_data: Dict[str, Any], poll_timestamp: datetime):
+        """
+        Log extended history data (macros, tool table, panel, counters)
+        using a hybrid Log-on-Change + Heartbeat approach.
+        """
+        try:
+            # 1. Macro History
+            macros = status_data.get("macros")
+            if macros:
+                should_log, change_type = self._should_log_history(
+                    macros, self.last_macros, self.last_macro_log_time, poll_timestamp
+                )
+                if should_log:
+                    event = MacroHistory(
+                        time=poll_timestamp,
+                        machine_id=self.machine.id,
+                        data=macros,
+                        change_type=change_type
+                    )
+                    db.add(event)
+                    self.last_macros = macros
+                    self.last_macro_log_time = poll_timestamp
+                    logger.debug(f"Logged macro history ({change_type}) for machine {self.machine.id}")
+
+            # 2. Tool Table History
+            tool_table = status_data.get("tool_table")
+            if tool_table:
+                should_log, change_type = self._should_log_history(
+                    tool_table, self.last_tool_table, self.last_tool_table_log_time, poll_timestamp
+                )
+                if should_log:
+                    event = ToolTableHistory(
+                        time=poll_timestamp,
+                        machine_id=self.machine.id,
+                        data=tool_table,
+                        change_type=change_type
+                    )
+                    db.add(event)
+                    self.last_tool_table = tool_table
+                    self.last_tool_table_log_time = poll_timestamp
+                    logger.debug(f"Logged tool table history ({change_type}) for machine {self.machine.id}")
+
+            # 3. Panel History
+            panel = status_data.get("panel")
+            if panel:
+                should_log, change_type = self._should_log_history(
+                    panel, self.last_panel, self.last_panel_log_time, poll_timestamp
+                )
+                if should_log:
+                    event = PanelHistory(
+                        time=poll_timestamp,
+                        machine_id=self.machine.id,
+                        data=panel,
+                        change_type=change_type
+                    )
+                    db.add(event)
+                    self.last_panel = panel
+                    self.last_panel_log_time = poll_timestamp
+                    logger.debug(f"Logged panel history ({change_type}) for machine {self.machine.id}")
+
+            # 4. Counter History
+            counters = status_data.get("counters")
+            if counters:
+                should_log, change_type = self._should_log_history(
+                    counters, self.last_counters, self.last_counter_log_time, poll_timestamp
+                )
+                if should_log:
+                    event = CounterHistory(
+                        time=poll_timestamp,
+                        machine_id=self.machine.id,
+                        data=counters,
+                        change_type=change_type
+                    )
+                    db.add(event)
+                    self.last_counters = counters
+                    self.last_counter_log_time = poll_timestamp
+                    logger.debug(f"Logged counter history ({change_type}) for machine {self.machine.id}")
+
+        except Exception as e:
+            logger.error(f"Failed to log extended history for machine {self.machine.id}: {e}")
+
+    def _should_log_history(self, current_data: Any, last_data: Any, last_log_time: Optional[datetime], current_time: datetime) -> Tuple[bool, str]:
+        """
+        Determine if history data should be logged based on change detection or heartbeat.
+        Returns (should_log, change_type)
+        """
+        # 1. Log immediately if data has changed
+        if current_data != last_data:
+            return True, "change"
+
+        # 2. Log heartbeat if interval has passed
+        if last_log_time is not None:
+            time_since_last_log = current_time - last_log_time
+            if time_since_last_log >= timedelta(minutes=self.heartbeat_interval_minutes):
+                return True, "heartbeat"
+        else:
+            # First time seeing this data, log it as heartbeat
+            return True, "heartbeat"
+
+        return False, ""
 
     async def _log_offline_heartbeat(self, status_data: Dict[str, Any], poll_timestamp: datetime):
         """Log offline heartbeat status event (status="off", previous_status="off")."""
