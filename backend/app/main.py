@@ -112,10 +112,9 @@ async def startup_event():
     """Run on application startup."""
     print(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     
-    # Initialize Redis (required)
+    # Initialize Redis (required) - raises RuntimeError on failure
     from app.utils.redis_client import init_redis
-    if not init_redis():
-        raise RuntimeError("Failed to initialize Redis - application cannot start")
+    init_redis()  # Raises RuntimeError if Redis is unavailable
     print("Redis client initialized")
     
     print("Starting background polling service...")
