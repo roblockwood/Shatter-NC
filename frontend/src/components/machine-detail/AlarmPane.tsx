@@ -158,143 +158,149 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId: _machineId, cur
         ) : !Array.isArray(alarms) || alarms.length === 0 ? (
           <div className="alarm-empty">NO ACTIVE ALARMS</div>
         ) : (
-          <div className="alarm-list-grid">
-            {/* Highest Severity Column (Level 4-5) */}
-            <div className="alarm-column">
-              {visibleHighest.length > 0 ? (
-                visibleHighest.map((alarm, idx) => {
-                  const severityColor = getSeverityColor(alarm);
-                  const displayText = alarm.description || alarm.message || alarm.code;
-                  return (
-                    <div key={idx} className="alarm-item">
-                      <div 
-                        className="alarm-item-header"
-                        style={{ color: severityColor, '--alarm-color': severityColor } as React.CSSProperties}
-                      >
-                        <span className="alarm-severity" style={{ color: severityColor }}>
-                          {getSeverityIndicator(alarm)}
-                        </span>
-                        <span 
-                          className="alarm-code" 
-                          style={{ 
-                            color: severityColor, 
-                            cursor: (alarm.cause || alarm.solution) ? 'help' : 'default' 
-                          }}
-                          onMouseEnter={(e) => {
-                            if (alarm.cause || alarm.solution) {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setHoveredAlarm(alarm);
-                              // Position tooltip above the alarm code, centered
-                              // Adjust if tooltip would go off-screen
-                              const tooltipWidth = 300; // Approximate tooltip width
-                              let x = rect.left + rect.width / 2;
-                              const minX = tooltipWidth / 2;
-                              const maxX = window.innerWidth - tooltipWidth / 2;
-                              x = Math.max(minX, Math.min(maxX, x));
-                              
-                              setTooltipPosition({
-                                x: x,
-                                y: rect.top,
-                              });
-                            }
-                          }}
-                          onMouseLeave={() => {
-                            setHoveredAlarm(null);
-                            setTooltipPosition(null);
-                          }}
+          <>
+            {/* Highest Severity Section (Level 4-5) */}
+            <div className="alarm-section">
+              <div className="alarm-section-title">CRITICAL ALARMS</div>
+              <div className="alarm-list">
+                {visibleHighest.length > 0 ? (
+                  visibleHighest.map((alarm, idx) => {
+                    const severityColor = getSeverityColor(alarm);
+                    const displayText = alarm.description || alarm.message || alarm.code;
+                    return (
+                      <div key={idx} className="alarm-item">
+                        <div 
+                          className="alarm-item-header"
+                          style={{ color: severityColor, '--alarm-color': severityColor } as React.CSSProperties}
                         >
-                          {alarm.code}
-                        </span>
-                        <span className="alarm-message-inline" style={{ color: severityColor }}>{displayText}</span>
+                          <span className="alarm-severity" style={{ color: severityColor }}>
+                            {getSeverityIndicator(alarm)}
+                          </span>
+                          <span 
+                            className="alarm-code" 
+                            style={{ 
+                              color: severityColor, 
+                              cursor: (alarm.cause || alarm.solution) ? 'help' : 'default' 
+                            }}
+                            onMouseEnter={(e) => {
+                              if (alarm.cause || alarm.solution) {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setHoveredAlarm(alarm);
+                                // Position tooltip above the alarm code, centered
+                                // Adjust if tooltip would go off-screen
+                                const tooltipWidth = 300; // Approximate tooltip width
+                                let x = rect.left + rect.width / 2;
+                                const minX = tooltipWidth / 2;
+                                const maxX = window.innerWidth - tooltipWidth / 2;
+                                x = Math.max(minX, Math.min(maxX, x));
+                                
+                                setTooltipPosition({
+                                  x: x,
+                                  y: rect.top,
+                                });
+                              }
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredAlarm(null);
+                              setTooltipPosition(null);
+                            }}
+                          >
+                            {alarm.code}
+                          </span>
+                          <span className="alarm-message-inline" style={{ color: severityColor }}>{displayText}</span>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="alarm-column-empty">NO CRITICAL ALARMS</div>
-              )}
-              {hasMoreHighest && onExpand && (
-                <div 
-                  className="alarm-more" 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onExpand();
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  +{highestSeverityAlarms.length - maxPerColumn} MORE
-                </div>
-              )}
+                    );
+                  })
+                ) : (
+                  <div className="alarm-section-empty">NO CRITICAL ALARMS</div>
+                )}
+                {hasMoreHighest && onExpand && (
+                  <div 
+                    className="alarm-more" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onExpand();
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    +{highestSeverityAlarms.length - maxPerColumn} MORE
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Other Alarms Column (Level 1-3) */}
-            <div className="alarm-column">
-              {visibleOthers.length > 0 ? (
-                visibleOthers.map((alarm, idx) => {
-                  const severityColor = getSeverityColor(alarm);
-                  const displayText = alarm.description || alarm.message || alarm.code;
-                  return (
-                    <div key={idx} className="alarm-item">
-                      <div 
-                        className="alarm-item-header"
-                        style={{ color: severityColor, '--alarm-color': severityColor } as React.CSSProperties}
-                      >
-                        <span className="alarm-severity" style={{ color: severityColor }}>
-                          {getSeverityIndicator(alarm)}
-                        </span>
-                        <span 
-                          className="alarm-code" 
-                          style={{ 
-                            color: severityColor, 
-                            cursor: (alarm.cause || alarm.solution) ? 'help' : 'default' 
-                          }}
-                          onMouseEnter={(e) => {
-                            if (alarm.cause || alarm.solution) {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setHoveredAlarm(alarm);
-                              // Position tooltip above the alarm code, centered
-                              // Adjust if tooltip would go off-screen
-                              const tooltipWidth = 300; // Approximate tooltip width
-                              let x = rect.left + rect.width / 2;
-                              const minX = tooltipWidth / 2;
-                              const maxX = window.innerWidth - tooltipWidth / 2;
-                              x = Math.max(minX, Math.min(maxX, x));
-                              
-                              setTooltipPosition({
-                                x: x,
-                                y: rect.top,
-                              });
-                            }
-                          }}
-                          onMouseLeave={() => {
-                            setHoveredAlarm(null);
-                            setTooltipPosition(null);
-                          }}
+            {/* Other Alarms Section (Level 1-3) */}
+            <div className="alarm-section">
+              <div className="alarm-section-title">WARNING/INFO ALARMS</div>
+              <div className="alarm-list">
+                {visibleOthers.length > 0 ? (
+                  visibleOthers.map((alarm, idx) => {
+                    const severityColor = getSeverityColor(alarm);
+                    const displayText = alarm.description || alarm.message || alarm.code;
+                    return (
+                      <div key={idx} className="alarm-item">
+                        <div 
+                          className="alarm-item-header"
+                          style={{ color: severityColor, '--alarm-color': severityColor } as React.CSSProperties}
                         >
-                          {alarm.code}
-                        </span>
-                        <span className="alarm-message-inline" style={{ color: severityColor }}>{displayText}</span>
+                          <span className="alarm-severity" style={{ color: severityColor }}>
+                            {getSeverityIndicator(alarm)}
+                          </span>
+                          <span 
+                            className="alarm-code" 
+                            style={{ 
+                              color: severityColor, 
+                              cursor: (alarm.cause || alarm.solution) ? 'help' : 'default' 
+                            }}
+                            onMouseEnter={(e) => {
+                              if (alarm.cause || alarm.solution) {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setHoveredAlarm(alarm);
+                                // Position tooltip above the alarm code, centered
+                                // Adjust if tooltip would go off-screen
+                                const tooltipWidth = 300; // Approximate tooltip width
+                                let x = rect.left + rect.width / 2;
+                                const minX = tooltipWidth / 2;
+                                const maxX = window.innerWidth - tooltipWidth / 2;
+                                x = Math.max(minX, Math.min(maxX, x));
+                                
+                                setTooltipPosition({
+                                  x: x,
+                                  y: rect.top,
+                                });
+                              }
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredAlarm(null);
+                              setTooltipPosition(null);
+                            }}
+                          >
+                            {alarm.code}
+                          </span>
+                          <span className="alarm-message-inline" style={{ color: severityColor }}>{displayText}</span>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="alarm-column-empty">NO WARNING/INFO ALARMS</div>
-              )}
-              {hasMoreOthers && onExpand && (
-                <div 
-                  className="alarm-more" 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onExpand();
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  +{otherAlarms.length - maxPerColumn} MORE
-                </div>
-              )}
+                    );
+                  })
+                ) : (
+                  <div className="alarm-section-empty">NO WARNING/INFO ALARMS</div>
+                )}
+                {hasMoreOthers && onExpand && (
+                  <div 
+                    className="alarm-more" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onExpand();
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    +{otherAlarms.length - maxPerColumn} MORE
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
       <div className="terminal-box-footer">
