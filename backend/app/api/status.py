@@ -860,8 +860,20 @@ async def batch_change_tool_colors(
             )
 
     try:
-        # Frontend performs validation using cached WebSocket data
-        # No backend validation needed - machine will reject with error codes if unsafe
+        # Validate machine state before operation (same validation as single endpoint)
+        from app.services.machine_state_validator import MachineStateValidator
+        validator = MachineStateValidator()
+        is_safe, error_message, status_data = await validator.validate_safe_for_write(
+            machine_id=machine_id,
+            operation_type="tool_color",
+            db=db
+        )
+        
+        if not is_safe:
+            raise HTTPException(
+                status_code=http_status.HTTP_409_CONFLICT,
+                detail=error_message or "Machine is not in a safe state for this operation",
+            )
         
         from app.clients.telnet_client import CNCTelnetClient, get_or_create_connection
         from app.services.audit_logger import AuditLogger
