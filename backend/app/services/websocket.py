@@ -108,6 +108,12 @@ class WebSocketManager:
             if "current_tool" in cached and "current_tool" not in status_data:
                 status_data["current_tool"] = cached["current_tool"]
             
+            # Preserve macro variables from cache if new status doesn't have it
+            if "macros" in cached and "macros" not in status_data:
+                status_data["macros"] = cached["macros"]
+            if "macros_timestamp" in cached and "macros_timestamp" not in status_data:
+                status_data["macros_timestamp"] = cached["macros_timestamp"]
+            
             self.last_status[machine_id] = status_data
             
             # Write to Redis cache for persistence across workers and restarts
