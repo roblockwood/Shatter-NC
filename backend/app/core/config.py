@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Redis
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
+    REDIS_PASSWORD: Optional[str] = None
 
     # CNC Polling
     DEFAULT_POLL_INTERVAL: int = 5  # seconds
@@ -58,6 +59,8 @@ class Settings(BaseSettings):
     @property
     def redis_url(self) -> str:
         """Construct Redis URL."""
+        if self.REDIS_PASSWORD:
+            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}"
 
     class Config:

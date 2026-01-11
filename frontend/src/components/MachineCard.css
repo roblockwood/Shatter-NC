@@ -932,7 +932,6 @@
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  min-height: 100vh;
 }
 
 /* Legacy grid classes - kept for backwards compatibility but not used by LayoutManager */
