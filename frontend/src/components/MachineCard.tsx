@@ -365,6 +365,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         // http_port removed - Telnet port is always 10000
         path: machine.path !== undefined && machine.path !== null ? machine.path : '/program',
         poll_interval_seconds: machine.poll_interval_seconds || 5,
+        tool_poll_interval_seconds: (machine as any).tool_poll_interval_seconds || 30,
         enabled: machine.enabled !== false,
         diameter_tolerance: (machine as any).diameter_tolerance || 0.010,
         length_tolerance_plus: (machine as any).length_tolerance_plus || 0.02,
