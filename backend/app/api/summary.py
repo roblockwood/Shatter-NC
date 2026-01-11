@@ -332,8 +332,8 @@ def get_running_summary(
         total_run_time = float(row.total_run_time_seconds)
         run_percentage = (total_run_time / time_range_seconds * 100) if time_range_seconds > 0 else 0.0
 
-        # Get current status from WebSocket cache
-        cached_status = websocket_manager.get_machine_status(row.machine_id) if websocket_manager else None
+        # Get current status from Redis cache (with fallback to in-memory cache)
+        cached_status = websocket_manager.get_machine_status_from_cache(row.machine_id) if websocket_manager else {}
         current_status = cached_status.get("status") if cached_status else None
 
         # Get status history for the time range (filter out 'off' status)

@@ -331,7 +331,7 @@ database_url = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST
 
 ### Redis Configuration
 
-Redis server settings for caching and task queues (optional).
+Redis server settings for distributed locks, caching, and rate limiting (required).
 
 #### REDIS_HOST
 
@@ -386,11 +386,17 @@ REDIS_PASSWORD=secure_redis_password_here
 **Constructed Property:**
 
 ```python
+# Without password:
 redis_url = f"redis://{REDIS_HOST}:{REDIS_PORT}"
-# With password: redis://:password@host:port
+
+# With password:
+redis_url = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}"
 ```
 
-**Note:** Redis is optional. If not available, caching features will be disabled.
+**Note:** Redis is required. The application will fail to start if Redis is unavailable. Redis is used for:
+- Distributed locks (coordinates Telnet operations across multiple worker processes)
+- Machine status caching (persists across restarts and workers)
+- Rate limiting (API endpoints and Telnet commands)
 
 ---
 
@@ -657,8 +663,11 @@ DEBUG=false            # Can enable for troubleshooting
 # Database
 POSTGRES_PASSWORD=changeme_secure_password  # Simple password
 
-# Redis (optional)
+# Redis Configuration (required - used for distributed locks, caching, and rate limiting)
 REDIS_HOST=redis
+REDIS_PORT=6379
+# REDIS_PASSWORD - Optional for development, required for production with authentication
+# REDIS_PASSWORD=your_redis_password_here
 
 # Security
 # SECRET_KEY not required (auth disabled)
@@ -961,11 +970,11 @@ redis.exceptions.ConnectionError: Error connecting to Redis
 
 **Solutions:**
 
-1. **Redis optional - ignore if not using caching**
-   - Application will run without Redis
-   - Caching features disabled
+1. **Redis is required - application will not start without it**
+   - The backend will fail to initialize if Redis is unavailable
+   - Check Redis container is running: `docker-compose ps redis`
 
-2. **Start Redis if needed**
+2. **Start Redis if not running**
    ```bash
    docker-compose up -d redis
    ```
