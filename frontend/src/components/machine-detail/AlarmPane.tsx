@@ -32,7 +32,7 @@ interface AlarmPaneProps {
   isExpanded?: boolean;
 }
 
-export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId, currentAlarms, onExpand, isExpanded = false }) => {
+export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId: _machineId, currentAlarms, onExpand, isExpanded = false }) => {
   const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [loading, setLoading] = useState(false);
   const [hoveredAlarm, setHoveredAlarm] = useState<Alarm | null>(null);
