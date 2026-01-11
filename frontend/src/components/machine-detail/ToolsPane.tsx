@@ -88,6 +88,8 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     table: null
   });
   const [toolsSummary, setToolsSummary] = useState<Array<{ tool_number: number; description: string }>>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false); // Track background refresh state
+  const [refreshing, setRefreshing] = useState(false); // Track refresh button state
   
   // Track pending changes (changes not yet pushed to server)
   const [pendingChanges, setPendingChanges] = useState<Map<string, { tool: Tool; field: string; oldValue: any; newValue: any; operationType: ToolModificationOperationType }>>(new Map());
@@ -608,6 +610,37 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     setPendingChanges(new Map());
   };
 
+  const handleRefresh = async () => {
+    if (!machineId || refreshing) return;
+    
+    try {
+      setRefreshing(true);
+      setIsRefreshing(true);
+      
+      // Import and call the refresh API
+      const { refreshToolData } = await import('../../api/machines');
+      await refreshToolData(machineId);
+      
+      // Refresh will trigger via WebSocket update, but we can also update cache timestamps
+      // to force a refresh if WebSocket is delayed
+      setCacheTimestamps(prev => ({
+        atc: Date.now(),
+        table: Date.now()
+      }));
+      
+    } catch (error) {
+      console.error('Error refreshing tool data:', error);
+      // Show error but don't block - WebSocket will eventually update
+    } finally {
+      // Keep refreshing state true briefly to show indicator
+      // It will be reset when WebSocket data arrives
+      setTimeout(() => {
+        setRefreshing(false);
+        setIsRefreshing(false);
+      }, 500);
+    }
+  };
+
   const isCurrentTool = (toolNum: number) => {
     return currentTool !== undefined && currentTool === toolNum;
   };
@@ -770,30 +803,50 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         <div className="terminal-box-top">
           <div className="terminal-box-title-row">
             <span>┌─ TOOLS ({tools.length}) {'─'.repeat(Math.max(0, 15 - 8 - String(tools.length).length))}</span>
-            {machineId && (
-              <div className="tools-source-toggle" onClick={(e) => e.stopPropagation()}>
-                <button
-                  className={`source-toggle-btn ${toolSource === 'atc' ? 'active' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setToolSource('atc');
-                  }}
-                  title="ATC Table"
-                >
-                  ATC
-                </button>
-                <button
-                  className={`source-toggle-btn ${toolSource === 'table' ? 'active' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setToolSource('table');
-                  }}
-                  title="Tool Table"
-                >
-                  TABLE
-                </button>
-              </div>
+            {isRefreshing && (
+              <span className="refresh-indicator" style={{ marginLeft: '8px', color: '#888', fontSize: '12px' }} title="Refreshing tool data...">
+                ⟳
+              </span>
             )}
+            <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+              {machineId && (
+                <button 
+                  className="expand-toggle"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRefresh();
+                  }}
+                  disabled={refreshing}
+                  title="Refresh tool data"
+                >
+                  {refreshing ? '[...]' : '[REFRESH]'}
+                </button>
+              )}
+              {machineId && (
+                <div className="tools-source-toggle" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className={`source-toggle-btn ${toolSource === 'atc' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setToolSource('atc');
+                    }}
+                    title="ATC Table"
+                  >
+                    ATC
+                  </button>
+                  <button
+                    className={`source-toggle-btn ${toolSource === 'table' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setToolSource('table');
+                    }}
+                    title="Tool Table"
+                  >
+                    TABLE
+                  </button>
+                </div>
+              )}
+            </div>
             {pendingChanges.size > 0 && (
               <div className="tools-pending-actions" onClick={(e) => e.stopPropagation()}>
                 <button
