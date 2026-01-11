@@ -20,7 +20,7 @@ def get_redis() -> Redis:
     return _redis_client
 
 
-async def get_async_redis() -> AsyncRedis:
+def get_async_redis() -> AsyncRedis:
     """Get asynchronous Redis client (singleton) for locks and async operations."""
     global _async_redis_client
     if _async_redis_client is None:
