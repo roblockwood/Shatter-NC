@@ -416,8 +416,50 @@ class MachinePoller:
                 error_message=str(e)
             ))
 
-            # Get cached status from WebSocket manager to preserve data like panel, alarms, etc.
-            cached_status = self.websocket_manager.get_machine_status(self.machine.id) if self.websocket_manager else {}
+            # Get cached status from Redis first (persists across workers and restarts)
+            # Fall back to WebSocket manager cache if Redis is unavailable or has cache miss
+            cached_status = {}
+            try:
+                from app.utils.redis_client import get_redis
+                import json
+                redis = get_redis()
+                cache_key = f"machine:status:{self.machine.id}"
+                cached_data = redis.get(cache_key)
+                if cached_data:
+                    cached_status = json.loads(cached_data.decode('utf-8'))
+                else:
+                    # Main status cache miss - try extended caches for older data
+                    # Try tool_table cache (5min TTL)
+                    tool_table_key = f"machine:tool_table:{self.machine.id}"
+                    tool_table_data = redis.get(tool_table_key)
+                    if tool_table_data:
+                        cached_status["tool_table"] = json.loads(tool_table_data.decode('utf-8'))
+                    
+                    # Try panel cache (2min TTL)
+                    panel_key = f"machine:panel:{self.machine.id}"
+                    panel_data = redis.get(panel_key)
+                    if panel_data:
+                        cached_status["panel"] = json.loads(panel_data.decode('utf-8'))
+                    
+                    # Try program_name cache (5min TTL)
+                    program_name_key = f"machine:program_name:{self.machine.id}"
+                    program_name_data = redis.get(program_name_key)
+                    if program_name_data:
+                        cached_status["program_name"] = program_name_data.decode('utf-8')
+                    
+                    # Still fall back to websocket_manager for any missing data
+                    ws_status = self.websocket_manager.get_machine_status(self.machine.id) if self.websocket_manager else {}
+                    if not cached_status:
+                        cached_status = ws_status
+                    else:
+                        # Merge with websocket_manager data (prefer cached_status, fill gaps from ws_status)
+                        for key, value in ws_status.items():
+                            if key not in cached_status or cached_status[key] is None:
+                                cached_status[key] = value
+            except Exception as e:
+                # Redis unavailable - fall back to websocket_manager
+                logger.debug(f"Failed to read from Redis cache for machine {self.machine.id}, falling back to websocket_manager: {e}")
+                cached_status = self.websocket_manager.get_machine_status(self.machine.id) if self.websocket_manager else {}
             
             # Create offline status data for logging, preserving cached data
             offline_status_data = {
