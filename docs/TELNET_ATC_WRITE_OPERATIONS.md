@@ -9,8 +9,8 @@ This document describes how to edit ATC (Automatic Tool Changer) pot assignments
 - **Phase 6: Enable Writes** - ✅ **IN PROGRESS** (ATC tool color changes implemented)
 - **Reference Implementation**: Available in `brother_cnc_export/brother_cnc_client.py`
 - **Backend Implementation**: `CHGMAGC` implemented in `backend/app/clients/telnet_client.py`
-- **Semaphore Serialization**: All read/write operations use per-machine semaphore locks to prevent conflicts
-- **Connection Pooling**: Persistent connections are reused across operations for improved stability and reliability
+- **Write Operation Locks**: Write operations use Redis locks for per-machine serialization
+- **Per-Poll Connections**: Fresh connections created for each operation with automatic cleanup
 
 ## ATC Write Commands
 
