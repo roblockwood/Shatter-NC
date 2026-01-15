@@ -1218,12 +1218,28 @@ class PollingService:
             results = await asyncio.gather(*poll_tasks, return_exceptions=True)
 
             # Broadcast results to WebSocket clients
-            for result in results:
+            for i, result in enumerate(results):
+                machine = machines_to_poll[i]
+
                 if isinstance(result, Exception):
-                    logger.error(f"Polling task failed: {result}")
+                    logger.error(f"Polling task failed for machine {machine.id} ({machine.name}): {result}")
+
+                    # Create offline status for failed polling
+                    offline_status = {
+                        "machine_id": machine.id,
+                        "machine_name": machine.name,
+                        "is_online": False,
+                        "status": "off",
+                        "error": str(result),
+                        "poll_timestamp": datetime.utcnow().isoformat(),
+                        "response_time_ms": 0,  # Failed poll
+                    }
+
+                    # Broadcast offline status
+                    await self.websocket_manager.broadcast_status(offline_status)
                     continue
 
-                # Broadcast to all connected clients
+                # Broadcast successful poll results
                 await self.websocket_manager.broadcast_status(result)
 
             logger.debug(f"Polled {len(machines_to_poll)} of {len(machines)} machines (per-machine intervals)")
