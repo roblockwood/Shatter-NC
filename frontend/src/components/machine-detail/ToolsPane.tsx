@@ -249,7 +249,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         }));
       }
     }
-  }, [initialTools, initialToolTable, machineId, isPushingChanges, pendingChanges]);
+  }, [initialTools, initialToolTable, machineId, isPushingChanges]);
   const navigate = useNavigate();
   const { isBetaMode } = useBetaMode();
 
