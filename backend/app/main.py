@@ -136,13 +136,6 @@ async def shutdown_event():
     print("Stopping background polling service...")
     await polling_service.stop()
     
-    # Ensure all Telnet connections are closed (backup cleanup)
-    try:
-        from app.clients.telnet_client import close_all_connections
-        await close_all_connections()
-    except Exception as e:
-        logger.warning(f"Error closing Telnet connections during shutdown: {e}")
-    
     # Close Redis connection
     try:
         from app.utils.redis_client import close_redis

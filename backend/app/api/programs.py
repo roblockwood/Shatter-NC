@@ -183,12 +183,13 @@ async def validate_program(
     # Phase 5: Using Telnet for data reads (FTP deprecated for data, kept only for file transfers)
     position_data = None
     wcs_fetch_failed = False
+    telnet_client = None
     try:
-        from app.clients.telnet_client import get_or_create_connection
+        from app.clients.telnet_client import create_fresh_connection
         from app.parsers.posni_parser_v2 import parse_posni_v2
-        
-        # Use pooled connection (reused across operations)
-        telnet_client = await get_or_create_connection(
+
+        # Create fresh connection
+        telnet_client = await create_fresh_connection(
             ip_address=machine.ip_address,
             port=10000,
             timeout=10
@@ -200,7 +201,7 @@ async def validate_program(
         if not position_data:
             raise Exception("Could not retrieve POSNI1.NC/POSNM1.NC from machine via Telnet (file may not exist or Telnet connection failed)")
         
-        # Connection stays in pool - don't disconnect
+        # Connection is cleaned up automatically
     except Exception as e:
         # Log Telnet error but don't prevent other validation
         wcs_fetch_failed = True
@@ -209,6 +210,9 @@ async def validate_program(
         warnings.append(error_msg)
         print(f"WCS Fetch Error: {error_msg}")
         print(traceback.format_exc())
+    finally:
+        if telnet_client:
+            await telnet_client.disconnect()
 
     # Validate WCS offset
     if parsed["wcs_offset"] and position_data:
