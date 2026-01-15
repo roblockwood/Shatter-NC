@@ -78,20 +78,21 @@ async def get_machine_status(
             detail=f"Machine with id {machine_id} not found",
         )
 
+    telnet_client = None
     try:
         import time
         start_time = time.time()
         # Phase 5: Migrate to Telnet for MONTR and PRD3 data (replaces HTTP get_status_overview)
-        from app.clients.telnet_client import get_or_create_connection
+        from app.clients.telnet_client import create_fresh_connection
         from app.parsers.montr_parser_v2 import parse_montr_v2
         from app.parsers.alarm_parser_v2 import parse_alarm_v2
         from app.parsers.prd3_parser_v2 import parse_prd3_v2
         from app.parsers.mem_parser_v2 import parse_mem_v2
         from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
         from datetime import datetime
-        
-        # Use pooled connection
-        telnet_client = await get_or_create_connection(
+
+        # Create fresh connection
+        telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=10
@@ -228,6 +229,9 @@ async def get_machine_status(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch machine status: {str(e)}",
         )
+    finally:
+        if telnet_client:
+            await telnet_client.disconnect()
 
 
 @router.get("/{machine_id}/running-log")
@@ -240,12 +244,13 @@ async def get_running_log(machine_id: int, db: Session = Depends(get_db)):
             detail=f"Machine with id {machine_id} not found",
         )
 
+    telnet_client = None
     try:
-        from app.clients.telnet_client import get_or_create_connection
+        from app.clients.telnet_client import create_fresh_connection
         from app.parsers.montr_parser_v2 import parse_montr_v2
         from datetime import datetime
-        
-        telnet_client = await get_or_create_connection(
+
+        telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=10
@@ -290,6 +295,9 @@ async def get_running_log(machine_id: int, db: Session = Depends(get_db)):
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
+    finally:
+        if telnet_client:
+            await telnet_client.disconnect()
 
 
 @router.get("/{machine_id}/counters")
@@ -302,12 +310,13 @@ async def get_work_counters(machine_id: int, db: Session = Depends(get_db)):
             detail=f"Machine with id {machine_id} not found",
         )
 
+    telnet_client = None
     try:
-        from app.clients.telnet_client import get_or_create_connection
+        from app.clients.telnet_client import create_fresh_connection
         from app.parsers.montr_parser_v2 import parse_montr_v2
         from datetime import datetime
-        
-        telnet_client = await get_or_create_connection(
+
+        telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=10
@@ -349,6 +358,9 @@ async def get_work_counters(machine_id: int, db: Session = Depends(get_db)):
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
+    finally:
+        if telnet_client:
+            await telnet_client.disconnect()
 
 
 @router.get("/{machine_id}/alarms")
@@ -361,13 +373,14 @@ async def get_alarms(machine_id: int, db: Session = Depends(get_db)):
             detail=f"Machine with id {machine_id} not found",
         )
 
+    telnet_client = None
     try:
-        from app.clients.telnet_client import get_or_create_connection
+        from app.clients.telnet_client import create_fresh_connection
         from app.parsers.alarm_parser_v2 import parse_alarm_v2
         from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
         from datetime import datetime
-        
-        telnet_client = await get_or_create_connection(
+
+        telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=10
@@ -407,6 +420,9 @@ async def get_alarms(machine_id: int, db: Session = Depends(get_db)):
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
+    finally:
+        if telnet_client:
+            await telnet_client.disconnect()
 
 
 @router.get("/{machine_id}/tools")
@@ -437,11 +453,11 @@ async def get_tools(
         if source == "table":
             # Fetch tool table from TOLNI1 (inches) or TOLNM1 (millimeters) via Telnet
             # Phase 5: Using Telnet for data reads (FTP deprecated for data, kept only for file transfers)
-            from app.clients.telnet_client import get_or_create_connection
+            from app.clients.telnet_client import create_fresh_connection
             from app.parsers.tolni_parser_v2 import parse_tolni_v2
             
-            # Use pooled connection (reused across operations)
-            telnet_client = await get_or_create_connection(
+            # Create fresh connection for this operation
+            telnet_client = await create_fresh_connection(
                 ip_address=db_machine.ip_address,
                 port=10000,  # Telnet port
                 timeout=10
@@ -451,7 +467,7 @@ async def get_tools(
             data_name = "TOLNI1" if db_machine.units == 'in' else "TOLNM1"
             tool_table_content = await telnet_client.get_tool_table_data(units=db_machine.units, verbose=False)
             if tool_table_content is None:
-                # Connection stays in pool - don't disconnect
+                # Connection is cleaned up automatically
                 # Check if we have a more specific error from the Telnet client
                 # CM7500 error (status code 40) means "editing communication data" - data is open on machine
                 raise HTTPException(
@@ -463,7 +479,7 @@ async def get_tools(
             # TOLN data should start with T## lines, ATCTL starts with M## lines
             if tool_table_content.strip().startswith('M'):
                 logger.error(f"Received ATCTL data instead of TOLN data for {data_name} - possible connection/data mix-up")
-                # Connection stays in pool - don't disconnect
+                # Connection is cleaned up automatically
                 raise HTTPException(
                     status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Data type mismatch: received ATCTL data instead of {data_name}. Please try again.",
@@ -481,7 +497,7 @@ async def get_tools(
             try:
                 from app.parsers.atctl_parser_v2 import parse_atctl_v2
                 
-                # Fetch ATC data to get pot mappings (reuse same pooled connection)
+                # Fetch ATC data to get pot mappings (fresh connection)
                 atc_data = await telnet_client.get_atc_magazine_data(control_version=None)
                 
                 if atc_data:
@@ -517,12 +533,12 @@ async def get_tools(
                                 tool["tool_type"] = atc_data["tool_type"]
                             if atc_data.get("color") is not None:
                                 tool["color"] = atc_data["color"]
-                # Connection stays in pool - don't disconnect
+                # Connection is cleaned up automatically
             except Exception as e:
                 logger.warning(f"Failed to merge pot numbers into TABLE data: {e}")
                 # Continue without pot numbers - TABLE data is still valid
             
-            # Connection stays in pool for reuse - don't disconnect
+            # Connection is cleaned up automatically
             parsed["machine_id"] = machine_id
             parsed["source"] = "tool_table"
             parsed["protocol"] = "telnet"  # Track which protocol was used
@@ -547,7 +563,7 @@ async def get_tools(
             return parsed
         else:
             # Default: ATC tool data from Telnet (Phase 5: Replace HTTP/FTP reads)
-            from app.clients.telnet_client import get_or_create_connection
+            from app.clients.telnet_client import create_fresh_connection
             from app.parsers.atctl_parser_v2 import parse_atctl_v2
             from app.parsers.tolni_parser_v2 import parse_tolni_v2
             
@@ -561,8 +577,8 @@ async def get_tools(
                     "raw_html": html
                 }
             
-            # Use pooled connection (reused across operations)
-            telnet_client = await get_or_create_connection(
+            # Create fresh connection for this operation
+            telnet_client = await create_fresh_connection(
                 ip_address=db_machine.ip_address,
                 port=10000,  # Telnet port
                 timeout=10
@@ -572,7 +588,7 @@ async def get_tools(
             # Retry logic is handled in telnet_client.load_data()
             atc_data = await telnet_client.get_atc_magazine_data(control_version=None, verbose=False)
             if atc_data is None:
-                # Connection stays in pool - don't disconnect
+                # Connection is cleaned up automatically
                 raise HTTPException(
                     status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail="Failed to load ATCTL/ATCTLD via Telnet. The machine may be busy (CM7500: editing communication data) or Telnet port 10000 may be blocked. Close any open data files on the machine and try again.",
@@ -582,7 +598,7 @@ async def get_tools(
             # ATCTL data should start with M## lines, TOLN starts with T## lines
             if atc_data.strip().startswith('T'):
                 logger.error(f"Received TOLN data instead of ATCTL data - possible connection/data mix-up")
-                # Connection stays in pool - don't disconnect
+                # Connection is cleaned up automatically
                 raise HTTPException(
                     status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Data type mismatch: received TOLN data instead of ATCTL. Please try again.",
@@ -592,12 +608,12 @@ async def get_tools(
             atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=None)
             
             # Get tool table data to merge tool details (diameter, length, name)
-            # Use the SAME pooled connection (semaphore ensures serialization)
+            # Use fresh connection (locks ensure serialization for writes)
             # Note: If TOLN fails, we still return ATC data (just without tool details)
             data_name = "TOLNI1" if db_machine.units == 'in' else "TOLNM1"
             tool_table_content = None
             try:
-                # Reuse same pooled connection (semaphore ensures operations are serialized)
+                # Use fresh connection (locks ensure operations are serialized)
                 tool_table_content = await telnet_client.get_tool_table_data(units=db_machine.units, verbose=False)
                 
                 # Validate TOLN data - should start with T## lines, not M## (ATCTL)
@@ -608,10 +624,10 @@ async def get_tools(
                         tool_table_content = None  # Don't use wrong data
                     elif not first_line.startswith('T') and first_line:
                         logger.warning(f"TOLN data ({data_name}) doesn't start with T## - unexpected format. First line: {first_line[:50]}")
-                # Connection stays in pool - don't disconnect
+                # Connection is cleaned up automatically
             except Exception as e:
                 logger.warning(f"Failed to load {data_name} for ATC merge (will continue without tool details): {e}")
-                # Connection stays in pool - don't disconnect
+                # Connection is cleaned up automatically
             
             if tool_table_content is None:
                 logger.warning(f"TOLN data ({data_name}) not available for ATC merge - ATC tools will have pot/tool mappings but no diameter/length/name")
@@ -676,10 +692,10 @@ async def get_tools(
             
             logger.info(f"ATC data merged: {len(tools)} tools, TOLN source={data_name}, units={db_machine.units}")
             
-            # Also fetch program_name from MEM using same pooled connection
+            # Also fetch program_name from MEM using fresh connection
             try:
                 from app.parsers.mem_parser import parse_mem
-                # Reuse same pooled connection (semaphore ensures serialization)
+                # Use fresh connection (locks ensure serialization)
                 mem_data = await telnet_client.get_memory_data()
                 if mem_data:
                     logger.debug(f"Raw MEM content: {repr(mem_data)}")
@@ -688,10 +704,10 @@ async def get_tools(
                     if program_name:
                         data["program_name"] = program_name
                         logger.debug(f"Extracted program_name from MEM: {program_name}")
-                # Connection stays in pool - don't disconnect
+                # Connection is cleaned up automatically
             except Exception as e:
                 logger.debug(f"Failed to fetch program_name from MEM: {e}")
-                # Connection stays in pool - don't disconnect
+                # Connection is cleaned up automatically
             
             return data
 
@@ -703,6 +719,9 @@ async def get_tools(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
+    finally:
+        if telnet_client:
+            await telnet_client.disconnect()
 
 
 @router.post("/{machine_id}/status/tools/refresh")
@@ -809,9 +828,9 @@ async def change_tool_color(
         
         from app.clients.telnet_client import CNCTelnetClient
         
-        # Use pooled connection (reused across operations)
-        from app.clients.telnet_client import get_or_create_connection
-        telnet_client = await get_or_create_connection(
+        # Create fresh connection for operation
+        from app.clients.telnet_client import create_fresh_connection
+        telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=10
@@ -825,7 +844,7 @@ async def change_tool_color(
             verbose=True
         )
         
-        # Connection stays in pool for reuse - don't disconnect
+        # Connection is automatically cleaned up
         
         logger.info(f"Color change result: success={success}, status_code={status_code}")
         
@@ -934,6 +953,7 @@ async def batch_change_tool_colors(
                 detail=f"Invalid color value: {change.color} (must be 0-7)",
             )
 
+    telnet_client = None
     try:
         # Validate machine state before operation (same validation as single endpoint)
         from app.services.machine_state_validator import MachineStateValidator
@@ -943,18 +963,18 @@ async def batch_change_tool_colors(
             operation_type="tool_color",
             db=db
         )
-        
+
         if not is_safe:
             raise HTTPException(
                 status_code=http_status.HTTP_409_CONFLICT,
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
-        
-        from app.clients.telnet_client import CNCTelnetClient, get_or_create_connection
+
+        from app.clients.telnet_client import CNCTelnetClient, create_fresh_connection
         from app.services.audit_logger import AuditLogger
-        
-        # Use pooled connection (reused for all operations)
-        telnet_client = await get_or_create_connection(
+
+        # Create fresh connection
+        telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=10
@@ -1028,7 +1048,7 @@ async def batch_change_tool_colors(
                 failed += 1
                 logger.error(f"Exception changing tool color for pot {change.pot_number}, tool {change.tool_number}: {e}")
         
-        # Connection stays in pool for reuse - don't disconnect
+        # Connection is automatically cleaned up
         
         # Immediately refresh tool data after batch color changes (if any were successful)
         if successful > 0 and polling_service:
@@ -1054,6 +1074,9 @@ async def batch_change_tool_colors(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to batch change tool colors: {str(e)}",
         )
+    finally:
+        if telnet_client:
+            await telnet_client.disconnect()
 
 
 @router.put("/{machine_id}/tools/atc/pot/{pot_number}/tool")
@@ -1106,8 +1129,8 @@ async def change_tool_assignment(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
         
-        from app.clients.telnet_client import get_or_create_connection
-        telnet_client = await get_or_create_connection(
+        from app.clients.telnet_client import create_fresh_connection
+        telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=10
@@ -1223,8 +1246,8 @@ async def change_tool_type(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
         
-        from app.clients.telnet_client import get_or_create_connection
-        telnet_client = await get_or_create_connection(
+        from app.clients.telnet_client import create_fresh_connection
+        telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=10
@@ -1337,8 +1360,8 @@ async def delete_tool_from_pot(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
         
-        from app.clients.telnet_client import get_or_create_connection
-        telnet_client = await get_or_create_connection(
+        from app.clients.telnet_client import create_fresh_connection
+        telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=10
@@ -1445,8 +1468,8 @@ async def change_spindle_tool(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
         
-        from app.clients.telnet_client import get_or_create_connection
-        telnet_client = await get_or_create_connection(
+        from app.clients.telnet_client import create_fresh_connection
+        telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=10
@@ -1559,8 +1582,8 @@ async def set_tool_life(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
         
-        from app.clients.telnet_client import get_or_create_connection
-        telnet_client = await get_or_create_connection(
+        from app.clients.telnet_client import create_fresh_connection
+        telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=10
@@ -1673,8 +1696,8 @@ async def set_tool_offset(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
         
-        from app.clients.telnet_client import get_or_create_connection
-        telnet_client = await get_or_create_connection(
+        from app.clients.telnet_client import create_fresh_connection
+        telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=10
@@ -1798,11 +1821,11 @@ async def get_position(machine_id: int, db: Session = Depends(get_db)):
 
     try:
         # Phase 5: Migrate to Telnet for position data (replaces FTP)
-        from app.clients.telnet_client import get_or_create_connection
+        from app.clients.telnet_client import create_fresh_connection
         from app.parsers.posni_parser_v2 import parse_posni_v2
         
-        # Use pooled connection
-        telnet_client = await get_or_create_connection(
+        # Create fresh connection
+        telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=10

@@ -333,12 +333,13 @@ async def refresh_program_name(machine_id: int, db: Session = Depends(get_db)):
             detail=f"Machine with id {machine_id} not found",
         )
     
+    telnet_client = None
     try:
-        from app.clients.telnet_client import get_or_create_connection
+        from app.clients.telnet_client import create_fresh_connection
         from app.parsers.mem_parser_v2 import parse_mem_v2
-        
-        # Use pooled connection (reused across operations)
-        telnet_client = await get_or_create_connection(
+
+        # Create fresh connection
+        telnet_client = await create_fresh_connection(
             ip_address=machine.ip_address,
             port=10000,
             timeout=10
@@ -346,7 +347,7 @@ async def refresh_program_name(machine_id: int, db: Session = Depends(get_db)):
         mem_data = await telnet_client.get_memory_data(verbose=False)
         
         if not mem_data:
-            # Connection stays in pool - don't disconnect
+            # Connection is cleaned up automatically - don't disconnect manually
             return {
                 "success": False,
                 "message": "MEM file not found or empty via Telnet",
@@ -367,14 +368,14 @@ async def refresh_program_name(machine_id: int, db: Session = Depends(get_db)):
                 status_data = await poller.poll()
                 await polling_service.websocket_manager.broadcast_status(status_data)
             
-            # Connection stays in pool - don't disconnect
+            # Connection is cleaned up automatically - don't disconnect manually
             return {
                 "success": True,
                 "message": f"Program name refreshed: {program_name}",
                 "program_name": program_name
             }
         else:
-            # Connection stays in pool - don't disconnect
+            # Connection is cleaned up automatically - don't disconnect manually
             return {
                 "success": False,
                 "message": "MEM parsed but no program_name found",
@@ -388,3 +389,6 @@ async def refresh_program_name(machine_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to refresh program name: {str(e)}",
         )
+    finally:
+        if telnet_client:
+            await telnet_client.disconnect()
