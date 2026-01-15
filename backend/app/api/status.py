@@ -817,10 +817,11 @@ async def change_tool_color(
             timeout=10
         )
         
-        success, status_code = await telnet_client.change_atc_tool_color(
-            pot_number=pot_number,
-            tool_number=tool_number,
-            color=color,
+        success, status_code = await telnet_client.change_atc_tool(
+            operation_type='C',
+            magazine_pos=pot_number,
+            tool_num=tool_number,
+            new_value=color,
             verbose=True
         )
         
@@ -967,10 +968,11 @@ async def batch_change_tool_colors(
         # Process all changes sequentially (Telnet semaphore ensures serialization anyway)
         for change in request.changes:
             try:
-                success, status_code = await telnet_client.change_atc_tool_color(
-                    pot_number=change.pot_number,
-                    tool_number=change.tool_number,
-                    color=change.color,
+                success, status_code = await telnet_client.change_atc_tool(
+                    operation_type='C',
+                    magazine_pos=change.pot_number,
+                    tool_num=change.tool_number,
+                    new_value=change.color,
                     verbose=False
                 )
                 
