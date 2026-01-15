@@ -17,80 +17,30 @@ logger = logging.getLogger(__name__)
 # Redis distributed locks are used instead of per-process semaphores
 # This ensures coordination across multiple worker processes
 
-# Global connection pool: Key: (ip_address, port) tuple, Value: CNCTelnetClient instance
-_telnet_connections: Dict[Tuple[str, int], 'CNCTelnetClient'] = {}
-_connections_lock = asyncio.Lock()  # Lock for accessing the _telnet_connections dict
 
 
-async def get_or_create_connection(ip_address: str, port: int = 10000, timeout: int = 10) -> 'CNCTelnetClient':
+async def create_fresh_connection(ip_address: str, port: int = 10000, timeout: int = 10) -> 'CNCTelnetClient':
     """
-    Get or create a persistent telnet connection for a machine.
-    
-    Connections are reused across operations to reduce connection churn and improve stability.
-    The connection will be automatically reconnected if it's lost.
-    
+    Create a fresh telnet connection for a machine.
+
+    This creates a fresh connection that will be closed after use.
+
     Args:
         ip_address: Machine IP address
         port: Telnet port (default 10000)
         timeout: Connection timeout in seconds
-        
+
     Returns:
-        CNCTelnetClient instance (may be new or reused)
-    """
-    key = (ip_address, port)
-    async with _connections_lock:
-        if key not in _telnet_connections:
-            client = CNCTelnetClient(ip_address, port, timeout=timeout)
-            _telnet_connections[key] = client
-            logger.debug(f"Created new pooled connection for {ip_address}:{port}")
-        else:
-            client = _telnet_connections[key]
-            # Check if connection is still alive
-            if not client._connected or not client.reader or not client.writer:
-                logger.debug(f"Connection pool entry exists but not connected, will reconnect on next operation")
-        return client
+        New CNCTelnetClient instance
 
-
-async def close_connection(ip_address: str, port: int = 10000):
+    Raises:
+        ConnectionError: If connection fails
     """
-    Close and remove a connection from the pool.
-    
-    This should be called when you want to explicitly close a connection,
-    such as on application shutdown or after an unrecoverable error.
-    
-    Args:
-        ip_address: Machine IP address
-        port: Telnet port (default 10000)
-    """
-    key = (ip_address, port)
-    async with _connections_lock:
-        if key in _telnet_connections:
-            client = _telnet_connections[key]
-            await client.disconnect()
-            del _telnet_connections[key]
-            logger.debug(f"Closed and removed pooled connection for {ip_address}:{port}")
-
-
-async def close_all_connections():
-    """
-    Close all connections in the global connection pool.
-    
-    This should be called on application shutdown to ensure
-    all Telnet connections are properly closed.
-    """
-    async with _connections_lock:
-        connections_to_close = list(_telnet_connections.items())
-        _telnet_connections.clear()
-    
-    # Close connections outside the lock to avoid deadlock
-    for key, client in connections_to_close:
-        try:
-            await client.disconnect()
-            logger.debug(f"Closed pooled connection for {key[0]}:{key[1]}")
-        except Exception as e:
-            logger.warning(f"Error closing connection {key[0]}:{key[1]}: {e}")
-    
-    logger.info(f"Closed {len(connections_to_close)} Telnet connection(s) from pool")
+    client = CNCTelnetClient(ip_address, port, timeout=timeout)
+    connected = await client.connect()
+    if not connected:
+        raise ConnectionError(f"Failed to connect to {ip_address}:{port}")
+    return client
 
 
 async def _get_machine_lock(ip_address: str, port: int):
@@ -550,40 +500,36 @@ class CNCTelnetClient:
         Returns:
             Dict with connection test results
         """
-        # Acquire lock for this machine to serialize with other operations
-        machine_lock = await _get_machine_lock(self.ip_address, self.port)
-        
-        async with machine_lock:
-            try:
-                start_time = datetime.now()
-                connected = await self.connect()
-                if not connected:
-                    return {
-                        "success": False,
-                        "error": "Failed to establish connection",
-                        "timestamp": datetime.now().isoformat(),
-                    }
-
-                # Try a simple command to verify connection works (MEM is more reliable than DIR)
-                success, status, _ = await self._send_command("LOD", "MEM")
-                end_time = datetime.now()
-                latency = (end_time - start_time).total_seconds() * 1000
-
-                await self.disconnect()
-
-                return {
-                    "success": success,
-                    "latency_ms": round(latency, 2),
-                    "status_code": status,
-                    "timestamp": datetime.now().isoformat(),
-                }
-            except Exception as e:
-                await self.disconnect()
+        try:
+            start_time = datetime.now()
+            connected = await self.connect()
+            if not connected:
                 return {
                     "success": False,
-                    "error": str(e),
+                    "error": "Failed to establish connection",
                     "timestamp": datetime.now().isoformat(),
                 }
+
+            # Try a simple command to verify connection works (MEM is more reliable than DIR)
+            success, status, _ = await self._send_command("LOD", "MEM")
+            end_time = datetime.now()
+            latency = (end_time - start_time).total_seconds() * 1000
+
+            await self.disconnect()
+
+            return {
+                "success": success,
+                "latency_ms": round(latency, 2),
+                "status_code": status,
+                "timestamp": datetime.now().isoformat(),
+            }
+        except Exception as e:
+            await self.disconnect()
+            return {
+                "success": False,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat(),
+            }
 
     async def load_data(self, data_name: str, verbose: bool = False, max_retries: int = 2) -> Optional[str]:
         """
@@ -599,54 +545,50 @@ class CNCTelnetClient:
         Returns:
             Data content as string, or None on failure
         """
-        # Acquire lock for this machine to serialize with writes
-        machine_lock = await _get_machine_lock(self.ip_address, self.port)
-        
-        async with machine_lock:
-            for attempt in range(max_retries + 1):
-                try:
-                    # Ensure connection (will reconnect if needed)
-                    if not self._connected:
-                        connected = await self.connect()
-                        if not connected:
-                            if attempt < max_retries:
-                                wait_time = 0.5 * (attempt + 1)  # 0.5s, 1s, 1.5s
-                                logger.warning(f"Telnet connection failed for '{data_name}', retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
-                                await asyncio.sleep(wait_time)
-                                continue
-                            return None
-
-                    success, status, data = await self._send_command("LOD", data_name, verbose=verbose)
-                    if success:
-                        return data
-                    else:
-                        # Check if it's a transient error that might benefit from retry
-                        # Status codes like "40" (conflict due to communication using other port) might be retryable
-                        if status == "40" and attempt < max_retries:
-                            wait_time = 0.5 * (attempt + 1)
-                            logger.warning(f"Failed to load '{data_name}': status {status} (communication conflict), retrying in {wait_time}s")
+        for attempt in range(max_retries + 1):
+            try:
+                # Ensure connection (will reconnect if needed)
+                if not self._connected:
+                    connected = await self.connect()
+                    if not connected:
+                        if attempt < max_retries:
+                            wait_time = 0.5 * (attempt + 1)  # 0.5s, 1s, 1.5s
+                            logger.warning(f"Telnet connection failed for '{data_name}', retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
                             await asyncio.sleep(wait_time)
-                            # Mark connection as bad to force reconnection on next attempt
-                            self._connected = False
                             continue
-                        else:
-                            logger.warning(f"Failed to load data '{data_name}': status {status}")
-                            return None
-                except (ConnectionError, TimeoutError, asyncio.TimeoutError) as e:
-                    if attempt < max_retries:
+                        return None
+
+                success, status, data = await self._send_command("LOD", data_name, verbose=verbose)
+                if success:
+                    return data
+                else:
+                    # Check if it's a transient error that might benefit from retry
+                    # Status codes like "40" (conflict due to communication using other port) might be retryable
+                    if status == "40" and attempt < max_retries:
                         wait_time = 0.5 * (attempt + 1)
-                        logger.warning(f"Connection error loading '{data_name}': {e}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
+                        logger.warning(f"Failed to load '{data_name}': status {status} (communication conflict), retrying in {wait_time}s")
+                        await asyncio.sleep(wait_time)
                         # Mark connection as bad to force reconnection on next attempt
                         self._connected = False
-                        await asyncio.sleep(wait_time)
                         continue
                     else:
-                        logger.error(f"Error loading data '{data_name}' after {max_retries + 1} attempts: {e}")
+                        logger.warning(f"Failed to load data '{data_name}': status {status}")
                         return None
-                except Exception as e:
-                    # Non-retryable errors (parsing, etc.) - fail immediately
-                    logger.error(f"Error loading data '{data_name}': {e}")
+            except (ConnectionError, TimeoutError, asyncio.TimeoutError) as e:
+                if attempt < max_retries:
+                    wait_time = 0.5 * (attempt + 1)
+                    logger.warning(f"Connection error loading '{data_name}': {e}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
+                    # Mark connection as bad to force reconnection on next attempt
+                    self._connected = False
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"Error loading data '{data_name}' after {max_retries + 1} attempts: {e}")
                     return None
+            except Exception as e:
+                # Non-retryable errors (parsing, etc.) - fail immediately
+                logger.error(f"Error loading data '{data_name}': {e}")
+                return None
         
         return None
 
@@ -809,11 +751,7 @@ class CNCTelnetClient:
         Returns:
             Directory listing as string (raw format), or None on failure
         """
-        # Acquire lock for this machine to serialize with other operations
-        machine_lock = await _get_machine_lock(self.ip_address, self.port)
-        
-        async with machine_lock:
-            return await self._get_directory_listing_internal(verbose=verbose)
+        return await self._get_directory_listing_internal(verbose=verbose)
 
     async def parse_directory_listing(
         self, directory_data: str, control_type: Optional[str] = None
