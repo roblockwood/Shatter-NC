@@ -374,10 +374,10 @@ The polling service now uses Telnet to fetch:
 ```python
 async def poll(self) -> Dict[str, Any]:
     """Poll machine status and return data."""
-    # Uses Telnet client with pooled connections
-    from app.clients.telnet_client import get_or_create_connection
-    
-    telnet_client = await get_or_create_connection(
+    # Uses Telnet client with per-poll connections
+    from app.clients.telnet_client import create_fresh_connection
+
+    telnet_client = await create_fresh_connection(
         ip_address=self.machine.ip_address,
         port=10000,
         timeout=10
@@ -402,7 +402,7 @@ async def poll(self) -> Dict[str, Any]:
 **Location:** [polling.py:72-377](../backend/app/services/polling.py#L72-L377)
 
 **Flow:**
-1. Get or create pooled Telnet connection for machine
+1. Create fresh Telnet connection for machine
 2. Fetch MONTR data (program info, time data, counters)
 3. Fetch PRD3 data (machine status)
 4. Fetch ALARM data (active alarms)
@@ -411,7 +411,7 @@ async def poll(self) -> Dict[str, Any]:
 7. Calculate response time and update poller state
 8. Launch background task to log events to database
 9. Return status data (for WebSocket broadcast)
-10. Connection stays in pool for next poll (persistent connections)
+10. Connection is automatically cleaned up (per-poll connections)
 
 **Non-Blocking Design:** Event logging is launched as a background task (`asyncio.create_task()`) so it doesn't block the poll loop. This ensures slow database writes don't delay polling.
 
