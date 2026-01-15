@@ -58,21 +58,22 @@ class MachinePoller:
     async def fetch_program_name(self) -> Optional[str]:
         """
         Fetch program_name from MEM via Telnet (on-demand).
-        
+
         Returns:
             program_name if successfully fetched, None otherwise
         """
+        from app.clients.telnet_client import create_fresh_connection
+        from app.parsers.mem_parser_v2 import parse_mem_v2
+
+        telnet_client = None
         try:
-            from app.clients.telnet_client import get_or_create_connection
-            from app.parsers.mem_parser_v2 import parse_mem_v2
-            
-            # Use pooled connection
-            telnet_client = await get_or_create_connection(
+            # Create fresh connection
+            telnet_client = await create_fresh_connection(
                 ip_address=self.machine.ip_address,
                 port=10000,
                 timeout=10
             )
-            
+
             mem_data = await telnet_client.get_memory_data(verbose=False)
             if mem_data:
                 logger.debug(f"Machine {self.machine.id} - Raw MEM content: {repr(mem_data)}")
@@ -89,7 +90,10 @@ class MachinePoller:
                 logger.debug(f"Machine {self.machine.id} - MEM file not found or empty")
         except Exception as e:
             logger.warning(f"Machine {self.machine.id} - Failed to fetch program_name from MEM via Telnet: {e}")
-        
+        finally:
+            if telnet_client:
+                await telnet_client.disconnect()
+
         return None
 
     async def poll_tool_data(self) -> Dict[str, Any]:
@@ -109,16 +113,17 @@ class MachinePoller:
         tool_data = {}
         step_times = {}
         
+        telnet_client = None
         try:
             logger.debug(f"[TOOL_POLL] Machine {self.machine.id} ({self.machine.name}) - Starting tool data poll")
-            
-            from app.clients.telnet_client import get_or_create_connection
+
+            from app.clients.telnet_client import create_fresh_connection
             from app.parsers.atctl_parser_v2 import parse_atctl_v2
             from app.parsers.tolni_parser_v2 import parse_tolni_v2
-            
-            # Use pooled connection
+
+            # Create fresh connection
             step_start = time.time()
-            telnet_client = await get_or_create_connection(
+            telnet_client = await create_fresh_connection(
                 ip_address=self.machine.ip_address,
                 port=10000,
                 timeout=10
@@ -284,7 +289,10 @@ class MachinePoller:
         except Exception as e:
             logger.warning(f"Machine {self.machine.id} - Failed to fetch tool data via Telnet: {e}")
             # Return empty dict on failure
-        
+        finally:
+            if telnet_client:
+                await telnet_client.disconnect()
+
         return tool_data
 
     async def poll(self) -> Dict[str, Any]:
@@ -293,18 +301,19 @@ class MachinePoller:
         poll_timestamp = datetime.utcnow()
         step_times = {}
 
+        telnet_client = None
         try:
             logger.debug(f"[POLL] Machine {self.machine.id} ({self.machine.name}) - Starting fast poll")
-            
+
             # Phase 5: Migrate to Telnet for MONTR and PRD3 data (replaces HTTP get_status_overview)
-            from app.clients.telnet_client import get_or_create_connection
+            from app.clients.telnet_client import create_fresh_connection
             from app.parsers.montr_parser_v2 import parse_montr_v2
             from app.parsers.alarm_parser_v2 import parse_alarm_v2
             from app.parsers.prd3_parser_v2 import parse_prd3_v2
-            
-            # Use pooled connection (reused across operations)
+
+            # Create fresh connection
             step_start = time.time()
-            telnet_client = await get_or_create_connection(
+            telnet_client = await create_fresh_connection(
                 ip_address=self.machine.ip_address,
                 port=10000,
                 timeout=10
@@ -746,6 +755,9 @@ class MachinePoller:
                     self.last_heartbeat_time = poll_timestamp
 
             return offline_status_data
+        finally:
+            if telnet_client:
+                await telnet_client.disconnect()
 
     async def _log_events_async(self, status_data: Dict[str, Any], poll_timestamp: datetime, response_time_ms: int, success: bool):
         """
@@ -1112,14 +1124,7 @@ class PollingService:
                 await self.tool_polling_task
             except asyncio.CancelledError:
                 pass
-        
-        # Close all Telnet connections for machines we were polling
-        try:
-            from app.clients.telnet_client import close_all_connections
-            await close_all_connections()
-        except Exception as e:
-            logger.warning(f"Error closing Telnet connections during polling service stop: {e}")
-        
+
         logger.info("Polling service stopped (fast and slow polling loops)")
 
     async def _poll_loop(self):
@@ -1404,12 +1409,13 @@ class PollingService:
             
             logger.info(f"Pre-populating control version cache for {len(machines)} enabled machine(s)...")
             
-            from app.clients.telnet_client import get_or_create_connection
-            
-            # Detect control version for each machine (concurrently, but with locks)
+            from app.clients.telnet_client import create_fresh_connection
+
+            # Detect control version for each machine (concurrently)
             async def detect_for_machine(m):
+                telnet_client = None
                 try:
-                    telnet_client = await get_or_create_connection(
+                    telnet_client = await create_fresh_connection(
                         ip_address=m.ip_address,
                         port=10000,
                         timeout=10
@@ -1422,6 +1428,9 @@ class PollingService:
                         logger.warning(f"Failed to detect control version for machine {m.id} ({m.name})")
                 except Exception as e:
                     logger.warning(f"Failed to pre-populate control version for machine {m.id} ({m.name}): {e}")
+                finally:
+                    if telnet_client:
+                        await telnet_client.disconnect()
             
             # Create tasks with proper closure (use default argument to capture machine)
             tasks = []

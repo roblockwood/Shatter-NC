@@ -589,18 +589,20 @@ class CNCHttpClient:
         # Note: This is a synchronous method, so we use asyncio.run for async Telnet client
         try:
             import asyncio
-            from app.clients.telnet_client import get_or_create_connection
+            from app.clients.telnet_client import create_fresh_connection
             from app.parsers.mem_parser_v2 import parse_mem_v2
-            
+
             async def fetch_mem():
-                telnet_client = await get_or_create_connection(
+                telnet_client = await create_fresh_connection(
                     ip_address=machine.ip_address,
                     port=10000,
                     timeout=10
                 )
-                mem_data = await telnet_client.get_memory_data(verbose=False)
-                # Connection stays in pool - don't disconnect
-                return mem_data
+                try:
+                    mem_data = await telnet_client.get_memory_data(verbose=False)
+                    return mem_data
+                finally:
+                    await telnet_client.disconnect()
             
             mem_data = asyncio.run(fetch_mem())
             if mem_data:

@@ -278,50 +278,51 @@ The `CNCTelnetClient` handles direct data file reading and write operations via 
 
 ### Features
 
-- **Connection Pooling**: Persistent connections are reused across operations for improved stability
-- **Semaphore Serialization**: Per-machine locks ensure only one operation at a time
-- **Auto-Reconnect**: Connections automatically recover if lost
+- **Per-Poll Connections**: Fresh connections created for each operation with automatic cleanup
+- **Write Operation Locks**: Redis locks ensure only one write operation at a time per machine
 - **Direct data access**: Same data format as FTP files, but more reliable
-- **Write operations**: Supports tool color changes, ATC assignments, and more (Phase 6)
+- **Write operations**: Supports tool color changes, ATC assignments, and more
 
-### Connection Pooling
+### Per-Poll Connection Management
 
-**⚠️ IMPORTANT**: Always use `get_or_create_connection()` instead of creating `CNCTelnetClient` directly.
+**⚠️ IMPORTANT**: Always use `create_fresh_connection()` for all telnet operations.
 
-The telnet client uses a connection pool to maintain persistent connections per machine. This dramatically improves stability:
+The telnet client creates fresh connections for each operation and automatically cleans them up. This approach eliminates connection state corruption while maintaining reliability:
 
-- **Reduced connection churn**: Connections are reused instead of created/destroyed each operation
-- **Faster operations**: No connect/disconnect overhead
-- **Better reliability**: Fewer connection attempts = fewer failure points
-- **Automatic recovery**: Lost connections are automatically reconnected
+- **Clean state**: Each operation starts with a fresh connection
+- **Automatic cleanup**: Connections are automatically closed after each operation
+- **Error isolation**: Connection issues don't persist across operations
+- **Simplified architecture**: No complex connection pooling management
 
 **Usage Pattern**:
 ```python
-from app.clients.telnet_client import get_or_create_connection
+from app.clients.telnet_client import create_fresh_connection
 
-# Get pooled connection (reused across operations)
-telnet_client = await get_or_create_connection(
+# Create fresh connection for this operation
+telnet_client = await create_fresh_connection(
     ip_address="192.168.86.89",
     port=10000,
     timeout=10
 )
 
-# Use connection for operations
-tool_data = await telnet_client.get_tool_table_data(units='in')
-atc_data = await telnet_client.get_atc_magazine_data()
-
-# Connection stays in pool - DO NOT call disconnect()
+try:
+    # Use connection for operations
+    tool_data = await telnet_client.get_tool_table_data(units='in')
+    atc_data = await telnet_client.get_atc_magazine_data()
+finally:
+    # Connection is automatically cleaned up
+    await telnet_client.disconnect()
 ```
 
 **Key Points**:
-- **Never create `CNCTelnetClient` directly**: Always use `get_or_create_connection()`
-- **Don't disconnect**: Connections stay open in the pool for reuse
-- **Automatic health checks**: Connections are checked and auto-reconnected if lost
-- **Per-machine pools**: Each machine has its own persistent connection
+- **Always use `create_fresh_connection()`**: Never create `CNCTelnetClient` directly
+- **Always cleanup**: Use try/finally blocks to ensure connections are closed
+- **Write operations use locks**: Redis locks serialize write operations (color changes, tool assignments)
+- **Read operations are parallel**: Multiple read operations can run concurrently
 
 ### Available Methods
 
-- `get_or_create_connection(ip_address, port, timeout)` - Get pooled connection
+- `create_fresh_connection(ip_address, port, timeout)` - Create fresh connection
 - `load_data(data_name)` - Load arbitrary data file (e.g., "MEM", "TOLNI1", "ATCTL")
 - `get_tool_table_data(units)` - Get tool table (TOLNI1 or TOLNM1 based on units)
 - `get_atc_magazine_data(control_version)` - Get ATC magazine configuration
@@ -329,6 +330,10 @@ atc_data = await telnet_client.get_atc_magazine_data()
 - `get_position_data()` - Get position/work offsets
 - `change_atc_tool_color(pot_number, tool_number, color)` - Change tool color (Phase 6)
 - `test_connection()` - Test connectivity and measure latency
+
+### Migration Notes
+
+This client was migrated from persistent pooled connections to per-poll fresh connections in 2026 to eliminate Redis lock corruption issues. The new approach creates fresh connections for each operation with automatic cleanup, providing better error isolation and reliability.
 
 ### Data Files Available via LOD
 
@@ -341,28 +346,31 @@ atc_data = await telnet_client.get_atc_magazine_data()
 | `SYSC89`, `SYSC94-99` | System data files |
 | `PRD1`, `PRD2`, `PRD3` | Production data |
 
-### Semaphore Serialization
+### Operation Synchronization
 
-All telnet operations use per-machine semaphore locks to ensure:
-- Only one operation per machine at a time
-- Writes wait for active reads to complete
-- Reads wait for active writes to complete
-- No conflicts between polling (reads) and API operations (writes)
+Write operations use Redis distributed locks to ensure only one write operation per machine at a time:
+- **Write serialization**: Tool changes, color updates, and assignments are serialized per machine
+- **Read parallelism**: Multiple read operations can run concurrently
+- **Automatic locking**: Locks are managed automatically by the client
 
-This is handled automatically - you don't need to manage locks manually.
+Read operations (polling, data fetching) don't use locks and can run in parallel.
 
 ### Write Operations (Phase 6)
 
-Write operations use extended timeouts (5 seconds) and are fully serialized:
+Write operations use extended timeouts (5 seconds) and are fully serialized with Redis locks:
 
 ```python
 # Change tool color
-telnet_client = await get_or_create_connection(ip_address, port=10000)
-success, status = await telnet_client.change_atc_tool_color(
-    pot_number=2,
-    tool_number=2,
-    color=4  # Green
-)
+telnet_client = await create_fresh_connection(ip_address, port=10000, timeout=10)
+try:
+    success, status = await telnet_client.change_atc_tool(
+        operation_type='C',  # Color change
+        magazine_pos=2,
+        tool_num=2,
+        new_value=4  # Green
+    )
+finally:
+    await telnet_client.disconnect()
 ```
 
 **Status Codes**:
