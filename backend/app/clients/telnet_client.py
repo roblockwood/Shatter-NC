@@ -295,7 +295,11 @@ class CNCTelnetClient:
         """
         # Pad command to 7 chars, then split into c1-c3 (3) and f1-f4 (4)
         # f1-f4 should be left-justified (e.g., "LOD " -> "LOD " with space, "MAGC" -> "MAGC")
-        cmd_padded = command.ljust(7)[:7]
+        # Special handling for CHGMAG: don't pad with space, use null or different padding
+        if command == "CHGMAG":
+            cmd_padded = command + "\x00\x00"  # Pad with null bytes instead of space
+        else:
+            cmd_padded = command.ljust(7)[:7]
         cmd_type = cmd_padded[:3].ljust(3)[:3]  # c1-c3 (3 bytes), left-justified
         function = cmd_padded[3:7].ljust(4)[:4]  # f1-f4 (4 bytes), left-justified
         
@@ -524,6 +528,9 @@ class CNCTelnetClient:
             if not success:
                 status_desc = self.get_status_description(status_code)
                 logger.warning(f"Command failed with status {status_code}: {status_desc}")
+                logger.warning(f"Failed command details: {command} {repr(arguments)}")
+                logger.warning(f"Frame sent: {repr(frame.decode('ascii', errors='replace'))}")
+                logger.warning(f"Frame hex: {frame.hex(' ')}")
             elif verbose:
                 logger.info(f"Command succeeded with status {status_code}")
                 if data:
@@ -2219,22 +2226,31 @@ class CNCTelnetClient:
 
     # ===== Write Commands (Phase 6) =====
 
-    async def change_atc_tool_color(
+    async def change_atc_tool(
         self,
-        pot_number: int,
-        tool_number: int,
-        color: int,
+        operation_type: str,
+        magazine_pos: int,
+        tool_num: Optional[int] = None,
+        new_value: Optional[int] = None,
         verbose: bool = False
     ) -> Tuple[bool, Optional[str]]:
         """
-        Change tool color in ATC magazine using CHGMAGC command.
-        
+        Unified method for all ATC tool operations using CCHGMAG command.
+
+        Supports all operation types:
+        - 'M': Change tool number (magazine_pos, new_value=tool_number)
+        - 'S': Change spindle tool (magazine_pos=0, new_value=tool_number)
+        - 'K': Change tool type (magazine_pos, new_value=1/2/3 for Standard/Large/Medium)
+        - 'C': Change color (magazine_pos, new_value=0-7 for color)
+        - 'D': Delete tool (magazine_pos)
+
         Args:
-            pot_number: Pot number (1-99, not spindle)
-            tool_number: Tool number in the pot (for verification)
-            color: Color value (0=None, 1=Blue, 2=Red, 3=Purple, 4=Green, 5=Light Blue, 6=Yellow, 7=White)
+            operation_type: Operation type ('M', 'S', 'K', 'C', 'D')
+            magazine_pos: Magazine position (0=spindle, 1-99=pots)
+            tool_num: Current tool number in position (optional, for verification)
+            new_value: New value for the operation (tool number, type, or color depending on operation_type)
             verbose: If True, log command details
-            
+
         Returns:
             Tuple of (success, status_code)
         """
@@ -2243,47 +2259,119 @@ class CNCTelnetClient:
             if not connected:
                 return False, None
 
-        # Validate inputs
-        if not 1 <= pot_number <= 99:
-            logger.error(f"Invalid pot number: {pot_number} (must be 1-99)")
+        # Validate operation type
+        if operation_type not in ['M', 'S', 'K', 'C', 'D']:
+            logger.error(f"Invalid operation_type: {operation_type} (must be M, S, K, C, or D)")
+            return False, "01"  # Invalid data
+
+        # Validate magazine position
+        if not isinstance(magazine_pos, int) or not 0 <= magazine_pos <= 99:
+            logger.error(f"Invalid magazine position: {magazine_pos} (must be 0-99)")
             return False, "30"  # Invalid tool/pot number
-        
-        if not 0 <= color <= 7:
-            logger.error(f"Invalid color value: {color} (must be 0-7)")
-            return False, "13"  # Data item not within allowed range
+
+        # Validate new_value for operations that require it
+        if operation_type in ['M', 'S', 'K', 'C']:
+            if new_value is None or not isinstance(new_value, int):
+                logger.error(f"Operation {operation_type} requires new_value")
+                return False, "01"  # Invalid data
+
+        # Operation-specific validation and argument formatting
+        if operation_type == 'M':  # Change tool number
+            if not 1 <= new_value <= 999:
+                logger.error(f"Tool number {new_value} out of valid range (1-999)")
+                return False, "30"  # Invalid tool/pot number
+            # Format: m1m2 + t1t2t3 = 2-digit mag + 3-digit tool
+            arguments = f"{magazine_pos:02d}{new_value:03d}"
+
+        elif operation_type == 'S':  # Change spindle tool
+            if not 0 <= new_value <= 999:
+                logger.error(f"Spindle tool {new_value} out of valid range (0-999)")
+                return False, "30"
+            if magazine_pos != 0:
+                logger.warning(f"Spindle tool change typically uses magazine position 0, got {magazine_pos}")
+            # Format: m1m2 + t1t2t3 = 2-digit mag + 3-digit tool
+            arguments = f"{magazine_pos:02d}{new_value:03d}"
+
+        elif operation_type == 'K':  # Change tool type
+            if not 1 <= new_value <= 3:
+                logger.error(f"Tool type {new_value} out of valid range (1=Standard, 2=Large, 3=Medium)")
+                return False, "13"  # Data item not within allowed range
+            # Format: m1m2 + t1 = 2-digit mag + 1-digit type
+            arguments = f"{magazine_pos:02d}{new_value}"
+
+        elif operation_type == 'C':  # Change color
+            if not 0 <= new_value <= 7:
+                logger.error(f"Color {new_value} out of valid range (0-7)")
+                return False, "13"
+            # Format: m1m2 + t1 = 2-digit mag + 1-digit color
+            arguments = f"{magazine_pos:02d}{new_value}"
+
+        elif operation_type == 'D':  # Delete tool
+            # Format: m1m2 = 2-digit mag
+            arguments = f"{magazine_pos:02d}"
+
+        # Pad arguments to 8 characters for C00/D00 compatibility
+        arguments = f"{arguments:<8}"
 
         # Acquire lock for this machine to prevent conflicts with polling reads
         machine_lock = await _get_machine_lock(self.ip_address, self.port)
-        
+
         start_time = asyncio.get_event_loop().time()
         try:
-            # Wait for lock (this will block if polling is currently reading)
             async with machine_lock:
-                pot_str = f"{pot_number:02d}"  # m1m2: magazine number (2 digits)
-                color_str = f"{color}"  # t1: color value (1 digit, 0-7)
-                
-                # Arguments format: m1m2 + t1 + padding = 8 chars
-                arguments = f"{pot_str}{color_str}      "[:8]  # "021     " (8 chars)
-                
-                # Use standard _send_command which uses _build_command (same as LOD)
-                # Use longer timeout (5 seconds) for write operations as they may take longer to process
-                success, status, _ = await self._send_command("CHGMAGC", arguments, verbose=verbose, read_timeout=5.0)
-                
+                # Use operation-specific commands (build_command adds %C prefix)
+                command_map = {
+                    'M': 'CHGMAGM',  # Change tool number
+                    'S': 'CHGMAGS',  # Change spindle tool
+                    'K': 'CHGMAGK',  # Change tool type
+                    'C': 'CHGMAGC',  # Change color
+                    'D': 'CHGMAGD',  # Delete tool
+                }
+                command = command_map.get(operation_type, 'CHGMAGC')  # Default to color command
+                success, status, _ = await self._send_command(command, arguments, verbose=verbose, read_timeout=5.0)
+
                 duration_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
-                
+
                 if success:
-                    color_names = {0: "None", 1: "Blue", 2: "Red", 3: "Purple", 4: "Green", 5: "Light Blue", 6: "Yellow", 7: "White"}
-                    logger.info(f"[WRITE] Changed tool color in pot {pot_number} to {color_names.get(color, 'Unknown')} ({duration_ms}ms)")
+                    operation_names = {
+                        'M': 'tool number',
+                        'S': 'spindle tool',
+                        'K': 'tool type',
+                        'C': 'color',
+                        'D': 'tool deletion'
+                    }
+                    operation_name = operation_names.get(operation_type, 'unknown')
+                    logger.info(f"[WRITE] Successfully changed {operation_name} for magazine position {magazine_pos} ({duration_ms}ms)")
                 else:
                     status_desc = self.get_status_description(status or "00")
-                    logger.warning(f"Failed to change tool color: {status_desc}")
-                
+                    logger.warning(f"Failed to execute {operation_type} operation: {status_desc}")
+
                 return success, status
-                
+
         except Exception as e:
-            logger.error(f"Error changing tool color: {e}")
+            logger.error(f"Error executing {operation_type} operation: {e}")
             return False, None
 
+    # Backwards compatibility alias
+    async def change_atc_tool_color(
+        self,
+        pot_number: int,
+        tool_number: int,
+        color: int,
+        verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Legacy method for changing tool color. Use change_atc_tool() instead.
+        """
+        return await self.change_atc_tool(
+            operation_type='C',
+            magazine_pos=pot_number,
+            tool_num=tool_number,
+            new_value=color,
+            verbose=verbose
+        )
+
+    # Backwards compatibility alias
     async def change_atc_tool_assignment(
         self,
         magazine_pos: int,
@@ -2293,124 +2381,15 @@ class CNCTelnetClient:
         verbose: bool = False
     ) -> Tuple[bool, Optional[str]]:
         """
-        Change tool configuration in ATC magazine using CHGMAG commands.
-        
-        This is a generic method that supports all CHGMAG operations:
-        - 'M': Change tool number (CHGMAGM)
-        - 'S': Change spindle/main tool (CHGMAGS)
-        - 'K': Change tool type (CHGMAGK)
-        - 'C': Change color (CHGMAGC) - Note: use change_atc_tool_color() for better interface
-        - 'D': Delete/remove tool (CHGMAGD)
-        
-        Args:
-            magazine_pos: Magazine position (0=spindle, 1-99=pots)
-            tool_num: Current tool number in position (for verification, optional)
-            change_type: Type of change ('M', 'S', 'K', 'C', 'D')
-            new_value: New value for the change (tool number, type, or color depending on change_type)
-            verbose: If True, log command details
-            
-        Returns:
-            Tuple of (success, status_code)
+        Legacy method for changing tool assignments. Use change_atc_tool() instead.
         """
-        if not self._connected:
-            connected = await self.connect()
-            if not connected:
-                return False, None
-        
-        # Validate inputs
-        if not isinstance(magazine_pos, int) or not 0 <= magazine_pos <= 99:
-            logger.error(f"Invalid magazine position: {magazine_pos} (must be 0-99)")
-            return False, "30"  # Invalid tool/pot number
-        
-        if change_type not in ['M', 'S', 'K', 'C', 'D']:
-            logger.error(f"Invalid change_type: {change_type} (must be M, S, K, C, or D)")
-            return False, "01"  # Invalid data
-        
-        # Warn about spindle tool changes
-        if magazine_pos == 0 and change_type != 'S':
-            logger.warning(f"Magazine position 0 (spindle) specified for non-spindle operation (type: {change_type})")
-        
-        # Format magazine position (2 digits)
-        mag_str = f"{magazine_pos:02d}"
-        
-        # Build arguments based on change_type
-        if change_type == 'M':  # Change tool number (CHGMAGM)
-            if new_value is None or not isinstance(new_value, int):
-                logger.error(f"CHGMAGM requires new_value (tool number)")
-                return False, "01"  # Invalid data
-            if not 1 <= new_value <= 999:
-                logger.error(f"Tool number {new_value} out of valid range (1-999)")
-                return False, "30"  # Invalid tool/pot number
-            # Format: mag_pos(2) + M(1) + new_tool(3) + padding(2) = 8 chars
-            # Example: "05M042  " for pot 5, tool 42
-            arguments = f"{mag_str}M{new_value:03d}  "[:8]
-            command = "CHGMAGM"
-            
-        elif change_type == 'S':  # Change spindle/main tool (CHGMAGS)
-            if new_value is None or not isinstance(new_value, int):
-                logger.error(f"CHGMAGS requires new_value (spindle tool)")
-                return False, "01"
-            if not 0 <= new_value <= 999:
-                logger.error(f"Spindle tool {new_value} out of valid range (0-999)")
-                return False, "30"
-            if magazine_pos != 0:
-                logger.warning(f"CHGMAGS typically uses magazine position 0 (spindle), got {magazine_pos}")
-            # Format: mag_pos(2) + S(1) + new_tool(3) + padding(2) = 8 chars
-            arguments = f"{mag_str}S{new_value:03d}  "[:8]
-            command = "CHGMAGS"
-            
-        elif change_type == 'K':  # Change tool type (CHGMAGK)
-            if new_value is None or not isinstance(new_value, int):
-                logger.error(f"CHGMAGK requires new_value (tool type)")
-                return False, "01"
-            if not 1 <= new_value <= 3:
-                logger.error(f"Tool type {new_value} out of valid range (1=Standard, 2=Large, 3=Medium)")
-                return False, "13"  # Data item not within allowed range
-            # Format: mag_pos(2) + K(1) + type(1) + padding(4) = 8 chars
-            # Example: "05K2    " for pot 5, type 2 (Large)
-            arguments = f"{mag_str}K{new_value}      "[:8]
-            command = "CHGMAGK"
-            
-        elif change_type == 'C':  # Change color (CHGMAGC)
-            if new_value is None or not isinstance(new_value, int):
-                logger.error(f"CHGMAGC requires new_value (color)")
-                return False, "01"
-            if not 0 <= new_value <= 7:
-                logger.error(f"Color {new_value} out of valid range (0-7)")
-                return False, "13"
-            # Format: mag_pos(2) + C(1) + color(1) + padding(4) = 8 chars
-            # Example: "05C2    " for pot 5, color 2 (Red)
-            arguments = f"{mag_str}C{new_value}      "[:8]
-            command = "CHGMAGC"
-            
-        else:  # change_type == 'D' - Delete tool (CHGMAGD)
-            # Format: mag_pos(2) + D(1) + padding(5) = 8 chars
-            # Example: "05D     " for pot 5
-            arguments = f"{mag_str}D       "[:8]
-            command = "CHGMAGD"
-        
-        # Acquire lock for this machine to prevent conflicts with polling reads
-        machine_lock = await _get_machine_lock(self.ip_address, self.port)
-        
-        start_time = asyncio.get_event_loop().time()
-        try:
-            async with machine_lock:
-                # Use standard _send_command with longer timeout for write operations
-                success, status, _ = await self._send_command(command, arguments, verbose=verbose, read_timeout=5.0)
-                
-                duration_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
-                
-                if success:
-                    logger.info(f"[WRITE] Successfully executed {command} for magazine position {magazine_pos} ({duration_ms}ms)")
-                else:
-                    status_desc = self.get_status_description(status or "00")
-                    logger.warning(f"Failed {command}: {status_desc}")
-                
-                return success, status
-                
-        except Exception as e:
-            logger.error(f"Error executing {command}: {e}")
-            return False, None
+        return await self.change_atc_tool(
+            operation_type=change_type,
+            magazine_pos=magazine_pos,
+            tool_num=tool_num,
+            new_value=new_value,
+            verbose=verbose
+        )
 
     async def assign_tool_to_pot(
         self,
