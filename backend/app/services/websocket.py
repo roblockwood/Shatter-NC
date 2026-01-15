@@ -47,6 +47,8 @@ class WebSocketManager:
                         "ip_address": machine.ip_address,
                         "enabled": machine.enabled,
                         "poll_timestamp": datetime.utcnow().isoformat(),
+                        "is_online": False,  # Default to offline
+                        "program_name": None,  # Default program name
                     }
 
                     # Overlay cached polling data if available
@@ -56,10 +58,6 @@ class WebSocketManager:
                         # Ensure program_name is included from cache
                         if "program_name" in cached:
                             machine_info["program_name"] = cached["program_name"]
-                    else:
-                        # No polling data yet - assume offline until first poll
-                        machine_info["is_online"] = False
-                        machine_info["program_name"] = None
 
                     machines_data.append(machine_info)
 
