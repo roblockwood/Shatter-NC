@@ -110,9 +110,7 @@ services:
   # Note: network_mode: host is required for mDNS multicast to work
   # This service does not join docker networks (uses host network)
   avahi:
-    build:
-      context: ./avahi
-      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_OWNER:-roblockwood}/${GITHUB_REPO:-shatter-nc}/avahi:${IMAGE_TAG:-latest}
     container_name: shatter-avahi-prod
     network_mode: host  # Required for mDNS multicast
     volumes:
