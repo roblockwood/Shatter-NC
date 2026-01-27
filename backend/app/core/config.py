@@ -44,8 +44,10 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",      # Development - Vite/React
         "http://localhost:5173",      # Development - Vite alternative port
-        "http://localhost",           # Production - Nginx on port 80
-        "http://localhost:80",        # Production - Nginx explicit port
+        "http://localhost",            # Production - Nginx on port 80 (redirects to HTTPS)
+        "http://localhost:80",         # Production - Nginx explicit port
+        "https://localhost",           # Production - HTTPS
+        "https://shatter.local",      # Production - mDNS HTTPS
         "*",                          # Allow all origins (for production with dynamic IPs)
     ]
 
