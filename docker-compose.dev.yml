@@ -59,13 +59,11 @@ services:
       VITE_API_URL: ${VITE_API_URL:-}
     ports:
       - "3000:3000"
-      - "443:443"
     depends_on:
       - backend
     volumes:
       - ./frontend:/app
       - /app/node_modules
-      - ./frontend/ssl:/etc/nginx/ssl:ro
     command: npm run dev
 
   # Redis for caching and task queue
