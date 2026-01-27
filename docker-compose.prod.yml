@@ -105,6 +105,23 @@ services:
     networks:
       - shatter-network
 
+  # Avahi mDNS service discovery
+  # Enables zero-configuration network discovery at http://shatter.local
+  # Note: network_mode: host is required for mDNS multicast to work
+  # This service does not join docker networks (uses host network)
+  avahi:
+    build:
+      context: ./avahi
+      dockerfile: Dockerfile
+    container_name: shatter-avahi-prod
+    network_mode: host  # Required for mDNS multicast
+    volumes:
+      - ./avahi/shatter.service:/etc/avahi/services/shatter.service:ro
+    restart: always
+    # Optional: Set custom hostname via environment variable
+    # environment:
+    #   - AVAHI_HOSTNAME=shatter
+
 volumes:
   postgres_data:
     driver: local
