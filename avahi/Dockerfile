@@ -29,7 +29,7 @@ RUN echo '[supervisord]' > /etc/supervisor/conf.d/supervisord.conf && \
     echo 'pidfile=/var/run/supervisord.pid' >> /etc/supervisor/conf.d/supervisord.conf && \
     echo '' >> /etc/supervisor/conf.d/supervisord.conf && \
     echo '[program:dbus]' >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo 'command=/usr/bin/dbus-daemon --system --nofork --nopidfile --address=unix:path=/run/dbus/system_bus_socket' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'command=/bin/bash -c "while [ ! -d /run/dbus ]; do mkdir -p /run/dbus && chmod 755 /run/dbus && sleep 0.1; done && exec /usr/bin/dbus-daemon --system --nofork --nopidfile --address=unix:path=/run/dbus/system_bus_socket"' >> /etc/supervisor/conf.d/supervisord.conf && \
     echo 'autostart=true' >> /etc/supervisor/conf.d/supervisord.conf && \
     echo 'autorestart=true' >> /etc/supervisor/conf.d/supervisord.conf && \
     echo 'startretries=3' >> /etc/supervisor/conf.d/supervisord.conf && \
@@ -55,8 +55,12 @@ RUN mkdir -p /var/log/supervisor
 
 # Create startup script that ensures /run/dbus exists at runtime
 RUN echo '#!/bin/bash' > /start.sh && \
+    echo 'set -e' >> /start.sh && \
+    echo '# Ensure /run/dbus exists with proper permissions' >> /start.sh && \
     echo 'mkdir -p /run/dbus' >> /start.sh && \
     echo 'chmod 755 /run/dbus' >> /start.sh && \
+    echo 'chown root:messagebus /run/dbus 2>/dev/null || chown root:root /run/dbus' >> /start.sh && \
+    echo '# Start supervisor' >> /start.sh && \
     echo 'exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf' >> /start.sh && \
     chmod +x /start.sh
 
