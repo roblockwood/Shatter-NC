@@ -33,6 +33,10 @@ RUN npm install --prefer-offline --no-audit
 # Copy application code
 COPY . .
 
+# Build argument for version (defaults to 0.1.0 if not provided)
+ARG VITE_APP_VERSION=0.1.0
+ENV VITE_APP_VERSION=$VITE_APP_VERSION
+
 # Build application
 RUN npm run build
 
