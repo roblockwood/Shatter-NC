@@ -7,6 +7,7 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
+      - 'avahi/**'
       - 'database/**'
       - 'docker-compose.prod.yml'
       - '.github/workflows/docker-build-push.yml'
@@ -16,6 +17,7 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
+      - 'avahi/**'
       - 'database/**'
       - 'docker-compose.prod.yml'
       - '.github/workflows/docker-build-push.yml'
@@ -57,6 +59,7 @@ jobs:
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_OUTPUT
           echo "BACKEND_IMAGE=ghcr.io/${OWNER}/${REPO_LOWER}/backend" >> $GITHUB_OUTPUT
           echo "FRONTEND_IMAGE=ghcr.io/${OWNER}/${REPO_LOWER}/frontend" >> $GITHUB_OUTPUT
+          echo "AVAHI_IMAGE=ghcr.io/${OWNER}/${REPO_LOWER}/avahi" >> $GITHUB_OUTPUT
 
       - name: Build and push backend image
         uses: docker/build-push-action@v5
@@ -88,6 +91,20 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build and push Avahi image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./avahi
+          file: ./avahi/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ steps.tags.outputs.AVAHI_IMAGE }}:latest
+            ${{ steps.tags.outputs.AVAHI_IMAGE }}:${{ steps.tags.outputs.SHORT_SHA }}
+            ${{ steps.tags.outputs.AVAHI_IMAGE }}:${{ steps.tags.outputs.DATE_TAG }}-${{ steps.tags.outputs.SHORT_SHA }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Build summary
         run: |
           if [ "${{ github.event_name }}" == "push" ]; then
@@ -106,6 +123,11 @@ jobs:
             echo "- \`${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
             echo "- \`${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.DATE_TAG }}-${{ steps.tags.outputs.SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Avahi" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ steps.tags.outputs.AVAHI_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ steps.tags.outputs.AVAHI_IMAGE }}:${{ steps.tags.outputs.SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ steps.tags.outputs.AVAHI_IMAGE }}:${{ steps.tags.outputs.DATE_TAG }}-${{ steps.tags.outputs.SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
             echo "**View packages:** https://github.com/${{ github.repository_owner }}?tab=packages" >> $GITHUB_STEP_SUMMARY
           else
             echo "## Docker Images Built Successfully ✅" >> $GITHUB_STEP_SUMMARY
@@ -113,6 +135,6 @@ jobs:
             echo "**Event:** Pull Request validation" >> $GITHUB_STEP_SUMMARY
             echo "**Architectures:** linux/amd64" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Both backend and frontend images built successfully. Ready to merge! 🚀" >> $GITHUB_STEP_SUMMARY
+            echo "Backend, frontend, and Avahi images built successfully. Ready to merge! 🚀" >> $GITHUB_STEP_SUMMARY
           fi
 
