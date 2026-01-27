@@ -7,6 +7,9 @@ import { BetaRoute } from './components/BetaRoute';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import './App.css';
 
+// Get version from environment variable (set at build time via Vite)
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || '0.1.0';
+
 function Navigation() {
   const location = useLocation();
   const { isBetaMode, activateBetaMode, deactivateBetaMode } = useBetaMode();
@@ -24,7 +27,7 @@ function Navigation() {
             style={{ cursor: 'pointer', userSelect: 'none' }}
             title={isBetaMode ? 'BETA MODE ACTIVE - Click rapidly to disable' : 'Click rapidly to enable beta mode'}
           >
-            SHATTER v0.1.0
+            SHATTER v{APP_VERSION}
           </span>
         </div>
         <nav className="app-nav">
