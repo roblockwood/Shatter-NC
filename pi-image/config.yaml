@@ -1,0 +1,43 @@
+# CustomPiOS Configuration for Shatter CNC Platform
+# This configuration creates a Raspberry Pi OS image with Docker and Shatter pre-installed
+
+base_image: "raspios_lite_arm64"
+hostname: "shatter"
+locale: "en_US.UTF-8"
+timezone: "UTC"
+
+# User configuration
+users:
+  - username: "pi"
+    password: "raspberry"  # Users should change this on first boot
+    groups: ["sudo", "docker"]
+    shell: "/bin/bash"
+
+# WiFi configuration - left unconfigured for first-boot wizard
+# Users will configure WiFi via the setup wizard
+
+# SSH configuration
+ssh:
+  enabled: true
+  password_auth: true
+  pubkey_auth: true
+
+# Modules to run during image build
+modules:
+  - "01-docker"
+  - "02-shatter"
+  - "03-avahi"
+  - "04-firstboot"
+
+# Additional packages to install
+packages:
+  - "curl"
+  - "wget"
+  - "git"
+  - "vim"
+  - "htop"
+  - "avahi-daemon"
+  - "avahi-utils"
+
+# First boot script (runs on first boot, not during image build)
+first_boot_script: "/opt/shatter/setup-wizard.sh"
