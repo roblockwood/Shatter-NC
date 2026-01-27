@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL with TimescaleDB extension
   postgres:
@@ -78,6 +76,22 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
+
+  # Avahi mDNS service discovery
+  # Enables zero-configuration network discovery at http://shatter.local:3000
+  # Note: network_mode: host is required for mDNS multicast to work
+  avahi:
+    build:
+      context: ./avahi
+      dockerfile: Dockerfile
+    container_name: shatter-avahi
+    network_mode: host  # Required for mDNS multicast
+    volumes:
+      - ./avahi/shatter-dev.service:/etc/avahi/services/shatter.service:ro
+    restart: unless-stopped
+    # Optional: Set custom hostname via environment variable
+    # environment:
+    #   - AVAHI_HOSTNAME=shatter
 
 volumes:
   postgres_data:
