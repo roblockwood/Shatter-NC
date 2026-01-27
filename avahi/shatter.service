@@ -3,8 +3,8 @@
 <service-group>
   <name replace-wildcards="yes">Shatter CNC Management</name>
   <service>
-    <type>_http._tcp</type>
-    <port>80</port>
+    <type>_https._tcp</type>
+    <port>443</port>
     <txt-record>path=/</txt-record>
     <txt-record>version=0.1.0</txt-record>
   </service>
