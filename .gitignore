@@ -56,10 +56,3 @@ temp/
 
 # OS
 Thumbs.db
-
-# SSL Certificates
-# Keep cert.pem (public certificate) but ignore private keys
-frontend/ssl/*.key
-frontend/ssl/key.pem
-*.key
-*.pem.key
