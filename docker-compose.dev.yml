@@ -86,6 +86,8 @@ services:
       dockerfile: Dockerfile
     container_name: shatter-avahi
     network_mode: host  # Required for mDNS multicast
+    tmpfs:
+      - /run
     volumes:
       - ./avahi/shatter-dev.service:/etc/avahi/services/shatter.service:ro
     restart: unless-stopped
