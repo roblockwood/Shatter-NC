@@ -113,6 +113,8 @@ services:
     image: ghcr.io/${GITHUB_OWNER:-roblockwood}/${GITHUB_REPO:-shatter-nc}/avahi:${IMAGE_TAG:-latest}
     container_name: shatter-avahi-prod
     network_mode: host  # Required for mDNS multicast
+    tmpfs:
+      - /run
     volumes:
       - ./avahi/shatter.service:/etc/avahi/services/shatter.service:ro
     restart: always
