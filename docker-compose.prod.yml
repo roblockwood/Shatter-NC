@@ -109,7 +109,10 @@ services:
   # Enables zero-configuration network discovery at http://shatter.local
   # Note: network_mode: host is required for mDNS multicast to work
   # This service does not join docker networks (uses host network)
+  # Only starts when explicitly enabled with profile: docker compose --profile avahi up -d
+  # Use this if Avahi is NOT running on your host machine
   avahi:
+    profiles: ["avahi"]
     image: ghcr.io/${GITHUB_OWNER:-roblockwood}/${GITHUB_REPO:-shatter-nc}/avahi:${IMAGE_TAG:-latest}
     container_name: shatter-avahi-prod
     network_mode: host  # Required for mDNS multicast
