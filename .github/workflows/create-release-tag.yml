@@ -66,5 +66,5 @@ jobs:
               issue_number: context.payload.pull_request.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `✅ Release tag \`${TAG}\` created successfully!\n\nThis will trigger:\n- 🐳 Docker image builds (via push to main)\n- 🍓 Raspberry Pi image build (via tag push)`
+              body: `✅ Release tag \`${TAG}\` created successfully!\n\nThis will trigger:\n- 🐳 Docker image builds (via push to main)`
             });
