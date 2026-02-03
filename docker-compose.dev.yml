@@ -80,7 +80,10 @@ services:
   # Avahi mDNS service discovery
   # Enables zero-configuration network discovery at http://shatter.local:3000
   # Note: network_mode: host is required for mDNS multicast to work
+  # Only starts when explicitly enabled with profile: docker compose --profile avahi up -d
+  # Use this if Avahi is NOT running on your host machine
   avahi:
+    profiles: ["avahi"]
     build:
       context: ./avahi
       dockerfile: Dockerfile

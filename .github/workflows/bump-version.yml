@@ -186,5 +186,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🚀 Version bump triggered!\n\n**Previous:** ${{ steps.current_version.outputs.current }}\n**New:** ${{ steps.new_version.outputs.version }}\n**Type:** ${{ steps.bump_type.outputs.type }}\n\n✅ Version files updated:\n- \`VERSION\`\n- \`backend/app/core/config.py\`\n- \`frontend/package.json\`\n\nAfter you merge this PR, tag \`${{ steps.new_version.outputs.tag }}\` will be created automatically, which will trigger:\n- Docker image builds\n- Raspberry Pi image build`
+              body: `🚀 Version bump triggered!\n\n**Previous:** ${{ steps.current_version.outputs.current }}\n**New:** ${{ steps.new_version.outputs.version }}\n**Type:** ${{ steps.bump_type.outputs.type }}\n\n✅ Version files updated:\n- \`VERSION\`\n- \`backend/app/core/config.py\`\n- \`frontend/package.json\`\n\nAfter you merge this PR, tag \`${{ steps.new_version.outputs.tag }}\` will be created automatically, which will trigger:\n- Docker image builds`
             });
