@@ -14,6 +14,17 @@ interface PaneComponent {
   component: React.ReactNode;
 }
 
+// Human-readable pane names
+const PANE_NAMES: Record<PaneId, string> = {
+  statusTimeline: 'Status Timeline',
+  alarms: 'Alarms',
+  currentProgram: 'Current Program',
+  tools: 'Tools',
+  cycleHistory: 'Cycle History',
+  panel: 'Panel',
+  fileManager: 'File Manager',
+};
+
 interface LayoutManagerProps {
   machineId: number;
   panes: PaneComponent[];
@@ -29,6 +40,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
 }) => {
   const [layout, setLayout] = useState<PaneLayout[]>(getDefaultLayout());
   const [isLoading, setIsLoading] = useState(true);
+  const [showPaneList, setShowPaneList] = useState(false);
   const saveTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debug: Log edit mode changes
@@ -83,9 +95,14 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
     };
   }, []);
 
-  // Convert PaneLayout[] to react-grid-layout Layout format
+  // Filter visible panes for rendering
+  const visibleLayout = useMemo(() => {
+    return layout.filter(pane => pane.visible !== false);
+  }, [layout]);
+
+  // Convert PaneLayout[] to react-grid-layout Layout format (only visible panes)
   const gridLayout = useMemo(() => {
-    const result = layout.map(pane => ({
+    const result = visibleLayout.map(pane => ({
       i: pane.i,
       x: pane.x,
       y: pane.y,
@@ -97,26 +114,44 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
     }));
     console.log('Grid layout computed:', { isEditMode, items: result.map(r => ({ i: r.i, static: r.static })) });
     return result;
-  }, [layout, isEditMode]);
+  }, [visibleLayout, isEditMode]);
 
   // Handle layout change
   const handleLayoutChange = useCallback(
     (currentLayout: Layout[]) => {
-      const newLayout: PaneLayout[] = currentLayout.map(item => ({
-        i: item.i as PaneId,
-        x: item.x,
-        y: item.y,
-        w: item.w,
-        h: item.h,
-        minW: item.minW,
-        minH: item.minH,
-        static: item.static,
-      }));
+      // Create a map of the current layout state to preserve visibility and other properties
+      const layoutMap = new Map<string, PaneLayout>();
+      layout.forEach(pane => {
+        layoutMap.set(pane.i, pane);
+      });
 
-      setLayout(newLayout);
+      // Merge the new positions/sizes from react-grid-layout with existing pane properties
+      const updatedLayout: PaneLayout[] = currentLayout.map(item => {
+        const existingPane = layoutMap.get(item.i);
+        return {
+          i: item.i as PaneId,
+          x: item.x,
+          y: item.y,
+          w: item.w,
+          h: item.h,
+          minW: item.minW ?? existingPane?.minW,
+          minH: item.minH ?? existingPane?.minH,
+          static: item.static,
+          visible: existingPane?.visible !== undefined ? existingPane.visible : true,
+        };
+      });
+
+      // Add back any panes that are hidden (not in currentLayout but in layout state)
+      layout.forEach(pane => {
+        if (pane.visible === false && !updatedLayout.find(p => p.i === pane.i)) {
+          updatedLayout.push({ ...pane });
+        }
+      });
+
+      setLayout(updatedLayout);
       // Save when layout changes (debounced) - only if in edit mode
       if (isEditMode) {
-        debouncedSave(newLayout);
+        debouncedSave(updatedLayout);
       }
     },
     [debouncedSave, isEditMode, layout]
@@ -128,6 +163,37 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
     setLayout(defaultLayout);
     debouncedSave(defaultLayout);
   }, [debouncedSave]);
+
+  // Toggle pane visibility
+  const handleToggleVisibility = useCallback(
+    (paneId: PaneId) => {
+      // Prevent hiding all panes
+      const visibleCount = layout.filter(p => p.visible !== false).length;
+      const targetPane = layout.find(p => p.i === paneId);
+      
+      if (targetPane && targetPane.visible !== false && visibleCount <= 1) {
+        // Don't allow hiding the last visible pane
+        return;
+      }
+
+      const updatedLayout = layout.map(pane => {
+        if (pane.i === paneId) {
+          return {
+            ...pane,
+            visible: pane.visible === false ? true : false,
+          };
+        }
+        return pane;
+      });
+
+      setLayout(updatedLayout);
+      // Save when visibility changes (debounced) - only if in edit mode
+      if (isEditMode) {
+        debouncedSave(updatedLayout);
+      }
+    },
+    [layout, isEditMode, debouncedSave]
+  );
 
   // Create a map of pane components by ID
   const paneMap = useMemo(() => {
@@ -152,22 +218,55 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
       data-edit-mode={isEditMode}
     >
       {isEditMode && (
-        <div className="layout-manager-controls">
-          <button
-            className="layout-control-btn"
-            onClick={handleResetToDefault}
-            title="Reset to default layout"
-          >
-            [RESET TO DEFAULT]
-          </button>
-          <button
-            className="layout-control-btn"
-            onClick={() => onEditModeChange?.(false)}
-            title="Exit edit mode"
-          >
-            [SAVE & EXIT]
-          </button>
-        </div>
+        <>
+          <div className="layout-manager-controls">
+            <button
+              className="layout-control-btn"
+              onClick={() => setShowPaneList(!showPaneList)}
+              title={showPaneList ? "Hide pane list" : "Show pane list"}
+            >
+              {showPaneList ? '[HIDE PANE LIST]' : '[SHOW PANE LIST]'}
+            </button>
+            <button
+              className="layout-control-btn"
+              onClick={handleResetToDefault}
+              title="Reset to default layout"
+            >
+              [RESET TO DEFAULT]
+            </button>
+            <button
+              className="layout-control-btn"
+              onClick={() => onEditModeChange?.(false)}
+              title="Exit edit mode"
+            >
+              [SAVE & EXIT]
+            </button>
+          </div>
+          {showPaneList && (
+            <div className="pane-list-panel">
+              <div className="pane-list-header">PANES</div>
+              <div className="pane-list-items">
+                {layout.map(pane => {
+                  const isVisible = pane.visible !== false;
+                  const paneName = PANE_NAMES[pane.i as PaneId] || pane.i;
+                  return (
+                    <label key={pane.i} className="pane-list-item">
+                      <input
+                        type="checkbox"
+                        checked={isVisible}
+                        onChange={() => handleToggleVisibility(pane.i as PaneId)}
+                        disabled={isVisible && layout.filter(p => p.visible !== false).length <= 1}
+                      />
+                      <span className={`pane-list-item-label ${!isVisible ? 'pane-hidden' : ''}`}>
+                        {paneName}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <div className="layout-container">
@@ -186,7 +285,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
           preventCollision={false}
           compactType="vertical"
         >
-        {layout.map(pane => {
+        {visibleLayout.map(pane => {
           const paneComponent = paneMap.get(pane.i as PaneId);
           if (!paneComponent) {
             return <div key={pane.i} />;
@@ -202,6 +301,17 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                 <div className="drag-handle" data-testid={`drag-handle-${pane.i}`}>
                   <span className="drag-handle-icon">☰</span>
                   <span className="drag-handle-label">{pane.i}</span>
+                  <button
+                    className="visibility-toggle-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleVisibility(pane.i as PaneId);
+                    }}
+                    title={pane.visible !== false ? "Hide pane" : "Show pane"}
+                    data-pane-visible={pane.visible !== false}
+                  >
+                    {pane.visible !== false ? '👁️' : '👁️‍🗨️'}
+                  </button>
                 </div>
               )}
               <div className="layout-pane-content">
