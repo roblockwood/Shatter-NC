@@ -1,0 +1,687 @@
+.file-manager-pane {
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  height: 100%;
+  width: 100%;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.file-manager-terminal-box {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.file-manager-terminal-box .terminal-box-content {
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.file-manager-content {
+  flex: 1;
+  display: flex;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.file-manager-programs-panel {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.file-manager-details-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 300px;
+  max-width: 400px;
+  overflow: hidden;
+}
+
+.file-manager-panel-header,
+.file-manager-panel-footer {
+  color: var(--color-text-secondary);
+  white-space: pre;
+  line-height: 1;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-xs);
+  flex-shrink: 0;
+}
+
+.file-manager-loading,
+.file-manager-error,
+.file-manager-empty {
+  padding: var(--spacing-md);
+  text-align: center;
+  font-size: var(--font-sm);
+  flex-shrink: 0;
+}
+
+.file-manager-programs-table {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.file-manager-table-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.file-manager-search-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex: 1;
+  max-width: 200px;
+}
+
+.file-manager-search-input {
+  flex: 1;
+  padding: 2px var(--spacing-xs);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+}
+
+.file-manager-search-input:focus {
+  outline: none;
+  border-color: var(--color-text-primary);
+  box-shadow: var(--glow);
+}
+
+.file-manager-search-clear-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  padding: 2px 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.file-manager-search-clear-btn:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-text-primary);
+  color: var(--color-text-primary);
+}
+
+.file-manager-sort-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.file-manager-sort-label {
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+}
+
+.file-manager-terminal-select-sm {
+  padding: 2px var(--spacing-xs);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  cursor: pointer;
+}
+
+.file-manager-terminal-select-sm:focus {
+  outline: none;
+  border-color: var(--color-text-primary);
+  box-shadow: var(--glow);
+}
+
+.file-manager-sort-direction-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  padding: 2px var(--spacing-xs);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 24px;
+}
+
+.file-manager-sort-direction-btn:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-text-primary);
+  box-shadow: var(--glow);
+}
+
+.file-manager-table-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.5fr 1fr;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  font-size: var(--font-xs);
+  flex-shrink: 0;
+}
+
+.file-manager-table-divider {
+  color: var(--color-text-dim);
+  white-space: pre;
+  line-height: 1;
+  font-size: var(--font-xs);
+  flex-shrink: 0;
+}
+
+.file-manager-table-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.file-manager-table-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.5fr 1fr;
+  gap: var(--spacing-xs);
+  padding: 2px var(--spacing-sm);
+  cursor: pointer;
+  transition: background 0.1s;
+  font-size: var(--font-xs);
+}
+
+.file-manager-table-row:hover {
+  background: var(--color-bg-elevated);
+}
+
+.file-manager-table-row.selected {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+.file-manager-table-row .file-manager-col-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.file-manager-col-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.file-manager-col-action-spacer {
+  display: inline-block;
+  width: 1px;
+}
+
+.file-manager-table-row.has-deployment {
+  border-left: 2px solid var(--color-success);
+}
+
+.file-manager-deployment-indicator {
+  color: var(--color-success);
+  font-size: var(--font-xs);
+  margin-left: var(--spacing-xs);
+}
+
+.file-manager-table-footer {
+  color: var(--color-text-dim);
+  white-space: pre;
+  line-height: 1;
+  padding: var(--spacing-xs) 0;
+  font-size: var(--font-xs);
+  flex-shrink: 0;
+}
+
+.file-manager-table-summary {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+  flex-shrink: 0;
+}
+
+.file-manager-upload-section {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.file-manager-upload-button {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: transparent;
+  border: 1px solid var(--color-border-bright);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s;
+}
+
+.file-manager-upload-button:hover {
+  border-color: var(--color-text-primary);
+  box-shadow: var(--glow);
+}
+
+.file-manager-upload-progress {
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+}
+
+.file-manager-details-content {
+  flex: 1;
+  padding: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.file-manager-detail-section {
+  margin-bottom: var(--spacing-xs);
+  padding-bottom: var(--spacing-xs);
+  border-bottom: 1px solid var(--color-border-dim);
+  flex-shrink: 0;
+}
+
+.file-manager-detail-section:last-of-type {
+  border-bottom: none;
+}
+
+.file-manager-section-title {
+  font-size: var(--font-xs);
+  font-weight: bold;
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.file-manager-detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-xs);
+  margin-bottom: 2px;
+}
+
+.file-manager-label {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.file-manager-value {
+  color: var(--color-text-primary);
+  text-align: right;
+}
+
+.file-manager-detail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+.file-manager-terminal-button,
+.file-manager-terminal-button-sm {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: transparent;
+  border: 1px solid var(--color-border-bright);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s;
+}
+
+.file-manager-terminal-button-sm {
+  padding: 2px 4px;
+  font-size: 10px;
+}
+
+.file-manager-terminal-button:hover,
+.file-manager-terminal-button-sm:hover {
+  border-color: var(--color-text-primary);
+  box-shadow: var(--glow);
+}
+
+.file-manager-code-preview {
+  margin-top: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+  max-height: 200px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.file-manager-preview-header,
+.file-manager-preview-footer {
+  color: var(--color-text-secondary);
+  padding: 2px var(--spacing-xs);
+  border-bottom: 1px solid var(--color-border);
+  white-space: pre;
+  line-height: 1;
+  font-size: var(--font-xs);
+  flex-shrink: 0;
+}
+
+.file-manager-preview-footer {
+  border-top: 1px solid var(--color-border);
+  border-bottom: none;
+}
+
+.file-manager-preview-content {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 10px;
+}
+
+.file-manager-preview-line {
+  display: flex;
+  padding: 1px var(--spacing-xs);
+  line-height: 1.3;
+  border-bottom: 1px solid var(--color-border-dim);
+}
+
+.file-manager-line-number {
+  color: var(--color-text-dim);
+  min-width: 25px;
+  text-align: right;
+  margin-right: var(--spacing-xs);
+  user-select: none;
+  font-size: 10px;
+}
+
+.file-manager-line-text {
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  white-space: pre;
+  word-break: break-word;
+  flex: 1;
+  font-size: 10px;
+}
+
+.file-manager-detail-table {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  border-collapse: collapse;
+}
+
+.file-manager-detail-table th {
+  text-align: left;
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--color-border-dim);
+  color: var(--color-text-muted);
+  font-weight: normal;
+  font-size: 10px;
+}
+
+.file-manager-detail-table td {
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--color-border-dim);
+  font-size: 10px;
+}
+
+.file-manager-detail-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.file-manager-detail-table tbody tr:hover {
+  background-color: rgba(0, 255, 0, 0.05);
+}
+
+.file-manager-tools-table {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.file-manager-wcs-validation table {
+  margin-top: var(--spacing-xs);
+}
+
+.file-manager-deployment-info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
+}
+
+.file-manager-deployment-selector {
+  flex: 1;
+  max-width: 250px;
+}
+
+.file-manager-tool-summary-row.clickable,
+.file-manager-wcs-summary-row.clickable {
+  cursor: pointer;
+}
+
+.file-manager-tool-summary-row.clickable:hover,
+.file-manager-wcs-summary-row.clickable:hover {
+  background-color: rgba(0, 255, 0, 0.1);
+}
+
+.file-manager-tool-detail-row,
+.file-manager-wcs-detail-row {
+  background-color: rgba(0, 255, 0, 0.03);
+}
+
+.file-manager-expand-icon {
+  display: inline-block;
+  width: 0.75rem;
+  text-align: center;
+  margin-right: 0.25rem;
+  font-size: 10px;
+}
+
+.file-manager-detail-label {
+  padding-left: 0.75rem !important;
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.file-manager-validation-error {
+  margin-bottom: var(--spacing-xs);
+}
+
+.file-manager-error-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+/* Modal Styles */
+.file-manager-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.file-manager-modal-content {
+  background: var(--color-bg-surface);
+  border: 2px solid var(--color-border-bright);
+  border-radius: 4px;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.file-manager-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+}
+
+.file-manager-modal-title {
+  color: var(--color-text-primary);
+  font-weight: 700;
+  font-size: var(--font-sm);
+  text-transform: uppercase;
+  word-break: break-all;
+  flex: 1;
+}
+
+.file-manager-modal-close {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-size: var(--font-md);
+  cursor: pointer;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  margin-left: var(--spacing-sm);
+  transition: all 0.2s;
+}
+
+.file-manager-modal-close:hover {
+  border-color: var(--color-text-primary);
+  box-shadow: var(--glow);
+}
+
+.file-manager-modal-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--spacing-sm);
+}
+
+.file-manager-file-stats {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+  padding-bottom: var(--spacing-xs);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+}
+
+.file-manager-code-viewer {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+}
+
+.file-manager-code-line {
+  display: flex;
+  padding: 2px var(--spacing-xs);
+  line-height: 1.4;
+  border-bottom: 1px solid var(--color-border-dim);
+  font-size: 10px;
+}
+
+.file-manager-modal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  color: var(--color-text-secondary);
+}
+
+.file-manager-modal-footer {
+  padding: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+}
+
+/* Status Colors */
+.text-success {
+  color: #00ff00;
+}
+
+.text-warning {
+  color: #ffaa00;
+}
+
+.text-error {
+  color: #ff4444;
+}
+
+.text-muted {
+  color: var(--color-text-muted);
+}
+
+/* ASCII Progress Bar Animation */
+.ascii-progress-container {
+  display: inline-block;
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  animation: progress-animate 2.5s ease-in-out infinite;
+  white-space: nowrap;
+  font-size: var(--font-xs);
+}
+
+@keyframes progress-animate {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Responsive adjustments for pane */
+@media (max-width: 1200px) {
+  .file-manager-content {
+    flex-direction: column;
+  }
+
+  .file-manager-details-panel {
+    min-width: unset;
+    max-width: unset;
+  }
+}
