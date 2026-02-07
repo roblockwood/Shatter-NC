@@ -2,7 +2,7 @@
  * Layout configuration types for machine detail panes
  */
 
-export type PaneId = 'statusTimeline' | 'alarms' | 'currentProgram' | 'tools' | 'cycleHistory' | 'panel';
+export type PaneId = 'statusTimeline' | 'alarms' | 'currentProgram' | 'tools' | 'cycleHistory' | 'panel' | 'fileManager';
 
 export interface PaneLayout {
   i: string;        // Pane ID: 'statusTimeline', 'alarms', 'currentProgram', 'tools', 'cycleHistory'
@@ -13,6 +13,7 @@ export interface PaneLayout {
   minW?: number;    // Minimum width
   minH?: number;    // Minimum height
   static?: boolean; // Whether pane is static (not draggable/resizable)
+  visible?: boolean; // Whether pane is visible (defaults to true for backward compatibility)
 }
 
 export interface LayoutConfig {
@@ -28,6 +29,7 @@ export const PANE_IDS = {
   TOOLS: 'tools' as const,
   CYCLE_HISTORY: 'cycleHistory' as const,
   PANEL: 'panel' as const,
+  FILE_MANAGER: 'fileManager' as const,
 } as const;
 
 // Default layout configuration matching current hardcoded structure
@@ -41,6 +43,7 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     h: 5,
     minW: 6,  // 25% minimum width (6/24 = 25%)
     minH: 3,
+    visible: true,
   },
   {
     i: PANE_IDS.ALARMS,
@@ -50,6 +53,7 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     h: 7,
     minW: 3,  // 12.5% minimum width (3/24 = 12.5%) - allows single internal frame width
     minH: 4,
+    visible: true,
   },
   {
     i: PANE_IDS.CURRENT_PROGRAM,
@@ -59,6 +63,7 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     h: 7,
     minW: 6,  // 25% minimum width (6/24 = 25%)
     minH: 4,
+    visible: true,
   },
   {
     i: PANE_IDS.TOOLS,
@@ -68,6 +73,7 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     h: 7,
     minW: 6,  // 25% minimum width (6/24 = 25%)
     minH: 4,
+    visible: true,
   },
   {
     i: PANE_IDS.CYCLE_HISTORY,
@@ -77,6 +83,7 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     h: 7,
     minW: 6,  // 25% minimum width (6/24 = 25%)
     minH: 4,
+    visible: true,
   },
   {
     i: PANE_IDS.PANEL,
@@ -86,5 +93,16 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     h: 8,
     minW: 3,  // 12.5% minimum width (3/24 = 12.5%) - allows single internal frame width
     minH: 6,  // Minimum vertical size to prevent clipping
+    visible: true,
+  },
+  {
+    i: PANE_IDS.FILE_MANAGER,
+    x: 0,
+    y: 27,
+    w: 24,
+    h: 8,
+    minW: 6,  // 25% minimum width (6/24 = 25%)
+    minH: 4,
+    visible: true,
   },
 ];
