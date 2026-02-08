@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ToolListModal } from './ToolListModal';
 import { UploadConfirmationModal } from './UploadConfirmationModal';
 import { SaveConfirmModal } from './SaveConfirmModal';
@@ -151,6 +151,11 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     setOnCollapse, 
     setOnToggleLayoutEdit 
   } = useExpandedMachine();
+  
+  // Create a stable toggle function using useCallback
+  const toggleLayoutEdit = useCallback(() => {
+    setLayoutEditMode((prev) => !prev);
+  }, [setLayoutEditMode]);
   const [cachedAlarms, setCachedAlarms] = useState<Alarm[] | null>(null);
   const [showAlarmHover, setShowAlarmHover] = useState(false);
   const [alarmHoverPosition, setAlarmHoverPosition] = useState<{ top: number; left: number } | null>(null);
@@ -612,7 +617,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     if (isExpanded && !isEditing && !editMode) {
       setExpandedMachine({ id: machine.machine_id, name: machine.machine_name });
       setOnCollapse(() => () => onCollapse?.());
-      setOnToggleLayoutEdit(() => () => setLayoutEditMode((prev) => !prev));
+      setOnToggleLayoutEdit(() => toggleLayoutEdit);
     } else {
       setExpandedMachine(null);
       setOnCollapse(null);
