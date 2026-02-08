@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ToolListModal } from './ToolListModal';
 import { UploadConfirmationModal } from './UploadConfirmationModal';
 import { SaveConfirmModal } from './SaveConfirmModal';
@@ -12,6 +12,7 @@ import { PanelPane } from './machine-detail/PanelPane';
 import { FileManagerPane } from './machine-detail/FileManagerPane';
 import { LayoutManager } from './machine-detail/LayoutManager';
 import { PANE_IDS } from '../types/layout';
+import { useExpandedMachine } from '../contexts/ExpandedMachineContext';
 import './MachineCard.css';
 import { API_BASE_URL } from '../config/api';
 
@@ -143,7 +144,18 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const [isEditSaving, setIsEditSaving] = useState(false);
   const [isEditTesting, setIsEditTesting] = useState(false);
   const [editTestResult, setEditTestResult] = useState<any>(null);
-  const [layoutEditMode, setLayoutEditMode] = useState(false);
+  const { 
+    setExpandedMachine, 
+    layoutEditMode, 
+    setLayoutEditMode, 
+    setOnCollapse, 
+    setOnToggleLayoutEdit 
+  } = useExpandedMachine();
+  
+  // Create a stable toggle function using useCallback
+  const toggleLayoutEdit = useCallback(() => {
+    setLayoutEditMode((prev) => !prev);
+  }, [setLayoutEditMode]);
   const [cachedAlarms, setCachedAlarms] = useState<Alarm[] | null>(null);
   const [showAlarmHover, setShowAlarmHover] = useState(false);
   const [alarmHoverPosition, setAlarmHoverPosition] = useState<{ top: number; left: number } | null>(null);
@@ -600,43 +612,23 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     }
   };
 
+  // Update context when expanded state changes
+  useEffect(() => {
+    if (isExpanded && !isEditing && !editMode) {
+      setExpandedMachine({ id: machine.machine_id, name: machine.machine_name });
+      setOnCollapse(() => () => onCollapse?.());
+      setOnToggleLayoutEdit(() => toggleLayoutEdit);
+    } else {
+      setExpandedMachine(null);
+      setOnCollapse(null);
+      setOnToggleLayoutEdit(null);
+    }
+  }, [isExpanded, isEditing, editMode, machine.machine_id, machine.machine_name, onCollapse, setExpandedMachine, setOnCollapse, setOnToggleLayoutEdit, setLayoutEditMode]);
+
   // Render expanded view
   if (isExpanded && !isEditing && !editMode) {
     return (
       <div className={`machine-card expanded`} onClick={handleCardClick}>
-        <div className="machine-card-expanded-header">
-          <div className="expanded-header-top">
-            ╔{'═'.repeat(70)}╗
-          </div>
-          <div className="expanded-header-title">
-            <span className="expanded-machine-name">{machine.machine_name}</span>
-            <div className="expanded-header-actions">
-              <button
-                className="card-action-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setLayoutEditMode(!layoutEditMode);
-                }}
-                title={layoutEditMode ? "Exit layout edit mode" : "Customize layout"}
-              >
-                {layoutEditMode ? '[EXIT EDIT]' : '[CUSTOMIZE LAYOUT]'}
-              </button>
-              <button
-                className="card-action-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCollapse?.();
-                }}
-                title="Collapse"
-              >
-                [COLLAPSE]
-              </button>
-            </div>
-          </div>
-          <div className="expanded-header-bottom">
-            ╠{'═'.repeat(70)}╣
-          </div>
-        </div>
 
         <div className="machine-card-expanded-content" ref={expandedContentRef}>
           <LayoutManager
