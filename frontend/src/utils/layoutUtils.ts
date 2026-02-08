@@ -43,6 +43,7 @@ export function mergeLayoutWithDefaults(
         minW: customPane.minW ?? defaultPane.minW,
         minH: customPane.minH ?? defaultPane.minH,
         static: customPane.static ?? defaultPane.static,
+        visible: customPane.visible !== undefined ? customPane.visible : (defaultPane.visible !== undefined ? defaultPane.visible : true),
       });
     } else {
       // Use default pane

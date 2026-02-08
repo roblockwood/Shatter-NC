@@ -9,6 +9,7 @@ import { ToolsPane } from './machine-detail/ToolsPane';
 import { CurrentProgramPane } from './machine-detail/CurrentProgramPane';
 import { CycleHistoryPane } from './machine-detail/CycleHistoryPane';
 import { PanelPane } from './machine-detail/PanelPane';
+import { FileManagerPane } from './machine-detail/FileManagerPane';
 import { LayoutManager } from './machine-detail/LayoutManager';
 import { PANE_IDS } from '../types/layout';
 import './MachineCard.css';
@@ -169,6 +170,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const cycleHistoryPaneRef = useRef<HTMLDivElement>(null);
   const cycleHoverRef = useRef<HTMLDivElement>(null);
   const cycleIndicatorRef = useRef<HTMLDivElement>(null);
+  const fileManagerPaneRef = useRef<HTMLDivElement>(null);
   const expandedContentRef = useRef<HTMLDivElement>(null);
   const [currentProgram, setCurrentProgram] = useState<string | null>(null);
   
@@ -716,6 +718,17 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     panelData={machine.panel}
                     onExpand={undefined}
                   />
+                ),
+              },
+              {
+                id: PANE_IDS.FILE_MANAGER,
+                component: (
+                  <div ref={fileManagerPaneRef}>
+                    <FileManagerPane 
+                      machineId={machine.machine_id}
+                      onExpand={undefined}
+                    />
+                  </div>
                 ),
               },
             ]}
