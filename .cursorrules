@@ -39,3 +39,36 @@ async def test_on_machine(ip_address: str, port: int = 10000):
 
 **Reference**: See `.cursor/machine-testing-skill.md` for detailed workflow.
 
+## Automatic Versioning
+
+The project uses **semantic-release** with **conventional commits** for automatic version management. Version bumps happen automatically based on commit messages when PRs are merged to `main`.
+
+**MANDATORY**: All commits MUST use conventional commit format:
+- `feat:` - New feature (minor version bump: 0.1.0 → 0.2.0)
+- `fix:` - Bug fix (patch version bump: 0.1.0 → 0.1.1)
+- `feat!:` - Breaking change (major version bump: 0.1.0 → 1.0.0)
+- `chore:`, `docs:`, `refactor:`, `style:`, `test:` - No version bump
+
+**When committing changes:**
+1. Use the commit message skill (`.cursor/commit-message-skill.md`) to format messages correctly
+2. Choose the appropriate commit type based on the changes
+3. Write commit message in conventional format
+4. The system will automatically handle versioning, tagging, and changelog generation
+
+**Examples:**
+```bash
+# Minor version bump
+git commit -m "feat: add pane visibility toggle"
+
+# Patch version bump
+git commit -m "fix: resolve pane visibility issue"
+
+# Major version bump
+git commit -m "feat!: redesign layout system"
+
+# No version bump
+git commit -m "chore: update dependencies"
+git commit -m "docs: update README"
+```
+
+**Reference**: See `.cursor/commit-message-skill.md` for detailed commit message guidelines and `docs/VERSIONING.md` for complete versioning documentation.
