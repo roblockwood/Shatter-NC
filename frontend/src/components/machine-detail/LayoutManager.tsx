@@ -37,7 +37,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
   machineId,
   panes,
   isEditMode = false,
-  onEditModeChange,
+  onEditModeChange: _onEditModeChange,
 }) => {
   const [layout, setLayout] = useState<PaneLayout[]>(getDefaultLayout());
   const [isLoading, setIsLoading] = useState(true);

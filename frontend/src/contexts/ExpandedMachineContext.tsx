@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState } from 'react';
+import type { ReactNode } from 'react';
 
 interface ExpandedMachineContextType {
   expandedMachine: {
@@ -7,7 +8,7 @@ interface ExpandedMachineContextType {
   } | null;
   layoutEditMode: boolean;
   setExpandedMachine: (machine: { id: number; name: string } | null) => void;
-  setLayoutEditMode: (mode: boolean) => void;
+  setLayoutEditMode: (mode: boolean | ((prev: boolean) => boolean)) => void;
   onCollapse: (() => void) | null;
   setOnCollapse: (handler: (() => void) | null) => void;
   onToggleLayoutEdit: (() => void) | null;
