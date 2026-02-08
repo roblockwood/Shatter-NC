@@ -6,6 +6,7 @@ import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { SummaryModal } from '../components/modals/SummaryModal';
 import { SummaryPopup } from '../components/modals/SummaryPopup';
 import { AsciiLoadingScreen } from '../components/AsciiLoadingScreen';
+import { useExpandedMachine } from '../contexts/ExpandedMachineContext';
 import './Dashboard.css';
 import { useState, useRef, useEffect } from 'react';
 import { API_BASE } from '../config/api';
@@ -78,6 +79,15 @@ export const Dashboard = () => {
 
   const onlineCount = machines.filter(m => m.is_online === true).length;
   const runningCount = machines.filter(m => m.is_online === true && (m.status?.toLowerCase() === 'operating' || m.status?.toLowerCase().includes('running'))).length;
+  const { 
+    expandedMachine, 
+    layoutEditMode, 
+    onCollapse, 
+    onToggleLayoutEdit,
+    showPaneList,
+    setShowPaneList,
+    onResetToDefault
+  } = useExpandedMachine();
 
   const handleDeleteMachine = (machine: any) => {
     setDeletingMachine(machine);
@@ -112,40 +122,91 @@ export const Dashboard = () => {
     <div className="dashboard">
       {/* Fleet Overview */}
       <div className="fleet-overview">
-        <span
-          className="machines-count clickable"
-          onClick={() => {
-            // If a machine is being edited, check for unsaved changes first
-            if (editingMachineId !== null) {
-              setPendingCollapseMachineId(editingMachineId);
-            } else {
-              // No machine being edited, collapse immediately
-              setExpandedMachineId(null);
-              setScrollToStatusMachineId(null);
-            }
-          }}
-        >
-          MACHINES: {machines.length}
-        </span>
-        <span className="separator">│</span>
-        <span
-          ref={runningRef}
-          className="clickable"
-          onClick={() => setSummaryModal({ isOpen: true, type: 'running' })}
-          onMouseEnter={() => handlePopupMouseEnter('running')}
-          onMouseLeave={handlePopupMouseLeave}
-        >
-          RUNNING: <span className="text-success">{runningCount}</span>
-        </span>
-        <span className="separator">│</span>
-        <span
-          ref={machinesRef}
-          className="clickable"
-          onMouseEnter={() => handlePopupMouseEnter('machines')}
-          onMouseLeave={handlePopupMouseLeave}
-        >
-          ONLINE: <span className="text-info">{onlineCount}</span><span className="text-dim">/</span><span className="text-info">{machines.length}</span>
-        </span>
+        <div className="fleet-overview-left">
+          <span
+            className="machines-count clickable"
+            onClick={() => {
+              // If a machine is being edited, check for unsaved changes first
+              if (editingMachineId !== null) {
+                setPendingCollapseMachineId(editingMachineId);
+              } else {
+                // No machine being edited, collapse immediately
+                setExpandedMachineId(null);
+                setScrollToStatusMachineId(null);
+              }
+            }}
+          >
+            MACHINES: {machines.length}
+          </span>
+          <span className="separator">│</span>
+          <span
+            ref={runningRef}
+            className="clickable"
+            onClick={() => setSummaryModal({ isOpen: true, type: 'running' })}
+            onMouseEnter={() => handlePopupMouseEnter('running')}
+            onMouseLeave={handlePopupMouseLeave}
+          >
+            RUNNING: <span className="text-success">{runningCount}</span>
+          </span>
+          <span className="separator">│</span>
+          <span
+            ref={machinesRef}
+            className="clickable"
+            onMouseEnter={() => handlePopupMouseEnter('machines')}
+            onMouseLeave={handlePopupMouseLeave}
+          >
+            ONLINE: <span className="text-info">{onlineCount}</span><span className="text-dim">/</span><span className="text-info">{machines.length}</span>
+          </span>
+        </div>
+        {expandedMachine && (
+          <div className="fleet-overview-right">
+            <span className="expanded-machine-name">{expandedMachine.name}</span>
+            {layoutEditMode && (
+              <>
+                <button
+                  className="card-action-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowPaneList(!showPaneList);
+                  }}
+                  title={showPaneList ? "Hide pane list" : "Show pane list"}
+                >
+                  {showPaneList ? '[HIDE PANE LIST]' : '[SHOW PANE LIST]'}
+                </button>
+                <button
+                  className="card-action-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onResetToDefault?.();
+                  }}
+                  title="Reset to default layout"
+                >
+                  [RESET TO DEFAULT]
+                </button>
+              </>
+            )}
+            <button
+              className="card-action-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleLayoutEdit?.();
+              }}
+              title={layoutEditMode ? "Exit layout edit mode" : "Customize layout"}
+            >
+              {layoutEditMode ? '[EXIT EDIT]' : '[CUSTOMIZE LAYOUT]'}
+            </button>
+            <button
+              className="card-action-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCollapse?.();
+              }}
+              title="Collapse"
+            >
+              [COLLAPSE]
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Machine Grid */}
