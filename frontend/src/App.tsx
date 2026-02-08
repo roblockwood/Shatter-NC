@@ -5,6 +5,7 @@ import { ToolManagement } from './pages/ToolManagement';
 import { useBetaMode, useBetaModeActivator } from './hooks/useBetaMode';
 import { BetaRoute } from './components/BetaRoute';
 import { WebSocketProvider } from './contexts/WebSocketContext';
+import { ExpandedMachineProvider } from './contexts/ExpandedMachineContext';
 import './App.css';
 
 // Get version from environment variable (set at build time via Vite)
@@ -64,26 +65,28 @@ function Navigation() {
 function App() {
   return (
     <WebSocketProvider>
-      <Router>
-        <div className="app">
-          <Navigation />
+      <ExpandedMachineProvider>
+        <Router>
+          <div className="app">
+            <Navigation />
 
-          <div className="app-content">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/files" element={<FileBrowser />} />
-              <Route
-                path="/tools"
-                element={
-                  <BetaRoute>
-                    <ToolManagement />
-                  </BetaRoute>
-                }
-              />
-            </Routes>
+            <div className="app-content">
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/files" element={<FileBrowser />} />
+                <Route
+                  path="/tools"
+                  element={
+                    <BetaRoute>
+                      <ToolManagement />
+                    </BetaRoute>
+                  }
+                />
+              </Routes>
+            </div>
           </div>
-        </div>
-      </Router>
+        </Router>
+      </ExpandedMachineProvider>
     </WebSocketProvider>
   );
 }

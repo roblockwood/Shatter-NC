@@ -75,6 +75,8 @@
 
 .fleet-overview {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: var(--spacing-lg);
   padding: var(--spacing-md) var(--spacing-lg);
   background: var(--color-bg-surface);
@@ -82,6 +84,26 @@
   font-size: var(--font-md);
   font-weight: 600;
   text-transform: uppercase;
+}
+
+.fleet-overview-left {
+  display: flex;
+  gap: var(--spacing-lg);
+  align-items: center;
+}
+
+.fleet-overview-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.fleet-overview-right .expanded-machine-name {
+  font-size: var(--font-md);
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-text-primary);
+  margin-right: var(--spacing-sm);
 }
 
 .fleet-overview .separator {
