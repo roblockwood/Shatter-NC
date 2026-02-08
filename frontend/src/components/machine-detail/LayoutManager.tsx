@@ -5,6 +5,7 @@ import 'react-grid-layout/css/styles.css';
 import type { PaneLayout, PaneId } from '../../types/layout';
 import { fetchMachineLayout, saveMachineLayout } from '../../api/layout';
 import { getDefaultLayout } from '../../utils/layoutUtils';
+import { useExpandedMachine } from '../../contexts/ExpandedMachineContext';
 import './LayoutManager.css';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
@@ -40,7 +41,10 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
 }) => {
   const [layout, setLayout] = useState<PaneLayout[]>(getDefaultLayout());
   const [isLoading, setIsLoading] = useState(true);
-  const [showPaneList, setShowPaneList] = useState(false);
+  const { 
+    showPaneList, 
+    setOnResetToDefault
+  } = useExpandedMachine();
   const saveTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debug: Log edit mode changes
@@ -164,6 +168,15 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
     debouncedSave(defaultLayout);
   }, [debouncedSave]);
 
+  // Expose handlers to context
+  useEffect(() => {
+    if (isEditMode) {
+      setOnResetToDefault(() => handleResetToDefault);
+    } else {
+      setOnResetToDefault(null);
+    }
+  }, [isEditMode, handleResetToDefault, setOnResetToDefault]);
+
   // Toggle pane visibility
   const handleToggleVisibility = useCallback(
     (paneId: PaneId) => {
@@ -217,56 +230,29 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
       className={`layout-manager ${isEditMode ? 'edit-mode' : ''}`}
       data-edit-mode={isEditMode}
     >
-      {isEditMode && (
-        <>
-          <div className="layout-manager-controls">
-            <button
-              className="layout-control-btn"
-              onClick={() => setShowPaneList(!showPaneList)}
-              title={showPaneList ? "Hide pane list" : "Show pane list"}
-            >
-              {showPaneList ? '[HIDE PANE LIST]' : '[SHOW PANE LIST]'}
-            </button>
-            <button
-              className="layout-control-btn"
-              onClick={handleResetToDefault}
-              title="Reset to default layout"
-            >
-              [RESET TO DEFAULT]
-            </button>
-            <button
-              className="layout-control-btn"
-              onClick={() => onEditModeChange?.(false)}
-              title="Exit edit mode"
-            >
-              [SAVE & EXIT]
-            </button>
+      {isEditMode && showPaneList && (
+        <div className="pane-list-panel">
+          <div className="pane-list-header">PANES</div>
+          <div className="pane-list-items">
+            {layout.map(pane => {
+              const isVisible = pane.visible !== false;
+              const paneName = PANE_NAMES[pane.i as PaneId] || pane.i;
+              return (
+                <label key={pane.i} className="pane-list-item">
+                  <input
+                    type="checkbox"
+                    checked={isVisible}
+                    onChange={() => handleToggleVisibility(pane.i as PaneId)}
+                    disabled={isVisible && layout.filter(p => p.visible !== false).length <= 1}
+                  />
+                  <span className={`pane-list-item-label ${!isVisible ? 'pane-hidden' : ''}`}>
+                    {paneName}
+                  </span>
+                </label>
+              );
+            })}
           </div>
-          {showPaneList && (
-            <div className="pane-list-panel">
-              <div className="pane-list-header">PANES</div>
-              <div className="pane-list-items">
-                {layout.map(pane => {
-                  const isVisible = pane.visible !== false;
-                  const paneName = PANE_NAMES[pane.i as PaneId] || pane.i;
-                  return (
-                    <label key={pane.i} className="pane-list-item">
-                      <input
-                        type="checkbox"
-                        checked={isVisible}
-                        onChange={() => handleToggleVisibility(pane.i as PaneId)}
-                        disabled={isVisible && layout.filter(p => p.visible !== false).length <= 1}
-                      />
-                      <span className={`pane-list-item-label ${!isVisible ? 'pane-hidden' : ''}`}>
-                        {paneName}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </>
+        </div>
       )}
 
       <div className="layout-container">
