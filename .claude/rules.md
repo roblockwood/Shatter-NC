@@ -199,16 +199,39 @@ feat: add program validation for deployed files
 └──────> Type: feat, fix, docs, style, refactor, test, chore
 ```
 
-### Commit Types:
-- `feat:` - New feature
-- `fix:` - Bug fix
-- `docs:` - Documentation only
-- `style:` - Formatting, missing semicolons, etc.
-- `refactor:` - Code change that neither fixes a bug nor adds a feature
-- `test:` - Adding tests
-- `chore:` - Updating build tasks, package manager configs, etc.
+### Commit Types (Conventional Commits - REQUIRED for Automatic Versioning):
 
-### Commit Body (optional but recommended for features):
+**MANDATORY**: All commits MUST use conventional commit format. The project uses semantic-release which automatically determines version bumps from commit messages.
+
+**Version Impact:**
+- `feat:` - New feature → **Minor version bump** (0.1.0 → 0.2.0)
+- `fix:` - Bug fix → **Patch version bump** (0.1.0 → 0.1.1)
+- `feat!:` - Breaking change → **Major version bump** (0.1.0 → 1.0.0)
+- `chore:`, `docs:`, `refactor:`, `style:`, `test:` → **No version bump**
+
+**Commit Types:**
+- `feat:` - New feature (triggers minor version bump)
+- `fix:` - Bug fix (triggers patch version bump)
+- `feat!:` - Breaking change feature (triggers major version bump)
+- `docs:` - Documentation only (no version bump)
+- `style:` - Formatting, missing semicolons, etc. (no version bump)
+- `refactor:` - Code change that neither fixes a bug nor adds a feature (no version bump)
+- `test:` - Adding tests (no version bump)
+- `chore:` - Updating build tasks, package manager configs, etc. (no version bump)
+
+**Breaking Changes:**
+To trigger a major version bump, use one of these formats:
+```bash
+# Option 1: Use ! after type
+git commit -m "feat!: redesign layout system"
+
+# Option 2: Include BREAKING CHANGE in footer
+git commit -m "feat: new API
+
+BREAKING CHANGE: API endpoints have changed"
+```
+
+**Commit Body (optional but recommended for features):**
 ```
 feat: add program validation for deployed files
 
@@ -219,6 +242,39 @@ feat: add program validation for deployed files
 
 Closes #42
 ```
+
+**Examples:**
+```bash
+# Minor version bump (0.1.0 → 0.2.0)
+git commit -m "feat: add pane visibility toggle"
+git commit -m "feat: implement layout customization"
+
+# Patch version bump (0.1.0 → 0.1.1)
+git commit -m "fix: resolve pane visibility toggle issue"
+git commit -m "fix: prevent hiding all panes"
+
+# Major version bump (0.1.0 → 1.0.0)
+git commit -m "feat!: redesign machine card layout"
+git commit -m "feat: new authentication system
+
+BREAKING CHANGE: Authentication API has changed"
+
+# No version bump
+git commit -m "chore: update dependencies"
+git commit -m "docs: update README"
+git commit -m "refactor: clean up LayoutManager code"
+git commit -m "test: add tests for pane visibility"
+```
+
+**When to Use Each Type:**
+- `feat:` - Use for any new functionality, UI features, API endpoints, etc.
+- `fix:` - Use for bug fixes, error corrections, defect resolutions
+- `feat!:` - Use when the change breaks backward compatibility
+- `chore:` - Use for dependency updates, build config changes, tooling
+- `docs:` - Use for documentation-only changes
+- `refactor:` - Use for code improvements that don't change behavior
+- `style:` - Use for formatting, whitespace, code style changes
+- `test:` - Use when adding or modifying tests
 
 ## 7. File Organization
 
