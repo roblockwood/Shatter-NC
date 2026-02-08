@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TerminalBox } from '../ui/TerminalBox';
 import { Select } from '../ui';
@@ -115,7 +115,7 @@ interface FileManagerPaneProps {
   onExpand?: () => void;
 }
 
-export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onExpand }) => {
+export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onExpand: _onExpand }) => {
   const [searchParams] = useSearchParams();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const deploymentSectionRef = React.useRef<HTMLDivElement>(null);
@@ -130,7 +130,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewModalContent, setViewModalContent] = useState<ViewData | null>(null);
   const [viewModalLoading, setViewModalLoading] = useState(false);
-  const [fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
+  const [_fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [deploymentDetail, setDeploymentDetail] = useState<DeploymentDetail | null>(null);
   const [deploymentLoading, setDeploymentLoading] = useState(false);
@@ -140,7 +140,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
   const [validationLoading, setValidationLoading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ fileName: string; percent: number } | null>(null);
-  const [highlightedFile, setHighlightedFile] = useState<string | null>(null);
+  const [_highlightedFile, setHighlightedFile] = useState<string | null>(null);
   const [pendingFileSelection, setPendingFileSelection] = useState<string | null>(null);
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
   const [expandedWCS, setExpandedWCS] = useState<boolean>(false);
