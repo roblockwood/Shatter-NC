@@ -1,0 +1,74 @@
+# One-off workflow to fix existing multi-platform image tags so arm64 shows
+# correctly (linux/arm64) instead of unknown/unknown in the registry UI.
+# This replaces the manifest list with one that only references the amd64 and
+# arm64 image manifests (dropping attestation references).
+#
+# Run manually from Actions tab when needed. No rebuild - only manifest list is updated.
+
+name: Fix existing image manifest labels
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix-manifests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Read version and set image base
+        id: meta
+        run: |
+          VERSION=$(cat VERSION)
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "base=ghcr.io/${{ github.repository_owner }}/${REPO_LOWER}" >> $GITHUB_OUTPUT
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fix manifest lists (backend, frontend, avahi)
+        env:
+          BASE: ${{ steps.meta.outputs.base }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -e
+          fix_tag() {
+            local image=$1
+            local tag=$2
+            echo "--- Fixing $image:$tag ---"
+            if ! docker manifest inspect "$image:$tag" > /tmp/manifest.json 2>/dev/null; then
+              echo "  (tag not found or not multi-platform, skipping)"
+              return 0
+            fi
+            amd64=$(jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest' /tmp/manifest.json | head -1)
+            arm64=$(jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest' /tmp/manifest.json | head -1)
+            if [ -z "$amd64" ] || [ -z "$arm64" ]; then
+              echo "  (missing amd64 or arm64 manifest, skipping)"
+              return 0
+            fi
+            docker manifest create "$image:$tag" "$image@$amd64" "$image@$arm64"
+            docker manifest push "$image:$tag"
+            echo "  done."
+          }
+
+          fix_tag "${BASE}/backend" "latest"
+          fix_tag "${BASE}/backend" "v${VERSION}"
+          fix_tag "${BASE}/frontend" "latest"
+          fix_tag "${BASE}/frontend" "v${VERSION}"
+          fix_tag "${BASE}/avahi" "latest"
+
+      - name: Summary
+        run: |
+          echo "## Manifest lists updated" >> $GITHUB_STEP_SUMMARY
+          echo "Existing tags for backend, frontend, and avahi now reference only linux/amd64 and linux/arm64 (no attestation entries)." >> $GITHUB_STEP_SUMMARY
+          echo "Refresh the package page on ghcr.io to see correct platform labels." >> $GITHUB_STEP_SUMMARY
