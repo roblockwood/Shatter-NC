@@ -18,17 +18,16 @@ EXPOSE 3000
 # Run development server
 CMD ["npm", "run", "dev", "--", "--host"]
 
-# Production build stage
-FROM node:20-alpine AS build
+# Production build stage (Debian base for better QEMU compatibility when building for arm64)
+FROM node:20-bookworm-slim AS build
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-# Using npm install for better cross-platform compatibility
-RUN npm install --prefer-offline --no-audit
+# Install dependencies (--ignore-scripts avoids native postinstall under QEMU)
+RUN npm install --prefer-offline --no-audit --ignore-scripts
 
 # Copy application code
 COPY . .
