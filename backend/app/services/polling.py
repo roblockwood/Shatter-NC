@@ -248,32 +248,12 @@ class MachinePoller:
                 tool_data["tool_table"] = tool_table_tools
                 tool_data["tool_table_timestamp"] = poll_timestamp.isoformat()
                 
-                # Update Redis cache with tool data
+                # Update websocket manager cache with tool data so fast poll can use it
                 step_start = time.time()
                 if self.websocket_manager:
-                    # Use websocket_manager's cache update logic
-                    from app.utils.redis_client import get_redis
-                    import json
-                    try:
-                        redis = get_redis()
-                        
-                        # Update full status cache if it exists (merge tool data)
-                        cache_key = f"machine:status:{self.machine.id}"
-                        cached_status = redis.get(cache_key)
-                        if cached_status:
-                            status_data = json.loads(cached_status.decode('utf-8'))
-                            status_data.update(tool_data)
-                            redis.setex(cache_key, 60, json.dumps(status_data).encode('utf-8'))
-                        
-                        # Update tool table cache (5min TTL)
-                        tool_table_key = f"machine:tool_table:{self.machine.id}"
-                        redis.setex(
-                            tool_table_key,
-                            300,  # 5 minutes
-                            json.dumps(tool_table_tools).encode('utf-8')
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to update Redis cache with tool data for machine {self.machine.id}: {e}")
+                    current = self.websocket_manager.get_machine_status(self.machine.id)
+                    merged = {**current, **tool_data, "machine_id": self.machine.id}
+                    await self.websocket_manager.broadcast_status(merged)
                 step_times['update_cache'] = time.time() - step_start
                 
                 # Log timing summary
@@ -521,77 +501,24 @@ class MachinePoller:
                 if operation_status is not None:
                     status_data["mem_operation_status"] = operation_status
 
-            # Load tool data from Redis cache (fetched by slow polling or immediate refresh)
-            # Tool data is polled separately at slower intervals to reduce fast poll overhead
+            # Load tool data from websocket manager cache (fetched by slow polling or immediate refresh)
             step_start = time.time()
-            try:
-                from app.utils.redis_client import get_redis
-                import json
-                redis = get_redis()
-                
-                # Try to get tool data from full status cache first
-                cache_key = f"machine:status:{self.machine.id}"
-                cached_status = redis.get(cache_key)
-                step_times['load_tool_cache'] = time.time() - step_start
-                if cached_status:
-                    cached_data = json.loads(cached_status.decode('utf-8'))
-                    # Extract tool-related fields from cached status
-                    if "tools" in cached_data:
-                        status_data["tools"] = cached_data["tools"]
-                    if "tool_table" in cached_data:
-                        status_data["tool_table"] = cached_data["tool_table"]
-                    if "current_tool" in cached_data:
-                        status_data["current_tool"] = cached_data["current_tool"]
-                    if "tools_timestamp" in cached_data:
-                        status_data["tools_timestamp"] = cached_data["tools_timestamp"]
-                        status_data["tool_data_timestamp"] = cached_data["tools_timestamp"]  # Alias for clarity
-                    if "tool_table_timestamp" in cached_data:
-                        status_data["tool_table_timestamp"] = cached_data["tool_table_timestamp"]
-                    if "tool_response_time_ms" in cached_data:
-                        status_data["tool_response_time_ms"] = cached_data["tool_response_time_ms"]
-                else:
-                    # Full cache miss - try tool table cache directly
-                    tool_table_key = f"machine:tool_table:{self.machine.id}"
-                    tool_table_data = redis.get(tool_table_key)
-                    if tool_table_data:
-                        status_data["tool_table"] = json.loads(tool_table_data.decode('utf-8'))
-                    
-                    # Fall back to websocket manager cache for any missing tool data
-                    if self.websocket_manager:
-                        ws_status = self.websocket_manager.get_machine_status(self.machine.id)
-                        if "tools" in ws_status:
-                            status_data["tools"] = ws_status["tools"]
-                        if "tool_table" in ws_status and "tool_table" not in status_data:
-                            status_data["tool_table"] = ws_status["tool_table"]
-                        if "current_tool" in ws_status:
-                            status_data["current_tool"] = ws_status["current_tool"]
-                        if "tools_timestamp" in ws_status:
-                            status_data["tools_timestamp"] = ws_status["tools_timestamp"]
-                            status_data["tool_data_timestamp"] = ws_status["tools_timestamp"]
-                    if "tool_table_timestamp" in ws_status:
-                        status_data["tool_table_timestamp"] = ws_status["tool_table_timestamp"]
-                    if "tool_response_time_ms" in ws_status:
-                        status_data["tool_response_time_ms"] = ws_status["tool_response_time_ms"]
-            except Exception as e:
-                # Redis unavailable - fall back to websocket manager cache
-                if 'load_tool_cache' not in step_times:
-                    step_times['load_tool_cache'] = time.time() - step_start
-                logger.debug(f"Failed to load tool data from Redis cache for machine {self.machine.id}, using websocket manager cache: {e}")
-                if self.websocket_manager:
-                    ws_status = self.websocket_manager.get_machine_status(self.machine.id)
-                    if "tools" in ws_status:
-                        status_data["tools"] = ws_status["tools"]
-                    if "tool_table" in ws_status:
-                        status_data["tool_table"] = ws_status["tool_table"]
-                    if "current_tool" in ws_status:
-                        status_data["current_tool"] = ws_status["current_tool"]
-                    if "tools_timestamp" in ws_status:
-                        status_data["tools_timestamp"] = ws_status["tools_timestamp"]
-                        status_data["tool_data_timestamp"] = ws_status["tools_timestamp"]
-                    if "tool_table_timestamp" in ws_status:
-                        status_data["tool_table_timestamp"] = ws_status["tool_table_timestamp"]
-                    if "tool_response_time_ms" in ws_status:
-                        status_data["tool_response_time_ms"] = ws_status["tool_response_time_ms"]
+            ws_status = self.websocket_manager.get_machine_status(self.machine.id) if self.websocket_manager else {}
+            step_times['load_tool_cache'] = time.time() - step_start
+            if ws_status:
+                if "tools" in ws_status:
+                    status_data["tools"] = ws_status["tools"]
+                if "tool_table" in ws_status:
+                    status_data["tool_table"] = ws_status["tool_table"]
+                if "current_tool" in ws_status:
+                    status_data["current_tool"] = ws_status["current_tool"]
+                if "tools_timestamp" in ws_status:
+                    status_data["tools_timestamp"] = ws_status["tools_timestamp"]
+                    status_data["tool_data_timestamp"] = ws_status["tools_timestamp"]
+                if "tool_table_timestamp" in ws_status:
+                    status_data["tool_table_timestamp"] = ws_status["tool_table_timestamp"]
+                if "tool_response_time_ms" in ws_status:
+                    status_data["tool_response_time_ms"] = ws_status["tool_response_time_ms"]
 
             # Program name is already set from MONTR data (operation_program_no)
             # No need to fetch from MEM separately - MONTR is more reliable
@@ -656,50 +583,8 @@ class MachinePoller:
                 error_message=str(e)
             ))
 
-            # Get cached status from Redis first (persists across workers and restarts)
-            # Fall back to WebSocket manager cache if Redis is unavailable or has cache miss
-            cached_status = {}
-            try:
-                from app.utils.redis_client import get_redis
-                import json
-                redis = get_redis()
-                cache_key = f"machine:status:{self.machine.id}"
-                cached_data = redis.get(cache_key)
-                if cached_data:
-                    cached_status = json.loads(cached_data.decode('utf-8'))
-                else:
-                    # Main status cache miss - try extended caches for older data
-                    # Try tool_table cache (5min TTL)
-                    tool_table_key = f"machine:tool_table:{self.machine.id}"
-                    tool_table_data = redis.get(tool_table_key)
-                    if tool_table_data:
-                        cached_status["tool_table"] = json.loads(tool_table_data.decode('utf-8'))
-                    
-                    # Try panel cache (2min TTL)
-                    panel_key = f"machine:panel:{self.machine.id}"
-                    panel_data = redis.get(panel_key)
-                    if panel_data:
-                        cached_status["panel"] = json.loads(panel_data.decode('utf-8'))
-                    
-                    # Try program_name cache (5min TTL)
-                    program_name_key = f"machine:program_name:{self.machine.id}"
-                    program_name_data = redis.get(program_name_key)
-                    if program_name_data:
-                        cached_status["program_name"] = program_name_data.decode('utf-8')
-                    
-                    # Still fall back to websocket_manager for any missing data
-                    ws_status = self.websocket_manager.get_machine_status(self.machine.id) if self.websocket_manager else {}
-                    if not cached_status:
-                        cached_status = ws_status
-                    else:
-                        # Merge with websocket_manager data (prefer cached_status, fill gaps from ws_status)
-                        for key, value in ws_status.items():
-                            if key not in cached_status or cached_status[key] is None:
-                                cached_status[key] = value
-            except Exception as e:
-                # Redis unavailable - fall back to websocket_manager
-                logger.debug(f"Failed to read from Redis cache for machine {self.machine.id}, falling back to websocket_manager: {e}")
-                cached_status = self.websocket_manager.get_machine_status(self.machine.id) if self.websocket_manager else {}
+            # Get cached status from websocket manager for offline display
+            cached_status = self.websocket_manager.get_machine_status(self.machine.id) if self.websocket_manager else {}
             
             # Create offline status data for logging, preserving cached data
             offline_status_data = {

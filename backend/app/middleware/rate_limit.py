@@ -1,64 +1,51 @@
 """Rate limiting middleware for API endpoints."""
+import asyncio
 import logging
 import time
+from collections import deque
+from typing import Dict
+
 from fastapi import Request, HTTPException, status as http_status
 from starlette.middleware.base import BaseHTTPMiddleware
-from app.utils.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 
+# In-memory sliding window: client_ip -> deque of request timestamps (oldest first)
+_rate_window: Dict[str, deque] = {}
+_rate_lock = asyncio.Lock()
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Rate limiting middleware using Redis sliding window algorithm."""
-    
+    """Rate limiting middleware using in-memory sliding window."""
+
     RATE_LIMIT = 100  # requests per window
     WINDOW_SECONDS = 60  # 1 minute
-    
+
     async def dispatch(self, request: Request, call_next):
         # Skip rate limiting for health checks
         if request.url.path in ["/health", "/"]:
             return await call_next(request)
-        
-        # Get client IP
+
         client_ip = request.client.host if request.client else "unknown"
-        key = f"ratelimit:api:{client_ip}"
-        
-        try:
-            redis = get_redis()
-            # Sliding window: use sorted set
-            now = time.time()
-            window_start = now - self.WINDOW_SECONDS
-            
-            # Remove old entries
-            redis.zremrangebyscore(key, 0, window_start)
-            
-            # Count current requests
-            count = redis.zcard(key)
-            
+        now = time.time()
+        window_start = now - self.WINDOW_SECONDS
+
+        async with _rate_lock:
+            if client_ip not in _rate_window:
+                _rate_window[client_ip] = deque()
+            timestamps = _rate_window[client_ip]
+            # Prune old entries
+            while timestamps and timestamps[0] < window_start:
+                timestamps.popleft()
+            count = len(timestamps)
             if count >= self.RATE_LIMIT:
-                # Calculate retry after
-                oldest = redis.zrange(key, 0, 0, withscores=True)
-                if oldest:
-                    retry_after = int(oldest[0][1] - window_start) + 1
-                else:
-                    retry_after = self.WINDOW_SECONDS
-                
+                retry_after = int(timestamps[0] - window_start) + 1 if timestamps else self.WINDOW_SECONDS
+                retry_after = max(1, min(retry_after, self.WINDOW_SECONDS))
                 raise HTTPException(
                     status_code=http_status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="Rate limit exceeded",
-                    headers={"Retry-After": str(retry_after)}
+                    headers={"Retry-After": str(retry_after)},
                 )
-            
-            # Add current request
-            redis.zadd(key, {str(now): now})
-            redis.expire(key, self.WINDOW_SECONDS)
-            
-        except HTTPException:
-            # Re-raise HTTP exceptions (rate limit exceeded)
-            raise
-        except Exception as e:
-            # If Redis fails, log but allow request (fail open)
-            logger.warning(f"Rate limit check failed: {e}")
-        
-        return await call_next(request)
+            timestamps.append(now)
 
+        return await call_next(request)
