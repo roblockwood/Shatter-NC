@@ -33,7 +33,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-shatter}
       POSTGRES_USER: ${POSTGRES_USER:-shatter_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
-      REDIS_HOST: redis
       LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
       DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-5}
     ports:
@@ -41,8 +40,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
     volumes:
       - ./backend:/app  # Mount backend code for hot-reload in development
       - ./database/init:/docker-entrypoint-initdb.d:ro
@@ -65,17 +62,6 @@ services:
       - ./frontend:/app
       - /app/node_modules
     command: npm run dev
-
-  # Redis for caching and task queue
-  redis:
-    image: redis:7-alpine
-    container_name: shatter-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
 
   # Avahi mDNS service discovery
   # Enables zero-configuration network discovery at http://shatter.local:3000
@@ -100,8 +86,6 @@ services:
 
 volumes:
   postgres_data:
-    driver: local
-  redis_data:
     driver: local
 
 networks:
