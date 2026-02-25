@@ -13,7 +13,7 @@ The Shatter backend is built on FastAPI, a modern Python web framework optimized
 | **Web Framework** | FastAPI 0.100+ | Async HTTP API, auto-generated docs |
 | **ORM** | SQLAlchemy 2.0 | Database modeling and queries |
 | **Database** | PostgreSQL 14 + TimescaleDB | Relational + time-series data |
-| **Cache/Coordination** | Redis 7+ | Distributed locks, caching, rate limiting (required) |
+| **Cache/Coordination** | In-process | Locks, caching, rate limiting (no Redis) |
 | **Async Runtime** | asyncio | Concurrent I/O operations |
 | **Telnet Client** | asyncio streams | Primary protocol for data polling (Port 10000) |
 | **HTTP Client** | Raw sockets | Legacy Brother CNC HTTP protocol (deprecated for polling) |
@@ -167,12 +167,6 @@ async def startup_event():
     """Run on application startup."""
     print(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     
-    # Initialize Redis (required)
-    from app.utils.redis_client import init_redis
-    if not init_redis():
-        raise RuntimeError("Failed to initialize Redis - application cannot start")
-    print("Redis client initialized")
-    
     print("Starting background polling service...")
     await polling_service.start()
     print("Polling service started - monitoring all enabled machines")
@@ -183,13 +177,13 @@ async def startup_event():
 **Startup Flow:**
 1. Application initialized by uvicorn/gunicorn
 2. FastAPI runs startup event handlers
-3. **Redis client initialized** (fail-fast if unavailable) - used for distributed locks, caching, and rate limiting
+3. **Polling service started**
 4. PollingService.start() launches background polling loop
 5. Polling begins for all enabled machines in database
 6. API becomes ready to accept requests
 
 **Important:** 
-- Redis must be available - application will fail to start if Redis is unavailable
+- Locks, cache, and rate limiting are in-process (no external service required)
 - The polling service starts BEFORE the first HTTP request arrives. This ensures real-time data is available immediately
 
 ### Shutdown Event
@@ -202,10 +196,6 @@ async def shutdown_event():
     print("Stopping background polling service...")
     await polling_service.stop()
     
-    # Close Redis connection
-    from app.utils.redis_client import close_redis
-    await close_redis()
-    
     print("Polling service stopped")
 ```
 
@@ -217,10 +207,10 @@ async def shutdown_event():
 3. PollingService.stop() cancels background tasks
 4. Active polling tasks complete gracefully
 5. WebSocket connections closed
-6. Redis connections closed gracefully
+6. Polling service stopped
 7. Application exits
 
-**Graceful Shutdown:** The polling service cancels its asyncio task and waits for in-flight polls to complete before exiting. Redis connections are properly closed to avoid connection leaks.
+**Graceful Shutdown:** The polling service cancels its asyncio task and waits for in-flight polls to complete before exiting.
 
 ## Core Services
 

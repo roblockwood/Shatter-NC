@@ -41,8 +41,6 @@ services:
       POSTGRES_DB: shatter
       POSTGRES_USER: shatter_user
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      REDIS_HOST: redis
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       LOG_LEVEL: ${LOG_LEVEL:-WARNING}
       DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-5}
       SECRET_KEY: ${SECRET_KEY}
@@ -59,8 +57,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "--max-time", "10", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -87,24 +83,6 @@ services:
     networks:
       - shatter-network
 
-  # Redis for caching and task queue
-  redis:
-    image: redis:7-alpine
-    container_name: shatter-redis-prod
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - shatter-network
-
   # Avahi mDNS service discovery
   # Enables zero-configuration network discovery at http://shatter.local
   # Note: network_mode: host is required for mDNS multicast to work
@@ -127,8 +105,6 @@ services:
 
 volumes:
   postgres_data:
-    driver: local
-  redis_data:
     driver: local
 
 networks:
