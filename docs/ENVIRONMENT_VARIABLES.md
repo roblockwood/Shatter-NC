@@ -8,7 +8,6 @@
   - [Application Configuration](#application-configuration)
   - [Server Configuration](#server-configuration)
   - [Database Configuration](#database-configuration)
-  - [Redis Configuration](#redis-configuration)
   - [CNC Polling Configuration](#cnc-polling-configuration)
   - [Security Configuration](#security-configuration)
   - [CORS Configuration](#cors-configuration)
@@ -329,77 +328,6 @@ database_url = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST
 
 ---
 
-### Redis Configuration
-
-Redis server settings for distributed locks, caching, and rate limiting (required).
-
-#### REDIS_HOST
-
-**Purpose:** Redis server hostname or IP address
-
-**Type:** String
-
-**Default:** `"localhost"`
-
-**Example:**
-```bash
-# Docker Compose
-REDIS_HOST=redis
-
-# Local development
-REDIS_HOST=localhost
-```
-
----
-
-#### REDIS_PORT
-
-**Purpose:** Redis server port
-
-**Type:** Integer
-
-**Default:** `6379`
-
-**Example:**
-```bash
-REDIS_PORT=6379
-```
-
----
-
-#### REDIS_PASSWORD
-
-**Purpose:** Redis authentication password (optional)
-
-**Type:** String (optional)
-
-**Default:** None
-
-**Example:**
-```bash
-# Production (recommended)
-REDIS_PASSWORD=secure_redis_password_here
-```
-
-**⚠️ SECURITY:** Always set a password in production
-
-**Constructed Property:**
-
-```python
-# Without password:
-redis_url = f"redis://{REDIS_HOST}:{REDIS_PORT}"
-
-# With password:
-redis_url = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}"
-```
-
-**Note:** Redis is required. The application will fail to start if Redis is unavailable. Redis is used for:
-- Distributed locks (coordinates Telnet operations across multiple worker processes)
-- Machine status caching (persists across restarts and workers)
-- Rate limiting (API endpoints and Telnet commands)
-
----
-
 ### CNC Polling Configuration
 
 Settings for the background polling service.
@@ -630,7 +558,6 @@ COMPOSE_PROJECT_NAME=shatter
 
 Container names will be prefixed:
 - `shatter-postgres-1`
-- `shatter-redis-1`
 - `shatter-backend-1`
 - `shatter-frontend-1`
 
@@ -663,12 +590,6 @@ DEBUG=false            # Can enable for troubleshooting
 # Database
 POSTGRES_PASSWORD=changeme_secure_password  # Simple password
 
-# Redis Configuration (required - used for distributed locks, caching, and rate limiting)
-REDIS_HOST=redis
-REDIS_PORT=6379
-# REDIS_PASSWORD - Optional for development, required for production with authentication
-# REDIS_PASSWORD=your_redis_password_here
-
 # Security
 # SECRET_KEY not required (auth disabled)
 # ENABLE_AUTH=false
@@ -698,10 +619,6 @@ DEBUG=false            # Never enable in production
 # Database
 POSTGRES_PASSWORD=CHANGE_ME_TO_SECURE_PASSWORD  # Strong 32+ char password
 
-# Redis
-REDIS_HOST=redis
-REDIS_PASSWORD=CHANGE_ME_TO_SECURE_REDIS_PASSWORD  # Required in production
-
 # Security
 SECRET_KEY=CHANGE_ME_TO_SECURE_SECRET_KEY  # openssl rand -hex 32
 ENABLE_AUTH=true       # Enable when implemented
@@ -713,7 +630,6 @@ ENABLE_AUTH=true       # Enable when implemented
 **Characteristics:**
 - Strong randomly generated passwords
 - WARNING level logging (reduce log volume)
-- Redis authentication required
 - Secret key for future auth features
 - Explicit API URLs if using reverse proxy
 
@@ -768,7 +684,7 @@ openssl rand -hex 32
 **Don't reuse passwords between:**
 - Development and production
 - Different production deployments
-- Database and Redis
+- Database and other services
 - Application secret keys
 
 ---
@@ -870,7 +786,6 @@ log_level = settings.LOG_LEVEL
 
 # Use constructed properties
 db_url = settings.database_url
-redis_url = settings.redis_url
 ```
 
 **Frontend:**
@@ -961,35 +876,6 @@ GET http://localhost:8000/api/machines net::ERR_CONNECTION_REFUSED
 
 ---
 
-### Redis Connection Error
-
-**Error:**
-```
-redis.exceptions.ConnectionError: Error connecting to Redis
-```
-
-**Solutions:**
-
-1. **Redis is required - application will not start without it**
-   - The backend will fail to initialize if Redis is unavailable
-   - Check Redis container is running: `docker-compose ps redis`
-
-2. **Start Redis if not running**
-   ```bash
-   docker-compose up -d redis
-   ```
-
-3. **Check REDIS_HOST**
-   ```bash
-   # Docker: should be "redis"
-   REDIS_HOST=redis
-
-   # Local: should be "localhost"
-   REDIS_HOST=localhost
-   ```
-
----
-
 ### Environment Variable Not Taking Effect
 
 **Symptom:** Changed variable but application still uses old value
@@ -1076,7 +962,6 @@ WARNING: The POSTGRES_PASSWORD variable is not set. Defaulting to a blank string
 | `DEBUG` | `false` | `false` (never true) |
 | `VITE_API_URL` | Auto-detect | Set if using reverse proxy |
 | `SECRET_KEY` | Not required (no auth) | Random 64-char hex |
-| `REDIS_PASSWORD` | Optional | Required |
 
 **Configuration Files:**
 

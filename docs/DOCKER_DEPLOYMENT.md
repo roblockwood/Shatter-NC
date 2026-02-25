@@ -10,7 +10,6 @@
   - [Production](#production)
 - [Service Details](#service-details)
   - [PostgreSQL + TimescaleDB](#postgresql--timescaledb)
-  - [Redis](#redis)
   - [Backend](#backend)
   - [Frontend](#frontend)
 - [Volume Management](#volume-management)
@@ -48,8 +47,8 @@ Two Docker Compose files are provided for different scenarios:
 
 | File | Use Case | Services | Frontend | Description |
 |------|----------|----------|----------|-------------|
-| **docker-compose.dev.yml** | Development (full stack) | postgres, redis, backend, frontend | Vite dev server | Full stack with hot reload |
-| **docker-compose.prod.yml** | Production (pre-built images) | postgres, redis, backend, frontend | Nginx static | Pulls pre-built images from GitHub Packages |
+| **docker-compose.dev.yml** | Development (full stack) | postgres, backend, frontend | Vite dev server | Full stack with hot reload |
+| **docker-compose.prod.yml** | Production (pre-built images) | postgres, backend, frontend | Nginx static | Pulls pre-built images from GitHub Packages |
 
 **Choosing a Configuration:**
 
@@ -67,16 +66,15 @@ Two Docker Compose files are provided for different scenarios:
 │  Docker Network (shatter-network)                           │
 │                                                              │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   │
-│  │  PostgreSQL  │   │    Redis     │   │   Backend    │   │
-│  │  (TimescaleDB)│←─┤  (Cache)     │←─┤  (FastAPI)   │   │
-│  │  Port: 5432  │   │  Port: 6379  │   │  Port: 8000  │   │
-│  └──────────────┘   └──────────────┘   └──────┬───────┘   │
-│         ↓                                      ↑            │
-│  ┌──────────────┐                    ┌─────────┴───────┐   │
-│  │ postgres_data│                    │   Frontend      │   │
-│  │  (Volume)    │                    │   (Vite dev)    │   │
-│  └──────────────┘                    │   Port: 3000    │   │
-│                                       └─────────────────┘   │
+│  │  PostgreSQL  │   │   Backend    │   │   Frontend   │   │
+│  │  (TimescaleDB)│←─┤  (FastAPI)   │←─┤  (Vite dev)  │   │
+│  │  Port: 5432  │   │  Port: 8000  │   │  Port: 3000  │   │
+│  └──────────────┘   └──────┬───────┘   └──────────────┘   │
+│         ↓                   ↑                               │
+│  ┌──────────────┐   ┌──────┴───────┐                       │
+│  │ postgres_data│   │   Frontend   │                       │
+│  │  (Volume)    │   │   (Vite dev) │                       │
+│  └──────────────┘   └──────────────┘                       │
 └─────────────────────────────────────────────────────────────┘
         ↓                                       ↓
  Host: localhost:5432                  Host: localhost:3000
@@ -89,16 +87,15 @@ Two Docker Compose files are provided for different scenarios:
 │  Docker Network (shatter-network)                           │
 │                                                              │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   │
-│  │  PostgreSQL  │   │    Redis     │   │   Backend    │   │
-│  │ (TimescaleDB)│←─┤  (+ password) │←─┤  (4 workers) │   │
-│  │  Port: 5432  │   │  Port: 6379  │   │  Port: 8000  │   │
-│  └──────────────┘   └──────────────┘   └──────┬───────┘   │
-│         ↓                  ↓                   ↑            │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────┴──────┐    │
-│  │ postgres_data│   │  redis_data  │   │  Frontend   │    │
-│  │  (Volume)    │   │  (Volume)    │   │  (Nginx)    │    │
-│  └──────────────┘   └──────────────┘   │  Port: 80   │    │
-│                                         └─────────────┘    │
+│  │  PostgreSQL  │   │   Backend    │   │   Frontend   │   │
+│  │ (TimescaleDB)│←─┤  (4 workers)  │←─┤  (Nginx)     │   │
+│  │  Port: 5432  │   │  Port: 8000  │   │  Port: 80    │   │
+│  └──────────────┘   └──────┬───────┘   └──────┬───────┘   │
+│         ↓                   ↑                  ↑            │
+│  ┌──────────────┐   ┌──────┴──────────────────┴──────┐    │
+│  │ postgres_data│   │  Frontend (Nginx)  Port: 80    │    │
+│  │  (Volume)    │   └────────────────────────────────┘    │
+│  └──────────────┘                                           │
 └─────────────────────────────────────────────────────────────┘
                                                   ↓
                                          Host: localhost:80
@@ -320,62 +317,6 @@ docker exec -it shatter-db psql -U shatter_user -d shatter
 
 ---
 
-### Redis
-
-**Image:** `redis:7-alpine`
-
-**Purpose:** Distributed locks, caching, and rate limiting (required)
-
-**Configuration:**
-
-```yaml
-redis:
-  image: redis:7-alpine
-  volumes:
-    - redis_data:/data
-  ports:
-    - "6379:6379"
-  command: redis-server --appendonly yes
-```
-
-**Production Differences:**
-
-```yaml
-# Production adds authentication
-command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-healthcheck:
-  test: ["CMD", "redis-cli", "ping"]
-  interval: 10s
-```
-
-**Features:**
-- **AOF persistence** - `--appendonly yes` ensures data durability
-- **Authentication** - Password required in production
-- **Health check** - Ping command verifies Redis is responsive
-
-**Accessing Redis:**
-
-```bash
-# From host
-redis-cli -h localhost
-
-# Production (with password)
-redis-cli -h localhost -a $REDIS_PASSWORD
-
-# From Docker
-docker exec -it shatter-redis redis-cli
-```
-
-**Current Usage:**
-- **Distributed Locks**: Coordinates Telnet operations across multiple backend worker processes, preventing race conditions on CNC machines
-- **Machine Status Caching**: Stores latest machine status with TTLs (60s for full status, 5min for tool tables, 2min for panel data, 5min for program names, 1hr for control versions). Persists across worker restarts and enables data availability during failed polls
-- **Rate Limiting**: Enforces API endpoint rate limits (100 requests/minute per IP) and Telnet command rate limits per machine
-- **Required**: Application will fail to start if Redis is unavailable
-
-**Location:** [docker-compose.dev.yml:70-78](../docker-compose.dev.yml#L70-L78)
-
----
-
 ### Backend
 
 **Image:** Custom (built from `backend/Dockerfile`)
@@ -408,7 +349,6 @@ backend:
   environment:
     POSTGRES_HOST: postgres
     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    REDIS_HOST: redis
     LOG_LEVEL: ${LOG_LEVEL:-INFO}
     DEFAULT_POLL_INTERVAL: 5
   ports:
@@ -535,7 +475,6 @@ Docker volumes store data that persists across container restarts.
 | Volume | Purpose | Size (typical) | Backup Priority |
 |--------|---------|----------------|-----------------|
 | `postgres_data` | Database files | 1-10GB | ⚠️ CRITICAL |
-| `redis_data` | Redis AOF logs | 10-100MB | 🔵 Optional |
 
 **List volumes:**
 
@@ -707,18 +646,6 @@ curl http://localhost:8000/health
 
 ---
 
-### Redis Health Check (Production)
-
-```yaml
-healthcheck:
-  test: ["CMD", "redis-cli", "ping"]
-  interval: 10s
-  timeout: 5s
-  retries: 5
-```
-
----
-
 ## Networking
 
 ### Default Network
@@ -791,6 +718,10 @@ http://localhost:3000
 ---
 
 ## Upgrading
+
+### Migrating from Redis (existing deployments)
+
+If you are upgrading from a version that used Redis, see **[MIGRATION_REMOVE_REDIS.md](MIGRATION_REMOVE_REDIS.md)** for steps to remove the Redis service and volume from your compose and environment.
 
 ### Upgrade Application Code
 
@@ -1185,4 +1116,3 @@ docker system df                                            # Disk usage
 | Frontend | 3000 | 80 |
 | Backend | 8000 | 8000 |
 | PostgreSQL | 5432 | 5432 |
-| Redis | 6379 | 6379 |
