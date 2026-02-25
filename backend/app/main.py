@@ -119,11 +119,6 @@ async def startup_event():
     """Run on application startup."""
     print(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     
-    # Initialize Redis (required) - raises RuntimeError on failure
-    from app.utils.redis_client import init_redis
-    init_redis()  # Raises RuntimeError if Redis is unavailable
-    print("Redis client initialized")
-    
     print("Starting background polling service...")
     await polling_service.start()
     print("Polling service started - monitoring all enabled machines")
@@ -135,12 +130,5 @@ async def shutdown_event():
     print(f"Shutting down {settings.APP_NAME}")
     print("Stopping background polling service...")
     await polling_service.stop()
-    
-    # Close Redis connection
-    try:
-        from app.utils.redis_client import close_redis
-        await close_redis()
-    except Exception as e:
-        logger.warning(f"Error closing Redis connection during shutdown: {e}")
     
     print("Polling service stopped")

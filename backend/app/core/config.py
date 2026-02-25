@@ -23,11 +23,6 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = "shatter_user"
     POSTGRES_PASSWORD: str = "changeme"
 
-    # Redis
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
-    REDIS_PASSWORD: Optional[str] = None
-
     # CNC Polling
     DEFAULT_POLL_INTERVAL: int = 5  # seconds
     DEFAULT_TOOL_POLL_INTERVAL: int = 30  # seconds (tool table/ATC polling, separate from fast status polling)
@@ -56,13 +51,6 @@ class Settings(BaseSettings):
             f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
-
-    @property
-    def redis_url(self) -> str:
-        """Construct Redis URL."""
-        if self.REDIS_PASSWORD:
-            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}"
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}"
 
     class Config:
         env_file = ".env"
