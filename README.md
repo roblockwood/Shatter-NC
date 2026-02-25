@@ -36,7 +36,6 @@ Open http://localhost:3000 and add your CNC machines through the web UI.
 - **Frontend**: React 19 + TypeScript + Vite (port 3000)
 - **Backend**: Python 3.11 + FastAPI (port 8000)
 - **Database**: PostgreSQL 14 + TimescaleDB (port 5432)
-- **Cache**: Redis 7 (optional, port 6379)
 
 **For complete architecture details**, see [Backend Architecture](docs/BACKEND_ARCHITECTURE.md) and [Frontend Architecture](docs/FRONTEND_ARCHITECTURE.md).
 
@@ -45,6 +44,7 @@ Open http://localhost:3000 and add your CNC machines through the web UI.
 ### Getting Started
 
 - **[Docker Deployment Guide](docs/DOCKER_DEPLOYMENT.md)** - Production and development deployment
+- **[Migration: Remove Redis](docs/MIGRATION_REMOVE_REDIS.md)** - Upgrading from a Redis-based deployment
 - **[Development Guide](docs/DEVELOPMENT_GUIDE.md)** - Local development setup and workflows
 - **[Environment Variables](docs/ENVIRONMENT_VARIABLES.md)** - Configuration reference
 - **[Contributing Guidelines](CONTRIBUTING.md)** - How to contribute to the project
