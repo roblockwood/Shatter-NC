@@ -156,6 +156,10 @@ Another program is using that port. Either close that program or change the port
 **Containers keep exiting**  
 In Docker Desktop → **Containers**, click the container that’s exiting (e.g. **shatter-backend**) and open the **Logs** tab. Check the end of the output for errors. Common causes: not enough memory, or a bad `.env` (e.g. typo in a variable). Fix the cause, then stop the Shatter containers and start them again (Section 5).
 
+
+**Backend logs show start-dev.sh: no such file or directory**  
+Pull the latest project (GitHub Desktop → **Pull origin**), then rebuild: in a terminal in the project folder run `docker compose -f docker-compose.dev.yml build backend --no-cache` then `docker compose -f docker-compose.dev.yml up -d`. After that, use the Start script or Docker Desktop as usual.
+
 **“Permission denied” or “Access denied” when cloning**  
 Your GitHub account doesn’t have access to the repo. Ask the repo owner to add you as a collaborator, then try cloning again in GitHub Desktop.
 
