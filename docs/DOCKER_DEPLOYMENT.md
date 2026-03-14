@@ -137,9 +137,8 @@ docker-compose up -d
 # Check all services are running
 docker-compose ps
 
-# Should see 4 services with "Up" status:
+# Should see 3 services with "Up" status:
 # - shatter-db (postgres)
-# - shatter-redis
 # - shatter-backend
 # - shatter-frontend
 ```
@@ -187,7 +186,6 @@ cp .env.production.example .env.production
 ```bash
 # Generate secure passwords
 openssl rand -base64 32  # For POSTGRES_PASSWORD
-openssl rand -base64 32  # For REDIS_PASSWORD
 openssl rand -hex 32     # For SECRET_KEY
 
 # Edit .env.production
@@ -196,7 +194,6 @@ nano .env.production
 
 **Required changes:**
 - `POSTGRES_PASSWORD` - Strong password
-- `REDIS_PASSWORD` - Strong password
 - `SECRET_KEY` - Random 64-char hex
 - `LOG_LEVEL=WARNING` - Less verbose logging
 - `ENABLE_AUTH=true` - Enable authentication (when implemented)
