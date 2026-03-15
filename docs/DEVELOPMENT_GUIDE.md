@@ -47,7 +47,6 @@ Before starting development, ensure you have these tools installed:
 | **Python** | 3.11+ | Backend development | https://www.python.org/downloads/ |
 | **Node.js** | 20+ | Frontend development | https://nodejs.org/ |
 | **PostgreSQL** | 15+ | Local database | https://www.postgresql.org/download/ |
-| **Redis** | 7+ | Local cache | https://redis.io/download |
 
 **Verify installations:**
 
@@ -62,7 +61,6 @@ python --version       # Python 3.11.5
 node --version         # v20.9.0
 npm --version          # 10.1.0
 psql --version         # psql (PostgreSQL) 15.4
-redis-cli --version    # redis-cli 7.0.12
 ```
 
 ---
@@ -99,9 +97,8 @@ docker compose -f docker-compose.dev.yml up -d
 
 # 4. Verify services
 docker compose -f docker-compose.dev.yml ps
-# Should see 4 services running:
+# Should see 3 services running:
 # - shatter-db (postgres)
-# - shatter-redis
 # - shatter-backend
 # - shatter-frontend
 
@@ -269,7 +266,7 @@ git clone https://github.com/your-org/shatter.git
 cd shatter
 
 # 2. Start backend services
-docker-compose up -d postgres redis backend
+docker-compose -f docker-compose.dev.yml up -d postgres backend
 
 # 3. Set up frontend locally
 cd frontend
@@ -314,13 +311,7 @@ psql shatter -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
 psql shatter -c "CREATE USER shatter_user WITH PASSWORD 'changeme';"
 psql shatter -c "GRANT ALL PRIVILEGES ON DATABASE shatter TO shatter_user;"
 
-# 3. Install Redis
-# Linux: apt-get install redis-server
-# Mac: brew install redis
-# Windows: Download from https://redis.io/download
-redis-server  # Start in separate terminal
-
-# 4. Set up backend
+# 3. Set up backend
 cd backend
 python3.11 -m venv venv
 source venv/bin/activate
@@ -333,14 +324,12 @@ POSTGRES_PORT=5432
 POSTGRES_DB=shatter
 POSTGRES_USER=shatter_user
 POSTGRES_PASSWORD=changeme
-REDIS_HOST=localhost
-REDIS_PORT=6379
 EOF
 
 # Run backend
 uvicorn app.main:app --reload
 
-# 5. Set up frontend (in new terminal)
+# 4. Set up frontend (in new terminal)
 cd frontend
 npm install
 npm run dev
@@ -1291,4 +1280,3 @@ npm test
 | API Docs | http://localhost:8000/docs |
 | ReDoc | http://localhost:8000/redoc |
 | PostgreSQL | localhost:5432 |
-| Redis | localhost:6379 |
