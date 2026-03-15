@@ -18,7 +18,7 @@ class Machine(Base):
     http_port = Column(Integer, default=80)
     ftp_username = Column(String(255), default="anonymous")
     ftp_password = Column(String(255), default="anonymous")
-    path = Column(String(255), default="/PROGRAM")
+    path = Column(String(255), default="/")
     tags = Column(JSON, nullable=True)  # ["production", "floor-a"]
     poll_interval_seconds = Column(Integer, default=5)
     tool_poll_interval_seconds = Column(Integer, default=30)  # Tool table/ATC polling interval (slower than fast poll)

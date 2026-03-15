@@ -14,7 +14,7 @@ class MachineBase(BaseModel):
     http_port: int = Field(default=80, ge=1, le=65535)
     ftp_username: str = Field(default="anonymous", max_length=255)
     ftp_password: str = Field(default="anonymous", max_length=255)
-    path: str = Field(default="/program", max_length=255, description="Default FTP path for program files")
+    path: str = Field(default="/", max_length=255, description="Default FTP path for program files (root)")
     tags: Optional[List[str]] = Field(default_factory=list)
     poll_interval_seconds: int = Field(default=5, ge=1, le=300)
     enabled: bool = Field(default=True)
