@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { StatusIndicator, Select } from '../components/ui';
 import './FileBrowser.css';
-import { API_BASE_URL } from '../config/api';
+import { API_BASE_URL, getApiErrorMessage } from '../config/api';
 
 interface Program {
   name: string;
@@ -294,8 +294,10 @@ export const FileBrowser: React.FC = () => {
       .then(res => {
         if (!res.ok) {
           return res.json().then(data => {
-            throw new Error(data.detail || `HTTP ${res.status}`);
-          }).catch(() => {
+            const msg = getApiErrorMessage(data?.detail) || `HTTP ${res.status}`;
+            throw new Error(msg);
+          }).catch((e) => {
+            if (e instanceof Error && !e.message.startsWith('HTTP ')) throw e;
             throw new Error(`HTTP ${res.status}`);
           });
         }

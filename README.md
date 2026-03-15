@@ -95,7 +95,7 @@ Open http://localhost:3000 and add your CNC machines through the web UI.
 
 ## License
 
-TBD (Likely MIT or Apache 2.0)
+Shatter-NC is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See [LICENSE](LICENSE) for the full text. In short: you may use, modify, and distribute the software; if you run a modified version as a network service, you must offer the corresponding source to its users.
 
 ## Contributing
 

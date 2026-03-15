@@ -42,6 +42,14 @@ export const buildApiUrl = (path: string): string => {
   return `${API_BASE_URL}/${cleanPath}`;
 };
 
+/** Normalize FastAPI error detail (string or array of strings) to a single display message. */
+export function getApiErrorMessage(detail: unknown): string {
+  if (detail == null) return '';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map(String).join(' ');
+  return String(detail);
+}
+
 // Debug logging (remove in production)
 // console.log('API Configuration:', {
 //   API_BASE_URL,
