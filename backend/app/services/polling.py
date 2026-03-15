@@ -17,6 +17,7 @@ from app.models.event import (
     CounterHistory
 )
 from app.clients.http_client import CNCHttpClient
+from app.core.config import settings
 from app.db.base import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ class MachinePoller:
         self.last_status: Optional[str] = None  # Track status transitions in-memory (only updated in _log_events_async)
         self.last_known_prd3_status: Optional[str] = None  # Last status from PRD3; used when PRD3 is missing on a later poll
         self.last_heartbeat_time: Optional[datetime] = None  # Track last heartbeat event
-        self.heartbeat_interval_minutes = 5  # Log heartbeat every 5 minutes
+        self.heartbeat_interval_minutes = settings.HEARTBEAT_INTERVAL_MINUTES
         self.offline_threshold = 3  # Require 3 consecutive failures before logging offline
         self.logged_offline_status = False  # Track if we've already logged the offline transition
         self._log_events_lock = asyncio.Lock()  # Serialize per-machine event logging to prevent race-induced duplicate/stale transitions
@@ -51,7 +52,7 @@ class MachinePoller:
         self.last_panel: Optional[Dict[str, Any]] = None
         self.last_counters: Optional[List[Dict[str, Any]]] = None
 
-        # Tracking last log times for heartbeat (5-minute interval)
+        # Tracking last log times for heartbeat (interval from settings)
         self.last_macro_log_time: Optional[datetime] = None
         self.last_tool_table_log_time: Optional[datetime] = None
         self.last_panel_log_time: Optional[datetime] = None
@@ -634,7 +635,7 @@ class MachinePoller:
                     f"(previous status: {previous_status})"
                 )
             
-            # Log offline heartbeat if machine is already logged as offline and 5 minutes have passed
+            # Log offline heartbeat if machine is already logged as offline and heartbeat interval has passed
             if self.logged_offline_status and self.last_heartbeat_time is not None:
                 time_since_heartbeat = poll_timestamp - self.last_heartbeat_time
                 if time_since_heartbeat >= timedelta(minutes=self.heartbeat_interval_minutes):
@@ -681,11 +682,15 @@ class MachinePoller:
 
                 # Log status transition (Option A: in-memory tracking)
                 if self.last_status != current_status:
+                    # First event after poller creation (last_status is None): pass previous_status=current_status
+                    # so the event is stored as a heartbeat and the UI shows [HEARTBEAT] not [STATUS EVENT]
+                    if self.last_status is None:
+                        status_data = {**status_data, "previous_status": current_status}
                     await self._log_status_event(db, status_data, current_status)
                     self.last_status = current_status
                     # Reset heartbeat timer on status change
                     self.last_heartbeat_time = poll_timestamp
-                # Log heartbeat if exactly 5 minutes have passed (even if status hasn't changed)
+                # Log heartbeat if heartbeat interval has passed (even if status hasn't changed)
                 elif current_status and success:
                     # Only log heartbeat if we have a previous heartbeat time to compare against
                     # This prevents logging heartbeats on first poll or after poller recreation
