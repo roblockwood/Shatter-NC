@@ -26,7 +26,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [events, setEvents] = useState<StatusEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; status: string; timestamp: Date; error?: string; is_heartbeat?: boolean } | null>(null);
+  const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; status: string; timestamp: Date; error?: string; is_heartbeat?: boolean; isLatest?: boolean } | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const [oscilloscopeWidth] = useState(180);
   const [scaleX, setScaleX] = useState(1);
@@ -316,46 +316,34 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
     const totalDuration = endTime.getTime() - startTime.getTime();
     const dataPoints: Array<{ time: number; level: number; status: string; error?: string; is_heartbeat?: boolean }> = [];
 
-    // If no events, still show current status
+    // If no events: only show a span when we have live data (currentStatus/isOnline from WebSocket).
+    // Otherwise we have no data for this window — don't assume a state.
     if (events.length === 0) {
-      const normalized = normalizeStatus(currentStatus || 'standby', isOnline);
-      dataPoints.push({
-        time: 0,
-        level: STATUS_LEVELS[normalized] ?? 3,
-        status: normalized,
-      });
-      dataPoints.push({
-        time: 100,
-        level: STATUS_LEVELS[normalized] ?? 3,
-        status: normalized,
-      });
+      const hasLiveData = currentStatus !== undefined || isOnline !== undefined;
+      if (hasLiveData) {
+        const normalized = normalizeStatus(currentStatus || 'standby', isOnline);
+        dataPoints.push({
+          time: 0,
+          level: STATUS_LEVELS[normalized] ?? 3,
+          status: normalized,
+        });
+        dataPoints.push({
+          time: 100,
+          level: STATUS_LEVELS[normalized] ?? 3,
+          status: normalized,
+        });
+      }
       return dataPoints;
     }
 
-    const sortedEvents = [...events].sort((a, b) => 
+    const sortedEvents = [...events].sort((a, b) =>
       new Date(a.time).getTime() - new Date(b.time).getTime()
     );
 
-    // Add initial point - prefer currentStatus if available (most accurate)
-    // Otherwise use first event status
-    let initialStatus = currentStatus;
-    if (!initialStatus && sortedEvents.length > 0) {
-      const firstEvent = sortedEvents[0];
-      const firstEventTime = new Date(firstEvent.time).getTime();
-      if (firstEventTime >= startTime.getTime()) {
-        initialStatus = firstEvent.status;
-      }
-    }
-    if (!initialStatus) initialStatus = 'standby';
-    
-    const normalizedInitial = normalizeStatus(initialStatus, isOnline);
-    dataPoints.push({
-      time: 0,
-      level: STATUS_LEVELS[normalizedInitial] ?? 3,
-      status: normalizedInitial,
-    });
+    // Do NOT add a synthetic point at time 0 — we only interpolate between actual status events.
+    // Starting the line at the left edge would imply the machine was in some state before the first event.
 
-    // Add points for each event - normalize each status carefully
+    // Add points for each event within the time window
     for (const event of sortedEvents) {
       const eventTime = new Date(event.time).getTime();
       if (eventTime >= startTime.getTime() && eventTime <= endTime.getTime()) {
@@ -365,25 +353,24 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
           time: relativeTime,
           level: STATUS_LEVELS[normalized] ?? 3,
           status: normalized,
-          error: event.error, // Include error from event if available
-          is_heartbeat: event.is_heartbeat, // Include heartbeat flag
+          error: event.error,
+          is_heartbeat: event.is_heartbeat,
         });
       }
     }
 
-    // Add final point - ALWAYS use currentStatus from WebSocket if available (most accurate)
-    // This ensures the "NOW" point reflects the actual current machine state
-    const finalStatus = currentStatus || (sortedEvents.length > 0 ? sortedEvents[sortedEvents.length - 1].status : 'standby');
-    const normalized = normalizeStatus(finalStatus, isOnline);
-    dataPoints.push({
-      time: 100,
-      level: STATUS_LEVELS[normalized] ?? 3,
-      status: normalized,
-      error: !isOnline && currentError ? currentError : undefined, // Include error if offline
-    });
-    
-    // If currentStatus is provided and different from last event, we might want to add a transition point
-    // But for now, the final point at 100% should represent current state
+    // Add "now" point at 100% only when we have live currentStatus (polling is running and we know state).
+    // Otherwise we would be assuming the last event's state continued to now.
+    if (currentStatus !== undefined) {
+      const finalStatus = currentStatus;
+      const normalized = normalizeStatus(finalStatus, isOnline);
+      dataPoints.push({
+        time: 100,
+        level: STATUS_LEVELS[normalized] ?? 3,
+        status: normalized,
+        error: !isOnline && currentError ? currentError : undefined,
+      });
+    }
 
     return dataPoints;
   };
@@ -799,17 +786,13 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                         className="oscilloscope-trace"
                       />
                     )) : (
-                      // Single point - render as horizontal line
-                      <line
-                        x1="0"
-                        y1={svgPoints[0].y}
-                        x2="100"
-                        y2={svgPoints[0].y}
-                        stroke="var(--color-text-primary)"
-                        strokeWidth="2"
-                        strokeLinecap="butt"
-                        shapeRendering="crispEdges"
-                        style={{ filter: 'none' }}
+                      // Single point - render only at that time (no line across full width; we don't assume state elsewhere)
+                      <circle
+                        cx={svgPoints[0].x}
+                        cy={svgPoints[0].y}
+                        r="2"
+                        fill="var(--color-text-primary)"
+                        stroke="none"
                         className="oscilloscope-trace"
                       />
                     ))}
@@ -836,7 +819,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                                 const normalized = normalizeStatus(dataPoint.status, isOnline);
                                 const levelY = (1 - (STATUS_LEVELS[normalized] ?? 3) / 4) * 100;
                                 const paddedY = 8 + (levelY / 100) * 84; // Map to 8-92 range
-                                // Get error and heartbeat flag from dataPoint
+                                // Get error, heartbeat flag, and latest (rightmost/current) from dataPoint
                                 setHoveredPoint({
                                   x: x,
                                   y: paddedY,
@@ -844,6 +827,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                                   timestamp: timestamp,
                                   error: dataPoint.error,
                                   is_heartbeat: dataPoint.is_heartbeat,
+                                  isLatest: dataIdx === oscilloscopeData.length - 1,
                                 });
                                 
                                 const tooltipWidth = 250; // Wider to accommodate error messages
@@ -906,7 +890,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                   top: `${tooltipPosition.y}px`,
                 }}
               >
-                {hoveredPoint.is_heartbeat ? '[HEARTBEAT]' : '[STATUS EVENT]'}<br/>
+                {hoveredPoint.isLatest ? '[LATEST]' : (hoveredPoint.is_heartbeat ? '[HEARTBEAT]' : '[STATUS EVENT]')}<br/>
                 {hoveredPoint.status}<br/>
                 {hoveredPoint.timestamp.toLocaleString()}
                 {hoveredPoint.error && (
