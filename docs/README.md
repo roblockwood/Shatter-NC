@@ -54,6 +54,9 @@ Documents in `archive/` are historical records of completed migrations or implem
 Templates and reusable documentation structures:
 - **[Schema Definition Template](templates/SCHEMA_DEFINITION_TEMPLATE.md)** - Template for defining CNC data file schemas
 
+### Bugs & issues
+- **[GitHub Issues](https://github.com/roblockwood/Shatter-NC/issues)** - Report bugs and track improvements. Use the `bug` label for defects.
+
 ### Roadmap
 Future planning and roadmap documents:
 - **[Future Documentation Plan](roadmap/FUTURE_DOCUMENTATION.md)** - Planned advanced topics (WebSocket protocol, testing, parsers)
