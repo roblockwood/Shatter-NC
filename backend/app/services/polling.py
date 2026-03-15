@@ -17,6 +17,7 @@ from app.models.event import (
     CounterHistory
 )
 from app.clients.http_client import CNCHttpClient
+from app.core.config import settings
 from app.db.base import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -33,11 +34,13 @@ class MachinePoller:
         self.last_tool_poll_time: Optional[datetime] = None  # Track last tool data poll for slow polling
         self.consecutive_failures = 0
         self.is_online = False
-        self.last_status: Optional[str] = None  # Track status transitions in-memory
+        self.last_status: Optional[str] = None  # Track status transitions in-memory (only updated in _log_events_async)
+        self.last_known_prd3_status: Optional[str] = None  # Last status from PRD3; used when PRD3 is missing on a later poll
         self.last_heartbeat_time: Optional[datetime] = None  # Track last heartbeat event
-        self.heartbeat_interval_minutes = 5  # Log heartbeat every 5 minutes
+        self.heartbeat_interval_minutes = settings.HEARTBEAT_INTERVAL_MINUTES
         self.offline_threshold = 3  # Require 3 consecutive failures before logging offline
         self.logged_offline_status = False  # Track if we've already logged the offline transition
+        self._log_events_lock = asyncio.Lock()  # Serialize per-machine event logging to prevent race-induced duplicate/stale transitions
         
         # Cache for program_name from mem.nc (fetched on-demand, not during regular polling)
         self.cached_program_name: Optional[str] = None
@@ -49,7 +52,7 @@ class MachinePoller:
         self.last_panel: Optional[Dict[str, Any]] = None
         self.last_counters: Optional[List[Dict[str, Any]]] = None
 
-        # Tracking last log times for heartbeat (5-minute interval)
+        # Tracking last log times for heartbeat (interval from settings)
         self.last_macro_log_time: Optional[datetime] = None
         self.last_tool_table_log_time: Optional[datetime] = None
         self.last_panel_log_time: Optional[datetime] = None
@@ -370,12 +373,12 @@ class MachinePoller:
                         logger.info(f"Machine {self.machine.id} - PRD3 reports 'off' but machine appears active (power_on_time={has_power_on_time}, program={has_program}), using 'standby'")
                         machine_status = "standby"
                 
-                # Update last known status when we successfully get PRD3 data
-                self.last_status = machine_status
+                # Update last known PRD3 status (used when PRD3 is missing on a later poll); do not set last_status here
+                self.last_known_prd3_status = machine_status
             else:
-                # PRD3 data not available - use last known status instead of defaulting to "operating"
-                if self.last_status:
-                    machine_status = self.last_status
+                # PRD3 data not available - use last known PRD3 status instead of defaulting to "operating"
+                if self.last_known_prd3_status:
+                    machine_status = self.last_known_prd3_status
                     logger.warning(f"Machine {self.machine.id} - PRD3 data not available, using last known status: {machine_status}")
                 else:
                     # No last status available - default to standby (safer than "operating")
@@ -487,8 +490,9 @@ class MachinePoller:
                 status_data["macros"] = {}
                 status_data["macros_timestamp"] = None
             
-            # Override status to 'error' if there are active alarms (unless machine is off)
-            if status_data.get("alarms") and machine_status != "off":
+            # Override status to 'error' only when there are hard alarms (type == "alarm"); ignore operator_message and loading_system
+            hard_alarms = [a for a in status_data.get("alarms", []) if a.get("type") == "alarm"]
+            if hard_alarms and machine_status != "off":
                 machine_status = "error"
                 status_data["status"] = "error"
             
@@ -631,7 +635,7 @@ class MachinePoller:
                     f"(previous status: {previous_status})"
                 )
             
-            # Log offline heartbeat if machine is already logged as offline and 5 minutes have passed
+            # Log offline heartbeat if machine is already logged as offline and heartbeat interval has passed
             if self.logged_offline_status and self.last_heartbeat_time is not None:
                 time_since_heartbeat = poll_timestamp - self.last_heartbeat_time
                 if time_since_heartbeat >= timedelta(minutes=self.heartbeat_interval_minutes):
@@ -655,65 +659,70 @@ class MachinePoller:
         - Production run start/end
         - Updates machine.last_seen_at to track successful polls
         """
-        db = SessionLocal()
-        try:
-            # Log polling event
-            polling_event = PollingEvent(
-                time=poll_timestamp,
-                machine_id=self.machine.id,
-                success=success,
-                response_time_ms=response_time_ms,
-            )
-            db.add(polling_event)
+        async with self._log_events_lock:
+            db = SessionLocal()
+            try:
+                # Log polling event
+                polling_event = PollingEvent(
+                    time=poll_timestamp,
+                    machine_id=self.machine.id,
+                    success=success,
+                    response_time_ms=response_time_ms,
+                )
+                db.add(polling_event)
 
-            # Update last_seen_at to track successful polling (only when online)
-            if success and status_data.get("is_online", True):
-                machine = db.query(Machine).filter(Machine.id == self.machine.id).first()
-                if machine:
-                    machine.last_seen_at = poll_timestamp
-                    db.add(machine)
+                # Update last_seen_at to track successful polling (only when online)
+                if success and status_data.get("is_online", True):
+                    machine = db.query(Machine).filter(Machine.id == self.machine.id).first()
+                    if machine:
+                        machine.last_seen_at = poll_timestamp
+                        db.add(machine)
 
-            current_status = status_data.get("status")
+                current_status = status_data.get("status")
 
-            # Log status transition (Option A: in-memory tracking)
-            if self.last_status != current_status:
-                await self._log_status_event(db, status_data, current_status)
-                self.last_status = current_status
-                # Reset heartbeat timer on status change
-                self.last_heartbeat_time = poll_timestamp
-            # Log heartbeat if exactly 5 minutes have passed (even if status hasn't changed)
-            elif current_status and success:
-                # Only log heartbeat if we have a previous heartbeat time to compare against
-                # This prevents logging heartbeats on first poll or after poller recreation
-                if self.last_heartbeat_time is not None:
-                    # Check if heartbeat interval has passed
-                    time_since_heartbeat = poll_timestamp - self.last_heartbeat_time
-                    if time_since_heartbeat >= timedelta(minutes=self.heartbeat_interval_minutes):
-                        # For heartbeats, previous_status should equal current_status (no change)
-                        status_data_with_heartbeat = {**status_data, "previous_status": current_status}
-                        await self._log_status_event(db, status_data_with_heartbeat, current_status)
-                        self.last_heartbeat_time = poll_timestamp
-                else:
-                    # Initialize heartbeat timer on first successful poll (don't log yet)
+                # Log status transition (Option A: in-memory tracking)
+                if self.last_status != current_status:
+                    # First event after poller creation (last_status is None): pass previous_status=current_status
+                    # so the event is stored as a heartbeat and the UI shows [HEARTBEAT] not [STATUS EVENT]
+                    if self.last_status is None:
+                        status_data = {**status_data, "previous_status": current_status}
+                    await self._log_status_event(db, status_data, current_status)
+                    self.last_status = current_status
+                    # Reset heartbeat timer on status change
                     self.last_heartbeat_time = poll_timestamp
+                # Log heartbeat if heartbeat interval has passed (even if status hasn't changed)
+                elif current_status and success:
+                    # Only log heartbeat if we have a previous heartbeat time to compare against
+                    # This prevents logging heartbeats on first poll or after poller recreation
+                    if self.last_heartbeat_time is not None:
+                        # Check if heartbeat interval has passed
+                        time_since_heartbeat = poll_timestamp - self.last_heartbeat_time
+                        if time_since_heartbeat >= timedelta(minutes=self.heartbeat_interval_minutes):
+                            # For heartbeats, previous_status should equal current_status (no change)
+                            status_data_with_heartbeat = {**status_data, "previous_status": current_status}
+                            await self._log_status_event(db, status_data_with_heartbeat, current_status)
+                            self.last_heartbeat_time = poll_timestamp
+                    else:
+                        # Initialize heartbeat timer on first successful poll (don't log yet)
+                        self.last_heartbeat_time = poll_timestamp
 
-            # Log alarms only when status indicates alarm (Q3)
-            if current_status == "alarm":
-                await self._log_alarms(db, status_data)
+                # Log alarms only when status indicates alarm (Q3)
+                if current_status == "alarm":
+                    await self._log_alarms(db, status_data)
 
-            # Log production run start/end (Q4)
-            await self._log_production_run(db, status_data)
+                # Log production run start/end (Q4)
+                await self._log_production_run(db, status_data)
 
-            # Log extended history (macros, tool table, panel, counters)
-            if success:
-                await self._log_extended_history(db, status_data, poll_timestamp)
+                # Log extended history (macros, tool table, panel, counters)
+                if success:
+                    await self._log_extended_history(db, status_data, poll_timestamp)
 
-            db.commit()
-        except Exception as e:
-            logger.error(f"Error logging events for machine {self.machine.id}: {e}")
-            db.rollback()
-        finally:
-            db.close()
+                db.commit()
+            except Exception as e:
+                logger.error(f"Error logging events for machine {self.machine.id}: {e}")
+                db.rollback()
+            finally:
+                db.close()
 
     async def _log_status_event(self, db: Session, status_data: Dict[str, Any], current_status: str):
         """Log machine status change event."""
