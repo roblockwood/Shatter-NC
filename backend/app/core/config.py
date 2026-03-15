@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # CNC Polling
     DEFAULT_POLL_INTERVAL: int = 5  # seconds
     DEFAULT_TOOL_POLL_INTERVAL: int = 30  # seconds (tool table/ATC polling, separate from fast status polling)
+    HEARTBEAT_INTERVAL_MINUTES: int = 2  # minutes between status/heartbeat log events when status unchanged
 
     # Security (optional)
     SECRET_KEY: Optional[str] = None
