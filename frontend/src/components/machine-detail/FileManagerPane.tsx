@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TerminalBox } from '../ui/TerminalBox';
 import { Select } from '../ui';
-import { API_BASE_URL } from '../../config/api';
+import { API_BASE_URL, getApiErrorMessage } from '../../config/api';
 import './FileManagerPane.css';
 
 interface Program {
@@ -238,8 +238,10 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
       .then(res => {
         if (!res.ok) {
           return res.json().then(data => {
-            throw new Error(data.detail || `HTTP ${res.status}`);
-          }).catch(() => {
+            const msg = getApiErrorMessage(data?.detail) || `HTTP ${res.status}`;
+            throw new Error(msg);
+          }).catch((e) => {
+            if (e instanceof Error && !e.message.startsWith('HTTP ')) throw e;
             throw new Error(`HTTP ${res.status}`);
           });
         }

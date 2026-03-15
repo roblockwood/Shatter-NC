@@ -251,7 +251,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     ftp_password: machine.ftp_password || '',
     ftp_port: machine.ftp_port || 21,
     // http_port removed - Telnet port is always 10000
-    path: machine.path !== undefined && machine.path !== null ? machine.path : '/program',
+    path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
     poll_interval_seconds: machine.poll_interval_seconds || 5,
     tool_poll_interval_seconds: (machine as any).tool_poll_interval_seconds || 30,
     enabled: machine.enabled !== false,
@@ -285,7 +285,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             ftp_password: fullMachineData.ftp_password || '',
             ftp_port: fullMachineData.ftp_port || 21,
             // http_port removed - Telnet port is always 10000
-            path: fullMachineData.path !== undefined && fullMachineData.path !== null ? fullMachineData.path : '/program',
+            path: fullMachineData.path !== undefined && fullMachineData.path !== null ? fullMachineData.path : '/',
             poll_interval_seconds: fullMachineData.poll_interval_seconds || 5,
             tool_poll_interval_seconds: fullMachineData.tool_poll_interval_seconds || 30,
             enabled: fullMachineData.enabled !== false,
@@ -381,7 +381,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         ftp_password: machine.ftp_password || '',
         ftp_port: machine.ftp_port || 21,
         // http_port removed - Telnet port is always 10000
-        path: machine.path !== undefined && machine.path !== null ? machine.path : '/program',
+        path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
         poll_interval_seconds: machine.poll_interval_seconds || 5,
         tool_poll_interval_seconds: (machine as any).tool_poll_interval_seconds || 30,
         enabled: machine.enabled !== false,
@@ -748,7 +748,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           filename={selectedFilename}
           machineId={machine.machine_id}
           machineName={machine.machine_name}
-          machinePath={machine.path || '/PROGRAM'}
+          machinePath={machine.path || '/'}
           fileContent={fileContent}
           units={(machine as any).units || machine.units || 'in'}
         />
@@ -875,7 +875,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 type="text"
                 value={editFormData.path}
                 onChange={(e) => setEditFormData({ ...editFormData, path: e.target.value })}
-                placeholder="/program"
+                placeholder="/"
                 disabled={isEditSaving}
               />
             </div>
@@ -1583,7 +1583,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         filename={selectedFilename}
         machineId={machine.machine_id}
         machineName={machine.machine_name}
-        machinePath={machine.path || '/PROGRAM'}
+        machinePath={machine.path || '/'}
         fileContent={fileContent}
         units={(machine as any).units || machine.units || 'in'}
       />
