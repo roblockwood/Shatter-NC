@@ -58,7 +58,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
     ftp_password: 'anonymous',
     ftp_port: 21,
     http_port: 80,
-    path: '/PROGRAM',
+    path: '/',
     poll_interval_seconds: 5,
     tool_poll_interval_seconds: 30,
     enabled: true,
@@ -101,7 +101,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
           ftp_password: 'anonymous',
           ftp_port: 21,
           http_port: 80,
-          path: '/PROGRAM',
+          path: '/',
           poll_interval_seconds: 5,
           enabled: true,
           model: 'Brother CNC',
@@ -152,7 +152,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
       ftp_password: 'anonymous',
       ftp_port: 21,
       http_port: 80,
-      path: '/PROGRAM',
+      path: '/',
       poll_interval_seconds: 5,
       enabled: true,
       model: 'Brother CNC',
@@ -301,7 +301,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
               type="text"
               value={formData.path}
               onChange={(e) => setFormData({ ...formData, path: e.target.value })}
-              placeholder="/PROGRAM"
+              placeholder="/"
               disabled={isSaving}
             />
           </div>

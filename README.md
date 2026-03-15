@@ -17,12 +17,12 @@ Shatter is an open-source web platform for monitoring and managing multiple Brot
 
 ## Quick Start
 
-**Development (Recommended):**
+**First-time or shop install:** See the **[Installation Guide](docs/INSTALLATION_GUIDE.md)** for step-by-step setup on Windows, macOS, or Linux using Docker Desktop (including private repo access and GitHub Desktop).
+
+**Development (after cloning):**
 ```bash
-git clone https://github.com/user/shatter
-cd shatter
 cp .env.example .env
-docker compose up -d
+docker compose -f docker-compose.dev.yml up -d
 ```
 
 Open http://localhost:3000 and add your CNC machines through the web UI.
@@ -43,6 +43,7 @@ Open http://localhost:3000 and add your CNC machines through the web UI.
 
 ### Getting Started
 
+- **[Installation Guide](docs/INSTALLATION_GUIDE.md)** - Step-by-step install for Windows, macOS, Linux (Docker Desktop; machinist-friendly)
 - **[Docker Deployment Guide](docs/DOCKER_DEPLOYMENT.md)** - Production and development deployment
 - **[Migration: Remove Redis](docs/MIGRATION_REMOVE_REDIS.md)** - Upgrading from a Redis-based deployment
 - **[Development Guide](docs/DEVELOPMENT_GUIDE.md)** - Local development setup and workflows
@@ -94,7 +95,7 @@ Open http://localhost:3000 and add your CNC machines through the web UI.
 
 ## License
 
-TBD (Likely MIT or Apache 2.0)
+Shatter-NC is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See [LICENSE](LICENSE) for the full text. In short: you may use, modify, and distribute the software; if you run a modified version as a network service, you must offer the corresponding source to its users.
 
 ## Contributing
 
