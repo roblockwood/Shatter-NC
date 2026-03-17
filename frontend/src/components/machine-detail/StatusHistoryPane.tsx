@@ -241,7 +241,7 @@ export const StatusHistoryPane: React.FC<StatusHistoryPaneProps> = ({ machineId 
                     <td>{formatDateTime(interval.start_time)}</td>
                     <td>{formatDateTime(interval.end_time)}</td>
                     <td>{formatDuration(interval.duration_seconds ?? undefined)}</td>
-                    <td>{interval.detail || (interval.program_no ? `PROGRAM/${interval.program_no}` : '—')}</td>
+                    <td>{interval.detail ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
