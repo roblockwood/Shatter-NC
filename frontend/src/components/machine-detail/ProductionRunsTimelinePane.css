@@ -1,0 +1,149 @@
+.production-runs-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+}
+
+.production-runs-pane .terminal-box-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.runs-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-family: var(--font-mono, 'Roboto Mono', monospace);
+  font-size: 10px;
+}
+
+.runs-range-controls {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.runs-range-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: inherit;
+  padding: 2px 6px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.runs-range-btn.active {
+  background: var(--color-text-primary);
+  color: var(--color-bg-primary);
+  box-shadow: var(--glow);
+}
+
+.runs-loading,
+.runs-empty {
+  padding: 4px 8px;
+  color: var(--color-text-muted);
+}
+
+.runs-timeline-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.run-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.run-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.run-program {
+  font-weight: 700;
+}
+
+.run-meta {
+  color: var(--color-text-secondary);
+}
+
+.run-bar-track {
+  position: relative;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.run-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.run-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.run-bar-parts {
+  position: absolute;
+  right: 2px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  font-size: 9px;
+  color: var(--color-text-primary);
+}
+
+/* Segment colors aligned with StatusTimeline */
+.segment-operating {
+  background: rgba(0, 255, 0, 0.4);
+}
+
+.segment-standby {
+  background: rgba(255, 255, 0, 0.3);
+}
+
+.segment-stopped {
+  background: rgba(255, 136, 0, 0.35);
+}
+
+.segment-error {
+  background: rgba(255, 0, 0, 0.45);
+}
+
+.segment-off {
+  background: rgba(128, 128, 128, 0.4);
+}
+
+.runs-segment-tooltip {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  margin-top: -4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-family: var(--font-mono, 'Roboto Mono', monospace);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  z-index: 1001;
+  pointer-events: none;
+  box-shadow: var(--glow);
+}
+
