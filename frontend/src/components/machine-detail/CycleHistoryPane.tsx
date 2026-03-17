@@ -20,10 +20,9 @@ interface CycleHistoryEntry {
 
 interface CycleHistoryPaneProps {
   machineId: number;
-  onExpand?: () => void;
 }
 
-export const CycleHistoryPane: React.FC<CycleHistoryPaneProps> = ({ machineId, onExpand }) => {
+export const CycleHistoryPane: React.FC<CycleHistoryPaneProps> = ({ machineId }) => {
   const [cycles, setCycles] = useState<CycleHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const PAGE_SIZE = 100;
@@ -57,11 +56,6 @@ export const CycleHistoryPane: React.FC<CycleHistoryPaneProps> = ({ machineId, o
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString();
   };
 
   const hasPrevPage = page > 0;
