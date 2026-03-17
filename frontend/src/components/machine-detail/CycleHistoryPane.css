@@ -198,3 +198,40 @@
   background: var(--color-bg-elevated);
 }
 
+.cycle-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+}
+
+.cycle-page-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  padding: 2px var(--spacing-xs);
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+}
+
+.cycle-page-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.cycle-page-btn:not(:disabled):hover {
+  color: var(--color-text-secondary);
+  border-color: var(--color-text-secondary);
+  box-shadow: var(--glow);
+}
+
+.cycle-page-info {
+  color: var(--color-text-secondary);
+}
+

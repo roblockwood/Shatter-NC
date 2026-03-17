@@ -21,7 +21,8 @@ const PANE_NAMES: Record<PaneId, string> = {
   alarms: 'Alarms',
   currentProgram: 'Current Program',
   tools: 'Tools',
-  cycleHistory: 'Cycle History',
+  productionRuns: 'Production Runs',
+  statusHistory: 'Status History',
   panel: 'Panel',
   fileManager: 'File Manager',
 };
@@ -234,7 +235,9 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
         <div className="pane-list-panel">
           <div className="pane-list-header">PANES</div>
           <div className="pane-list-items">
-            {layout.map(pane => {
+            {layout
+              .filter(pane => pane.i !== 'cycleHistory')
+              .map(pane => {
               const isVisible = pane.visible !== false;
               const paneName = PANE_NAMES[pane.i as PaneId] || pane.i;
               return (

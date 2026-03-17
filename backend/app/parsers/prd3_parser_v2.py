@@ -120,13 +120,15 @@ class PRD3ParserV2:
             return {
                 "header": {},
                 "current_status": {},
-                "control_version": self.control_version
+                "history": [],
+                "control_version": self.control_version,
             }
         
         parsed_data = {
             "header": {},
             "current_status": {},
-            "control_version": self.control_version
+            "history": [],
+            "control_version": self.control_version,
         }
         
         # Parse each line type
@@ -139,12 +141,38 @@ class PRD3ParserV2:
             if line.startswith('A01,'):
                 parsed_data["header"] = self._parse_a01_line(line)
             elif line.startswith('C01,'):
+                # C01 represents the current status (latest entry)
                 parsed_data["current_status"] = self._parse_c01_line(line)
+            elif line.startswith('B'):
+                # B0001-Bxxxx are historical status log entries with the same
+                # structure as C01. We strip the B-index prefix and parse the
+                # remaining CSV fields using the C01 schema.
+                match = re.match(r'^(B(\d+)),(.*)$', line)
+                if not match:
+                    continue
+                index_str = match.group(2)
+                csv_part = match.group(3)
+                try:
+                    index = int(index_str)
+                except (TypeError, ValueError):
+                    index = None
+
+                c01_like_line = f"C01,{csv_part}"
+                history_entry = self._parse_c01_line(c01_like_line)
+                if index is not None:
+                    history_entry["index"] = index
+                parsed_data["history"].append(history_entry)
         
-        # Map status code to string
+        # Map status code to string for current_status
         if parsed_data["current_status"].get("current_status") is not None:
             status_code = parsed_data["current_status"]["current_status"]
             parsed_data["current_status"]["status"] = STATUS_CODE_MAP.get(status_code, "standby")
+        
+        # Map status codes for history entries
+        for entry in parsed_data["history"]:
+            code = entry.get("current_status")
+            if code is not None:
+                entry["status"] = STATUS_CODE_MAP.get(code, "standby")
         
         return parsed_data
 
@@ -204,7 +232,19 @@ class PRD3ParserV2:
             # Convert to appropriate type
             try:
                 if field_def.data_type == int:
-                    status_data[field_def.name] = int(value_str)
+                    # Some controls appear to emit non-numeric placeholders for
+                    # memory_operation_type and similar fields (e.g. quoted
+                    # strings like 'PROGRAM ' or just quotes/spaces). In those
+                    # cases, treat the value as undefined instead of logging
+                    # noisy parse warnings on every poll.
+                    if field_def.name == "memory_operation_type":
+                        numeric = value_str.strip().strip("'\"")
+                        if not numeric or not numeric.lstrip("+-").isdigit():
+                            # Leave memory_operation_type unset when not numeric
+                            continue
+                        status_data[field_def.name] = int(numeric)
+                    else:
+                        status_data[field_def.name] = int(value_str)
                 elif field_def.data_type == float:
                     status_data[field_def.name] = float(value_str)
                 else:
@@ -213,11 +253,11 @@ class PRD3ParserV2:
                         value_str = value_str.strip("'\"")
                     status_data[field_def.name] = value_str
             except (ValueError, TypeError) as e:
-                logger.warning(f"Failed to parse {field_def.name}='{value_str}': {e}")
-                if field_def.data_type == int:
-                    status_data[field_def.name] = 0
-                elif field_def.data_type == float:
-                    status_data[field_def.name] = 0.0
+                # For non-critical fields we prefer to skip bad values quietly
+                # rather than flood logs on every poll.
+                if field_def.data_type == int or field_def.data_type == float:
+                    # Skip setting the field when parsing fails
+                    continue
                 else:
                     status_data[field_def.name] = value_str
         

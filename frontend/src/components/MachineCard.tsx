@@ -7,7 +7,8 @@ import { AlarmPane } from './machine-detail/AlarmPane';
 import { StatusTimeline } from './machine-detail/StatusTimeline';
 import { ToolsPane } from './machine-detail/ToolsPane';
 import { CurrentProgramPane } from './machine-detail/CurrentProgramPane';
-import { CycleHistoryPane } from './machine-detail/CycleHistoryPane';
+import { ProductionRunsTimelinePane } from './machine-detail/ProductionRunsTimelinePane';
+import { StatusHistoryPane } from './machine-detail/StatusHistoryPane';
 import { PanelPane } from './machine-detail/PanelPane';
 import { FileManagerPane } from './machine-detail/FileManagerPane';
 import { LayoutManager } from './machine-detail/LayoutManager';
@@ -177,14 +178,22 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const currentProgramPaneRef = useRef<HTMLDivElement>(null);
   const programHoverRef = useRef<HTMLDivElement>(null);
   const programIndicatorRef = useRef<HTMLDivElement>(null);
-  const [showCycleHover, setShowCycleHover] = useState(false);
-  const [cycleHoverPosition, setCycleHoverPosition] = useState<{ top: number; left: number } | null>(null);
   const cycleHistoryPaneRef = useRef<HTMLDivElement>(null);
-  const cycleHoverRef = useRef<HTMLDivElement>(null);
-  const cycleIndicatorRef = useRef<HTMLDivElement>(null);
+  const [showProductionRunsHover, setShowProductionRunsHover] = useState(false);
+  const [productionRunsHoverPosition, setProductionRunsHoverPosition] = useState<{ top: number; left: number } | null>(null);
+  const productionRunsHoverRef = useRef<HTMLDivElement>(null);
+  const productionRunsIndicatorRef = useRef<HTMLDivElement>(null);
   const fileManagerPaneRef = useRef<HTMLDivElement>(null);
   const expandedContentRef = useRef<HTMLDivElement>(null);
   const [currentProgram, setCurrentProgram] = useState<string | null>(null);
+  const [latestRun, setLatestRun] = useState<{
+    program_no: string | null;
+    run_start: string;
+    run_end: string;
+    part_count: number;
+    segments: { status: string | null; start_time: string; end_time: string }[];
+  } | null>(null);
+  const [latestRunLoading, setLatestRunLoading] = useState(false);
   
   // Cache alarms from machine prop to avoid refetching
   useEffect(() => {
@@ -212,6 +221,47 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       setCurrentProgram(null);
     }
   }, [machine.program_name, machine.machine_name]);
+
+  // Fetch most recent production run for compact card summary
+  useEffect(() => {
+    let cancelled = false;
+    const fetchLatestRun = async () => {
+      try {
+        setLatestRunLoading(true);
+        const endTime = new Date();
+        const startTime = new Date(endTime);
+        startTime.setDate(startTime.getDate() - 7);
+
+        const resp = await fetch(
+          `${API_BASE_URL}/api/machines/${machine.machine_id}/production-runs-timeline?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&limit=1&offset=0`
+        );
+        if (!resp.ok) {
+          if (!cancelled) {
+            setLatestRun(null);
+          }
+          return;
+        }
+        const data = await resp.json();
+        const runs = Array.isArray(data) ? data : [];
+        if (!cancelled) {
+          setLatestRun(runs[0] || null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setLatestRun(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLatestRunLoading(false);
+        }
+      }
+    };
+
+    fetchLatestRun();
+    return () => {
+      cancelled = true;
+    };
+  }, [machine.machine_id]);
 
   // Helper function to find pane element within current card
   const findPaneElement = (paneId: string): HTMLElement | null => {
@@ -472,7 +522,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     if (!isExpanded) {
       setShowStatusHover(false);
       setShowProgramHover(false);
-      setShowCycleHover(false);
+      setShowProductionRunsHover(false);
       setShowToolsHover(false);
       setShowAlarmHover(false);
     }
@@ -579,11 +629,6 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     }
   };
 
-  const formatTime = (time: string | undefined) => {
-    if (!time || time === '0000:00:00.0') return '00:00:00';
-    return time.substring(0, 8); // Remove decimal if present
-  };
-
   const handleCardClick = (e: React.MouseEvent) => {
     // Don't expand if clicking on buttons or inputs
     const target = e.target as HTMLElement;
@@ -612,18 +657,25 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     }
   };
 
-  // Update context when expanded state changes
+  // Wire this card into the ExpandedMachineContext when expanded so that
+  // global layout edit controls (buttons, pane list, etc.) know which
+  // machine is active and how to toggle its layout edit mode.
+  const hasRegisteredExpandedContextRef = useRef(false);
   useEffect(() => {
-    if (isExpanded && !isEditing && !editMode) {
-      setExpandedMachine({ id: machine.machine_id, name: machine.machine_name });
-      setOnCollapse(() => () => onCollapse?.());
-      setOnToggleLayoutEdit(() => toggleLayoutEdit);
-    } else {
-      setExpandedMachine(null);
-      setOnCollapse(null);
-      setOnToggleLayoutEdit(null);
+    if (!isExpanded || hasRegisteredExpandedContextRef.current) {
+      return;
     }
-  }, [isExpanded, isEditing, editMode, machine.machine_id, machine.machine_name, onCollapse, setExpandedMachine, setOnCollapse, setOnToggleLayoutEdit, setLayoutEditMode]);
+
+    // Card became expanded – register metadata and handlers once
+    setExpandedMachine({ id: machine.machine_id, name: machine.machine_name });
+
+    if (onCollapse) {
+      setOnCollapse(() => onCollapse);
+    }
+
+    setOnToggleLayoutEdit(() => toggleLayoutEdit);
+    hasRegisteredExpandedContextRef.current = true;
+  }, [isExpanded, machine.machine_id, machine.machine_name, onCollapse]);
 
   // Render expanded view
   if (isExpanded && !isEditing && !editMode) {
@@ -693,14 +745,21 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 ),
               },
               {
-                id: PANE_IDS.CYCLE_HISTORY,
+                id: PANE_IDS.PRODUCTION_RUNS,
                 component: (
                   <div ref={cycleHistoryPaneRef}>
-                    <CycleHistoryPane 
+                    <ProductionRunsTimelinePane
                       machineId={machine.machine_id}
-                      onExpand={undefined}
                     />
                   </div>
+                ),
+              },
+              {
+                id: PANE_IDS.STATUS_HISTORY,
+                component: (
+                  <StatusHistoryPane
+                    machineId={machine.machine_id}
+                  />
                 ),
               },
               {
@@ -1271,20 +1330,21 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             )}
           </div>
 
-          <div 
-            ref={cycleIndicatorRef}
+          {/* PRODUCTION RUN SUMMARY (replaces legacy CYCLE/PARTS) */}
+          <div
+            ref={productionRunsIndicatorRef}
             className="machine-row machine-row-hoverable"
             onMouseEnter={() => {
-              if (cycleIndicatorRef.current) {
-                const rect = cycleIndicatorRef.current.getBoundingClientRect();
+              if (productionRunsIndicatorRef.current) {
+                const rect = productionRunsIndicatorRef.current.getBoundingClientRect();
                 const viewportWidth = window.innerWidth;
                 const viewportHeight = window.innerHeight;
                 const paneWidth = 500;
                 const paneHeight = 400;
-                
+
                 let left = rect.right + 8;
                 let top = rect.top;
-                
+
                 if (left + paneWidth > viewportWidth) {
                   left = rect.left - paneWidth - 8;
                 }
@@ -1294,20 +1354,19 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 if (top < 8) {
                   top = 8;
                 }
-                
-                setCycleHoverPosition({ top, left });
+
+                setProductionRunsHoverPosition({ top, left });
               }
-              setShowCycleHover(true);
+              setShowProductionRunsHover(true);
             }}
-            onMouseLeave={() => setShowCycleHover(false)}
+            onMouseLeave={() => setShowProductionRunsHover(false)}
             onClick={(e) => {
               e.stopPropagation();
               if (!isExpanded) {
                 onExpand?.();
               }
               setTimeout(() => {
-                // Find pane by data attribute (works with LayoutManager)
-                const paneElement = findPaneElement(PANE_IDS.CYCLE_HISTORY);
+                const paneElement = findPaneElement(PANE_IDS.PRODUCTION_RUNS);
                 if (paneElement) {
                   paneElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
                   paneElement.classList.add('cycle-pane-highlight');
@@ -1315,7 +1374,6 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     paneElement.classList.remove('cycle-pane-highlight');
                   }, 2000);
                 } else if (cycleHistoryPaneRef.current) {
-                  // Fallback to ref if data attribute not found
                   cycleHistoryPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
                   cycleHistoryPaneRef.current.classList.add('cycle-pane-highlight');
                   setTimeout(() => {
@@ -1326,23 +1384,63 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             }}
             style={{ cursor: 'pointer' }}
           >
-            <span className="label">CYCLE/PARTS:</span>
-            <span className="value">
-              {formatTime(machine.cycle_time)}
-              {machine.counters && machine.counters.length > 0 && `/${machine.counters[0].count}`}
+            <span className="label">PRODUCTION RUN:</span>
+            <span className="value production-run-summary">
+              {latestRunLoading && !latestRun && 'LOADING...'}
+              {!latestRunLoading && !latestRun && 'NO RECENT RUNS'}
+              {latestRun && (
+                <>
+                  <span className="production-run-meta">
+                    {latestRun.program_no || 'UNKNOWN'} · {latestRun.part_count} parts
+                  </span>
+                  <span className="production-run-bar-track">
+                    {(() => {
+                      const runStartMs = new Date(latestRun.run_start).getTime();
+                      const runEndMs = new Date(latestRun.run_end).getTime();
+                      const span = Math.max(1, runEndMs - runStartMs);
+                      return latestRun.segments.map((seg, idx) => {
+                        const sStartMs = new Date(seg.start_time).getTime();
+                        const sEndMs = new Date(seg.end_time).getTime();
+                        const left = ((sStartMs - runStartMs) / span) * 100;
+                        const width = Math.max(2, ((sEndMs - sStartMs) / span) * 100);
+                        const status = (seg.status || '').toLowerCase();
+                        const statusClass =
+                          status === 'operating'
+                            ? 'mini-segment-operating'
+                            : status === 'standby'
+                            ? 'mini-segment-standby'
+                            : status === 'stopped'
+                            ? 'mini-segment-stopped'
+                            : status === 'error'
+                            ? 'mini-segment-error'
+                            : status === 'off'
+                            ? 'mini-segment-off'
+                            : 'mini-segment-standby';
+                        return (
+                          <span
+                            key={idx}
+                            className={`production-run-segment ${statusClass}`}
+                            style={{ left: `${left}%`, width: `${width}%` }}
+                          />
+                        );
+                      });
+                    })()}
+                  </span>
+                </>
+              )}
             </span>
-            {showCycleHover && cycleHoverPosition && (
-              <div 
-                ref={cycleHoverRef}
+            {showProductionRunsHover && productionRunsHoverPosition && (
+              <div
+                ref={productionRunsHoverRef}
                 className="cycle-hover-pane"
                 style={{
-                  top: `${cycleHoverPosition.top}px`,
-                  left: `${cycleHoverPosition.left}px`,
+                  top: `${productionRunsHoverPosition.top}px`,
+                  left: `${productionRunsHoverPosition.left}px`,
                 }}
-                onMouseEnter={() => setShowCycleHover(true)}
-                onMouseLeave={() => setShowCycleHover(false)}
+                onMouseEnter={() => setShowProductionRunsHover(true)}
+                onMouseLeave={() => setShowProductionRunsHover(false)}
               >
-                <CycleHistoryPane
+                <ProductionRunsTimelinePane
                   machineId={machine.machine_id}
                 />
               </div>
