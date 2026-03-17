@@ -1,0 +1,246 @@
+.status-history-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+}
+
+.status-history-color-toggle {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono, 'Roboto Mono', monospace);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 6px;
+  margin-left: auto;
+  text-transform: uppercase;
+}
+
+.status-history-color-toggle.active {
+  background: var(--color-text-primary);
+  color: var(--color-bg-primary);
+  box-shadow: var(--glow);
+}
+
+.status-history-pane .terminal-box-content {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+
+.status-history-loading,
+.status-history-empty {
+  padding: 4px 8px;
+  color: var(--text-muted, #888);
+}
+
+.status-history-table-wrapper {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-history-summary {
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.25));
+  padding: 2px 4px;
+  font-size: 10px;
+  font-family: 'Roboto Mono', monospace;
+}
+
+.status-summary-title {
+  color: var(--color-text-secondary, #aaa);
+  margin-bottom: 2px;
+}
+
+.status-summary-rows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.status-summary-row {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.status-summary-label {
+  font-weight: 600;
+}
+
+.status-summary-value {
+  color: var(--color-text-primary, #fff);
+}
+
+.status-history-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.status-history-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 4px;
+  font-size: 10px;
+}
+
+.status-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.status-filter-pill {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  padding: 0 4px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.25));
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.status-filter-on {
+  border-color: var(--color-text-secondary, #9f9);
+}
+
+.status-filter-off {
+  opacity: 0.4;
+}
+
+.status-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-search-label {
+  color: var(--text-muted, #888);
+}
+
+.status-search-input {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: inherit;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  padding: 1px 4px;
+  width: 70px;
+}
+
+.status-history-table th,
+.status-history-table td {
+  padding: 2px 6px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+
+.status-history-header-row th {
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Base zebra + hover, but keep weaker than explicit status coloring */
+.status-history-row:nth-child(2n) {
+  background-color: rgba(255, 255, 255, 0.01);
+}
+
+.status-history-row:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.status-history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+  font-family: var(--font-mono, 'Roboto Mono', monospace);
+  font-size: 10px;
+}
+
+.status-page-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: inherit;
+  padding: 2px 6px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.status-page-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.status-page-btn:not(:disabled):hover {
+  color: var(--color-text-secondary);
+  border-color: var(--color-text-secondary);
+  box-shadow: var(--glow);
+}
+
+.status-page-info {
+  color: var(--color-text-secondary);
+}
+
+/* Subtle status row coloring (beta color mode) */
+.status-colored.status-operating {
+  /* operating: #00ff00 in StatusTimeline */
+  background-color: rgba(0, 255, 0, 0.18) !important;
+  border-left: 2px solid rgba(0, 255, 0, 0.8);
+  font-weight: 700;
+}
+
+.status-colored.status-standby {
+  /* standby: #ffff00 in StatusTimeline */
+  background-color: rgba(255, 255, 0, 0.05) !important;
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 0, 0.10),
+    rgba(255, 255, 0, 0.10) 2px,
+    transparent 2px,
+    transparent 6px
+  );
+  border-left: 2px dashed rgba(255, 255, 0, 0.9);
+  font-style: italic;
+}
+
+.status-colored.status-stopped {
+  /* stopped: #ff8800 in StatusTimeline */
+  background-color: rgba(255, 136, 0, 0.18) !important;
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 136, 0, 0.20),
+    rgba(255, 136, 0, 0.20) 2px,
+    transparent 2px,
+    transparent 6px
+  );
+  border-left: 2px solid rgba(255, 136, 0, 0.8);
+  text-decoration: underline;
+}
+
+.status-colored.status-error {
+  /* error: #ff0000 in StatusTimeline */
+  background-color: rgba(255, 0, 0, 0.22) !important;
+  border-left: 2px solid rgba(255, 0, 0, 0.9);
+  font-weight: 700;
+  color: var(--color-error, #ff6666);
+}
+
+.status-colored.status-off {
+  /* off: #808080 in StatusTimeline */
+  background-color: rgba(128, 128, 128, 0.20) !important;
+  border-left: 2px solid rgba(128, 128, 128, 0.9);
+  color: var(--color-success-muted, #2a5c2a);
+}
+
