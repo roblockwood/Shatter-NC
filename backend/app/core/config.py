@@ -45,6 +45,11 @@ class Settings(BaseSettings):
         "*",                          # Allow all origins (for production with dynamic IPs)
     ]
 
+    # Timezone for interpreting CNC timestamps (e.g., PRD3) and for
+    # default "local" views in history endpoints. This should be an
+    # IANA timezone name.
+    LOCAL_TIMEZONE: str = "America/Los_Angeles"
+
     @property
     def database_url(self) -> str:
         """Construct database URL."""
