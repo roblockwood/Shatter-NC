@@ -281,3 +281,165 @@ def get_cycle_history(
     cycle_history.sort(key=lambda r: r["start_time"], reverse=True)
     return cycle_history
 
+
+def get_production_runs_timeline(
+    db: Session,
+    machine_id: int,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Build a high-level production runs timeline by grouping sequential operating
+    intervals with the same program_no into runs, and embedding status segments
+    (operating/standby/stopped/error/off) inside each run window.
+    """
+    # Resolve time window (default: last 24h in configured local timezone)
+    try:
+        tz = ZoneInfo(settings.LOCAL_TIMEZONE)
+    except Exception:
+        tz = timezone.utc
+
+    if end_time is None:
+        end_time = datetime.now(tz)
+    if start_time is None:
+        start_time = end_time - timedelta(hours=24)
+
+    # Normalize window to UTC for DB queries (timestamps are stored as timestamptz)
+    if start_time.tzinfo is None:
+        start_utc = start_time.replace(tzinfo=tz).astimezone(timezone.utc)
+    else:
+        start_utc = start_time.astimezone(timezone.utc)
+
+    if end_time.tzinfo is None:
+        end_utc = end_time.replace(tzinfo=tz).astimezone(timezone.utc)
+    else:
+        end_utc = end_time.astimezone(timezone.utc)
+
+    # Load PRD3 status history rows for this machine and window
+    prd3_rows: List[PRD3StatusHistory] = (
+        db.query(PRD3StatusHistory)
+        .filter(
+            PRD3StatusHistory.machine_id == machine_id,
+            PRD3StatusHistory.time >= start_utc,
+            PRD3StatusHistory.time <= end_utc,
+        )
+        .order_by(PRD3StatusHistory.time.asc())
+        .all()
+    )
+
+    if not prd3_rows:
+        return []
+
+    status_intervals = _build_status_intervals(prd3_rows)
+
+    # Build primitive operating intervals (per-cycle slices)
+    operating_intervals = _build_operating_intervals(prd3_rows)
+    if not operating_intervals:
+        return []
+
+    # Group operating intervals into runs by contiguous same-program sequences.
+    runs: List[Dict[str, Any]] = []
+    current_run: Optional[Dict[str, Any]] = None
+
+    for op in operating_intervals:
+        prog = op["program_no"]
+        op_start = op["start_time"]
+        op_end = op["end_time"] or end_utc
+
+        if current_run is None:
+            current_run = {
+                "program_no": prog,
+                "run_start": op_start,
+                "run_end": op_end,
+                "cycles": 1,
+            }
+            continue
+
+        # Same program: extend current run, even if there were off/error/standby
+        # periods between cycles. We only break runs when the program changes.
+        if current_run["program_no"] == prog:
+            current_run["run_end"] = max(current_run["run_end"], op_end)
+            current_run["cycles"] += 1
+            continue
+
+        # Different program or large gap: close current run and start a new one
+        runs.append(current_run)
+        current_run = {
+            "program_no": prog,
+            "run_start": op_start,
+            "run_end": op_end,
+            "cycles": 1,
+        }
+
+    if current_run is not None:
+        runs.append(current_run)
+
+    if not runs:
+        return []
+
+    # For each run, collect status segments and parts.
+    timeline: List[Dict[str, Any]] = []
+
+    for run in runs:
+        rs = run["run_start"]
+        re = run["run_end"]
+
+        # Normalize run window to local tz for display and for subsequent queries
+        rs_local = rs.astimezone(tz) if rs.tzinfo else rs.replace(tzinfo=tz)
+        re_local = re.astimezone(tz) if re.tzinfo else re.replace(tzinfo=tz)
+
+        # Build status segments by intersecting full status_intervals with run window
+        segments: List[Dict[str, Any]] = []
+        for s in status_intervals:
+            s_start = s["start_time"]
+            s_end = s["end_time"] or end_utc
+
+            # Work in local time for consistency
+            s_start_local = s_start.astimezone(tz) if s_start.tzinfo else s_start.replace(tzinfo=tz)
+            s_end_local = s_end.astimezone(tz) if s_end.tzinfo else s_end.replace(tzinfo=tz)
+
+            seg_start = max(rs_local, s_start_local)
+            seg_end = min(re_local, s_end_local)
+            if seg_end <= seg_start:
+                continue
+
+            segments.append(
+                {
+                    "status": s["status"],
+                    "status_code": s.get("status_code"),
+                    "start_time": seg_start,
+                    "end_time": seg_end,
+                    "error_no": s.get("error_no"),
+                }
+            )
+
+        # Parts within the run window
+        counter_snaps: List[CounterHistory] = (
+            db.query(CounterHistory)
+            .filter(
+                CounterHistory.machine_id == machine_id,
+                CounterHistory.time >= rs_local,
+                CounterHistory.time < re_local,
+            )
+            .order_by(CounterHistory.time.asc())
+            .all()
+        )
+        parts_by_counter = _compute_counter_increments_for_interval(counter_snaps)
+        total_parts = sum(parts_by_counter.values())
+
+        # Assemble run record (normalize run_start/run_end to local tz)
+        timeline.append(
+            {
+                "program_no": run["program_no"],
+                "run_start": rs_local,
+                "run_end": re_local,
+                "cycles": run["cycles"],
+                "segments": segments,
+                "part_count": total_parts,
+                "parts_by_counter": parts_by_counter,
+            }
+        )
+
+    # Newest runs first
+    timeline.sort(key=lambda r: r["run_start"], reverse=True)
+    return timeline

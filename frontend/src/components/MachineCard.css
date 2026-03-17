@@ -527,6 +527,56 @@
   font-weight: 500;
 }
 
+/* Compact production run summary bar */
+.production-run-summary {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.production-run-meta {
+  font-size: var(--font-xs);
+  opacity: 0.8;
+}
+
+.production-run-bar-track {
+  position: relative;
+  display: inline-block;
+  width: 140px;
+  height: 8px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  margin-left: 4px;
+}
+
+.production-run-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.mini-segment-operating {
+  background: var(--color-status-operating, #3cff3c);
+}
+
+.mini-segment-standby {
+  background: var(--color-status-standby, #ffd447);
+}
+
+.mini-segment-stopped {
+  background: var(--color-status-stopped, #ff9e4a);
+}
+
+.mini-segment-error {
+  background: var(--color-status-error, #ff4a4a);
+}
+
+.mini-segment-off {
+  background: var(--color-status-off, #666);
+}
+
 .machine-offline {
   opacity: 0.7;
 }

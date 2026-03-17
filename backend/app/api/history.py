@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from app.db.base import get_db
 from app.models.event import MachineStatusEvent, AlarmEvent, ProductionRun, PRD3StatusHistory
-from app.services.history_service import get_cycle_history, _build_status_intervals
+from app.services.history_service import get_cycle_history, _build_status_intervals, get_production_runs_timeline
 from app.schemas.event import (
     MachineStatusEventResponse,
     AlarmEventResponse,
@@ -322,9 +322,9 @@ async def get_prd3_status_history(
             # Match IO0518 * style
             detail = f"{error_no} *"
         else:
-            # For other statuses, fall back to folder_name if present
+            # For other statuses, use folder_name only when it's a real path (not the generic "PROGRAM" token)
             folder_name = interval.get("folder_name")
-            if folder_name:
+            if folder_name and folder_name.strip().upper() != "PROGRAM":
                 detail = folder_name
 
         # Compute duration in whole seconds
@@ -348,6 +348,70 @@ async def get_prd3_status_history(
                 "label": label,
                 "detail": detail,
                 "duration_seconds": duration_seconds,
+            }
+        )
+
+    return serialized
+
+
+# ========== Production Runs Timeline (PRD3 + Counters) ==========
+
+@router.get("/machines/{machine_id}/production-runs-timeline")
+async def get_production_runs_timeline_endpoint(
+    machine_id: int,
+    start_time: Optional[datetime] = Query(
+        None,
+        description="Filter runs starting at or after this time (defaults to last 24h)",
+    ),
+    end_time: Optional[datetime] = Query(
+        None,
+        description="Filter runs ending at or before this time (defaults to now)",
+    ),
+    limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """
+    Get a production runs timeline by grouping sequential PRD3 operating intervals
+    with the same program_no into runs, and embedding status segments inside each run.
+    """
+    runs = get_production_runs_timeline(
+        db=db,
+        machine_id=machine_id,
+        start_time=start_time,
+        end_time=end_time,
+    )
+
+    # Apply simple pagination on the runs list (newest-first already)
+    if offset < 0:
+        offset = 0
+    if limit <= 0:
+        return []
+    runs = runs[offset : offset + limit]
+
+    serialized = []
+    for r in runs:
+        segments = []
+        for s in r.get("segments", []):
+            segments.append(
+                {
+                    "status": s.get("status"),
+                    "status_code": s.get("status_code"),
+                    "start_time": s.get("start_time"),
+                    "end_time": s.get("end_time"),
+                    "error_no": s.get("error_no"),
+                }
+            )
+
+        serialized.append(
+            {
+                "program_no": r.get("program_no"),
+                "run_start": r.get("run_start"),
+                "run_end": r.get("run_end"),
+                "cycles": r.get("cycles"),
+                "segments": segments,
+                "part_count": r.get("part_count"),
+                "parts_by_counter": r.get("parts_by_counter"),
             }
         )
 
