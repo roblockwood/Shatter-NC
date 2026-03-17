@@ -2,10 +2,18 @@
  * Layout configuration types for machine detail panes
  */
 
-export type PaneId = 'statusTimeline' | 'alarms' | 'currentProgram' | 'tools' | 'cycleHistory' | 'panel' | 'fileManager';
+export type PaneId =
+  | 'statusTimeline'
+  | 'alarms'
+  | 'currentProgram'
+  | 'tools'
+  | 'productionRuns'
+  | 'statusHistory'
+  | 'panel'
+  | 'fileManager';
 
 export interface PaneLayout {
-  i: string;        // Pane ID: 'statusTimeline', 'alarms', 'currentProgram', 'tools', 'cycleHistory'
+  i: string;        // Pane ID: 'statusTimeline', 'alarms', 'currentProgram', 'tools', 'productionRuns', 'statusHistory', etc.
   x: number;        // Grid column position
   y: number;        // Grid row position
   w: number;        // Width in grid units
@@ -27,7 +35,8 @@ export const PANE_IDS = {
   ALARMS: 'alarms' as const,
   CURRENT_PROGRAM: 'currentProgram' as const,
   TOOLS: 'tools' as const,
-  CYCLE_HISTORY: 'cycleHistory' as const,
+  PRODUCTION_RUNS: 'productionRuns' as const,
+  STATUS_HISTORY: 'statusHistory' as const,
   PANEL: 'panel' as const,
   FILE_MANAGER: 'fileManager' as const,
 } as const;
@@ -76,7 +85,7 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     visible: true,
   },
   {
-    i: PANE_IDS.CYCLE_HISTORY,
+    i: PANE_IDS.PRODUCTION_RUNS,
     x: 12,
     y: 12,
     w: 12,
@@ -86,9 +95,19 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     visible: true,
   },
   {
-    i: PANE_IDS.PANEL,
+    i: PANE_IDS.STATUS_HISTORY,
     x: 0,
     y: 19,
+    w: 24,
+    h: 6,
+    minW: 6,
+    minH: 3,
+    visible: true,
+  },
+  {
+    i: PANE_IDS.PANEL,
+    x: 0,
+    y: 25,
     w: 24,
     h: 8,
     minW: 3,  // 12.5% minimum width (3/24 = 12.5%) - allows single internal frame width
