@@ -8,6 +8,7 @@ import { StatusTimeline } from './machine-detail/StatusTimeline';
 import { ToolsPane } from './machine-detail/ToolsPane';
 import { CurrentProgramPane } from './machine-detail/CurrentProgramPane';
 import { CycleHistoryPane } from './machine-detail/CycleHistoryPane';
+import { StatusHistoryPane } from './machine-detail/StatusHistoryPane';
 import { PanelPane } from './machine-detail/PanelPane';
 import { FileManagerPane } from './machine-detail/FileManagerPane';
 import { LayoutManager } from './machine-detail/LayoutManager';
@@ -612,18 +613,63 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     }
   };
 
-  // Update context when expanded state changes
+  // Wire this card into the ExpandedMachineContext when expanded so that
+  // global layout edit controls (buttons, pane list, etc.) know which
+  // machine is active and how to toggle its layout edit mode.
   useEffect(() => {
-    if (isExpanded && !isEditing && !editMode) {
-      setExpandedMachine({ id: machine.machine_id, name: machine.machine_name });
-      setOnCollapse(() => () => onCollapse?.());
+    if (isExpanded) {
+      // Register expanded machine metadata
+      setExpandedMachine((prev) => {
+        if (prev && prev.id === machine.machine_id && prev.name === machine.machine_name) {
+          return prev;
+        }
+        return { id: machine.machine_id, name: machine.machine_name };
+      });
+
+      // Register collapse handler (if provided)
+      if (onCollapse) {
+        setOnCollapse(() => onCollapse);
+      }
+
+      // Register layout edit toggle handler
       setOnToggleLayoutEdit(() => toggleLayoutEdit);
     } else {
-      setExpandedMachine(null);
-      setOnCollapse(null);
+      // Card is not expanded – clear handlers if they point at this machine
       setOnToggleLayoutEdit(null);
+      if (onCollapse) {
+        setOnCollapse(null);
+      }
+      setExpandedMachine((prev) => {
+        if (prev && prev.id === machine.machine_id) {
+          return null;
+        }
+        return prev;
+      });
     }
-  }, [isExpanded, isEditing, editMode, machine.machine_id, machine.machine_name, onCollapse, setExpandedMachine, setOnCollapse, setOnToggleLayoutEdit, setLayoutEditMode]);
+
+    // Cleanup on unmount
+    return () => {
+      setOnToggleLayoutEdit(null);
+      if (onCollapse) {
+        setOnCollapse(null);
+      }
+      setExpandedMachine((prev) => {
+        if (prev && prev.id === machine.machine_id) {
+          return null;
+        }
+        return prev;
+      });
+    };
+  }, [
+    isExpanded,
+    machine.machine_id,
+    machine.machine_name,
+    onCollapse,
+    setExpandedMachine,
+    setOnCollapse,
+    setOnToggleLayoutEdit,
+    toggleLayoutEdit,
+  ]);
 
   // Render expanded view
   if (isExpanded && !isEditing && !editMode) {
@@ -701,6 +747,14 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                       onExpand={undefined}
                     />
                   </div>
+                ),
+              },
+              {
+                id: PANE_IDS.STATUS_HISTORY,
+                component: (
+                  <StatusHistoryPane
+                    machineId={machine.machine_id}
+                  />
                 ),
               },
               {

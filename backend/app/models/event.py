@@ -211,3 +211,32 @@ class CounterHistory(Base):
 
     def __repr__(self):
         return f"<CounterHistory(machine_id={self.machine_id}, time={self.time}, type='{self.change_type}')>"
+
+
+class PRD3StatusHistory(Base):
+    """Historical record of PRD3/PRDD3 status history entries (TimescaleDB hypertable)."""
+
+    __tablename__ = "prd3_status_history"
+
+    # TimescaleDB time column (start of status interval)
+    time = Column(DateTime(timezone=True), primary_key=True, nullable=False)
+    machine_id = Column(Integer, ForeignKey("machines.id", ondelete="CASCADE"), primary_key=True, nullable=False, index=True)
+
+    # Status information
+    status = Column(String(50), nullable=False, index=True)       # off, standby, operating, stopped, error
+    status_code = Column(Integer, nullable=False)                 # 1-5
+
+    # Program/error context
+    program_no = Column(String(50))                               # Program number when status=operating
+    error_no = Column(String(50))                                 # Error number when status=error
+    folder_name = Column(String(500))
+    memory_operation_type = Column(Integer)                       # 0=Internal, 1/2/3=external
+
+    # Optional raw payload for debugging/extensibility
+    raw = Column(JSONB)
+
+    # Relationships
+    machine = relationship("Machine")
+
+    def __repr__(self):
+        return f"<PRD3StatusHistory(machine_id={self.machine_id}, time={self.time}, status='{self.status}', program_no='{self.program_no}')>"
