@@ -1,3 +1,11 @@
+# [0.4.0](https://github.com/roblockwood/Shatter-NC/compare/v0.3.0...v0.4.0) (2026-03-17)
+
+
+### Features
+
+* implement cycle history feature in frontend and backend ([7aeb9a7](https://github.com/roblockwood/Shatter-NC/commit/7aeb9a7db2cbdbba2485894413efba7b4eca2ca7))
+* implement production runs feature in frontend and backend ([e747a35](https://github.com/roblockwood/Shatter-NC/commit/e747a35faa35b299a32f4430d3ebee66028d2ab3))
+
 # [0.3.0](https://github.com/roblockwood/Shatter-NC/compare/v0.2.0...v0.3.0) (2026-03-15)
 
 
