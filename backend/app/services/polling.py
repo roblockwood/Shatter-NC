@@ -2,7 +2,8 @@
 import asyncio
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Dict, Any, Optional, Tuple, List
 from sqlalchemy.orm import Session
 from app.models.machine import Machine
@@ -14,7 +15,8 @@ from app.models.event import (
     MacroHistory,
     ToolTableHistory,
     PanelHistory,
-    CounterHistory
+    CounterHistory,
+    PRD3StatusHistory,
 )
 from app.clients.http_client import CNCHttpClient
 from app.core.config import settings
@@ -323,7 +325,7 @@ class MachinePoller:
             parsed = parse_montr_v2(montr_data.encode('utf-8'), control_version=control_version)
             step_times['parse_montr'] = time.time() - step_start
             
-            # Get PRD3 data (contains current status)
+            # Get PRD3 data (contains current status and status history)
             step_start = time.time()
             prd3_data = await telnet_client.get_prd3_data(control_version=control_version, verbose=False)
             step_times['get_prd3'] = time.time() - step_start
@@ -332,6 +334,11 @@ class MachinePoller:
                 step_start = time.time()
                 prd3_parsed = parse_prd3_v2(prd3_data.encode('utf-8'), control_version=control_version)
                 step_times['parse_prd3'] = time.time() - step_start
+                # Ingest PRD3 history asynchronously (non-blocking)
+                try:
+                    asyncio.create_task(self._log_prd3_history(prd3_parsed))
+                except Exception as e:
+                    logger.warning(f"Machine {self.machine.id} - Failed to schedule PRD3 history logging: {e}")
             
             # Get MEM data to check mode and operation_status (needed for frontend validation)
             mem_parsed = None
@@ -647,6 +654,105 @@ class MachinePoller:
         finally:
             if telnet_client:
                 await telnet_client.disconnect()
+
+    async def _log_prd3_history(self, prd3_parsed: Dict[str, Any]):
+        """
+        Ingest PRD3/PRDD3 status history into PRD3StatusHistory hypertable.
+
+        This method is designed to be called asynchronously from poll()
+        and should not block the main polling loop.
+        """
+        try:
+            history = prd3_parsed.get("history") or []
+            if not history:
+                return
+
+            db = SessionLocal()
+            try:
+                # Determine the latest stored timestamp for this machine to avoid duplicates
+                latest = (
+                    db.query(PRD3StatusHistory.time)
+                    .filter(PRD3StatusHistory.machine_id == self.machine.id)
+                    .order_by(PRD3StatusHistory.time.desc())
+                    .limit(1)
+                    .one_or_none()
+                )
+                latest_time = latest[0] if latest else None
+
+                # Collapse history entries by start time to avoid duplicate
+                # primary key violations when PRD3 contains multiple records
+                # with the same start_date_time (e.g., standby + operating
+                # at the same timestamp). For a given timestamp we keep the
+                # last entry seen, which is typically the most specific
+                # status (e.g., operating).
+                history_by_time = {}
+                for entry in history:
+                    start_str = entry.get("start_date_time")
+                    if not start_str or len(start_str) != 14:
+                        continue
+                    try:
+                        # PRD3 format: YYYYMMDDhhmmss
+                        start_dt = datetime.strptime(start_str, "%Y%m%d%H%M%S")
+                    except Exception:
+                        continue
+
+                    # Interpret PRD3 timestamps as local machine time in configured timezone.
+                    # They are stored in the database as timestamptz (Postgres will keep them in UTC),
+                    # but semantic "wall time" comes from LOCAL_TIMEZONE.
+                    if start_dt.tzinfo is None:
+                        try:
+                            start_dt = start_dt.replace(tzinfo=ZoneInfo(settings.LOCAL_TIMEZONE))
+                        except Exception:
+                            start_dt = start_dt.replace(tzinfo=timezone.utc)
+
+                    # Skip if we've already ingested this or a later entry
+                    if latest_time is not None and start_dt <= latest_time:
+                        continue
+
+                    # For now, let later entries for the same timestamp win
+                    history_by_time[start_dt] = entry
+
+                new_rows = []
+                for start_dt, entry in history_by_time.items():
+                    status_code = entry.get("current_status")
+                    status = entry.get("status")
+                    if status_code is None or status is None:
+                        continue
+
+                    program_or_error = (entry.get("program_or_error_no") or "").strip()
+                    program_no = None
+                    error_no = None
+                    if status == "operating" and program_or_error:
+                        program_no = program_or_error
+                    elif status == "error" and program_or_error:
+                        error_no = program_or_error
+
+                    row = PRD3StatusHistory(
+                        time=start_dt,
+                        machine_id=self.machine.id,
+                        status=status,
+                        status_code=status_code,
+                        program_no=program_no,
+                        error_no=error_no,
+                        folder_name=entry.get("folder_name"),
+                        memory_operation_type=entry.get("memory_operation_type"),
+                        raw=entry,
+                    )
+                    new_rows.append(row)
+
+                if new_rows:
+                    db.add_all(new_rows)
+                    db.commit()
+                    logger.debug(
+                        f"Machine {self.machine.id} - Logged {len(new_rows)} PRD3 history entries"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to log PRD3 history for machine {self.machine.id}: {e}")
+                db.rollback()
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Unexpected error in _log_prd3_history for machine {self.machine.id}: {e}")
 
     async def _log_events_async(self, status_data: Dict[str, Any], poll_timestamp: datetime, response_time_ms: int, success: bool):
         """

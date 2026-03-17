@@ -7,8 +7,20 @@ interface StatusEvent {
   time: string;
   status: string;
   previous_status?: string;
-  error?: string; // Error message if status is offline
-  is_heartbeat?: boolean; // True if this is a heartbeat (previous_status === status)
+  error?: string;
+  is_heartbeat?: boolean;
+}
+
+interface AlarmHistoryEvent {
+  time: string;
+  alarm_code: string;
+  alarm_message: string;
+}
+
+interface CycleHistoryEntryForTimeline {
+  start_time: string;
+  end_time: string;
+  part_count: number;
 }
 
 interface StatusTimelineProps {
@@ -25,6 +37,8 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
   const { isBetaMode } = useBetaMode();
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [events, setEvents] = useState<StatusEvent[]>([]);
+  const [alarmEvents, setAlarmEvents] = useState<AlarmHistoryEvent[]>([]);
+  const [cycleEntries, setCycleEntries] = useState<CycleHistoryEntryForTimeline[]>([]);
   const [loading, setLoading] = useState(true);
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; status: string; timestamp: Date; error?: string; is_heartbeat?: boolean; isLatest?: boolean } | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
@@ -213,14 +227,38 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
         
         if (response.ok) {
           const data = await response.json();
-          // Calculate is_heartbeat for each event (heartbeat when previous_status === status)
           const eventsWithHeartbeat = data.map((event: StatusEvent) => ({
             ...event,
-            is_heartbeat: event.previous_status !== undefined && 
-                         event.previous_status !== null &&
-                         event.previous_status.toLowerCase() === event.status.toLowerCase()
+            is_heartbeat:
+              event.previous_status !== undefined &&
+              event.previous_status !== null &&
+              event.previous_status.toLowerCase() === event.status.toLowerCase(),
           }));
           setEvents(eventsWithHeartbeat);
+        }
+
+        const alarmsResponse = await fetch(
+          `${API_BASE_URL}/api/machines/${machineId}/alarms?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&limit=1000`
+        );
+        if (alarmsResponse.ok) {
+          const alarmData = await alarmsResponse.json();
+          setAlarmEvents(Array.isArray(alarmData) ? alarmData : []);
+        }
+
+        const cycleResponse = await fetch(
+          `${API_BASE_URL}/api/machines/${machineId}/cycle-history?since=${startTime.toISOString()}&limit=100`
+        );
+        if (cycleResponse.ok) {
+          const cycleData = await cycleResponse.json();
+          const arr = Array.isArray(cycleData) ? cycleData : [];
+          const minimalCycles: CycleHistoryEntryForTimeline[] = arr.map((c: any) => ({
+            start_time: c.start_time,
+            end_time: c.end_time,
+            part_count: c.part_count ?? 0,
+          }));
+          setCycleEntries(minimalCycles);
+        } else {
+          setCycleEntries([]);
         }
       } catch (error) {
         console.error('Error fetching status history:', error);
@@ -514,7 +552,9 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
 
   const { svgPoints, statusLabels, statusLevels, startTime, endTime: _endTime, totalDuration, timeDivisions } = renderOscilloscope();
   
-  // Recalculate scale after SVG is rendered and when component becomes visible
+  // Recalculate scale after SVG is rendered and when component becomes visible.
+  // IMPORTANT: do not depend on svgPoints directly here, since it's a new array every render
+  // and would cause this effect to run on every render and continually call setScaleX.
   useEffect(() => {
     const updateScale = () => {
       if (oscilloscopeRef.current && oscilloscopeDataRef.current) {
@@ -565,7 +605,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
         observer.disconnect();
       }
     };
-  }, [svgPoints, oscilloscopeWidth, events.length]);
+  }, [oscilloscopeWidth, events.length, timeRange]);
 
   return (
     <div 
@@ -875,6 +915,52 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
                             style={{ filter: 'none' }}
                           />
                         </g>
+                      );
+                    })}
+                    {/* Alarm dots (mapped along ERROR row) */}
+                    {alarmEvents.map((alarm, idx) => {
+                      const alarmTime = new Date(alarm.time).getTime();
+                      if (alarmTime < startTime.getTime() || alarmTime > _endTime.getTime()) {
+                        return null;
+                      }
+                      const relative = ((alarmTime - startTime.getTime()) / totalDuration) * 100;
+                      const errorLevel = STATUS_LEVELS['error'] ?? 1;
+                      const levelY = (1 - errorLevel / 4) * 100;
+                      const paddedY = 8 + (levelY / 100) * 84;
+                      return (
+                        <circle
+                          key={`alarm-dot-${idx}`}
+                          cx={relative}
+                          cy={paddedY}
+                          r="1.5"
+                          fill="var(--color-error)"
+                          stroke="none"
+                        />
+                      );
+                    })}
+                    {/* Part count dots (mapped along OPERATING row, one per cycle, size by part_count) */}
+                    {cycleEntries.map((cycle, idx) => {
+                      if (!cycle.part_count || cycle.part_count <= 0) {
+                        return null;
+                      }
+                      const endMs = new Date(cycle.end_time || cycle.start_time).getTime();
+                      if (endMs < startTime.getTime() || endMs > _endTime.getTime()) {
+                        return null;
+                      }
+                      const relative = ((endMs - startTime.getTime()) / totalDuration) * 100;
+                      const opLevel = STATUS_LEVELS['operating'] ?? 4;
+                      const levelY = (1 - opLevel / 4) * 100;
+                      const paddedY = 8 + (levelY / 100) * 84;
+                      const radius = Math.min(3, 1 + Math.log10(cycle.part_count + 1));
+                      return (
+                        <circle
+                          key={`part-dot-${idx}`}
+                          cx={relative}
+                          cy={paddedY}
+                          r={radius}
+                          fill="var(--color-accent, #00bcd4)"
+                          stroke="none"
+                        />
                       );
                     })}
                     </svg>

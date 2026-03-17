@@ -28,6 +28,15 @@ export function mergeLayoutWithDefaults(
     customMap.set(pane.i, pane);
   });
 
+  // Legacy: treat saved 'cycleHistory' as 'productionRuns' for position/size
+  const productionRunsFromCycle = customMap.get('cycleHistory');
+  if (productionRunsFromCycle && !customMap.get('productionRuns')) {
+    customMap.set('productionRuns', {
+      ...productionRunsFromCycle,
+      i: 'productionRuns' as const,
+    });
+  }
+
   // Merge: use custom if exists, otherwise use default
   const merged: PaneLayout[] = [];
   defaultLayout.forEach(defaultPane => {
@@ -51,8 +60,10 @@ export function mergeLayoutWithDefaults(
     }
   });
 
-  // Add any extra panes from custom that aren't in defaults (for future extensibility)
+  // Add any extra panes from custom that aren't in defaults (for future extensibility).
+  // Exclude legacy 'cycleHistory' — it was replaced by 'productionRuns'.
   custom.forEach(customPane => {
+    if (customPane.i === 'cycleHistory') return;
     if (!defaultLayout.find(p => p.i === customPane.i)) {
       merged.push(customPane);
     }
