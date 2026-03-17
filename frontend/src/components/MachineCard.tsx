@@ -629,11 +629,6 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     }
   };
 
-  const formatTime = (time: string | undefined) => {
-    if (!time || time === '0000:00:00.0') return '00:00:00';
-    return time.substring(0, 8); // Remove decimal if present
-  };
-
   const handleCardClick = (e: React.MouseEvent) => {
     // Don't expand if clicking on buttons or inputs
     const target = e.target as HTMLElement;
@@ -672,12 +667,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     }
 
     // Card became expanded – register metadata and handlers once
-    setExpandedMachine((prev) => {
-      if (prev && prev.id === machine.machine_id && prev.name === machine.machine_name) {
-        return prev;
-      }
-      return { id: machine.machine_id, name: machine.machine_name };
-    });
+    setExpandedMachine({ id: machine.machine_id, name: machine.machine_name });
 
     if (onCollapse) {
       setOnCollapse(() => onCollapse);
