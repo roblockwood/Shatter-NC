@@ -35,7 +35,7 @@ export const StatusHistoryPane: React.FC<StatusHistoryPaneProps> = ({ machineId 
   const [colorMode, setColorMode] = useState<boolean>(() => {
     return localStorage.getItem('statusHistoryColorMode') === 'true';
   });
-  const PAGE_SIZE = 200;
+  const PAGE_SIZE = 100;
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -46,18 +46,15 @@ export const StatusHistoryPane: React.FC<StatusHistoryPaneProps> = ({ machineId 
     const fetchStatusHistory = async () => {
       try {
         setLoading(true);
-        const endTime = new Date();
-        const startTime = new Date(endTime.getTime() - 24 * 60 * 60 * 1000); // last 24h
-
         const response = await fetch(
-          `${API_BASE_URL}/api/machines/${machineId}/prd3-status-history?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`
+          `${API_BASE_URL}/api/machines/${machineId}/prd3-status-history?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`
         );
         if (response.ok) {
           const data: PRD3StatusInterval[] = await response.json();
           const arr = Array.isArray(data) ? data : [];
           setIntervals(arr);
 
-          // Aggregate total duration per status over last 24h
+          // Aggregate total duration per status over the fetched intervals
           const totals: Record<string, number> = {};
           for (const interval of arr) {
             const key = (interval.status || '').toLowerCase();
@@ -153,7 +150,7 @@ export const StatusHistoryPane: React.FC<StatusHistoryPaneProps> = ({ machineId 
         ) : (
           <div className="status-history-table-wrapper">
             <div className="status-history-summary">
-              <div className="status-summary-title">T-24 STATUS TIME</div>
+              <div className="status-summary-title">T-7 STATUS TIME</div>
               <div className="status-summary-rows">
                 <div className="status-summary-row">
                   <span className="status-summary-label">RUN:</span>
