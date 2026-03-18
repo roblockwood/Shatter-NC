@@ -255,17 +255,29 @@ async def get_prd3_status_history(
     """
     Get a detailed PRD3-derived status history timeline for a machine.
 
+    Primary behavior:
+    - If no explicit time range is provided, use the last 7 days.
+    - If that window has no intervals, fall back to the most recent PRD3 rows
+      for this machine (capped) and build intervals from those.
+
     This endpoint returns contiguous status intervals (off/standby/operating/stopped/error)
     with start/end times and associated program/error context, built from
     PRD3StatusHistory rows.
     """
-    # Default window: last 24 hours if no explicit start_time
+    FALLBACK_ROW_LIMIT = 500
+
+    # Normalize end_time
     if end_time is None:
         end_time = datetime.utcnow()
-    if start_time is None:
-        start_time = end_time - timedelta(hours=24)
 
-    # Query raw PRD3 rows for this window
+    # Track whether the caller explicitly provided a time window
+    explicit_range = start_time is not None
+
+    # Default window: last 7 days if no explicit start_time
+    if start_time is None:
+        start_time = end_time - timedelta(days=7)
+
+    # Primary query: PRD3 rows for this window
     rows = (
         db.query(PRD3StatusHistory)
         .filter(
@@ -278,6 +290,21 @@ async def get_prd3_status_history(
     )
 
     intervals = _build_status_intervals(rows)
+
+    # If no intervals and the caller did not specify an explicit time range,
+    # fall back to building intervals from the most recent PRD3 rows.
+    if not intervals and not explicit_range:
+        rows_desc = (
+            db.query(PRD3StatusHistory)
+            .filter(PRD3StatusHistory.machine_id == machine_id)
+            .order_by(PRD3StatusHistory.time.desc())
+            .limit(FALLBACK_ROW_LIMIT)
+            .all()
+        )
+        # Reverse to ascending for the interval builder
+        rows_fallback = list(reversed(rows_desc))
+        intervals = _build_status_intervals(rows_fallback)
+
     if not intervals:
         return []
 
