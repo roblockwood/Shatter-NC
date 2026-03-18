@@ -685,7 +685,7 @@ class MachinePoller:
                 # at the same timestamp). For a given timestamp we keep the
                 # last entry seen, which is typically the most specific
                 # status (e.g., operating).
-                history_by_time = {}
+                history_by_time: Dict[datetime, Dict[str, Any]] = {}
                 for entry in history:
                     start_str = entry.get("start_date_time")
                     if not start_str or len(start_str) != 14:
@@ -712,8 +712,26 @@ class MachinePoller:
                     # For now, let later entries for the same timestamp win
                     history_by_time[start_dt] = entry
 
-                new_rows = []
-                for start_dt, entry in history_by_time.items():
+                total_candidates = len(history_by_time)
+                if total_candidates == 0:
+                    logger.info(
+                        f"Machine {self.machine.id} - PRD3 history ingest: no new entries after {latest_time!s}"
+                    )
+                    return
+
+                logger.info(
+                    f"Machine {self.machine.id} - PRD3 history ingest starting, "
+                    f"{total_candidates} candidate entries after de-duplication since {latest_time!s}"
+                )
+
+                BATCH_SIZE = 1000
+                processed = 0
+                committed = 0
+                batch: list[PRD3StatusHistory] = []
+
+                # Iterate in chronological order so we always insert old→new
+                for start_dt in sorted(history_by_time.keys()):
+                    entry = history_by_time[start_dt]
                     status_code = entry.get("current_status")
                     status = entry.get("status")
                     if status_code is None or status is None:
@@ -738,14 +756,39 @@ class MachinePoller:
                         memory_operation_type=entry.get("memory_operation_type"),
                         raw=entry,
                     )
-                    new_rows.append(row)
+                    batch.append(row)
+                    processed += 1
 
-                if new_rows:
-                    db.add_all(new_rows)
+                    if len(batch) >= BATCH_SIZE:
+                        db.add_all(batch)
+                        db.commit()
+                        committed += len(batch)
+                        logger.info(
+                            f"Machine {self.machine.id} - PRD3 ingest committed "
+                            f"{len(batch)} entries (total committed: {committed}/{total_candidates})"
+                        )
+                        batch.clear()
+
+                    if processed % BATCH_SIZE == 0:
+                        logger.info(
+                            f"Machine {self.machine.id} - PRD3 ingest progress: "
+                            f"{processed}/{total_candidates} entries prepared"
+                        )
+
+                # Final partial batch
+                if batch:
+                    db.add_all(batch)
                     db.commit()
-                    logger.debug(
-                        f"Machine {self.machine.id} - Logged {len(new_rows)} PRD3 history entries"
+                    committed += len(batch)
+                    logger.info(
+                        f"Machine {self.machine.id} - PRD3 ingest committed final "
+                        f"{len(batch)} entries (total committed: {committed}/{total_candidates})"
                     )
+
+                logger.info(
+                    f"Machine {self.machine.id} - PRD3 history ingest finished, "
+                    f"{committed} new entries logged"
+                )
             except Exception as e:
                 logger.error(f"Failed to log PRD3 history for machine {self.machine.id}: {e}")
                 db.rollback()
