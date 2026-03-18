@@ -1,3 +1,10 @@
+# [0.5.0](https://github.com/roblockwood/Shatter-NC/compare/v0.4.0...v0.5.0) (2026-03-18)
+
+
+### Features
+
+* update PRD3 status history endpoint and frontend to support 7-day intervals ([a68f613](https://github.com/roblockwood/Shatter-NC/commit/a68f6135c9d1771e33c5888b4fccbbc11a9d6190))
+
 # [0.4.0](https://github.com/roblockwood/Shatter-NC/compare/v0.3.0...v0.4.0) (2026-03-17)
 
 
