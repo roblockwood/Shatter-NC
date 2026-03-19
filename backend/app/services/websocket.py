@@ -46,6 +46,7 @@ class WebSocketManager:
                         "machine_name": machine.name,
                         "ip_address": machine.ip_address,
                         "enabled": machine.enabled,
+                        "part_display_mode": getattr(machine, "part_display_mode", "parts"),
                         "poll_timestamp": datetime.utcnow().isoformat(),
                         "is_online": False,  # Default to offline
                         "program_name": None,  # Default program name
@@ -100,6 +101,10 @@ class WebSocketManager:
             if "alarms" in cached and "alarms" not in status_data:
                 status_data["alarms"] = cached["alarms"]
             
+            # Preserve machine display preferences from cache if not present in new status
+            if "part_display_mode" in cached and "part_display_mode" not in status_data:
+                status_data["part_display_mode"] = cached["part_display_mode"]
+
             # Preserve tool table and current tool from cache if new status doesn't have it
             if "tool_table" in cached and "tool_table" not in status_data:
                 status_data["tool_table"] = cached["tool_table"]

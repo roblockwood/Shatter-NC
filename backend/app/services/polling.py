@@ -550,6 +550,7 @@ class MachinePoller:
                 "machine_name": self.machine.name,
                 "poll_timestamp": poll_timestamp.isoformat(),
                 "response_time_ms": response_time_ms,
+                "part_display_mode": getattr(self.machine, "part_display_mode", "parts"),
             })
             # is_online is already set in status_data based on PRD3 availability - don't override it
             
@@ -608,6 +609,7 @@ class MachinePoller:
                 "consecutive_failures": self.consecutive_failures,
                 "response_time_ms": response_time_ms,
                 "program_name": self.cached_program_name,  # Preserve cached program_name even when offline
+                "part_display_mode": getattr(self.machine, "part_display_mode", "parts"),
                 # Preserve cached data that doesn't change frequently when offline
                 "panel": cached_status.get("panel"),  # Preserve panel data
                 "alarms": cached_status.get("alarms", []),  # Preserve alarms

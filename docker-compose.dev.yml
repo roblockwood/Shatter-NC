@@ -27,6 +27,8 @@ services:
       target: development  # Use development target for hot-reload
     container_name: shatter-backend
     restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
