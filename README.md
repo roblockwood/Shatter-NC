@@ -13,7 +13,6 @@ Shatter is an open-source web platform for monitoring and managing multiple Brot
 - 🔄 **Version Control** - Git-like versioning for NC programs with deployment tracking
 - 🏭 **Multi-Machine** - Monitor and manage multiple CNCs from a single interface
 - 🐳 **Easy Deployment** - Docker-based, runs on isolated networks
-- 🌐 **Zero-Config Discovery** - Avahi/mDNS support for network discovery at `shatter.local`
 
 ## Quick Start
 
@@ -26,8 +25,6 @@ docker compose -f docker-compose.dev.yml up -d
 ```
 
 Open http://localhost:3000 and add your CNC machines through the web UI.
-
-**With Avahi enabled**, the service is also discoverable at http://shatter.local (or http://shatter.local:3000 in dev mode). See [Avahi Setup](avahi/README.md) for configuration.
 
 **For detailed deployment options**, see [Docker Deployment Guide](docs/DOCKER_DEPLOYMENT.md).
 
