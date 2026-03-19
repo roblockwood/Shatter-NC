@@ -65,27 +65,6 @@ services:
       - /app/node_modules
     command: npm run dev
 
-  # Avahi mDNS service discovery
-  # Enables zero-configuration network discovery at http://shatter.local:3000
-  # Note: network_mode: host is required for mDNS multicast to work
-  # Only starts when explicitly enabled with profile: docker compose --profile avahi up -d
-  # Use this if Avahi is NOT running on your host machine
-  avahi:
-    profiles: ["avahi"]
-    build:
-      context: ./avahi
-      dockerfile: Dockerfile
-    container_name: shatter-avahi
-    network_mode: host  # Required for mDNS multicast
-    tmpfs:
-      - /run
-    volumes:
-      - ./avahi/shatter-dev.service:/etc/avahi/services/shatter.service:ro
-    restart: unless-stopped
-    # Optional: Set custom hostname via environment variable
-    # environment:
-    #   - AVAHI_HOSTNAME=shatter
-
 volumes:
   postgres_data:
     driver: local
