@@ -42,6 +42,9 @@ class Machine(Base):
     # UI layout configuration (JSON)
     layout_config = Column(JSON, nullable=True)  # Custom pane layout configuration
 
+    # UI preferences
+    part_display_mode = Column(String(20), default="parts")  # 'parts' | 'cycle'
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     last_seen_at = Column(DateTime(timezone=True), nullable=True)

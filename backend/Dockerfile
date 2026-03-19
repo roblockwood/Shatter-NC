@@ -31,7 +31,7 @@ RUN useradd -m -u 1000 shatter && chown -R shatter:shatter /app
 FROM base AS development
 USER shatter
 EXPOSE 8000
-CMD ["/bin/bash", "-c", "echo 'Waiting for PostgreSQL...' && while ! pg_isready -h ${POSTGRES_HOST} -U ${POSTGRES_USER}; do sleep 1; done && echo 'Running migrations...' && python3 /app/scripts/run_migrations.py && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
+CMD ["/bin/bash", "-c", "echo 'Waiting for PostgreSQL...' && while ! pg_isready -h ${POSTGRES_HOST} -U ${POSTGRES_USER}; do sleep 1; done && echo 'Running migrations...' && python3 /app/scripts/run_migrations.py && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --timeout-graceful-shutdown 20"]
 
 # Production stage
 FROM base AS production

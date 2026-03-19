@@ -88,6 +88,30 @@ async def update_machine(
 
     db.commit()
     db.refresh(db_machine)
+
+    # Update in-memory poller config (used to populate websocket status fields)
+    try:
+        if polling_service and machine_id in getattr(polling_service, "pollers", {}):
+            poller = polling_service.pollers[machine_id]
+            if getattr(poller, "machine", None):
+                poller.machine.part_display_mode = getattr(db_machine, "part_display_mode", "parts")
+    except Exception as e:
+        logger.warning(f"Failed to update poller config for machine {machine_id}: {e}")
+
+    # Update websocket cached status so connected dashboards reflect config changes immediately
+    try:
+        if polling_service and getattr(polling_service, "websocket_manager", None):
+            cached = polling_service.websocket_manager.get_machine_status(machine_id) or {}
+            merged = {
+                **cached,
+                "machine_id": machine_id,
+                "machine_name": db_machine.name,
+                "part_display_mode": getattr(db_machine, "part_display_mode", "parts"),
+            }
+            await polling_service.websocket_manager.broadcast_status(merged)
+    except Exception as e:
+        logger.warning(f"Failed to broadcast machine config update for machine {machine_id}: {e}")
+
     return db_machine
 
 

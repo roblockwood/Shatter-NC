@@ -130,5 +130,11 @@ async def shutdown_event():
     print(f"Shutting down {settings.APP_NAME}")
     print("Stopping background polling service...")
     await polling_service.stop()
+    try:
+        from app.clients.telnet_client import close_all_connections
+        await close_all_connections()
+    except Exception:
+        # Best-effort cleanup; shutdown must continue
+        pass
     
     print("Polling service stopped")

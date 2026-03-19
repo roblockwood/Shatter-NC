@@ -11,12 +11,17 @@ import socket
 from typing import Optional, Dict, Any, Tuple
 from datetime import datetime
 import logging
+import weakref
 
 logger = logging.getLogger(__name__)
 
 # Per-machine asyncio locks (single-backend deployment)
 _machine_locks: Dict[Tuple[str, int], asyncio.Lock] = {}
 _locks_lock = asyncio.Lock()
+
+# Registry of active telnet clients so we can close sockets on shutdown/reload.
+_active_clients: "weakref.WeakSet[CNCTelnetClient]" = weakref.WeakSet()
+_active_clients_lock = asyncio.Lock()
 
 # In-memory control version cache: (ip, port) -> (version_str, expiry_time from loop.time())
 _control_version_cache: Dict[Tuple[str, int], Tuple[str, float]] = {}
@@ -44,6 +49,30 @@ async def create_fresh_connection(ip_address: str, port: int = 10000, timeout: i
     if not connected:
         raise ConnectionError(f"Failed to connect to {ip_address}:{port}")
     return client
+
+
+async def close_all_connections() -> int:
+    """
+    Close any currently-open telnet sockets held by this process.
+
+    This is primarily used during FastAPI shutdown and uvicorn reload cycles to
+    avoid leaving the CNC control thinking a session is still active.
+
+    Returns:
+        Number of clients we attempted to close.
+    """
+    # Snapshot under lock so we don't hold lock while awaiting disconnects.
+    async with _active_clients_lock:
+        clients = list(_active_clients)
+
+    for client in clients:
+        try:
+            await client.disconnect()
+        except Exception:
+            # Best-effort cleanup
+            pass
+
+    return len(clients)
 
 
 async def _get_machine_lock(ip_address: str, port: int) -> asyncio.Lock:
@@ -310,6 +339,8 @@ class CNCTelnetClient:
             )
             self._connected = True
             self.last_command_time = asyncio.get_event_loop().time()
+            async with _active_clients_lock:
+                _active_clients.add(self)
             logger.debug(f"Connected to {self.ip_address}:{self.port}")
             return True
         except asyncio.TimeoutError:
@@ -333,6 +364,11 @@ class CNCTelnetClient:
                 self.writer = None
                 self.reader = None
                 self._connected = False
+                async with _active_clients_lock:
+                    try:
+                        _active_clients.discard(self)
+                    except Exception:
+                        pass
 
     async def _send_command(
         self, command: str, arguments: str = "", verbose: bool = False, read_timeout: float = 1.0
