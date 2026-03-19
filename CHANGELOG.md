@@ -1,3 +1,10 @@
+# [0.6.0](https://github.com/roblockwood/Shatter-NC/compare/v0.5.0...v0.6.0) (2026-03-19)
+
+
+### Features
+
+* enhance machine management and connection handling ([2e317ed](https://github.com/roblockwood/Shatter-NC/commit/2e317ed48edabbd76b7f4d60f8412101919d2908))
+
 # [0.5.0](https://github.com/roblockwood/Shatter-NC/compare/v0.4.0...v0.5.0) (2026-03-18)
 
 
