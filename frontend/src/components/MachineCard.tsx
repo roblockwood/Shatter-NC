@@ -29,6 +29,7 @@ interface Alarm {
   message: string;
   severity?: string;
   level_class?: string;
+  stop_level?: string;
 }
 
 interface MachineStatus {
@@ -58,6 +59,7 @@ interface MachineStatus {
   http_port?: number;
   path?: string;
   poll_interval_seconds?: number;
+  part_display_mode?: 'cycle' | 'parts';
   enabled?: boolean;
   units?: 'in' | 'mm';
 }
@@ -190,6 +192,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     program_no: string | null;
     run_start: string;
     run_end: string;
+    cycles: number;
     part_count: number;
     segments: { status: string | null; start_time: string; end_time: string }[];
   } | null>(null);
@@ -201,6 +204,19 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       setCachedAlarms(machine.alarms);
     }
   }, [machine.alarms]);
+
+  const getAlarmSeverityLevel = (alarm: Alarm): number => {
+    // Mirror AlarmPane: stop_level 5..1 (5 highest). Default to 3 if missing/invalid.
+    const raw = alarm.stop_level;
+    if (raw !== undefined && raw !== null && String(raw) !== '') {
+      const level = parseInt(String(raw), 10);
+      if (!isNaN(level) && level >= 1 && level <= 5) {
+        return level;
+      }
+    }
+    return 3;
+  };
+
 
   // Use program_name from machine status (active program from polling)
   // This shows the actual program running on the machine, not just the most recent deployment
@@ -305,6 +321,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     poll_interval_seconds: machine.poll_interval_seconds || 5,
     tool_poll_interval_seconds: (machine as any).tool_poll_interval_seconds || 30,
     enabled: machine.enabled !== false,
+    part_display_mode: machine.part_display_mode || 'parts',
     diameter_tolerance: (machine as any).diameter_tolerance || 0.010,
     length_tolerance_plus: (machine as any).length_tolerance_plus || 0.02,
     length_tolerance_minus: (machine as any).length_tolerance_minus || 0.0,
@@ -339,6 +356,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             poll_interval_seconds: fullMachineData.poll_interval_seconds || 5,
             tool_poll_interval_seconds: fullMachineData.tool_poll_interval_seconds || 30,
             enabled: fullMachineData.enabled !== false,
+            part_display_mode: fullMachineData.part_display_mode || 'parts',
             diameter_tolerance: fullMachineData.diameter_tolerance || 0.010,
             length_tolerance_plus: fullMachineData.length_tolerance_plus || 0.02,
             length_tolerance_minus: fullMachineData.length_tolerance_minus || 0.0,
@@ -435,6 +453,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         poll_interval_seconds: machine.poll_interval_seconds || 5,
         tool_poll_interval_seconds: (machine as any).tool_poll_interval_seconds || 30,
         enabled: machine.enabled !== false,
+        part_display_mode: machine.part_display_mode || 'parts',
         diameter_tolerance: (machine as any).diameter_tolerance || 0.010,
         length_tolerance_plus: (machine as any).length_tolerance_plus || 0.02,
         length_tolerance_minus: (machine as any).length_tolerance_minus || 0.0,
@@ -884,6 +903,23 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 options={[
                   { value: 'in', label: 'INCHES (in)' },
                   { value: 'mm', label: 'MILLIMETERS (mm)' },
+                ]}
+              />
+            </div>
+            <div style={{ flex: '0 0 auto', minWidth: '260px' }}>
+              <label>PARTS DISPLAY:</label>
+              <Select
+                value={editFormData.part_display_mode}
+                onChange={(value) =>
+                  setEditFormData({
+                    ...editFormData,
+                    part_display_mode: value as 'cycle' | 'parts',
+                  })
+                }
+                disabled={isEditSaving}
+                options={[
+                  { value: 'parts', label: 'PARTS COUNTER' },
+                  { value: 'cycle', label: 'CYCLE COUNT' },
                 ]}
               />
             </div>
@@ -1391,7 +1427,10 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               {latestRun && (
                 <>
                   <span className="production-run-meta">
-                    {latestRun.program_no || 'UNKNOWN'} · {latestRun.part_count} parts
+                    {latestRun.program_no || 'UNKNOWN'} ·{' '}
+                    {(machine.part_display_mode || 'parts') === 'cycle'
+                      ? `cycles: ${latestRun.cycles}`
+                      : `parts: ${latestRun.part_count}`}
                   </span>
                   <span className="production-run-bar-track">
                     {(() => {
@@ -1536,95 +1575,103 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             </div>
           )}
 
-          {!isEditing && (
-            <div 
-              ref={alarmIndicatorRef}
-              className="machine-row machine-row-hoverable"
-              onMouseEnter={() => {
-                if (alarmIndicatorRef.current && machine.alarms && machine.alarms.length > 0) {
-                  const rect = alarmIndicatorRef.current.getBoundingClientRect();
-                  const viewportWidth = window.innerWidth;
-                  const viewportHeight = window.innerHeight;
-                  const paneWidth = 450; // Approximate width
-                  const paneHeight = 500; // Max height
-                  
-                  // Calculate position - prefer right side, but adjust if needed
-                  let left = rect.right + 8;
-                  let top = rect.top;
-                  
-                  // If pane would go off right edge, position to the left
-                  if (left + paneWidth > viewportWidth) {
-                    left = rect.left - paneWidth - 8;
-                  }
-                  
-                  // If pane would go off bottom, adjust upward
-                  if (top + paneHeight > viewportHeight) {
-                    top = Math.max(8, viewportHeight - paneHeight - 8);
-                  }
-                  
-                  // Ensure it doesn't go off top
-                  if (top < 8) {
-                    top = 8;
-                  }
-                  
-                  setAlarmHoverPosition({ top, left });
+          {!isEditing && (() => {
+            const allAlarms = machine.alarms || [];
+            const criticalAlarms = allAlarms.filter((a) => getAlarmSeverityLevel(a) >= 4);
+            const warningAlarms = allAlarms.filter((a) => getAlarmSeverityLevel(a) < 4);
+
+            const showHoverAt = (el: HTMLElement | null) => {
+              if (!el || allAlarms.length === 0) return;
+              const rect = el.getBoundingClientRect();
+              const viewportWidth = window.innerWidth;
+              const viewportHeight = window.innerHeight;
+              const paneWidth = 450;
+              const paneHeight = 500;
+
+              let left = rect.right + 8;
+              let top = rect.top;
+
+              if (left + paneWidth > viewportWidth) {
+                left = rect.left - paneWidth - 8;
+              }
+
+              if (top + paneHeight > viewportHeight) {
+                top = Math.max(8, viewportHeight - paneHeight - 8);
+              }
+
+              if (top < 8) top = 8;
+
+              setAlarmHoverPosition({ top, left });
+              setShowAlarmHover(true);
+            };
+
+            const handleClick = (e: React.MouseEvent) => {
+              e.stopPropagation();
+              if (!isExpanded) {
+                onExpand?.();
+              }
+              // Scroll to alarm pane after expansion
+              setTimeout(() => {
+                const paneElement = findPaneElement(PANE_IDS.ALARMS);
+                if (paneElement) {
+                  paneElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  paneElement.classList.add('alarm-pane-highlight');
+                  setTimeout(() => {
+                    paneElement.classList.remove('alarm-pane-highlight');
+                  }, 2000);
+                } else if (alarmPaneRef.current) {
+                  alarmPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  alarmPaneRef.current.classList.add('alarm-pane-highlight');
+                  setTimeout(() => {
+                    alarmPaneRef.current?.classList.remove('alarm-pane-highlight');
+                  }, 2000);
                 }
-                if (machine.alarms && machine.alarms.length > 0) {
-                  setShowAlarmHover(true);
-                }
-              }}
-              onMouseLeave={() => setShowAlarmHover(false)}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isExpanded) {
-                  onExpand?.();
-                }
-                // Scroll to alarm pane after expansion
-                setTimeout(() => {
-                  // Find pane by data attribute (works with LayoutManager)
-                  const paneElement = findPaneElement(PANE_IDS.ALARMS);
-                  if (paneElement) {
-                    paneElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    paneElement.classList.add('alarm-pane-highlight');
-                    setTimeout(() => {
-                      paneElement.classList.remove('alarm-pane-highlight');
-                    }, 2000);
-                  } else if (alarmPaneRef.current) {
-                    // Fallback to ref if data attribute not found
-                    alarmPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    alarmPaneRef.current.classList.add('alarm-pane-highlight');
-                    setTimeout(() => {
-                      alarmPaneRef.current?.classList.remove('alarm-pane-highlight');
-                    }, 2000);
-                  }
-                }, 300);
-              }}
-              style={{ cursor: machine.alarms && machine.alarms.length > 0 ? 'pointer' : 'default' }}
-            >
-              <span className="label">ALARMS:</span>
-              <span className={`value ${machine.alarms && machine.alarms.length > 0 ? 'text-error' : ''}`}>
-                {machine.alarms ? machine.alarms.length : 0}
-              </span>
-              {showAlarmHover && alarmHoverPosition && machine.alarms && machine.alarms.length > 0 && (
-                <div 
-                  ref={alarmHoverRef}
-                  className="alarm-hover-pane"
-                  style={{
-                    top: `${alarmHoverPosition.top}px`,
-                    left: `${alarmHoverPosition.left}px`,
-                  }}
-                  onMouseEnter={() => setShowAlarmHover(true)}
+              }, 300);
+            };
+
+            return (
+              <>
+                <div
+                  ref={alarmIndicatorRef}
+                  className="machine-row machine-row-hoverable"
+                  onMouseEnter={() => showHoverAt(alarmIndicatorRef.current)}
                   onMouseLeave={() => setShowAlarmHover(false)}
+                  onClick={handleClick}
+                  style={{ cursor: allAlarms.length > 0 ? 'pointer' : 'default' }}
                 >
-                  <AlarmPane
-                    machineId={machine.machine_id}
-                    currentAlarms={machine.alarms}
-                    isExpanded={true}
-                  />
+                  <span className="label">ALARMS/WARN:</span>
+                  <span className="value">
+                    <span className={criticalAlarms.length > 0 ? 'text-error' : ''}>
+                      {criticalAlarms.length}
+                    </span>
+                    {' / '}
+                    <span className={warningAlarms.length > 0 ? 'text-warning' : ''}>
+                      {warningAlarms.length}
+                    </span>
+                  </span>
                 </div>
-              )}
-            </div>
-          )}
+
+                {showAlarmHover && alarmHoverPosition && allAlarms.length > 0 && (
+                  <div
+                    ref={alarmHoverRef}
+                    className="alarm-hover-pane"
+                    style={{
+                      top: `${alarmHoverPosition.top}px`,
+                      left: `${alarmHoverPosition.left}px`,
+                    }}
+                    onMouseEnter={() => setShowAlarmHover(true)}
+                    onMouseLeave={() => setShowAlarmHover(false)}
+                  >
+                    <AlarmPane
+                      machineId={machine.machine_id}
+                      currentAlarms={allAlarms}
+                      isExpanded={true}
+                    />
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           <div className="machine-card-divider-thin">
             {'─'.repeat(32)}
