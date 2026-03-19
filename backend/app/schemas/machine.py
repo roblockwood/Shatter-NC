@@ -31,6 +31,7 @@ class MachineBase(BaseModel):
     # Measurement units
     units: str = Field(default='in', description="Measurement units: 'in' for inches, 'mm' for millimeters")
     layout_config: Optional[Dict[str, Any]] = Field(default=None, description="Custom pane layout configuration")
+    part_display_mode: str = Field(default="parts", description="Compact machine card count label: 'parts' or 'cycle'")
 
 
 class MachineCreate(MachineBase):
@@ -66,6 +67,7 @@ class MachineUpdate(BaseModel):
     # Measurement units
     units: Optional[str] = Field(None, description="Measurement units: 'in' for inches, 'mm' for millimeters")
     layout_config: Optional[Dict[str, Any]] = Field(None, description="Custom pane layout configuration")
+    part_display_mode: Optional[str] = Field(None, description="Compact machine card count label: 'parts' or 'cycle'")
 
 
 class MachineResponse(MachineBase):
