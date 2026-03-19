@@ -18,7 +18,7 @@ EXPOSE 3000
 # Run development server
 CMD ["npm", "run", "dev", "--", "--host"]
 
-# Production build stage (Debian base for better QEMU compatibility when building for arm64)
+# Production build stage
 FROM node:20-bookworm-slim AS build
 
 WORKDIR /app
@@ -26,7 +26,7 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies (--ignore-scripts avoids native postinstall under QEMU)
+# Install dependencies
 RUN npm install --prefer-offline --no-audit --ignore-scripts
 
 # Copy application code
