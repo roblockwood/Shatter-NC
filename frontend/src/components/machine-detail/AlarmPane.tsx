@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { PollingStatusLight } from '../ui/PollingStatusLight';
 import './AlarmPane.css';
 
 interface Alarm {
@@ -30,9 +31,19 @@ interface AlarmPaneProps {
   }>;
   onExpand?: () => void;
   isExpanded?: boolean;
+  /** Server fast-poll timestamp when alarms (and related status) were last updated. */
+  pollTimestamp?: string | null;
+  pollIntervalSeconds?: number;
 }
 
-export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId: _machineId, currentAlarms, onExpand, isExpanded = false }) => {
+export const AlarmPane: React.FC<AlarmPaneProps> = ({
+  machineId: _machineId,
+  currentAlarms,
+  onExpand,
+  isExpanded = false,
+  pollTimestamp,
+  pollIntervalSeconds = 5,
+}) => {
   const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [loading, setLoading] = useState(false);
   const [hoveredAlarm, setHoveredAlarm] = useState<Alarm | null>(null);
@@ -136,19 +147,26 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({ machineId: _machineId, cur
         <div className="terminal-box-top">
           <div className="terminal-box-title-row">
             <span>┌─ ALARMS ({alarms.length}) {'─'.repeat(Math.max(0, 40 - 10 - String(alarms.length).length))}</span>
-            {hasMoreAlarms && onExpand && (
-              <button 
-                className="expand-toggle"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onExpand();
-                }}
-                title="Expand"
-              >
-                [EXPAND]
-              </button>
-            )}
-            <span>┐</span>
+            <div className="pane-header-right-actions">
+              <PollingStatusLight
+                lastUpdatedAt={pollTimestamp}
+                expectedIntervalMs={Math.max(pollIntervalSeconds * 1000, 1000)}
+                ariaLabel="Alarms pane data freshness"
+              />
+              {hasMoreAlarms && onExpand && (
+                <button 
+                  className="expand-toggle"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onExpand();
+                  }}
+                  title="Expand"
+                >
+                  [EXPAND]
+                </button>
+              )}
+              <span>┐</span>
+            </div>
           </div>
         </div>
       </div>

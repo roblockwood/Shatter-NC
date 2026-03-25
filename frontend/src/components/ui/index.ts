@@ -5,3 +5,6 @@ export { PollingOscilloscope } from './PollingOscilloscope';
 export { StatusOscilloscope } from './StatusOscilloscope';
 export { Modal } from './Modal';
 export { Select } from './Select';
+export { PollingStatusLight } from './PollingStatusLight';
+export type { PollingFreshness } from './pollingFreshness';
+export { freshnessFromAgeMs, earlierIsoTimestamp } from './pollingFreshness';

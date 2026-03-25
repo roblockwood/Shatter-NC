@@ -5,8 +5,9 @@ import time
 from collections import deque
 from typing import Dict
 
-from fastapi import Request, HTTPException, status as http_status
+from fastapi import Request, status as http_status
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +42,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             if count >= self.RATE_LIMIT:
                 retry_after = int(timestamps[0] - window_start) + 1 if timestamps else self.WINDOW_SECONDS
                 retry_after = max(1, min(retry_after, self.WINDOW_SECONDS))
-                raise HTTPException(
+                # Return a response here; raising HTTPException from BaseHTTPMiddleware.dispatch
+                # does not propagate correctly (Starlette TaskGroup → 500 + noisy logs).
+                return JSONResponse(
                     status_code=http_status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Rate limit exceeded",
+                    content={"detail": "Rate limit exceeded"},
                     headers={"Retry-After": str(retry_after)},
                 )
             timestamps.append(now)

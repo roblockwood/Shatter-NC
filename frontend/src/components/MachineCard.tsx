@@ -50,6 +50,11 @@ interface MachineStatus {
   panel?: any;  // Panel data (doors, mode, overrides)
   error?: string;
   poll_timestamp: string;
+  /** When the last successful fast (status) poll completed; does not advance on failed attempts. */
+  last_successful_poll_at?: string | null;
+  tools_timestamp?: string | null;
+  tool_table_timestamp?: string | null;
+  macros_timestamp?: string | null;
   response_time_ms?: number;
   tool_response_time_ms?: number;
   ip_address?: string;
@@ -59,9 +64,18 @@ interface MachineStatus {
   http_port?: number;
   path?: string;
   poll_interval_seconds?: number;
+  tool_poll_interval_seconds?: number;
   part_display_mode?: 'cycle' | 'parts';
   enabled?: boolean;
   units?: 'in' | 'mm';
+}
+
+/** Fast-poll freshness time for status/alarms/panel: last successful controller poll only (falls back to legacy poll_timestamp if field absent). */
+function fastPollLastSuccessAt(machine: MachineStatus): string | null | undefined {
+  if (machine.last_successful_poll_at !== undefined) {
+    return machine.last_successful_poll_at;
+  }
+  return machine.poll_timestamp;
 }
 
 interface MachineCardProps {
@@ -717,6 +731,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                       isOnline={machine.is_online}
                       currentError={machine.error}
                       onExpand={undefined}
+                      machineLastSuccessfulPollAt={fastPollLastSuccessAt(machine)}
                     />
                   </div>
                 ),
@@ -729,6 +744,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                       machineId={machine.machine_id} 
                       currentAlarms={machine.alarms || cachedAlarms || undefined}
                       onExpand={undefined}
+                      pollTimestamp={fastPollLastSuccessAt(machine)}
+                      pollIntervalSeconds={machine.poll_interval_seconds ?? 5}
                     />
                   </div>
                 ),
@@ -742,6 +759,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                       machineStatus={machine.status}
                       programName={machine.program_name}
                       onExpand={undefined}
+                      machineLastSuccessfulPollAt={fastPollLastSuccessAt(machine)}
                     />
                   </div>
                 ),
@@ -759,6 +777,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               machineStatus={machine.status}
               memMode={(machine as any).mem_mode}
               memOperationStatus={(machine as any).mem_operation_status}
+              toolsTimestamp={machine.tools_timestamp ?? undefined}
+              toolTableTimestamp={machine.tool_table_timestamp ?? undefined}
+              toolPollIntervalSeconds={machine.tool_poll_interval_seconds ?? 30}
             />
                   </div>
                 ),
@@ -769,6 +790,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                   <div ref={cycleHistoryPaneRef}>
                     <ProductionRunsTimelinePane
                       machineId={machine.machine_id}
+                      machineLastSuccessfulPollAt={fastPollLastSuccessAt(machine)}
                     />
                   </div>
                 ),
@@ -778,6 +800,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 component: (
                   <StatusHistoryPane
                     machineId={machine.machine_id}
+                    machineLastSuccessfulPollAt={fastPollLastSuccessAt(machine)}
                   />
                 ),
               },
@@ -787,6 +810,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                   <PanelPane 
                     panelData={machine.panel}
                     onExpand={undefined}
+                    pollTimestamp={fastPollLastSuccessAt(machine)}
+                    pollIntervalSeconds={machine.poll_interval_seconds ?? 5}
                   />
                 ),
               },
@@ -1284,6 +1309,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                   currentStatus={machine.status}
                   isOnline={machine.is_online}
                   currentError={machine.error}
+                  machineLastSuccessfulPollAt={fastPollLastSuccessAt(machine)}
                 />
               </div>
             )}
@@ -1361,6 +1387,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                   machineId={machine.machine_id}
                   machineStatus={machine.status}
                   programName={machine.program_name}
+                  machineLastSuccessfulPollAt={fastPollLastSuccessAt(machine)}
                 />
               </div>
             )}
@@ -1432,15 +1459,31 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                       ? `cycles: ${latestRun.cycles}`
                       : `parts: ${latestRun.part_count}`}
                   </span>
-                  <span className="production-run-bar-track">
-                    {(() => {
-                      const runStartMs = new Date(latestRun.run_start).getTime();
-                      const runEndMs = new Date(latestRun.run_end).getTime();
-                      const span = Math.max(1, runEndMs - runStartMs);
-                      return latestRun.segments.map((seg, idx) => {
+                  {(() => {
+                    const runStartMs = new Date(latestRun.run_start).getTime();
+                    const runEndMs = new Date(latestRun.run_end).getTime();
+                    const totalMs = Math.max(1, runEndMs - runStartMs);
+                    let activeMs = 0;
+                    for (const seg of latestRun.segments || []) {
+                      if ((seg.status || '').toLowerCase() !== 'operating') continue;
+                      const s0 = new Date(seg.start_time).getTime();
+                      const s1 = new Date(seg.end_time).getTime();
+                      if (!isNaN(s0) && !isNaN(s1) && s1 >= s0) activeMs += s1 - s0;
+                    }
+                    const utilPct = Math.min(100, Math.max(0, Math.round((activeMs / totalMs) * 100)));
+                    const runStartMs2 = new Date(latestRun.run_start).getTime();
+                    const runEndMs2 = new Date(latestRun.run_end).getTime();
+                    const span = Math.max(1, runEndMs2 - runStartMs2);
+                    return (
+                      <span className="production-run-util-row">
+                        <span className="production-run-util text-dim" title="Operating time / total run time">
+                          util: {utilPct}%
+                        </span>
+                        <span className="production-run-bar-track">
+                          {latestRun.segments.map((seg, idx) => {
                         const sStartMs = new Date(seg.start_time).getTime();
                         const sEndMs = new Date(seg.end_time).getTime();
-                        const left = ((sStartMs - runStartMs) / span) * 100;
+                        const left = ((sStartMs - runStartMs2) / span) * 100;
                         const width = Math.max(2, ((sEndMs - sStartMs) / span) * 100);
                         const status = (seg.status || '').toLowerCase();
                         const statusClass =
@@ -1462,9 +1505,11 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                             style={{ left: `${left}%`, width: `${width}%` }}
                           />
                         );
-                      });
-                    })()}
-                  </span>
+                          })}
+                        </span>
+                      </span>
+                    );
+                  })()}
                 </>
               )}
             </span>
@@ -1481,6 +1526,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               >
                 <ProductionRunsTimelinePane
                   machineId={machine.machine_id}
+                  machineLastSuccessfulPollAt={fastPollLastSuccessAt(machine)}
                 />
               </div>
             )}
@@ -1562,6 +1608,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     machineId={machine.machine_id}
                     units={(machine as any).units || machine.units || 'in'}
                     machineStatus={machine.status}
+                    toolsTimestamp={machine.tools_timestamp ?? undefined}
+                    toolTableTimestamp={machine.tool_table_timestamp ?? undefined}
+                    toolPollIntervalSeconds={machine.tool_poll_interval_seconds ?? 30}
                   />
                 </div>
               )}
@@ -1666,6 +1715,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                       machineId={machine.machine_id}
                       currentAlarms={allAlarms}
                       isExpanded={true}
+                      pollTimestamp={fastPollLastSuccessAt(machine)}
+                      pollIntervalSeconds={machine.poll_interval_seconds ?? 5}
                     />
                   </div>
                 )}
