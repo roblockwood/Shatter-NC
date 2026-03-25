@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { API_BASE_URL } from '../../config/api';
 import { useBetaMode } from '../../hooks/useBetaMode';
+import { earlierIsoTimestamp } from '../ui/pollingFreshness';
+import { PollingStatusLight } from '../ui/PollingStatusLight';
 import './StatusTimeline.css';
 
 interface StatusEvent {
@@ -29,11 +31,20 @@ interface StatusTimelineProps {
   isOnline?: boolean; // Whether machine is online
   currentError?: string; // Current error message if machine is offline
   onExpand?: () => void;
+  /** Last successful fast CNC poll (ISO). With API fetch time, only the older instant is used for the light. */
+  machineLastSuccessfulPollAt?: string | null;
 }
 
 type TimeRange = '1h' | '8h' | '24h' | '7d';
 
-export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, currentStatus, isOnline, currentError, onExpand: _onExpand }) => {
+export const StatusTimeline: React.FC<StatusTimelineProps> = ({
+  machineId,
+  currentStatus,
+  isOnline,
+  currentError,
+  onExpand: _onExpand,
+  machineLastSuccessfulPollAt,
+}) => {
   const { isBetaMode } = useBetaMode();
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [events, setEvents] = useState<StatusEvent[]>([]);
@@ -47,6 +58,11 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
   const [colorMode, setColorMode] = useState<boolean>(() => {
     return localStorage.getItem('oscilloscopeColorMode') === 'true';
   });
+  const [lastFetchSuccessAt, setLastFetchSuccessAt] = useState<string | null>(null);
+  const statusLightLastUpdatedAt = useMemo(
+    () => earlierIsoTimestamp(lastFetchSuccessAt, machineLastSuccessfulPollAt),
+    [lastFetchSuccessAt, machineLastSuccessfulPollAt],
+  );
   const oscilloscopeRef = React.useRef<HTMLDivElement>(null);
   const oscilloscopeDataRef = React.useRef<HTMLDivElement>(null);
   
@@ -235,6 +251,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
               event.previous_status.toLowerCase() === event.status.toLowerCase(),
           }));
           setEvents(eventsWithHeartbeat);
+          setLastFetchSuccessAt(new Date().toISOString());
         }
 
         const alarmsResponse = await fetch(
@@ -615,6 +632,13 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({ machineId, curre
       <div className="status-timeline-header">
         <div className="status-timeline-title-row">
           <span>┌─ STATUS TIMELINE {'─'.repeat(25)}┐</span>
+          <span className="pane-header-status-light-wrap">
+            <PollingStatusLight
+              lastUpdatedAt={statusLightLastUpdatedAt}
+              expectedIntervalMs={60_000}
+              ariaLabel="Status timeline data freshness"
+            />
+          </span>
         </div>
       </div>
       <div className="status-timeline-controls">

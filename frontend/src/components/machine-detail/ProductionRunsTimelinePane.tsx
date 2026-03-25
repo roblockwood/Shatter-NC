@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { API_BASE_URL } from '../../config/api';
+import { earlierIsoTimestamp } from '../ui/pollingFreshness';
+import { PollingStatusLight } from '../ui/PollingStatusLight';
 import './ProductionRunsTimelinePane.css';
 
 interface RunSegment {
@@ -22,16 +24,26 @@ interface ProductionRun {
 
 interface ProductionRunsTimelinePaneProps {
   machineId: number;
+  /** Last successful fast CNC poll (ISO). Combined with API fetch time for the status light. */
+  machineLastSuccessfulPollAt?: string | null;
 }
 
 type TimeRange = '1h' | '8h' | '24h' | '7d';
 
 const SEGMENT_TOOLTIP_DELAY_MS = 100;
 
-export const ProductionRunsTimelinePane: React.FC<ProductionRunsTimelinePaneProps> = ({ machineId }) => {
+export const ProductionRunsTimelinePane: React.FC<ProductionRunsTimelinePaneProps> = ({
+  machineId,
+  machineLastSuccessfulPollAt,
+}) => {
   const [runs, setRuns] = useState<ProductionRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
+  const [lastFetchSuccessAt, setLastFetchSuccessAt] = useState<string | null>(null);
+  const statusLightLastUpdatedAt = useMemo(
+    () => earlierIsoTimestamp(lastFetchSuccessAt, machineLastSuccessfulPollAt),
+    [lastFetchSuccessAt, machineLastSuccessfulPollAt],
+  );
   const [segmentTooltip, setSegmentTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const segmentTooltipRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -74,6 +86,7 @@ export const ProductionRunsTimelinePane: React.FC<ProductionRunsTimelinePaneProp
           const arr = Array.isArray(data) ? data : [];
           arr.sort((a, b) => new Date(b.run_start).getTime() - new Date(a.run_start).getTime());
           setRuns(arr);
+          setLastFetchSuccessAt(new Date().toISOString());
         } else {
           setRuns([]);
         }
@@ -119,6 +132,13 @@ export const ProductionRunsTimelinePane: React.FC<ProductionRunsTimelinePaneProp
         <div className="terminal-box-top">
           <div className="terminal-box-title-row">
             <span>┌─ PRODUCTION RUNS {'─'.repeat(25)}┐</span>
+            <span className="pane-header-status-light-wrap">
+              <PollingStatusLight
+                lastUpdatedAt={statusLightLastUpdatedAt}
+                expectedIntervalMs={120_000}
+                ariaLabel="Production runs data freshness"
+              />
+            </span>
           </div>
         </div>
       </div>

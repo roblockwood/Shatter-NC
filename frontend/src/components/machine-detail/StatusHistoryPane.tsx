@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { API_BASE_URL } from '../../config/api';
 import { useBetaMode } from '../../hooks/useBetaMode';
+import { earlierIsoTimestamp } from '../ui/pollingFreshness';
+import { PollingStatusLight } from '../ui/PollingStatusLight';
 import './StatusHistoryPane.css';
 
 interface PRD3StatusInterval {
@@ -17,9 +19,14 @@ interface PRD3StatusInterval {
 
 interface StatusHistoryPaneProps {
   machineId: number;
+  /** Last successful fast CNC poll (ISO). Combined with API fetch time for the status light. */
+  machineLastSuccessfulPollAt?: string | null;
 }
 
-export const StatusHistoryPane: React.FC<StatusHistoryPaneProps> = ({ machineId }) => {
+export const StatusHistoryPane: React.FC<StatusHistoryPaneProps> = ({
+  machineId,
+  machineLastSuccessfulPollAt,
+}) => {
   const { isBetaMode } = useBetaMode();
   const [intervals, setIntervals] = useState<PRD3StatusInterval[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +44,11 @@ export const StatusHistoryPane: React.FC<StatusHistoryPaneProps> = ({ machineId 
   });
   const PAGE_SIZE = 100;
   const [page, setPage] = useState(0);
+  const [lastFetchSuccessAt, setLastFetchSuccessAt] = useState<string | null>(null);
+  const statusLightLastUpdatedAt = useMemo(
+    () => earlierIsoTimestamp(lastFetchSuccessAt, machineLastSuccessfulPollAt),
+    [lastFetchSuccessAt, machineLastSuccessfulPollAt],
+  );
 
   useEffect(() => {
     localStorage.setItem('statusHistoryColorMode', String(colorMode));
@@ -53,6 +65,7 @@ export const StatusHistoryPane: React.FC<StatusHistoryPaneProps> = ({ machineId 
           const data: PRD3StatusInterval[] = await response.json();
           const arr = Array.isArray(data) ? data : [];
           setIntervals(arr);
+          setLastFetchSuccessAt(new Date().toISOString());
 
           // Aggregate total duration per status over the fetched intervals
           const totals: Record<string, number> = {};
@@ -130,15 +143,22 @@ export const StatusHistoryPane: React.FC<StatusHistoryPaneProps> = ({ machineId 
         <div className="terminal-box-top">
           <div className="terminal-box-title-row">
             <span>┌─ STATUS HISTORY {'─'.repeat(25)}┐</span>
-            {isBetaMode && (
-              <button
-                type="button"
-                className={`status-history-color-toggle ${colorMode ? 'active' : ''}`}
-                onClick={() => setColorMode((prev) => !prev)}
-              >
-                [COLOR]
-              </button>
-            )}
+            <div className="pane-header-right-actions">
+              <PollingStatusLight
+                lastUpdatedAt={statusLightLastUpdatedAt}
+                expectedIntervalMs={60_000}
+                ariaLabel="Status history data freshness"
+              />
+              {isBetaMode && (
+                <button
+                  type="button"
+                  className={`status-history-color-toggle ${colorMode ? 'active' : ''}`}
+                  onClick={() => setColorMode((prev) => !prev)}
+                >
+                  [COLOR]
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { PollingStatusLight } from '../ui/PollingStatusLight';
 import './PanelPane.css';
 
 interface PanelData {
@@ -41,6 +42,8 @@ interface PanelData {
 interface PanelPaneProps {
   panelData?: PanelData | null;
   onExpand?: () => void;
+  pollTimestamp?: string | null;
+  pollIntervalSeconds?: number;
 }
 
 const MODE_LABELS: { [key: number]: string } = {
@@ -293,14 +296,34 @@ const RapidTraverseSlider: React.FC<{
   );
 };
 
-export const PanelPane: React.FC<PanelPaneProps> = ({ panelData, onExpand: _onExpand }) => {
+export const PanelPane: React.FC<PanelPaneProps> = ({
+  panelData,
+  pollTimestamp,
+  pollIntervalSeconds = 5,
+}) => {
+  const pollMs = Math.max((pollIntervalSeconds ?? 5) * 1000, 1000);
+
+  const panelTitleRow = (
+    <div className="terminal-box-title-row panel-pane-title-row">
+      <span>┌─ PANEL STATUS {'─'.repeat(27)}</span>
+      <div className="pane-header-right-actions">
+        <PollingStatusLight
+          lastUpdatedAt={pollTimestamp}
+          expectedIntervalMs={pollMs}
+          ariaLabel="Panel status data freshness"
+        />
+        <span>┐</span>
+      </div>
+    </div>
+  );
+
   if (!panelData) {
     return (
       <div className="panel-pane">
         <div className="terminal-box">
           <div className="terminal-box-header">
             <div className="terminal-box-top">
-              ┌─ PANEL STATUS {'─'.repeat(27)}┐
+              {panelTitleRow}
             </div>
           </div>
           <div className="terminal-box-content">
@@ -347,7 +370,7 @@ export const PanelPane: React.FC<PanelPaneProps> = ({ panelData, onExpand: _onEx
       <div className="terminal-box">
         <div className="terminal-box-header">
           <div className="terminal-box-top">
-            ┌─ PANEL STATUS {'─'.repeat(27)}┐
+            {panelTitleRow}
           </div>
         </div>
         <div className="terminal-box-content">
