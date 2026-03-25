@@ -49,9 +49,17 @@ class PRD3ParserV2:
         self.content = content.decode('utf-8', errors='replace').rstrip('\x00\r\n\t ')
         self.lines = [line.strip() for line in self.content.split('\n') if line.strip()]
         
-        # Determine control version
+        # Determine control version (file structure wins over DIR-based guess from polling)
         if control_version and control_version in PRD3_SCHEMAS:
             self.control_version = control_version
+            content_based = self._detect_control_version()
+            if content_based != self.control_version:
+                logger.info(
+                    "PRD3: overriding control_version %s -> %s from A01/C01 structure",
+                    self.control_version,
+                    content_based,
+                )
+                self.control_version = content_based
         else:
             self.control_version = self._detect_control_version()
         
