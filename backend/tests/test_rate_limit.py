@@ -1,8 +1,8 @@
 """Tests for in-memory API rate limit middleware."""
+import asyncio
 import pytest
 from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
-from fastapi import HTTPException
 from app.main import app
 from app.middleware import rate_limit
 
@@ -19,8 +19,7 @@ def test_health_not_rate_limited():
     assert r.status_code == 200
 
 
-@pytest.mark.asyncio
-async def test_rate_limit_returns_429_after_limit():
+def test_rate_limit_returns_429_after_limit():
     """More than RATE_LIMIT requests in window returns 429."""
     rate_limit._rate_window.clear()
     middleware = rate_limit.RateLimitMiddleware(app=MagicMock())
@@ -36,11 +35,12 @@ async def test_rate_limit_returns_429_after_limit():
         req.client = MagicMock(host="192.168.1.100", port=12345)
         return req
 
-    for _ in range(3):
-        r = await middleware.dispatch(make_request(), call_next)
-        assert r.status_code == 200
+    async def run():
+        for _ in range(3):
+            r = await middleware.dispatch(make_request(), call_next)
+            assert r.status_code == 200
+        resp = await middleware.dispatch(make_request(), call_next)
+        assert resp.status_code == 429
+        assert resp.headers.get("retry-after") is not None
 
-    with pytest.raises(HTTPException) as exc_info:
-        await middleware.dispatch(make_request(), call_next)
-    assert exc_info.value.status_code == 429
-    assert "retry-after" in [k.lower() for k in exc_info.value.headers.keys()]
+    asyncio.run(run())

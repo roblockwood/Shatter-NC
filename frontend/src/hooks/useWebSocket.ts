@@ -28,6 +28,13 @@ interface MachineStatus {
   units?: 'in' | 'mm';
   error?: string;
   poll_timestamp: string;
+  /** When the last successful fast poll completed (ISO). Omitted or stale when machine unreachable. */
+  last_successful_poll_at?: string | null;
+  /** When ATC / magazine tool data was last fetched (ISO). */
+  tools_timestamp?: string | null;
+  /** When TOLN tool table data was last fetched (ISO). */
+  tool_table_timestamp?: string | null;
+  macros_timestamp?: string | null;
   ip_address?: string;
   ftp_username?: string;
   ftp_password?: string;
@@ -35,6 +42,7 @@ interface MachineStatus {
   http_port?: number;
   location?: string;
   poll_interval_seconds?: number;
+  tool_poll_interval_seconds?: number;
   enabled?: boolean;
 }
 
