@@ -44,6 +44,10 @@
   width: 100%;
 }
 
+.tools-pane .tools-pane-header-actions .expand-toggle {
+  margin-left: 0;
+}
+
 .expand-toggle {
   background: transparent;
   border: 1px solid var(--color-border);

@@ -1,0 +1,3 @@
+# Optional deps for docs/scrape/*.py (PDF extraction). Not required for app runtime.
+# Usage: python3 -m pip install -r docs/scrape/requirements-scrape.txt
+pymupdf>=1.24.0

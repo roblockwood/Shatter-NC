@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '../../config/api';
+import { earlierIsoTimestamp } from '../ui/pollingFreshness';
+import { PollingStatusLight } from '../ui/PollingStatusLight';
 import './CurrentProgramPane.css';
 
 interface ToolValidation {
@@ -73,6 +75,8 @@ interface CurrentProgramPaneProps {
   machineStatus?: string;
   programName?: string;  // Active program O-number from machine (e.g., "O2045")
   onExpand?: () => void;
+  /** Last successful fast CNC poll (ISO). Combined with deployment API fetch time for the status light. */
+  machineLastSuccessfulPollAt?: string | null;
 }
 
 interface FileInfo {
@@ -130,7 +134,12 @@ function invalidateCache(machineId: number, programName?: string): void {
   dataCache.delete(key);
 }
 
-export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineId, programName, onExpand }) => {
+export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
+  machineId,
+  programName,
+  onExpand,
+  machineLastSuccessfulPollAt,
+}) => {
   // Initialize state from cache if available (persists across unmounts)
   const cachedData = getCachedData(machineId, programName);
   const [deployment, setDeployment] = useState<Deployment | null>(cachedData?.deployment || null);
@@ -142,6 +151,11 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
   const [refreshing, setRefreshing] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false); // Track background refresh state
   const [refreshTrigger, setRefreshTrigger] = useState(0); // Force refresh when incremented
+  const [lastFetchSuccessAt, setLastFetchSuccessAt] = useState<string | null>(null);
+  const statusLightLastUpdatedAt = useMemo(
+    () => earlierIsoTimestamp(lastFetchSuccessAt, machineLastSuccessfulPollAt),
+    [lastFetchSuccessAt, machineLastSuccessfulPollAt],
+  );
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
   const [expandedWCS, setExpandedWCS] = useState<boolean>(false);
   const isInitialLoadRef = useRef(true);
@@ -167,6 +181,11 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
       previousProgramNameRef.current = programName;
       hasDataRef.current = true;
       lastFetchedProgramNameRef.current = programName;
+      const key = getCacheKey(machineId, programName);
+      const entry = dataCache.get(key);
+      if (entry) {
+        setLastFetchSuccessAt(new Date(entry.timestamp).toISOString());
+      }
       
       // Cache hit - no logging needed
       return; // Skip fetching - we have cached data
@@ -183,6 +202,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
     }
     
     const fetchCurrentDeployment = async () => {
+      const recordFetchSuccess = () => setLastFetchSuccessAt(new Date().toISOString());
       const isNewProgramName = lastFetchedProgramNameRef.current !== programName;
       
       // Set loading/refreshing indicators
@@ -226,6 +246,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
                 if (refreshTrigger > 0) {
                   setRefreshTrigger(0);
                 }
+                recordFetchSuccess();
                 return;
               } else {
                 // No deployment found for this O-number - program may not be in database
@@ -288,6 +309,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
               if (refreshTrigger > 0) {
                 setRefreshTrigger(0);
               }
+              recordFetchSuccess();
               return;
             }
             // If fetch failed but not 404, fall through to fallback
@@ -331,6 +353,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
             }
             setIsRefreshing(false);
             setRefreshing(false);
+            recordFetchSuccess();
           } else {
             // No deployments found - if we have programName, try to fetch file info
             setDeployment(null);
@@ -387,6 +410,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
             }
             setIsRefreshing(false);
             setRefreshing(false);
+            recordFetchSuccess();
           }
         } else {
           // API call failed - if we have programName, at least show that
@@ -873,7 +897,12 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
                 ⟳
               </span>
             )}
-            <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+            <div className="pane-header-right-actions">
+              <PollingStatusLight
+                lastUpdatedAt={statusLightLastUpdatedAt}
+                expectedIntervalMs={300_000}
+                ariaLabel="Current program pane data freshness"
+              />
               <button 
                 className="expand-toggle"
                 onClick={(e) => {
@@ -897,8 +926,8 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({ machineI
                   [EXPAND]
                 </button>
               )}
+              <span>┐</span>
             </div>
-            <span>┐</span>
           </div>
         </div>
       </div>

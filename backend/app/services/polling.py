@@ -33,6 +33,7 @@ class MachinePoller:
         self.websocket_manager = websocket_manager
         self.last_poll_time: Optional[datetime] = None
         self.last_fast_poll_time: Optional[datetime] = None  # Track last fast poll for per-machine intervals
+        self.last_successful_fast_poll_at: Optional[datetime] = None  # Only advances on successful fast poll (UI freshness)
         self.last_tool_poll_time: Optional[datetime] = None  # Track last tool data poll for slow polling
         self.consecutive_failures = 0
         self.is_online = False
@@ -564,6 +565,8 @@ class MachinePoller:
             self.consecutive_failures = 0
             self.last_poll_time = poll_timestamp
             self.last_fast_poll_time = poll_timestamp  # Track fast poll time for per-machine intervals
+            self.last_successful_fast_poll_at = poll_timestamp
+            status_data["last_successful_poll_at"] = self.last_successful_fast_poll_at.isoformat()
 
             # Log events to database (non-blocking, in background)
             # Only log status events if we have a status (machine is online)
@@ -598,11 +601,14 @@ class MachinePoller:
             # Get cached status from websocket manager for offline display
             cached_status = self.websocket_manager.get_machine_status(self.machine.id) if self.websocket_manager else {}
             
+            last_ok = self.last_successful_fast_poll_at
+            last_ok_iso = last_ok.isoformat() if last_ok else cached_status.get("last_successful_poll_at")
             # Create offline status data for logging, preserving cached data
             offline_status_data = {
                 "machine_id": self.machine.id,
                 "machine_name": self.machine.name,
                 "poll_timestamp": poll_timestamp.isoformat(),
+                "last_successful_poll_at": last_ok_iso,
                 "is_online": False,
                 "status": "off",  # Set status to "off" when machine is not responding
                 "error": str(e),
@@ -613,7 +619,10 @@ class MachinePoller:
                 # Preserve cached data that doesn't change frequently when offline
                 "panel": cached_status.get("panel"),  # Preserve panel data
                 "alarms": cached_status.get("alarms", []),  # Preserve alarms
+                "tools": cached_status.get("tools"),  # Preserve ATC tools
+                "tools_timestamp": cached_status.get("tools_timestamp"),
                 "tool_table": cached_status.get("tool_table"),  # Preserve tool table
+                "tool_table_timestamp": cached_status.get("tool_table_timestamp"),
                 "current_tool": cached_status.get("current_tool"),  # Preserve current tool
                 "macros": cached_status.get("macros", {}),  # Preserve macro variables
                 "macros_timestamp": cached_status.get("macros_timestamp"),  # Preserve macro timestamp
@@ -1269,6 +1278,14 @@ class PollingService:
                 if isinstance(result, Exception):
                     logger.error(f"Polling task failed for machine {machine.id} ({machine.name}): {result}")
 
+                    poller = self.pollers.get(machine.id)
+                    last_ok_iso = None
+                    if poller and poller.last_successful_fast_poll_at:
+                        last_ok_iso = poller.last_successful_fast_poll_at.isoformat()
+                    elif self.websocket_manager:
+                        cached = self.websocket_manager.get_machine_status(machine.id)
+                        last_ok_iso = cached.get("last_successful_poll_at") if cached else None
+
                     # Create offline status for failed polling
                     offline_status = {
                         "machine_id": machine.id,
@@ -1277,6 +1294,7 @@ class PollingService:
                         "status": "off",
                         "error": str(result),
                         "poll_timestamp": datetime.utcnow().isoformat(),
+                        "last_successful_poll_at": last_ok_iso,
                         "response_time_ms": 0,  # Failed poll
                     }
 
