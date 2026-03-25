@@ -186,6 +186,10 @@
   width: 100%;
 }
 
+.alarm-pane .pane-header-right-actions .expand-toggle {
+  margin-left: 0;
+}
+
 .expand-toggle {
   background: transparent;
   border: 1px solid var(--color-border);

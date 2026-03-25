@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
 import { FileBrowser } from './pages/FileBrowser';
@@ -63,6 +64,10 @@ function Navigation() {
 }
 
 function App() {
+  useEffect(() => {
+    document.title = `Shatter v${APP_VERSION}`;
+  }, []);
+
   return (
     <WebSocketProvider>
       <ExpandedMachineProvider>
