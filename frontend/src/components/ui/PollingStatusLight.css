@@ -1,0 +1,109 @@
+/* Push status light (or action group) to the right in a flex title row */
+.pane-header-status-light-wrap {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pane-header-right-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Wrapper: hover target + themed tooltip positioning */
+.polling-status-light-anchor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+  vertical-align: middle;
+}
+
+.polling-status-light {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-left: 6px;
+  vertical-align: middle;
+  box-shadow: 0 0 4px currentColor;
+}
+
+/* Terminal-themed popover (fixed + portal; position/transform set inline) */
+.polling-status-light-tooltip {
+  z-index: 10000;
+  min-width: 210px;
+  max-width: min(340px, 90vw);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-light);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  line-height: 1.4;
+  letter-spacing: var(--letter-spacing);
+  box-shadow:
+    0 0 1px var(--color-text-dim),
+    0 0 16px rgba(0, 255, 0, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  text-align: left;
+  animation: polling-status-tooltip-fade 0.1s ease-out;
+}
+
+@keyframes polling-status-tooltip-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.polling-status-light-tooltip__label {
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.polling-status-light-tooltip__time {
+  color: var(--color-text-primary);
+  text-shadow: 0 0 8px rgba(0, 255, 0, 0.2);
+  word-break: break-word;
+}
+
+.polling-status-light-tooltip__age {
+  margin-top: 2px;
+  color: var(--color-text-dim);
+  font-size: var(--font-xs);
+}
+
+.polling-status-light-tooltip__empty {
+  color: var(--color-text-muted);
+}
+
+.polling-status-light--fresh {
+  background: #22c55e;
+  color: #22c55e;
+}
+
+.polling-status-light--waning {
+  background: #eab308;
+  color: #eab308;
+}
+
+.polling-status-light--stale {
+  background: #ef4444;
+  color: #ef4444;
+}
+
+.polling-status-light--unknown {
+  background: #6b7280;
+  color: #6b7280;
+  box-shadow: none;
+}

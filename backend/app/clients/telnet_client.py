@@ -671,12 +671,16 @@ class CNCTelnetClient:
         Returns:
             PRD3/PRDD3 data as string, or None if failed
         """
-        # Determine data name based on control version
         if control_version is None:
             control_version = await self.detect_control_type()
-        
-        data_name = "PRDD3" if control_version == "D00" else "PRD3"
-        return await self.load_data(data_name, verbose=verbose)
+
+        primary = "PRDD3" if control_version == "D00" else "PRD3"
+        alternate = "PRD3" if primary == "PRDD3" else "PRDD3"
+        data = await self.load_data(primary, verbose=verbose)
+        if data is not None:
+            return data
+        # Wrong control guess (e.g. ambiguous DIR parse) — other filename may exist on this control
+        return await self.load_data(alternate, verbose=verbose)
 
     async def get_atc_magazine_data(self, control_version: Optional[str] = None, verbose: bool = False) -> Optional[str]:
         """
@@ -1079,11 +1083,21 @@ class CNCTelnetClient:
                     # If we found indicators but in wrong format, that's suspicious
                     elif c00_count_in_d00_format > 0 or d00_count_in_c00_format > 0:
                         logger.warning(f"Found control indicators in unexpected format - ambiguous (C00 in D00: {c00_count_in_d00_format}, D00 in C00: {d00_count_in_c00_format})")
-                        # Still try to return something based on what we found
+                        # Prefer "correct format" counts when present
                         if c00_count_in_c00_format > 0:
                             detected_version = "C00"
                         elif d00_count_in_d00_format > 0:
                             detected_version = "D00"
+                        # D00 file names (SYSD/PRDD) under C00 parse → actual control is usually D00
+                        # (D00 directory layout misread as C00). Symmetric for C00 names under D00 parse.
+                        elif d00_count_in_c00_format > c00_count_in_d00_format:
+                            detected_version = "D00"
+                        elif c00_count_in_d00_format > d00_count_in_c00_format:
+                            detected_version = "C00"
+                        elif d00_count_in_c00_format > 0:
+                            detected_version = "D00"
+                        elif c00_count_in_d00_format > 0:
+                            detected_version = "C00"
                     
                     # Fallback: if no indicators found, use format that produces more valid entries
                     elif entries_c00 and entries_d00:

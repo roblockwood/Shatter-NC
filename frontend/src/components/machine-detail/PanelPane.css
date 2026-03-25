@@ -18,6 +18,13 @@
   font-size: var(--font-sm);
 }
 
+.panel-pane .panel-pane-title-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  white-space: pre;
+}
+
 /* Main content grid - adapts to available width */
 .panel-pane .terminal-box-content {
   display: grid;
