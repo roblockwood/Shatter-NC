@@ -116,6 +116,9 @@ class WebSocketManager:
                 status_data["macros"] = cached["macros"]
             if "macros_timestamp" in cached and "macros_timestamp" not in status_data:
                 status_data["macros_timestamp"] = cached["macros_timestamp"]
+            # Preserve last successful fast poll time when partial updates omit it (e.g. tool-only broadcast)
+            if "last_successful_poll_at" in cached and "last_successful_poll_at" not in status_data:
+                status_data["last_successful_poll_at"] = cached["last_successful_poll_at"]
             
             self.last_status[machine_id] = status_data
 
