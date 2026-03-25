@@ -1,3 +1,16 @@
+# [0.7.0](https://github.com/roblockwood/Shatter-NC/compare/v0.6.0...v0.7.0) (2026-03-25)
+
+
+### Bug Fixes
+
+* improve control version detection in PRD3 parser and telnet client ([f63a012](https://github.com/roblockwood/Shatter-NC/commit/f63a01204532d4993c09656147c371267ee21877))
+* update rate limit middleware to return JSON response instead of raising HTTPException; add last successful fast poll tracking in MachinePoller; adjust tests accordingly ([51e471c](https://github.com/roblockwood/Shatter-NC/commit/51e471c34ff093e65fea69b6722278cc4eaac8c2))
+
+
+### Features
+
+* preserve last successful fast poll time in websocket status updates ([d2c323a](https://github.com/roblockwood/Shatter-NC/commit/d2c323a22520e4cb7c48f2409b680b4ae6b5e089))
+
 # [0.6.0](https://github.com/roblockwood/Shatter-NC/compare/v0.5.0...v0.6.0) (2026-03-19)
 
 
