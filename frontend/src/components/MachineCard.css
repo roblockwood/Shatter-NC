@@ -540,6 +540,17 @@
   opacity: 0.8;
 }
 
+.production-run-util-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.production-run-util {
+  font-size: var(--font-xs);
+  white-space: nowrap;
+}
+
 .production-run-bar-track {
   position: relative;
   display: inline-block;
@@ -548,7 +559,7 @@
   border-radius: 3px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.05);
-  margin-left: 4px;
+  margin-left: 0;
 }
 
 .production-run-segment {

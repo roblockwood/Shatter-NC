@@ -6,6 +6,7 @@ import type { UnitType } from '../../utils/formatDimension';
 import './ToolsPane.css';
 import { API_BASE_URL } from '../../config/api';
 import { ColorSelect } from './ColorSelect';
+import { PollingStatusLight } from '../ui/PollingStatusLight';
 
 // Define type locally to avoid Vite import issues
 type ToolModificationOperationType = 
@@ -39,6 +40,9 @@ interface ToolsPaneProps {
   machineStatus?: string;  // Status from WebSocket polling (e.g., "operating", "standby", "error")
   memMode?: number;  // MEM mode from WebSocket polling: 0=Manual, 1=MDI, 2=Memory, 3=Edit, 4=MDI manual, 5=Memory edit
   memOperationStatus?: number;  // MEM operation_status from WebSocket polling: 0=Reset, 1=Operation, 2=Temporary stop, 3=Block stop
+  toolsTimestamp?: string | null;
+  toolTableTimestamp?: string | null;
+  toolPollIntervalSeconds?: number;
 }
 
 type SortColumn = 'pot_number' | 'tool_number' | 'tool_name' | 'diameter' | 'length' | 'group' | 'life' | 'tool_type' | 'color';
@@ -53,7 +57,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   units = 'in',
   machineStatus,
   memMode,
-  memOperationStatus: _memOperationStatus
+  memOperationStatus: _memOperationStatus,
+  toolsTimestamp,
+  toolTableTimestamp,
+  toolPollIntervalSeconds = 30,
 }) => {
   // Cache sort settings separately for each view (ATC and TABLE)
   const [sortSettings, setSortSettings] = useState<{
@@ -112,6 +119,15 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     }
     return true;
   }, [machineStatus, memMode]);
+
+  const toolsDataLastUpdatedAt = useMemo(() => {
+    const wsAt = toolSource === 'atc' ? toolsTimestamp : toolTableTimestamp;
+    if (wsAt) return wsAt;
+    const ct = cacheTimestamps[toolSource];
+    return ct != null ? ct : null;
+  }, [toolSource, toolsTimestamp, toolTableTimestamp, cacheTimestamps.atc, cacheTimestamps.table]);
+
+  const toolExpectedIntervalMs = Math.max((toolPollIntervalSeconds ?? 30) * 1000, 5000);
 
   const machineStateReason = useMemo(() => {
     if (!machineStatus && memMode === undefined) return undefined;
@@ -808,7 +824,12 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 ⟳
               </span>
             )}
-            <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+            <div className="pane-header-right-actions tools-pane-header-actions">
+              <PollingStatusLight
+                lastUpdatedAt={toolsDataLastUpdatedAt}
+                expectedIntervalMs={toolExpectedIntervalMs}
+                ariaLabel={`Tools (${toolSource.toUpperCase()}) data freshness`}
+              />
               {machineId && (
                 <button 
                   className="expand-toggle"
@@ -846,44 +867,44 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                   </button>
                 </div>
               )}
+              {pendingChanges.size > 0 && (
+                <div className="tools-pending-actions" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="tools-action-btn tools-discard-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDiscardChanges();
+                    }}
+                    disabled={isPushingChanges}
+                    title="Discard all pending changes"
+                  >
+                    DISCARD ({pendingChanges.size})
+                  </button>
+                  <button
+                    className={`tools-action-btn tools-push-btn ${!isMachineSafeForPush ? 'disabled' : ''} ${isPushingChanges ? 'pushing' : ''} ${pushComplete ? 'complete' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePushChanges();
+                    }}
+                    disabled={isPushingChanges || !isMachineSafeForPush}
+                    title={
+                      !isMachineSafeForPush
+                        ? `Cannot push changes: ${machineStateReason || 'Machine is not in a safe state'}`
+                        : 'Push all pending changes to machine'
+                    }
+                  >
+                    {pushComplete
+                      ? '✓ PUSHED'
+                      : isPushingChanges 
+                      ? 'PUSHING...' 
+                      : !isMachineSafeForPush
+                      ? `BLOCKED (${pendingChanges.size})`
+                      : `PUSH (${pendingChanges.size})`}
+                  </button>
+                </div>
+              )}
+              <span>┐</span>
             </div>
-            {pendingChanges.size > 0 && (
-              <div className="tools-pending-actions" onClick={(e) => e.stopPropagation()}>
-                <button
-                  className="tools-action-btn tools-discard-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDiscardChanges();
-                  }}
-                  disabled={isPushingChanges}
-                  title="Discard all pending changes"
-                >
-                  DISCARD ({pendingChanges.size})
-                </button>
-                <button
-                  className={`tools-action-btn tools-push-btn ${!isMachineSafeForPush ? 'disabled' : ''} ${isPushingChanges ? 'pushing' : ''} ${pushComplete ? 'complete' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePushChanges();
-                  }}
-                  disabled={isPushingChanges || !isMachineSafeForPush}
-                  title={
-                    !isMachineSafeForPush
-                      ? `Cannot push changes: ${machineStateReason || 'Machine is not in a safe state'}`
-                      : 'Push all pending changes to machine'
-                  }
-                >
-                  {pushComplete
-                    ? '✓ PUSHED'
-                    : isPushingChanges 
-                    ? 'PUSHING...' 
-                    : !isMachineSafeForPush
-                    ? `BLOCKED (${pendingChanges.size})`
-                    : `PUSH (${pendingChanges.size})`}
-                </button>
-              </div>
-            )}
-            <span>┐</span>
           </div>
         </div>
       </div>
