@@ -1,3 +1,10 @@
+# [0.8.0](https://github.com/roblockwood/Shatter-NC/compare/v0.7.0...v0.8.0) (2026-03-28)
+
+
+### Features
+
+* enhance MachinePoller with online status management ([0ee4068](https://github.com/roblockwood/Shatter-NC/commit/0ee4068864a41b336145a2f5e12172317ad83bea))
+
 # [0.7.0](https://github.com/roblockwood/Shatter-NC/compare/v0.6.0...v0.7.0) (2026-03-25)
 
 
