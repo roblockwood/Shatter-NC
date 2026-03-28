@@ -268,6 +268,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
           isDraggable={isEditMode}
           isResizable={isEditMode}
           draggableHandle={isEditMode ? ".drag-handle" : ""}
+          draggableCancel=".visibility-toggle-btn"
           onLayoutChange={handleLayoutChange}
           margin={[16, 16]}
           containerPadding={[0, 0]}
@@ -291,7 +292,9 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                   <span className="drag-handle-icon">☰</span>
                   <span className="drag-handle-label">{pane.i}</span>
                   <button
+                    type="button"
                     className="visibility-toggle-btn"
+                    onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleToggleVisibility(pane.i as PaneId);
