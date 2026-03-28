@@ -68,13 +68,16 @@
 
 .color-select.read-only {
   cursor: default;
-  padding-right: 6px;
 }
 
 .color-select.read-only:hover {
   border-color: var(--color-border);
   background: var(--color-bg-surface);
   box-shadow: none;
+}
+
+.color-select-arrow-placeholder {
+  visibility: hidden;
 }
 
 .color-select-dropdown {
