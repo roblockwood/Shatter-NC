@@ -22,6 +22,8 @@ interface ColorSelectProps {
   value: number;
   onChange: (value: number) => void;
   disabled?: boolean;
+  /** Same look as interactive mode, but no dropdown (e.g. tool table view). */
+  readOnly?: boolean;
   className?: string;
 }
 
@@ -29,6 +31,7 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
   value,
   onChange,
   disabled = false,
+  readOnly = false,
   className = '',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -82,20 +85,20 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!disabled) {
+    if (!disabled && !readOnly) {
       setIsOpen(!isOpen);
     }
   };
 
   const handleSelect = (colorValue: number) => {
-    if (!disabled && colorValue !== value) {
+    if (!disabled && !readOnly && colorValue !== value) {
       onChange(colorValue);
     }
     setIsOpen(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (disabled) return;
+    if (disabled || readOnly) return;
     e.stopPropagation();
 
     if (e.key === 'Enter' || e.key === ' ') {
@@ -126,21 +129,21 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
     <div className={`color-select-wrapper ${className}`}>
       <div
         ref={selectRef}
-        className={`color-select ${isOpen ? 'open' : ''} ${disabled ? 'disabled' : ''}`}
+        className={`color-select ${isOpen ? 'open' : ''} ${disabled ? 'disabled' : ''} ${readOnly ? 'read-only' : ''}`}
         onClick={handleToggle}
         onKeyDown={handleKeyDown}
         onMouseDown={(e) => e.stopPropagation()}
-        tabIndex={disabled ? -1 : 0}
-        role="combobox"
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
-        aria-disabled={disabled}
+        tabIndex={disabled || readOnly ? -1 : 0}
+        role={readOnly ? undefined : 'combobox'}
+        aria-expanded={readOnly ? undefined : isOpen}
+        aria-haspopup={readOnly ? undefined : 'listbox'}
+        aria-disabled={disabled || readOnly}
       >
         <span className="color-select-indicator" style={{ backgroundColor: selectedColor.hex }} />
         <span className="color-select-value">{selectedColor.name}</span>
-        <span className="color-select-arrow">▼</span>
+        {!readOnly && <span className="color-select-arrow">▼</span>}
       </div>
-      {isOpen && (
+      {isOpen && !readOnly && (
         <div
           ref={dropdownRef}
           className="color-select-dropdown"

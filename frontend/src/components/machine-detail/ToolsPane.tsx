@@ -808,6 +808,11 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   // Show all tools since list is scrollable
   const visibleCount = filteredAndSortedTools.length;
 
+  const toolsListTitleMid =
+    toolSource === 'atc' ? `ATC (${tools.length})` : `TABLE (${tools.length})`;
+  const toolsListTitlePrefix = `┌─ ${toolsListTitleMid}`;
+  const toolsListTitleDashes = Math.max(0, 43 - toolsListTitlePrefix.length);
+
   return (
     <div 
       className="tools-pane terminal-box"
@@ -818,7 +823,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       >
         <div className="terminal-box-top">
           <div className="terminal-box-title-row">
-            <span>┌─ TOOLS ({tools.length}) {'─'.repeat(Math.max(0, 15 - 8 - String(tools.length).length))}</span>
+            <span>
+              {toolsListTitlePrefix} {'─'.repeat(toolsListTitleDashes)}
+            </span>
             {isRefreshing && (
               <span className="refresh-indicator" style={{ marginLeft: '8px', color: '#888', fontSize: '12px' }} title="Refreshing tool data...">
                 ⟳
@@ -1024,7 +1031,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     <td className="tools-col-number">
                       {isCurrent && <span className="current-indicator">►</span>}
                       {hasMatch && <span className="matched-indicator" title="Tool exists in Tool Management">●</span>}
-                      {String(tool.tool_number).padStart(2, '0')}
+                      T{String(tool.tool_number).padStart(2, '0')}
                     </td>
                     <td className="tools-col-name">{getToolDisplayName(tool) || '──'}</td>
                     <td className="tools-col-diameter">{formatDimension(tool.diameter, units)}</td>
@@ -1041,19 +1048,14 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                           value={tool.color ?? 0}
                           onChange={(newColor) => handleColorChange(tool, newColor)}
                         />
+                      ) : tool.color !== undefined && tool.color !== null ? (
+                        <ColorSelect
+                          value={tool.color}
+                          onChange={() => {}}
+                          readOnly
+                        />
                       ) : (
-                        tool.color !== undefined && tool.color !== null ? (
-                          <span className="color-display">
-                            <span 
-                              className="color-indicator" 
-                              style={{ backgroundColor: getColorInfo(tool.color).hex }}
-                              title={getColorInfo(tool.color).name}
-                            />
-                            <span className="color-name">{getColorInfo(tool.color).name}</span>
-                          </span>
-                        ) : (
-                          '──'
-                        )
+                        '──'
                       )}
                     </td>
                   </tr>
