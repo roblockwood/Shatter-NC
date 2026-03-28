@@ -141,7 +141,12 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
       >
         <span className="color-select-indicator" style={{ backgroundColor: selectedColor.hex }} />
         <span className="color-select-value">{selectedColor.name}</span>
-        {!readOnly && <span className="color-select-arrow">▼</span>}
+        <span
+          className={`color-select-arrow ${readOnly ? 'color-select-arrow-placeholder' : ''}`}
+          aria-hidden
+        >
+          ▼
+        </span>
       </div>
       {isOpen && !readOnly && (
         <div

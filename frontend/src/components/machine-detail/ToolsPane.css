@@ -11,9 +11,191 @@
   min-height: 0;
 }
 
+/* Flex header/footer: TerminalBox uses white-space:pre which breaks dash-fill rows */
+.tools-pane.terminal-box .terminal-box-header,
+.tools-pane.terminal-box .terminal-box-footer {
+  white-space: normal;
+}
+
+.tools-pane-title-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.tools-pane-title-dash-fill {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+
+.tools-pane-footer {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.tools-pane-footer-dash-fill {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+
+.tools-pane-footer-corner {
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.tools-pane-content-inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  box-sizing: border-box;
+}
+
 .modal-body .tools-pane {
   height: auto;
   max-height: none;
+}
+
+/* Machine card hover preview: fixed-size parent + flex scroll (avoids clipped / overflow mess) */
+.tools-pane--hover-preview {
+  min-height: 0 !important;
+  min-width: 0;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.tools-hover-pane .tools-pane--hover-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tools-pane--hover-preview .terminal-box-header,
+.tools-pane--hover-preview .terminal-box-footer {
+  flex-shrink: 0;
+}
+
+.tools-pane--hover-preview .terminal-box-content {
+  flex: 1 1 auto;
+  min-height: 0 !important;
+  min-width: 0;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+}
+
+.tools-pane--hover-preview .tools-pane-content-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  padding: 4px 6px;
+}
+
+.tools-pane--hover-preview .tools-table-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+/*
+ * Hover preview: avoid table-layout:fixed + many px columns eating 100% width — that left
+ * ~0px for TOOL NAME (26%), so every character wrapped vertically. Use auto layout + min
+ * widths so the name column stays readable; parent scrolls horizontally.
+ */
+.tools-pane--hover-preview .tools-table {
+  table-layout: auto;
+  width: max-content;
+  max-width: none;
+}
+
+.tools-pane--hover-preview .tools-table thead th {
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.tools-pane--hover-preview .tools-col-name {
+  width: auto !important;
+  min-width: 5rem;
+  max-width: 8.5rem;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+.tools-pane--hover-preview .tools-col-pot,
+.tools-pane--hover-preview .tools-col-number {
+  width: auto;
+  min-width: 2.25rem;
+  white-space: nowrap;
+}
+
+.tools-pane--hover-preview .tools-col-diameter,
+.tools-pane--hover-preview .tools-col-length {
+  width: auto;
+  min-width: 4.25rem;
+  white-space: nowrap;
+}
+
+.tools-pane--hover-preview .tools-col-group,
+.tools-pane--hover-preview .tools-col-life,
+.tools-pane--hover-preview .tools-col-type {
+  width: auto;
+  min-width: 2.5rem;
+  white-space: nowrap;
+}
+
+.tools-pane--hover-preview .tools-pane-header-actions {
+  gap: 4px;
+}
+
+.tools-pane--hover-preview .tools-pane-title-label {
+  font-size: 0.8rem;
+}
+
+.tools-pane--hover-preview .source-toggle-btn {
+  padding: 1px 4px;
+  font-size: 10px;
+}
+
+.tools-pane--hover-preview .tools-table th,
+.tools-pane--hover-preview .tools-table td {
+  padding: 2px 4px;
+  font-size: 0.7rem;
+}
+
+.tools-pane--hover-preview .tools-col-color {
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
+}
+
+.tools-pane--hover-preview .color-select {
+  min-height: 18px;
+  padding: 1px 4px 1px 6px;
+  font-size: 9px;
+}
+
+.tools-pane--hover-preview .color-select-indicator {
+  width: 10px;
+  height: 10px;
 }
 
 .tools-pane .terminal-box-content {
@@ -33,7 +215,10 @@
 .tools-table-wrapper {
   width: 100%;
   overflow: visible;
-  padding: var(--spacing-xs) var(--spacing-sm);
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
 }
 
 .terminal-box-title-row {
@@ -44,11 +229,16 @@
   width: 100%;
 }
 
-.tools-pane .tools-pane-header-actions .expand-toggle {
-  margin-left: 0;
+.terminal-box-title-row.tools-pane-title-row {
+  gap: 0;
+  min-width: 0;
 }
 
-.expand-toggle {
+.tools-pane .tools-pane-header-actions {
+  flex-shrink: 0;
+}
+
+.tools-color-toggle {
   background: transparent;
   border: 1px solid var(--color-border);
   color: var(--color-text-primary);
@@ -56,15 +246,13 @@
   font-size: var(--font-xs);
   cursor: pointer;
   padding: 2px var(--spacing-xs);
-  margin-left: auto;
-  flex-shrink: 0;
-  transition: all 0.2s ease;
   text-transform: uppercase;
+  flex-shrink: 0;
 }
 
-.expand-toggle:hover {
-  color: var(--color-text-secondary);
-  border-color: var(--color-text-secondary);
+.tools-color-toggle.active {
+  background: var(--color-text-primary);
+  color: var(--color-bg-primary);
   box-shadow: var(--glow);
 }
 
@@ -134,12 +322,14 @@
 .tools-empty {
   text-align: center;
   color: var(--color-text-muted);
-  padding: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-sm);
   font-size: var(--font-sm);
+  box-sizing: border-box;
 }
 
 .tools-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   font-family: var(--font-mono);
@@ -154,8 +344,6 @@
   z-index: 10;
   background: var(--color-bg-elevated);
   border-bottom: 1px solid var(--color-border);
-  margin-top: calc(var(--spacing-xs) * -1);
-  padding-top: var(--spacing-xs);
 }
 
 .tools-table thead th {
@@ -211,8 +399,8 @@
 }
 
 .tools-col-name {
-  min-width: 150px;
-  max-width: 250px;
+  width: 26%;
+  min-width: 100px;
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
@@ -237,9 +425,18 @@
 }
 
 .tools-col-color {
-  width: 100px;
+  width: 108px;
+  min-width: 108px;
+  max-width: 108px;
   text-align: left;
   padding: var(--spacing-xs) var(--spacing-sm);
+  vertical-align: middle;
+}
+
+.tools-col-color .color-select-wrapper {
+  display: block;
+  max-width: none;
+  width: 100%;
 }
 
 
@@ -339,26 +536,13 @@
   color: var(--color-bg-primary);
 }
 
-.refresh-indicator {
-  display: inline-block;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .tools-search-container {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-sm);
-  padding: var(--spacing-xs) 0;
+  margin: 0 0 var(--spacing-sm) 0;
+  padding: 0;
+  flex-shrink: 0;
 }
 
 .tools-search-input {
@@ -503,5 +687,85 @@
 .tools-table tbody tr.tool-matched:hover {
   background: var(--color-bg-elevated);
   box-shadow: inset 2px 0 0 var(--color-info);
+}
+
+/* Beta: row tint by tool color (same idea as StatusHistoryPane.status-colored) — hex matches ColorSelect */
+.tools-table tbody tr.tools-row-colored {
+  font-weight: 600;
+}
+
+.tools-table tbody tr.tools-row-colored.current-tool {
+  font-weight: 700;
+}
+
+.tools-table tbody tr.tools-row-colored:hover {
+  filter: brightness(1.12);
+}
+
+.tools-table tbody tr.tool-matched.tools-row-colored {
+  border-left: none;
+  border-right: 2px solid var(--color-info);
+}
+
+.tools-table tbody tr.tool-matched.tools-row-colored:hover {
+  box-shadow: none;
+}
+
+/* NONE #666666 */
+.tools-table tbody tr.tools-row-colored.tool-color-0 {
+  background-color: rgba(102, 102, 102, 0.22) !important;
+  border-left: 2px solid rgba(102, 102, 102, 0.9);
+  color: var(--color-text-primary);
+}
+
+/* BLUE #0066ff */
+.tools-table tbody tr.tools-row-colored.tool-color-1 {
+  background-color: rgba(0, 102, 255, 0.18) !important;
+  border-left: 2px solid rgba(0, 102, 255, 0.85);
+}
+
+/* RED #ff0000 */
+.tools-table tbody tr.tools-row-colored.tool-color-2 {
+  background-color: rgba(255, 0, 0, 0.2) !important;
+  border-left: 2px solid rgba(255, 0, 0, 0.88);
+  color: var(--color-error, #ff8888);
+}
+
+/* PURPLE #9900ff */
+.tools-table tbody tr.tools-row-colored.tool-color-3 {
+  background-color: rgba(153, 0, 255, 0.16) !important;
+  border-left: 2px solid rgba(153, 0, 255, 0.85);
+}
+
+/* GREEN #00ff00 */
+.tools-table tbody tr.tools-row-colored.tool-color-4 {
+  background-color: rgba(0, 255, 0, 0.14) !important;
+  border-left: 2px solid rgba(0, 255, 0, 0.75);
+}
+
+/* LT BLUE #00ccff */
+.tools-table tbody tr.tools-row-colored.tool-color-5 {
+  background-color: rgba(0, 204, 255, 0.14) !important;
+  border-left: 2px solid rgba(0, 204, 255, 0.8);
+}
+
+/* YELLOW #ffff00 */
+.tools-table tbody tr.tools-row-colored.tool-color-6 {
+  background-color: rgba(255, 255, 0, 0.08) !important;
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 0, 0.12),
+    rgba(255, 255, 0, 0.12) 2px,
+    transparent 2px,
+    transparent 6px
+  );
+  border-left: 2px dashed rgba(255, 255, 0, 0.85);
+  font-style: italic;
+}
+
+/* WHITE #ffffff */
+.tools-table tbody tr.tools-row-colored.tool-color-7 {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border-left: 2px solid rgba(255, 255, 255, 0.65);
 }
 

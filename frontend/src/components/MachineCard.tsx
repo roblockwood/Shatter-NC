@@ -1541,8 +1541,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                   const rect = toolsIndicatorRef.current.getBoundingClientRect();
                   const viewportWidth = window.innerWidth;
                   const viewportHeight = window.innerHeight;
-                  const paneWidth = 500;
-                  const paneHeight = 500;
+                  const paneWidth = 560;
+                  const paneHeight = 440;
                   
                   let left = rect.right + 8;
                   let top = rect.top;
@@ -1602,6 +1602,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                   onMouseLeave={() => setShowToolsHover(false)}
                 >
                   <ToolsPane
+                    variant="hover"
                     tools={machine.tools || []}
                     toolTable={machine.tool_table || []}
                     currentTool={machine.current_tool}
