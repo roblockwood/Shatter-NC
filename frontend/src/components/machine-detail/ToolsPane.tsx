@@ -43,6 +43,8 @@ interface ToolsPaneProps {
   toolsTimestamp?: string | null;
   toolTableTimestamp?: string | null;
   toolPollIntervalSeconds?: number;
+  /** Compact layout for machine-card hover preview (scroll + slimmer chrome). */
+  variant?: 'default' | 'hover';
 }
 
 type SortColumn = 'pot_number' | 'tool_number' | 'tool_name' | 'diameter' | 'length' | 'group' | 'life' | 'tool_type' | 'color';
@@ -61,6 +63,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   toolsTimestamp,
   toolTableTimestamp,
   toolPollIntervalSeconds = 30,
+  variant = 'default',
 }) => {
   // Cache sort settings separately for each view (ATC and TABLE)
   const [sortSettings, setSortSettings] = useState<{
@@ -95,9 +98,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     table: null
   });
   const [toolsSummary, setToolsSummary] = useState<Array<{ tool_number: number; description: string }>>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false); // Track background refresh state
-  const [refreshing, setRefreshing] = useState(false); // Track refresh button state
-  
+
   // Track pending changes (changes not yet pushed to server)
   const [pendingChanges, setPendingChanges] = useState<Map<string, { tool: Tool; field: string; oldValue: any; newValue: any; operationType: ToolModificationOperationType }>>(new Map());
   const [isPushingChanges, setIsPushingChanges] = useState(false);
@@ -268,6 +269,13 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   }, [initialTools, initialToolTable, machineId, isPushingChanges]);
   const navigate = useNavigate();
   const { isBetaMode } = useBetaMode();
+  const [toolsColorMode, setToolsColorMode] = useState<boolean>(() => {
+    return localStorage.getItem('toolsPaneColorMode') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('toolsPaneColorMode', String(toolsColorMode));
+  }, [toolsColorMode]);
 
   // Fetch tools summary for matching (only if beta mode is enabled)
   useEffect(() => {
@@ -429,6 +437,15 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const getToolDisplayName = (tool: Tool) => {
     // Return empty string if no tool_name, so it displays as blank
     return tool.tool_name || '';
+  };
+
+  /** Beta row tint: 0–7 matching ColorSelect / getColorInfo. */
+  const getToolColorClassIndex = (tool: Tool): number => {
+    const c = tool.color;
+    if (c === undefined || c === null || !Number.isFinite(Number(c))) return 0;
+    const n = Math.floor(Number(c));
+    if (n < 0 || n > 7) return 0;
+    return n;
   };
 
   const handleColorChange = (tool: Tool, newColor: number) => {
@@ -626,37 +643,6 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     setPendingChanges(new Map());
   };
 
-  const handleRefresh = async () => {
-    if (!machineId || refreshing) return;
-    
-    try {
-      setRefreshing(true);
-      setIsRefreshing(true);
-      
-      // Import and call the refresh API
-      const { refreshToolData } = await import('../../api/machines');
-      await refreshToolData(machineId);
-      
-      // Refresh will trigger via WebSocket update, but we can also update cache timestamps
-      // to force a refresh if WebSocket is delayed
-      setCacheTimestamps(() => ({
-        atc: Date.now(),
-        table: Date.now()
-      }));
-      
-    } catch (error) {
-      console.error('Error refreshing tool data:', error);
-      // Show error but don't block - WebSocket will eventually update
-    } finally {
-      // Keep refreshing state true briefly to show indicator
-      // It will be reset when WebSocket data arrives
-      setTimeout(() => {
-        setRefreshing(false);
-        setIsRefreshing(false);
-      }, 500);
-    }
-  };
-
   const isCurrentTool = (toolNum: number) => {
     return currentTool !== undefined && currentTool === toolNum;
   };
@@ -810,44 +796,44 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
   const toolsListTitleMid =
     toolSource === 'atc' ? `ATC (${tools.length})` : `TABLE (${tools.length})`;
-  const toolsListTitlePrefix = `┌─ ${toolsListTitleMid}`;
-  const toolsListTitleDashes = Math.max(0, 43 - toolsListTitlePrefix.length);
+  /** Long run clipped by flex so header rule length matches pane width for any label. */
+  const terminalRuleFill = '─'.repeat(320);
+
+  const isHoverPreview = variant === 'hover';
 
   return (
     <div 
-      className="tools-pane terminal-box"
+      className={`tools-pane terminal-box${isHoverPreview ? ' tools-pane--hover-preview' : ''}`}
       onClick={(e) => e.stopPropagation()}
     >
       <div 
         className="terminal-box-header"
       >
         <div className="terminal-box-top">
-          <div className="terminal-box-title-row">
-            <span>
-              {toolsListTitlePrefix} {'─'.repeat(toolsListTitleDashes)}
+          <div className="terminal-box-title-row tools-pane-title-row">
+            <span className="tools-pane-title-label">┌─ {toolsListTitleMid}</span>
+            <span className="tools-pane-title-dash-fill" aria-hidden>
+              {terminalRuleFill}
             </span>
-            {isRefreshing && (
-              <span className="refresh-indicator" style={{ marginLeft: '8px', color: '#888', fontSize: '12px' }} title="Refreshing tool data...">
-                ⟳
-              </span>
-            )}
             <div className="pane-header-right-actions tools-pane-header-actions">
-              <PollingStatusLight
-                lastUpdatedAt={toolsDataLastUpdatedAt}
-                expectedIntervalMs={toolExpectedIntervalMs}
-                ariaLabel={`Tools (${toolSource.toUpperCase()}) data freshness`}
-              />
-              {machineId && (
-                <button 
-                  className="expand-toggle"
+              {!isHoverPreview && (
+                <PollingStatusLight
+                  lastUpdatedAt={toolsDataLastUpdatedAt}
+                  expectedIntervalMs={toolExpectedIntervalMs}
+                  ariaLabel={`Tools (${toolSource.toUpperCase()}) data freshness`}
+                />
+              )}
+              {!isHoverPreview && isBetaMode && (
+                <button
+                  type="button"
+                  className={`tools-color-toggle ${toolsColorMode ? 'active' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleRefresh();
+                    setToolsColorMode((prev) => !prev);
                   }}
-                  disabled={refreshing}
-                  title="Refresh tool data"
+                  title="Tint rows by tool color (matches COLOR column)"
                 >
-                  {refreshing ? '[...]' : '[REFRESH]'}
+                  [COLOR]
                 </button>
               )}
               {machineId && (
@@ -919,7 +905,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         {tools.length === 0 && !isLoadingTools && !currentError ? (
           <div className="tools-empty">NO TOOLS LOADED</div>
         ) : (
-          <>
+          <div className="tools-pane-content-inner">
             {/* Show error message if present */}
             {currentError && (
               <div className="tools-error-message" onClick={(e) => e.stopPropagation()}>
@@ -932,21 +918,23 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 <span className="tools-loading-text">UPDATING...</span>
               </div>
             )}
-            <div className="tools-search-container" onClick={(e) => e.stopPropagation()}>
-              <input
-                type="text"
-                className="tools-search-input"
-                placeholder="SEARCH TOOLS..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-              />
-              {searchQuery && (
-                <span className="tools-search-results">
-                  {filteredAndSortedTools.length} / {tools.length}
-                </span>
-              )}
-            </div>
+            {!isHoverPreview && (
+              <div className="tools-search-container" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  className="tools-search-input"
+                  placeholder="SEARCH TOOLS..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                {searchQuery && (
+                  <span className="tools-search-results">
+                    {filteredAndSortedTools.length} / {tools.length}
+                  </span>
+                )}
+              </div>
+            )}
             <div className="tools-table-wrapper">
               <table className="tools-table">
               <thead onClick={(e) => e.stopPropagation()}>
@@ -1019,10 +1007,14 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 const isCurrent = isCurrentTool(tool.tool_number);
                 const matched = getMatchedTool(tool);
                 const hasMatch = matched !== null && isBetaMode;
+                const colorIdx = getToolColorClassIndex(tool);
+                const rowColored = isBetaMode && toolsColorMode;
                 return (
                   <tr 
                     key={idx} 
-                    className={`${isCurrent ? 'current-tool' : ''} ${hasMatch ? 'tool-matched' : ''}`}
+                    className={`${isCurrent ? 'current-tool' : ''} ${hasMatch ? 'tool-matched' : ''} ${
+                      rowColored ? `tools-row-colored tool-color-${colorIdx}` : ''
+                    }`}
                     onClick={(e) => handleRowClick(tool, e)}
                     style={{ cursor: hasMatch ? 'pointer' : 'default' }}
                     title={hasMatch ? `Click to view tool ${matched.tool_number} in Tool Management` : undefined}
@@ -1065,12 +1057,16 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               </tbody>
               </table>
             </div>
-          </>
+          </div>
         )}
       </div>
-        <div className="terminal-box-footer">
-          └{'─'.repeat(42)}┘
-        </div>
+      <div className="terminal-box-footer tools-pane-footer">
+        <span className="tools-pane-footer-corner">└</span>
+        <span className="tools-pane-footer-dash-fill" aria-hidden>
+          {terminalRuleFill}
+        </span>
+        <span className="tools-pane-footer-corner">┘</span>
+      </div>
       
     </div>
   );
