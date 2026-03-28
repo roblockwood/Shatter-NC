@@ -61,6 +61,115 @@ class MachinePoller:
         self.last_panel_log_time: Optional[datetime] = None
         self.last_counter_log_time: Optional[datetime] = None
 
+    def display_online(self) -> bool:
+        """
+        Debounced online flag for UI / websocket (matches offline_threshold semantics).
+
+        True only after at least one successful fast poll and while consecutive_failures
+        is below offline_threshold.
+        """
+        if self.last_successful_fast_poll_at is None:
+            return False
+        return self.consecutive_failures < self.offline_threshold
+
+    def _finalize_poll_failure(
+        self,
+        exc: BaseException,
+        poll_timestamp: datetime,
+        poll_start_time: float,
+    ) -> Dict[str, Any]:
+        """
+        Increment failure count, log, build websocket payload, update self.is_online,
+        and run offline-transition / heartbeat logging when threshold is met.
+        """
+        self.consecutive_failures += 1
+        response_time_ms = int((time.time() - poll_start_time) * 1000)
+
+        logger.error(
+            f"Error polling machine {self.machine.id} ({self.machine.name}): {exc} "
+            f"(failures: {self.consecutive_failures})"
+        )
+
+        asyncio.create_task(
+            self._log_polling_event(
+                poll_timestamp,
+                success=False,
+                response_time_ms=response_time_ms,
+                error_message=str(exc),
+            )
+        )
+
+        cached_status = (
+            self.websocket_manager.get_machine_status(self.machine.id) if self.websocket_manager else {}
+        )
+
+        last_ok = self.last_successful_fast_poll_at
+        last_ok_iso = last_ok.isoformat() if last_ok else cached_status.get("last_successful_poll_at")
+
+        display = self.display_online()
+        if display:
+            status_for_ui = (
+                cached_status.get("status")
+                or self.last_known_prd3_status
+                or "standby"
+            )
+        else:
+            status_for_ui = "off"
+
+        offline_status_data: Dict[str, Any] = {
+            "machine_id": self.machine.id,
+            "machine_name": self.machine.name,
+            "poll_timestamp": poll_timestamp.isoformat(),
+            "last_successful_poll_at": last_ok_iso,
+            "is_online": display,
+            "status": status_for_ui,
+            "consecutive_failures": self.consecutive_failures,
+            "response_time_ms": response_time_ms,
+            "program_name": self.cached_program_name,
+            "part_display_mode": getattr(self.machine, "part_display_mode", "parts"),
+            "panel": cached_status.get("panel"),
+            "alarms": cached_status.get("alarms", []),
+            "tools": cached_status.get("tools"),
+            "tools_timestamp": cached_status.get("tools_timestamp"),
+            "tool_table": cached_status.get("tool_table"),
+            "tool_table_timestamp": cached_status.get("tool_table_timestamp"),
+            "current_tool": cached_status.get("current_tool"),
+            "macros": cached_status.get("macros", {}),
+            "macros_timestamp": cached_status.get("macros_timestamp"),
+            "tool_response_time_ms": cached_status.get("tool_response_time_ms"),
+        }
+        if not display:
+            offline_status_data["error"] = str(exc)
+
+        self.is_online = display
+
+        should_log_offline = (
+            self.consecutive_failures >= self.offline_threshold and not self.logged_offline_status
+        )
+
+        if should_log_offline:
+            previous_status = self.last_status
+            self.last_status = "off"
+            offline_status_data["previous_status"] = previous_status
+            asyncio.create_task(
+                self._log_events_async(offline_status_data, poll_timestamp, response_time_ms, success=False)
+            )
+            self.logged_offline_status = True
+            self.last_heartbeat_time = poll_timestamp
+            logger.info(
+                f"Machine {self.machine.id} ({self.machine.name}) marked offline "
+                f"after {self.consecutive_failures} consecutive failures "
+                f"(previous status: {previous_status})"
+            )
+
+        if self.logged_offline_status and self.last_heartbeat_time is not None:
+            time_since_heartbeat = poll_timestamp - self.last_heartbeat_time
+            if time_since_heartbeat >= timedelta(minutes=self.heartbeat_interval_minutes):
+                asyncio.create_task(self._log_offline_heartbeat(offline_status_data, poll_timestamp))
+                self.last_heartbeat_time = poll_timestamp
+
+        return offline_status_data
+
     async def fetch_program_name(self) -> Optional[str]:
         """
         Fetch program_name from MEM via Telnet (on-demand).
@@ -257,8 +366,9 @@ class MachinePoller:
                 # Update websocket manager cache with tool data so fast poll can use it
                 step_start = time.time()
                 if self.websocket_manager:
-                    current = self.websocket_manager.get_machine_status(self.machine.id)
+                    current = self.websocket_manager.get_machine_status(self.machine.id) or {}
                     merged = {**current, **tool_data, "machine_id": self.machine.id}
+                    merged["is_online"] = self.display_online()
                     await self.websocket_manager.broadcast_status(merged)
                 step_times['update_cache'] = time.time() - step_start
                 
@@ -310,10 +420,6 @@ class MachinePoller:
             step_start = time.time()
             control_version = await telnet_client.detect_control_type()
             step_times['detect_control'] = time.time() - step_start
-            
-            # Machine is online if we successfully connected and can perform Telnet operations
-            # If we got here, we have a working Telnet connection
-            is_online = True
             
             # Get MONTR data (replaces HTTP /running_log and /work_counter)
             step_start = time.time()
@@ -407,9 +513,7 @@ class MachinePoller:
                 except (ValueError, IndexError):
                     return time_str
             
-            # is_online is already set to True after successful Telnet connection
-            # PRD3 failure doesn't mean machine is offline - it just means we can't get status
-            # Status will use last known value when PRD3 is unavailable
+            # is_online for clients is set after last_successful_fast_poll_at (debounced display_online)
             
             status_data = {
                 "ip_address": self.machine.ip_address,
@@ -422,7 +526,6 @@ class MachinePoller:
                 "power_on_hours": format_time(time_info.get("power_on_time", "000000000")),
                 "operation_time": format_time(time_info.get("operation_time", "000000000")),
                 "status": machine_status,  # From PRD3: off, standby, operating, stopped, error
-                "is_online": is_online,  # True when any Telnet operation succeeds (machine is reachable)
                 "counters": [
                     {
                         "counter_number": c.get("counter_number", i + 1),
@@ -545,7 +648,7 @@ class MachinePoller:
                                      if time_ms > 0.001])  # Only show steps > 1ms
             logger.debug(f"[POLL] Machine {self.machine.id} ({self.machine.name}) - Fast poll completed in {response_time_ms}ms | Steps: {step_summary}")
 
-            # Add metadata (preserve is_online from status_data if already set)
+            # Add metadata
             status_data.update({
                 "machine_id": self.machine.id,
                 "machine_name": self.machine.name,
@@ -553,20 +656,19 @@ class MachinePoller:
                 "response_time_ms": response_time_ms,
                 "part_display_mode": getattr(self.machine, "part_display_mode", "parts"),
             })
-            # is_online is already set in status_data based on PRD3 availability - don't override it
             
             # Ensure program_name is explicitly included (even if None)
             if "program_name" not in status_data:
                 status_data["program_name"] = None
 
-            # Update machine health (use is_online from status_data, not hardcoded True)
             was_offline = not self.is_online or self.logged_offline_status
-            self.is_online = status_data.get("is_online", True)  # Use is_online from status_data
             self.consecutive_failures = 0
             self.last_poll_time = poll_timestamp
             self.last_fast_poll_time = poll_timestamp  # Track fast poll time for per-machine intervals
             self.last_successful_fast_poll_at = poll_timestamp
             status_data["last_successful_poll_at"] = self.last_successful_fast_poll_at.isoformat()
+            self.is_online = self.display_online()
+            status_data["is_online"] = self.is_online
 
             # Log events to database (non-blocking, in background)
             # Only log status events if we have a status (machine is online)
@@ -579,89 +681,7 @@ class MachinePoller:
             return status_data
 
         except Exception as e:
-            self.consecutive_failures += 1
-            self.is_online = False
-
-            # Calculate response time (or error time)
-            response_time_ms = int((time.time() - poll_start_time) * 1000)
-
-            logger.error(
-                f"Error polling machine {self.machine.id} ({self.machine.name}): {e} "
-                f"(failures: {self.consecutive_failures})"
-            )
-
-            # Log polling event for failed poll
-            asyncio.create_task(self._log_polling_event(
-                poll_timestamp,
-                success=False,
-                response_time_ms=response_time_ms,
-                error_message=str(e)
-            ))
-
-            # Get cached status from websocket manager for offline display
-            cached_status = self.websocket_manager.get_machine_status(self.machine.id) if self.websocket_manager else {}
-            
-            last_ok = self.last_successful_fast_poll_at
-            last_ok_iso = last_ok.isoformat() if last_ok else cached_status.get("last_successful_poll_at")
-            # Create offline status data for logging, preserving cached data
-            offline_status_data = {
-                "machine_id": self.machine.id,
-                "machine_name": self.machine.name,
-                "poll_timestamp": poll_timestamp.isoformat(),
-                "last_successful_poll_at": last_ok_iso,
-                "is_online": False,
-                "status": "off",  # Set status to "off" when machine is not responding
-                "error": str(e),
-                "consecutive_failures": self.consecutive_failures,
-                "response_time_ms": response_time_ms,
-                "program_name": self.cached_program_name,  # Preserve cached program_name even when offline
-                "part_display_mode": getattr(self.machine, "part_display_mode", "parts"),
-                # Preserve cached data that doesn't change frequently when offline
-                "panel": cached_status.get("panel"),  # Preserve panel data
-                "alarms": cached_status.get("alarms", []),  # Preserve alarms
-                "tools": cached_status.get("tools"),  # Preserve ATC tools
-                "tools_timestamp": cached_status.get("tools_timestamp"),
-                "tool_table": cached_status.get("tool_table"),  # Preserve tool table
-                "tool_table_timestamp": cached_status.get("tool_table_timestamp"),
-                "current_tool": cached_status.get("current_tool"),  # Preserve current tool
-                "macros": cached_status.get("macros", {}),  # Preserve macro variables
-                "macros_timestamp": cached_status.get("macros_timestamp"),  # Preserve macro timestamp
-                "tool_response_time_ms": cached_status.get("tool_response_time_ms"),  # Preserve tool polling metric
-            }
-
-            # Only log offline transition if we've exceeded the threshold AND haven't already logged it
-            should_log_offline = (
-                self.consecutive_failures >= self.offline_threshold and 
-                not self.logged_offline_status
-            )
-            
-            if should_log_offline:
-                # Store previous status before updating (needed for event logging)
-                previous_status = self.last_status
-                # Update last_status to "off" immediately so transition back online will be detected
-                self.last_status = "off"
-                # Update offline_status_data with correct previous_status for logging
-                offline_status_data["previous_status"] = previous_status
-                # Log status event for offline transition (non-blocking)
-                asyncio.create_task(self._log_events_async(offline_status_data, poll_timestamp, response_time_ms, success=False))
-                self.logged_offline_status = True
-                # Set heartbeat timer so we can track offline heartbeats
-                self.last_heartbeat_time = poll_timestamp
-                logger.info(
-                    f"Machine {self.machine.id} ({self.machine.name}) marked offline "
-                    f"after {self.consecutive_failures} consecutive failures "
-                    f"(previous status: {previous_status})"
-                )
-            
-            # Log offline heartbeat if machine is already logged as offline and heartbeat interval has passed
-            if self.logged_offline_status and self.last_heartbeat_time is not None:
-                time_since_heartbeat = poll_timestamp - self.last_heartbeat_time
-                if time_since_heartbeat >= timedelta(minutes=self.heartbeat_interval_minutes):
-                    # Log offline heartbeat (status="off", previous_status="off")
-                    asyncio.create_task(self._log_offline_heartbeat(offline_status_data, poll_timestamp))
-                    self.last_heartbeat_time = poll_timestamp
-
-            return offline_status_data
+            return self._finalize_poll_failure(e, poll_timestamp, poll_start_time)
         finally:
             if telnet_client:
                 await telnet_client.disconnect()
@@ -1279,27 +1299,11 @@ class PollingService:
                     logger.error(f"Polling task failed for machine {machine.id} ({machine.name}): {result}")
 
                     poller = self.pollers.get(machine.id)
-                    last_ok_iso = None
-                    if poller and poller.last_successful_fast_poll_at:
-                        last_ok_iso = poller.last_successful_fast_poll_at.isoformat()
-                    elif self.websocket_manager:
-                        cached = self.websocket_manager.get_machine_status(machine.id)
-                        last_ok_iso = cached.get("last_successful_poll_at") if cached else None
-
-                    # Create offline status for failed polling
-                    offline_status = {
-                        "machine_id": machine.id,
-                        "machine_name": machine.name,
-                        "is_online": False,
-                        "status": "off",
-                        "error": str(result),
-                        "poll_timestamp": datetime.utcnow().isoformat(),
-                        "last_successful_poll_at": last_ok_iso,
-                        "response_time_ms": 0,  # Failed poll
-                    }
-
-                    # Broadcast offline status
-                    await self.websocket_manager.broadcast_status(offline_status)
+                    if poller:
+                        fail_ts = datetime.utcnow()
+                        offline_status = poller._finalize_poll_failure(result, fail_ts, time.time())
+                        if self.websocket_manager:
+                            await self.websocket_manager.broadcast_status(offline_status)
                     continue
 
                 # Broadcast successful poll results
@@ -1415,6 +1419,7 @@ class PollingService:
                         merged_status = {**existing_status, **result}
                         merged_status["machine_id"] = machine.id
                         merged_status["machine_name"] = machine.name
+                        merged_status["is_online"] = poller.display_online()
                         
                         # Broadcast the merged status
                         await self.websocket_manager.broadcast_status(merged_status)
@@ -1468,6 +1473,7 @@ class PollingService:
             merged_status = {**existing_status, **tool_data}
             merged_status["machine_id"] = machine_id
             merged_status["machine_name"] = poller.machine.name
+            merged_status["is_online"] = poller.display_online()
             
             # Broadcast the merged status
             await self.websocket_manager.broadcast_status(merged_status)
