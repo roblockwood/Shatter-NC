@@ -1,3 +1,10 @@
+## [0.9.2](https://github.com/roblockwood/Shatter-NC/compare/v0.9.1...v0.9.2) (2026-03-28)
+
+
+### Bug Fixes
+
+* allow pane visibility toggle clicks inside grid drag handle ([197b020](https://github.com/roblockwood/Shatter-NC/commit/197b0203076e3ad17aee4f8d94c489432e97ead3))
+
 ## [0.9.1](https://github.com/roblockwood/Shatter-NC/compare/v0.9.0...v0.9.1) (2026-03-28)
 
 
