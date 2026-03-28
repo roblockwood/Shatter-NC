@@ -1,3 +1,10 @@
+# [0.10.0](https://github.com/roblockwood/Shatter-NC/compare/v0.9.2...v0.10.0) (2026-03-28)
+
+
+### Features
+
+* enhance ToolsPane and MachineCard components for improved hover preview and color functionality ([3ec9756](https://github.com/roblockwood/Shatter-NC/commit/3ec975676fbe2010c14e667423b1d5c228f4bd6f))
+
 ## [0.9.2](https://github.com/roblockwood/Shatter-NC/compare/v0.9.1...v0.9.2) (2026-03-28)
 
 
