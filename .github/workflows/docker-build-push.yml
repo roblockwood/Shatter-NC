@@ -1,16 +1,9 @@
 name: Build and Push Docker Images
 
+# Images for main are built in release.yml after semantic-release (correct VERSION in images).
+# This workflow only validates Docker builds on pull requests.
+
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'database/**'
-      - 'docker-compose.prod.yml'
-      - 'VERSION'
-      - '.github/workflows/docker-build-push.yml'
   pull_request:
     branches:
       - main
@@ -21,6 +14,7 @@ on:
       - 'docker-compose.prod.yml'
       - 'VERSION'
       - '.github/workflows/docker-build-push.yml'
+      - '.github/workflows/release.yml'
 
 jobs:
   build-and-push:
