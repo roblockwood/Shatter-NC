@@ -1,3 +1,10 @@
+## [0.9.1](https://github.com/roblockwood/Shatter-NC/compare/v0.9.0...v0.9.1) (2026-03-28)
+
+
+### Bug Fixes
+
+* **ci:** build Docker images after semantic-release on main ([7f2c8ff](https://github.com/roblockwood/Shatter-NC/commit/7f2c8ff41cc9a766b2bbd1fd51f0e0eff127e195))
+
 # [0.9.0](https://github.com/roblockwood/Shatter-NC/compare/v0.8.0...v0.9.0) (2026-03-28)
 
 
