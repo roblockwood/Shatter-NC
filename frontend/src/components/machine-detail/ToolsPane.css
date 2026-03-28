@@ -339,26 +339,6 @@
   color: var(--color-bg-primary);
 }
 
-.color-display {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-xs);
-}
-
-.color-indicator {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 1px solid var(--color-border);
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.color-name {
-  font-size: var(--font-xs);
-}
-
 .refresh-indicator {
   display: inline-block;
   animation: spin 1s linear infinite;
