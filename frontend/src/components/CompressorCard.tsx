@@ -13,12 +13,9 @@ import type { CompressorStatus } from '../hooks/useWebSocket';
 import { API_BASE, getApiErrorMessage } from '../config/api';
 import {
   asRecord,
-  formatLoadIdle,
   readCompressorControllerStatus,
-  readLedData,
   readOutletTempLine,
   readPressureLine,
-  readSigmaPanel,
 } from '../utils/compressorTelemetry';
 import './MachineCard.css';
 
@@ -71,18 +68,10 @@ function findCompressorPane(paneId: string): HTMLElement | null {
   return document.querySelector(`[data-pane-id="${paneId}"]`) as HTMLElement | null;
 }
 
-function opValueClass(op: string): string {
-  if (op === 'LOAD') return 'value text-warning';
-  if (op === 'IDLE') return 'value text-info';
-  return 'value text-dim';
-}
-
-const HOVER_TIMELINE_W = 620;
-const HOVER_TIMELINE_H = 340;
 const HOVER_PANEL_W = 560;
 const HOVER_PANEL_H = 480;
-const HOVER_HISTORY_W = 520;
-const HOVER_HISTORY_H = 480;
+const HOVER_STATUS_TIMELINE_W = 620;
+const HOVER_STATUS_TIMELINE_H = 340;
 const HOVER_TELEMETRY_W = 560;
 const HOVER_TELEMETRY_H = 440;
 
@@ -378,32 +367,25 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
 
   const pollTs = compressor.last_successful_poll_at || compressor.poll_timestamp;
 
-  const { psiLine, tempLine, opLine, controllerDetail, panelLine } = useMemo(() => {
+  const { psiLine, tempLine, controllerDetail } = useMemo(() => {
     const metrics = compressor.metrics || {};
     const operational = asRecord(metrics.operational);
-    const led = readLedData(metrics.led_data);
     const online = compressor.is_online;
-    const sp = readSigmaPanel(operational);
-    const panelRaw = sp.systemStatusDisplay?.trim() || sp.panelClock?.trim() || '';
-    const panelLineVal =
-      !online ? '—' : panelRaw.length > 36 ? `${panelRaw.slice(0, 34)}…` : panelRaw || '—';
     return {
       psiLine: online ? readPressureLine(operational) : '—',
       tempLine: online ? readOutletTempLine(operational) : '—',
-      opLine: online ? formatLoadIdle(led, compressor.status) : '—',
       controllerDetail: readCompressorControllerStatus(compressor),
-      panelLine: panelLineVal,
     };
   }, [compressor]);
 
-  const [showTimelinePreview, setShowTimelinePreview] = useState(false);
-  const [timelinePreviewPosition, setTimelinePreviewPosition] = useState<{
+  const [showStatusPanelPreview, setShowStatusPanelPreview] = useState(false);
+  const [statusPanelPreviewPosition, setStatusPanelPreviewPosition] = useState<{
     top: number;
     left: number;
   } | null>(null);
-  const timelineBlockRef = useRef<HTMLDivElement>(null);
-  const timelineHoverPaneRef = useRef<HTMLDivElement>(null);
-  const timelineLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const statusPanelBlockRef = useRef<HTMLDivElement>(null);
+  const statusPanelHoverPaneRef = useRef<HTMLDivElement>(null);
+  const statusPanelLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showPsiPreview, setShowPsiPreview] = useState(false);
   const [psiPreviewPosition, setPsiPreviewPosition] = useState<{ top: number; left: number } | null>(
@@ -421,45 +403,37 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
   const tempHoverPaneRef = useRef<HTMLDivElement>(null);
   const tempLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [showPanelPreview, setShowPanelPreview] = useState(false);
-  const [panelPreviewPosition, setPanelPreviewPosition] = useState<{ top: number; left: number } | null>(
-    null
-  );
-  const panelBlockRef = useRef<HTMLDivElement>(null);
-  const panelHoverPaneRef = useRef<HTMLDivElement>(null);
-  const panelLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const [showHistoryPreview, setShowHistoryPreview] = useState(false);
-  const [historyPreviewPosition, setHistoryPreviewPosition] = useState<{
+  const [showStatusTimelinePreview, setShowStatusTimelinePreview] = useState(false);
+  const [statusTimelinePreviewPosition, setStatusTimelinePreviewPosition] = useState<{
     top: number;
     left: number;
   } | null>(null);
-  const historyBlockRef = useRef<HTMLDivElement>(null);
-  const historyHoverPaneRef = useRef<HTMLDivElement>(null);
-  const historyLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const statusTimelineBlockRef = useRef<HTMLDivElement>(null);
+  const statusTimelineHoverPaneRef = useRef<HTMLDivElement>(null);
+  const statusTimelineLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const openTimelinePreview = useCallback(() => {
-    if (timelineLeaveTimerRef.current) {
-      clearTimeout(timelineLeaveTimerRef.current);
-      timelineLeaveTimerRef.current = null;
+  const openStatusPanelPreview = useCallback(() => {
+    if (statusPanelLeaveTimerRef.current) {
+      clearTimeout(statusPanelLeaveTimerRef.current);
+      statusPanelLeaveTimerRef.current = null;
     }
-    if (timelineBlockRef.current) {
-      setTimelinePreviewPosition(
+    if (statusPanelBlockRef.current) {
+      setStatusPanelPreviewPosition(
         computeFixedHoverPosition(
-          timelineBlockRef.current.getBoundingClientRect(),
-          HOVER_TIMELINE_W,
-          HOVER_TIMELINE_H
+          statusPanelBlockRef.current.getBoundingClientRect(),
+          HOVER_PANEL_W,
+          HOVER_PANEL_H
         )
       );
     }
-    setShowTimelinePreview(true);
+    setShowStatusPanelPreview(true);
   }, []);
 
-  const scheduleCloseTimelinePreview = useCallback(() => {
-    if (timelineLeaveTimerRef.current) clearTimeout(timelineLeaveTimerRef.current);
-    timelineLeaveTimerRef.current = setTimeout(() => {
-      setShowTimelinePreview(false);
-      timelineLeaveTimerRef.current = null;
+  const scheduleCloseStatusPanelPreview = useCallback(() => {
+    if (statusPanelLeaveTimerRef.current) clearTimeout(statusPanelLeaveTimerRef.current);
+    statusPanelLeaveTimerRef.current = setTimeout(() => {
+      setShowStatusPanelPreview(false);
+      statusPanelLeaveTimerRef.current = null;
     }, 140);
   }, []);
 
@@ -513,63 +487,37 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
     }, 140);
   }, []);
 
-  const openPanelPreview = useCallback(() => {
-    if (panelLeaveTimerRef.current) {
-      clearTimeout(panelLeaveTimerRef.current);
-      panelLeaveTimerRef.current = null;
+  const openStatusTimelinePreview = useCallback(() => {
+    if (statusTimelineLeaveTimerRef.current) {
+      clearTimeout(statusTimelineLeaveTimerRef.current);
+      statusTimelineLeaveTimerRef.current = null;
     }
-    if (panelBlockRef.current) {
-      setPanelPreviewPosition(
+    if (statusTimelineBlockRef.current) {
+      setStatusTimelinePreviewPosition(
         computeFixedHoverPosition(
-          panelBlockRef.current.getBoundingClientRect(),
-          HOVER_PANEL_W,
-          HOVER_PANEL_H
+          statusTimelineBlockRef.current.getBoundingClientRect(),
+          HOVER_STATUS_TIMELINE_W,
+          HOVER_STATUS_TIMELINE_H
         )
       );
     }
-    setShowPanelPreview(true);
+    setShowStatusTimelinePreview(true);
   }, []);
 
-  const scheduleClosePanelPreview = useCallback(() => {
-    if (panelLeaveTimerRef.current) clearTimeout(panelLeaveTimerRef.current);
-    panelLeaveTimerRef.current = setTimeout(() => {
-      setShowPanelPreview(false);
-      panelLeaveTimerRef.current = null;
-    }, 140);
-  }, []);
-
-  const openHistoryPreview = useCallback(() => {
-    if (historyLeaveTimerRef.current) {
-      clearTimeout(historyLeaveTimerRef.current);
-      historyLeaveTimerRef.current = null;
-    }
-    if (historyBlockRef.current) {
-      setHistoryPreviewPosition(
-        computeFixedHoverPosition(
-          historyBlockRef.current.getBoundingClientRect(),
-          HOVER_HISTORY_W,
-          HOVER_HISTORY_H
-        )
-      );
-    }
-    setShowHistoryPreview(true);
-  }, []);
-
-  const scheduleCloseHistoryPreview = useCallback(() => {
-    if (historyLeaveTimerRef.current) clearTimeout(historyLeaveTimerRef.current);
-    historyLeaveTimerRef.current = setTimeout(() => {
-      setShowHistoryPreview(false);
-      historyLeaveTimerRef.current = null;
+  const scheduleCloseStatusTimelinePreview = useCallback(() => {
+    if (statusTimelineLeaveTimerRef.current) clearTimeout(statusTimelineLeaveTimerRef.current);
+    statusTimelineLeaveTimerRef.current = setTimeout(() => {
+      setShowStatusTimelinePreview(false);
+      statusTimelineLeaveTimerRef.current = null;
     }, 140);
   }, []);
 
   useEffect(() => {
     return () => {
-      if (timelineLeaveTimerRef.current) clearTimeout(timelineLeaveTimerRef.current);
+      if (statusPanelLeaveTimerRef.current) clearTimeout(statusPanelLeaveTimerRef.current);
       if (psiLeaveTimerRef.current) clearTimeout(psiLeaveTimerRef.current);
       if (tempLeaveTimerRef.current) clearTimeout(tempLeaveTimerRef.current);
-      if (panelLeaveTimerRef.current) clearTimeout(panelLeaveTimerRef.current);
-      if (historyLeaveTimerRef.current) clearTimeout(historyLeaveTimerRef.current);
+      if (statusTimelineLeaveTimerRef.current) clearTimeout(statusTimelineLeaveTimerRef.current);
     };
   }, []);
 
@@ -843,31 +791,48 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
       ) : (
         <div className="machine-card-content">
           <div
-            ref={timelineBlockRef}
+            ref={statusPanelBlockRef}
             className="compressor-card-hover-metric-block"
-            onMouseEnter={() => {
-              if (timelineBlockRef.current) {
-                setTimelinePreviewPosition(
-                  computeFixedHoverPosition(
-                    timelineBlockRef.current.getBoundingClientRect(),
-                    HOVER_TIMELINE_W,
-                    HOVER_TIMELINE_H
-                  )
-                );
-              }
-              setShowTimelinePreview(true);
-            }}
-            onMouseLeave={() => setShowTimelinePreview(false)}
+            onMouseEnter={openStatusPanelPreview}
+            onMouseLeave={() => scheduleCloseStatusPanelPreview()}
             onClick={(e) => {
               e.stopPropagation();
               if (!isExpanded) onExpand?.();
-              focusCompressorPane(PANE_IDS.COMPRESSOR_STATUS_TIMELINE, 'status-pane-highlight');
+              focusCompressorPane(PANE_IDS.COMPRESSOR_PANEL, 'program-pane-highlight');
             }}
           >
             <div className="machine-row machine-row-hoverable" style={{ cursor: 'pointer' }}>
               <span className="label">STATUS:</span>
               <span className={`value ${statusValueClass(compressor)}`}>{statusDisplay(compressor)}</span>
             </div>
+            {showStatusPanelPreview && statusPanelPreviewPosition && (
+              <div
+                ref={statusPanelHoverPaneRef}
+                className="tools-hover-pane compressor-card-hover-wrap compressor-card-hover-wrap--panel"
+                style={{
+                  top: `${statusPanelPreviewPosition.top}px`,
+                  left: `${statusPanelPreviewPosition.left}px`,
+                }}
+                onMouseEnter={openStatusPanelPreview}
+                onMouseLeave={scheduleCloseStatusPanelPreview}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <CompressorPanelPane compressor={compressor} />
+              </div>
+            )}
+          </div>
+
+          <div
+            ref={statusTimelineBlockRef}
+            className="compressor-card-hover-metric-block"
+            onMouseEnter={openStatusTimelinePreview}
+            onMouseLeave={() => scheduleCloseStatusTimelinePreview()}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isExpanded) onExpand?.();
+              focusCompressorPane(PANE_IDS.COMPRESSOR_STATUS_TIMELINE, 'status-pane-highlight');
+            }}
+          >
             <div className="machine-row machine-row-hoverable" style={{ cursor: 'pointer' }}>
               <span className="label">OPERATION:</span>
               <span
@@ -877,16 +842,16 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
                 {controllerDetail || '—'}
               </span>
             </div>
-            {showTimelinePreview && timelinePreviewPosition && (
+            {showStatusTimelinePreview && statusTimelinePreviewPosition && (
               <div
-                ref={timelineHoverPaneRef}
+                ref={statusTimelineHoverPaneRef}
                 className="status-hover-pane compressor-card-hover-wrap compressor-card-hover-wrap--timeline"
                 style={{
-                  top: `${timelinePreviewPosition.top}px`,
-                  left: `${timelinePreviewPosition.left}px`,
+                  top: `${statusTimelinePreviewPosition.top}px`,
+                  left: `${statusTimelinePreviewPosition.left}px`,
                 }}
-                onMouseEnter={openTimelinePreview}
-                onMouseLeave={scheduleCloseTimelinePreview}
+                onMouseEnter={openStatusTimelinePreview}
+                onMouseLeave={scheduleCloseStatusTimelinePreview}
                 onClick={(e) => e.stopPropagation()}
               >
                 <CompressorStatusTimelinePane
@@ -997,74 +962,6 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
             )}
           </div>
 
-          <div
-            ref={panelBlockRef}
-            className="compressor-card-hover-metric-block"
-            onMouseEnter={openPanelPreview}
-            onMouseLeave={scheduleClosePanelPreview}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!isExpanded) onExpand?.();
-              focusCompressorPane(PANE_IDS.COMPRESSOR_PANEL, 'program-pane-highlight');
-            }}
-          >
-            <div className="machine-row machine-row-hoverable" style={{ cursor: 'pointer' }}>
-              <span className="label">PANEL:</span>
-              <span className="value text-dim" title={panelLine !== '—' ? panelLine : undefined}>
-                {panelLine}
-              </span>
-            </div>
-            {showPanelPreview && panelPreviewPosition && (
-              <div
-                ref={panelHoverPaneRef}
-                className="tools-hover-pane compressor-card-hover-wrap compressor-card-hover-wrap--panel"
-                style={{
-                  top: `${panelPreviewPosition.top}px`,
-                  left: `${panelPreviewPosition.left}px`,
-                }}
-                onMouseEnter={openPanelPreview}
-                onMouseLeave={scheduleClosePanelPreview}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <CompressorPanelPane compressor={compressor} />
-              </div>
-            )}
-          </div>
-
-          <div
-            ref={historyBlockRef}
-            className="machine-row machine-row-hoverable compressor-card-hover-metric-block"
-            style={{ cursor: 'pointer' }}
-            onMouseEnter={openHistoryPreview}
-            onMouseLeave={scheduleCloseHistoryPreview}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!isExpanded) onExpand?.();
-              focusCompressorPane(PANE_IDS.COMPRESSOR_STATUS_HISTORY, 'cycle-pane-highlight');
-            }}
-          >
-            <span className="label">OP:</span>
-            <span className={opValueClass(opLine)}>{opLine}</span>
-            {showHistoryPreview && historyPreviewPosition && (
-              <div
-                ref={historyHoverPaneRef}
-                className="alarm-hover-pane compressor-card-hover-wrap compressor-card-hover-wrap--history"
-                style={{
-                  top: `${historyPreviewPosition.top}px`,
-                  left: `${historyPreviewPosition.left}px`,
-                }}
-                onMouseEnter={openHistoryPreview}
-                onMouseLeave={scheduleCloseHistoryPreview}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <CompressorStatusHistoryPane
-                  compressorId={compressor.compressor_id}
-                  liveStatus={compressor.status}
-                  isOnline={compressor.is_online}
-                />
-              </div>
-            )}
-          </div>
           <div className="machine-card-divider-thin">{'─'.repeat(32)}</div>
           <div className="machine-footer">
             <button
