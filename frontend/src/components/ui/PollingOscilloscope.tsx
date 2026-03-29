@@ -1,4 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocalChartTimeAxisMode } from '../../hooks/useLocalChartTimeAxisMode';
+import {
+  buildOscilloscopeAxisDivisionLabels,
+  getOscilloscopeTicksForMode,
+  oscilloscopeAxisEndLabels,
+} from '../../utils/chartTimeAxis';
+import { ChartTimeAxisToggle } from './ChartTimeAxisToggle';
 import './PollingOscilloscope.css';
 
 interface PollingDataPoint {
@@ -12,6 +19,8 @@ interface PollingOscilloscopeProps {
   timeRange?: '1h' | '8h' | '24h' | '7d';
   compact?: boolean; // For tabular UI
   currentOnline?: boolean; // Current online status
+  /** Unique key for persisting this chart’s axis mode. */
+  timeAxisStorageKey: string;
 }
 
 export const PollingOscilloscope: React.FC<PollingOscilloscopeProps> = ({
@@ -19,7 +28,9 @@ export const PollingOscilloscope: React.FC<PollingOscilloscopeProps> = ({
   timeRange = '8h',
   compact = false,
   currentOnline = true,
+  timeAxisStorageKey,
 }) => {
+  const { timeAxisMode, toggleTimeAxisMode } = useLocalChartTimeAxisMode(timeAxisStorageKey);
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; online: boolean; timestamp: Date } | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const [oscilloscopeWidth, setOscilloscopeWidth] = useState(180);
@@ -176,59 +187,19 @@ export const PollingOscilloscope: React.FC<PollingOscilloscopeProps> = ({
       });
     }
     
-    // Calculate time division markers
-    const timeDivisions: Array<{ x: number; label: string; time: Date }> = [];
-    switch (timeRange) {
-      case '1h':
-        for (let i = 0; i <= 4; i++) {
-          const minutes = i * 15;
-          const divTime = new Date(startTime.getTime() + (minutes * 60 * 1000));
-          timeDivisions.push({
-            x: (i * 15 / 60) * 100,
-            label: `${minutes}m`,
-            time: divTime
-          });
-        }
-        break;
-      case '8h':
-        for (let i = 0; i <= 8; i++) {
-          const hours = i;
-          const divTime = new Date(startTime.getTime() + (hours * 60 * 60 * 1000));
-          timeDivisions.push({
-            x: (i / 8) * 100,
-            label: `${hours}h`,
-            time: divTime
-          });
-        }
-        break;
-      case '24h':
-        for (let i = 0; i <= 4; i++) {
-          const hours = i * 6;
-          const divTime = new Date(startTime.getTime() + (hours * 60 * 60 * 1000));
-          timeDivisions.push({
-            x: (i / 4) * 100,
-            label: `${hours}h`,
-            time: divTime
-          });
-        }
-        break;
-      case '7d':
-        for (let i = 0; i <= 7; i++) {
-          const days = i;
-          const divTime = new Date(startTime.getTime() + (days * 24 * 60 * 60 * 1000));
-          timeDivisions.push({
-            x: (i / 7) * 100,
-            label: `${days}d`,
-            time: divTime
-          });
-        }
-        break;
-    }
-    
-    return { svgPoints, statusLabels, statusLevels, timeDivisions };
+    const timeTicks = getOscilloscopeTicksForMode(timeRange, startTime, endTime, timeAxisMode);
+    const timeDivisions = buildOscilloscopeAxisDivisionLabels(
+      timeRange,
+      timeTicks,
+      endTime,
+      timeAxisMode
+    );
+    const axisEnds = oscilloscopeAxisEndLabels(timeRange, startTime, endTime, timeAxisMode);
+
+    return { svgPoints, statusLabels, statusLevels, timeDivisions, axisEnds };
   };
 
-  const { svgPoints, statusLabels, timeDivisions } = renderOscilloscope();
+  const { svgPoints, statusLabels, timeDivisions, axisEnds } = renderOscilloscope();
 
   // Dynamic width calculation and scaling
   useEffect(() => {
@@ -474,20 +445,36 @@ export const PollingOscilloscope: React.FC<PollingOscilloscopeProps> = ({
           </div>
         </div>
         {!compact && (
-          <div className="oscilloscope-x-axis">
-            <span className="oscilloscope-x-axis-label">PAST</span>
-            {timeDivisions.map((div, idx) => (
-              <span
-                key={`label-${idx}`}
-                className="oscilloscope-x-axis-label"
-                style={{
-                  left: `${div.x * scaleX}%`,
-                }}
-              >
-                {div.label}
-              </span>
-            ))}
-            <span className="oscilloscope-x-axis-label" style={{ right: '0' }}>NOW</span>
+          <div className="oscilloscope-x-axis polling-oscilloscope-x-axis">
+            <span
+              className="oscilloscope-x-axis-label polling-oscilloscope-x-axis-left"
+              style={{ left: 0, transform: 'none' }}
+            >
+              {axisEnds.left}
+            </span>
+            <div className="polling-oscilloscope-x-middles">
+              {timeDivisions.map((div, idx) => {
+                if (idx === 0 || idx === timeDivisions.length - 1) return null;
+                return (
+                  <span
+                    key={`label-${idx}`}
+                    className="oscilloscope-x-axis-label"
+                    style={{
+                      left: `${div.x * scaleX}%`,
+                    }}
+                  >
+                    {div.label}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="polling-oscilloscope-x-axis-end">
+              <span className="oscilloscope-x-axis-label polling-oscilloscope-x-axis-now">{axisEnds.right}</span>
+              <ChartTimeAxisToggle
+                timeAxisMode={timeAxisMode}
+                toggleTimeAxisMode={toggleTimeAxisMode}
+              />
+            </div>
           </div>
         )}
       </div>

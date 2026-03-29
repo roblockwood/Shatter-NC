@@ -272,10 +272,19 @@
 .oscilloscope-x-divisions {
   position: absolute;
   left: calc(60px + var(--spacing-xs) + 1ch);
-  right: 0;
+  right: 3.75rem;
   top: var(--spacing-xs);
   height: 100%;
   pointer-events: none;
+}
+
+.oscilloscope-x-axis-endgroup {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+  margin-left: auto;
+  z-index: 1;
 }
 
 .oscilloscope-x-label-start,

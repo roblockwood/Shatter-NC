@@ -1,5 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { StatusEvent } from '../../api/summary';
+import { useLocalChartTimeAxisMode } from '../../hooks/useLocalChartTimeAxisMode';
+import {
+  buildOscilloscopeAxisDivisionLabels,
+  getOscilloscopeTicksForMode,
+  oscilloscopeAxisEndLabels,
+} from '../../utils/chartTimeAxis';
+import { ChartTimeAxisToggle } from './ChartTimeAxisToggle';
 import './StatusOscilloscope.css';
 
 interface StatusOscilloscopeProps {
@@ -13,6 +20,8 @@ interface StatusOscilloscopeProps {
   isOnline?: boolean;
   /** Grow with parent flex layout instead of fixed 120px (e.g. compressor status timeline pane). */
   fillHeight?: boolean;
+  /** Unique key for persisting this chart’s relative vs clock axis mode. */
+  timeAxisStorageKey: string;
 }
 
 // CNC: Operating (top) … Error (bottom)
@@ -90,7 +99,9 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
   variant = 'cnc',
   isOnline,
   fillHeight = false,
+  timeAxisStorageKey,
 }) => {
+  const { timeAxisMode, toggleTimeAxisMode } = useLocalChartTimeAxisMode(timeAxisStorageKey);
   const norm =
     variant === 'compressor' ? normalizeCompressorStatus : normalizeCncStatus;
   const STATUS_LEVELS =
@@ -178,35 +189,14 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
 
   const oscilloscopeData = buildOscilloscopeData();
 
-  // Evenly spaced ticks PAST (left) → NOW (right). Labels = how long before NOW (reading left→right: larger → smaller).
-  const calculateTimeDivisions = () => {
-    const totalMs = endTime.getTime() - startTime.getTime();
-    if (totalMs <= 0) return [];
-
-    const segmentCount =
-      timeRange === '1h' ? 4 : timeRange === '8h' ? 8 : timeRange === '24h' ? 4 : 7;
-    const tickCount = segmentCount + 1;
-    const out: Array<{ x: number; label: string; time: Date }> = [];
-
-    for (let i = 0; i < tickCount; i++) {
-      const x = (i / segmentCount) * 100;
-      const divTime = new Date(startTime.getTime() + (i / segmentCount) * totalMs);
-      const msBeforeNow = Math.max(0, endTime.getTime() - divTime.getTime());
-
-      let label: string;
-      if (timeRange === '1h') {
-        label = `${Math.round(msBeforeNow / 60000)}m`;
-      } else if (timeRange === '8h' || timeRange === '24h') {
-        label = `${Math.round(msBeforeNow / 3600000)}h`;
-      } else {
-        label = `${Math.round(msBeforeNow / 86400000)}d`;
-      }
-      out.push({ x, label, time: divTime });
-    }
-    return out;
-  };
-
-  const timeDivisions = calculateTimeDivisions();
+  const timeTicks = getOscilloscopeTicksForMode(timeRange, startTime, endTime, timeAxisMode);
+  const timeDivisions = buildOscilloscopeAxisDivisionLabels(
+    timeRange,
+    timeTicks,
+    endTime,
+    timeAxisMode
+  );
+  const axisEnds = oscilloscopeAxisEndLabels(timeRange, startTime, endTime, timeAxisMode);
 
   // Dynamic width calculation - match PollingOscilloscope approach
   useEffect(() => {
@@ -582,7 +572,7 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
         )}
         {/* X-axis labels */}
         <div className="status-oscilloscope-x-axis">
-          <span className="status-oscilloscope-x-label-start">PAST</span>
+          <span className="status-oscilloscope-x-label-start">{axisEnds.left}</span>
           <div className="status-oscilloscope-x-divisions">
             {timeDivisions.map((div, divIdx) => {
               // Skip first and last (PAST and NOW are already shown)
@@ -598,7 +588,13 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
               );
             })}
           </div>
-          <span className="status-oscilloscope-x-label-end">NOW</span>
+          <div className="status-oscilloscope-x-axis-endgroup">
+            <span className="status-oscilloscope-x-label-end">{axisEnds.right}</span>
+            <ChartTimeAxisToggle
+              timeAxisMode={timeAxisMode}
+              toggleTimeAxisMode={toggleTimeAxisMode}
+            />
+          </div>
         </div>
       </div>
     );

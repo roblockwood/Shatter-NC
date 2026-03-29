@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { API_BASE_URL } from '../../config/api';
 import { useBetaMode } from '../../hooks/useBetaMode';
+import { useLocalChartTimeAxisMode } from '../../hooks/useLocalChartTimeAxisMode';
+import {
+  buildOscilloscopeAxisDivisionLabels,
+  getOscilloscopeTicksForMode,
+  oscilloscopeAxisEndLabels,
+} from '../../utils/chartTimeAxis';
+import { ChartTimeAxisToggle } from '../ui/ChartTimeAxisToggle';
 import { earlierIsoTimestamp } from '../ui/pollingFreshness';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import './StatusTimeline.css';
@@ -46,6 +53,9 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
   machineLastSuccessfulPollAt,
 }) => {
   const { isBetaMode } = useBetaMode();
+  const { timeAxisMode, toggleTimeAxisMode } = useLocalChartTimeAxisMode(
+    `speedio-${machineId}-status-timeline`
+  );
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const [events, setEvents] = useState<StatusEvent[]>([]);
   const [alarmEvents, setAlarmEvents] = useState<AlarmHistoryEvent[]>([]);
@@ -511,63 +521,37 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
       });
     }
     
-    // Calculate time division markers based on time range
-    const timeDivisions: Array<{ x: number; label: string; time: Date }> = [];
-    switch (timeRange) {
-      case '1h':
-        // Every 15 minutes for 1 hour
-        for (let i = 0; i <= 4; i++) {
-          const minutes = i * 15;
-          const divTime = new Date(startTime.getTime() + (minutes * 60 * 1000));
-          timeDivisions.push({
-            x: (i * 15 / 60) * 100,
-            label: `${minutes}m`,
-            time: divTime
-          });
-        }
-        break;
-      case '8h':
-        // Every hour for 8 hours
-        for (let i = 0; i <= 8; i++) {
-          const hours = i;
-          const divTime = new Date(startTime.getTime() + (hours * 60 * 60 * 1000));
-          timeDivisions.push({
-            x: (i / 8) * 100,
-            label: `${hours}h`,
-            time: divTime
-          });
-        }
-        break;
-      case '24h':
-        // Every 6 hours for 24 hours
-        for (let i = 0; i <= 4; i++) {
-          const hours = i * 6;
-          const divTime = new Date(startTime.getTime() + (hours * 60 * 60 * 1000));
-          timeDivisions.push({
-            x: (i / 4) * 100,
-            label: `${hours}h`,
-            time: divTime
-          });
-        }
-        break;
-      case '7d':
-        // Every day for 7 days
-        for (let i = 0; i <= 7; i++) {
-          const days = i;
-          const divTime = new Date(startTime.getTime() + (days * 24 * 60 * 60 * 1000));
-          timeDivisions.push({
-            x: (i / 7) * 100,
-            label: `${days}d`,
-            time: divTime
-          });
-        }
-        break;
-    }
-    
-    return { svgPoints, statusLabels, statusLevels, startTime, endTime, totalDuration, timeDivisions };
+    const timeTicks = getOscilloscopeTicksForMode(timeRange, startTime, endTime, timeAxisMode);
+    const timeDivisions = buildOscilloscopeAxisDivisionLabels(
+      timeRange,
+      timeTicks,
+      endTime,
+      timeAxisMode
+    );
+    const axisEnds = oscilloscopeAxisEndLabels(timeRange, startTime, endTime, timeAxisMode);
+
+    return {
+      svgPoints,
+      statusLabels,
+      statusLevels,
+      startTime,
+      endTime,
+      totalDuration,
+      timeDivisions,
+      axisEnds,
+    };
   };
 
-  const { svgPoints, statusLabels, statusLevels, startTime, endTime: _endTime, totalDuration, timeDivisions } = renderOscilloscope();
+  const {
+    svgPoints,
+    statusLabels,
+    statusLevels,
+    startTime,
+    endTime: _endTime,
+    totalDuration,
+    timeDivisions,
+    axisEnds,
+  } = renderOscilloscope();
   
   // Recalculate scale after SVG is rendered and when component becomes visible.
   // IMPORTANT: do not depend on svgPoints directly here, since it's a new array every render
@@ -1014,7 +998,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
               </div>
             )}
             <div className="oscilloscope-x-axis">
-              <span className="oscilloscope-x-label-start">PAST</span>
+              <span className="oscilloscope-x-label-start">{axisEnds.left}</span>
               <div className="oscilloscope-x-divisions">
                 {timeDivisions.map((div, idx) => {
                   // Skip first and last (PAST and NOW are already shown)
@@ -1030,7 +1014,13 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
                   );
                 })}
               </div>
-              <span className="oscilloscope-x-label-end">NOW</span>
+              <div className="oscilloscope-x-axis-endgroup">
+                <span className="oscilloscope-x-label-end">{axisEnds.right}</span>
+                <ChartTimeAxisToggle
+                  timeAxisMode={timeAxisMode}
+                  toggleTimeAxisMode={toggleTimeAxisMode}
+                />
+              </div>
             </div>
           </div>
         )}

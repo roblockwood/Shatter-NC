@@ -1,6 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { API_BASE_URL } from '../../config/api';
+import {
+  buildCompressorStatusSamplesUrl,
+  COMPRESSOR_CHART_REFETCH_MS,
+  fetchCompressorStatusSamples,
+  isCompressorChartAbortError,
+} from '../../utils/compressorChartSamples';
+import {
+  buildOscilloscopeAxisDivisionLabels,
+  getOscilloscopeTicksForMode,
+} from '../../utils/chartTimeAxis';
 import { asciiFooterLine, asciiHeaderLeft } from '../../utils/terminalFrame';
+import { useLocalChartTimeAxisMode } from '../../hooks/useLocalChartTimeAxisMode';
+import { ChartTimeAxisToggle } from '../ui/ChartTimeAxisToggle';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import { readNumericPressureTemp } from '../../utils/compressorTelemetry';
 import './AlarmPane.css';
@@ -16,8 +27,6 @@ type TimeRange = '1h' | '8h' | '24h' | '7d';
 
 export type CompressorTelemetrySeries = 'psi' | 'temp';
 
-/** Match ~1 Hz DB samples; was 5s and made charts look poll-limited. */
-const REFETCH_MS = 1_000;
 const MAX_DRAW_POINTS = 1_400;
 
 const COLOR_PSI = '#3b82f6';
@@ -72,6 +81,38 @@ function decimatePoints(points: TelemetryPoint[], maxCount: number): TelemetryPo
   return out;
 }
 
+/** Re-inject global min/max of `key` so decimation cannot drop the only spike (PEAK / trough). */
+function mergeExtremaSamples(
+  decimated: TelemetryPoint[],
+  fullSeries: TelemetryPoint[],
+  key: 'psi' | 'temp'
+): TelemetryPoint[] {
+  if (fullSeries.length === 0) return decimated;
+  let maxP: TelemetryPoint | null = null;
+  let minP: TelemetryPoint | null = null;
+  let maxV = -Infinity;
+  let minV = Infinity;
+  for (const p of fullSeries) {
+    const v = p[key];
+    if (v == null || !Number.isFinite(v)) continue;
+    if (v > maxV) {
+      maxV = v;
+      maxP = p;
+    }
+    if (v < minV) {
+      minV = v;
+      minP = p;
+    }
+  }
+  const byTime = new Map<number, TelemetryPoint>();
+  for (const p of decimated) {
+    byTime.set(p.t, p);
+  }
+  if (maxP) byTime.set(maxP.t, maxP);
+  if (minP) byTime.set(minP.t, minP);
+  return Array.from(byTime.values()).sort((a, b) => a.t - b.t);
+}
+
 function filterSeries(points: TelemetryPoint[], key: 'psi' | 'temp'): TelemetryPoint[] {
   return points.filter((p) => p[key] != null && Number.isFinite(p[key] as number));
 }
@@ -107,43 +148,112 @@ const Y_FLAT_PAD = 1.5;
 const Y_MARGIN_PSI = 5;
 const Y_MARGIN_TEMP = 5;
 
-/** PSI: light MA only (often fewer identical samples in a row). */
-const PSI_SMOOTH_RADIUS = 5;
-/** Temp: many 1 Hz samples per integer → bin in time, then strong MA + EMA (display only). */
-const TEMP_DISPLAY_BIN_MS = 12_000;
-const TEMP_SMOOTH_RADIUS = 10;
-const TEMP_EMA_ALPHA = 0.38;
-/** Optional PSI time bin (0 = off); softens stepped pressure a bit without lagging like temp. */
-const PSI_DISPLAY_BIN_MS = 6_000;
-
 /**
- * Collapse high-rate plateau samples into one point per time window using mean `v`.
- * Buckets that straddle an integer step get a fractional average → smoother curves than MA on raw 1 Hz plateaus.
+ * Spread haze: 7d uses wide bins (blocky polygons) — strong blur softens edges; keep opacity near other
+ * ranges so the band doesn’t read as faint / uneven.
  */
-function downsampleByTimeAverage(
+interface TelemetryRangeSmoothing {
+  displayBinMs: number;
+  smoothRadius: number;
+  emaAlpha: number;
+  spreadFillOpacity: number;
+  spreadBlurStd: number;
+}
+
+function telemetrySmoothingForRange(range: TimeRange): TelemetryRangeSmoothing {
+  switch (range) {
+    case '1h':
+      return {
+        displayBinMs: 10_000,
+        smoothRadius: 7,
+        emaAlpha: 0.28,
+        spreadFillOpacity: 1,
+        spreadBlurStd: 3.5,
+      };
+    case '8h':
+      return {
+        displayBinMs: 16_000,
+        smoothRadius: 9,
+        emaAlpha: 0.22,
+        spreadFillOpacity: 1,
+        spreadBlurStd: 3.5,
+      };
+    case '24h':
+      return {
+        displayBinMs: 28_000,
+        smoothRadius: 11,
+        emaAlpha: 0.18,
+        spreadFillOpacity: 0.96,
+        spreadBlurStd: 4.25,
+      };
+    case '7d':
+      return {
+        displayBinMs: 900_000,
+        smoothRadius: 14,
+        emaAlpha: 0.12,
+        spreadFillOpacity: 0.94,
+        spreadBlurStd: 11,
+      };
+  }
+}
+
+/** Per time window: true min / max + mean (mean → smooth line; min/max → spread fill). */
+function downsampleByTimeMinMaxMean(
   points: Array<{ t: number; v: number }>,
   windowMs: number
-): Array<{ t: number; v: number }> {
-  if (points.length === 0 || windowMs <= 0) return points;
-  const out: Array<{ t: number; v: number }> = [];
+): Array<{ t: number; min: number; max: number; mean: number }> {
+  if (points.length === 0 || windowMs <= 0) return [];
+  const out: Array<{ t: number; min: number; max: number; mean: number }> = [];
   let i = 0;
   while (i < points.length) {
     const winStart = points[i]!.t;
     let sum = 0;
     let c = 0;
     let lastT = winStart;
+    let minV = points[i]!.v;
+    let maxV = points[i]!.v;
     while (i < points.length && points[i]!.t < winStart + windowMs) {
-      sum += points[i]!.v;
+      const v = points[i]!.v;
+      sum += v;
       c++;
       lastT = points[i]!.t;
+      if (v < minV) minV = v;
+      if (v > maxV) maxV = v;
       i++;
     }
-    out.push({ t: lastT, v: sum / c });
+    out.push({ t: lastT, min: minV, max: maxV, mean: sum / c });
   }
   return out;
 }
 
-/** Exponential moving average (display only); reduces notchiness after MA. */
+/** Area between smoothed mean and bin max (upper) / min (lower); filled + blurred as one band. */
+function telemetrySpreadFillPaths(
+  bins: Array<{ t: number; min: number; max: number }>,
+  smoothedMean: number[],
+  xOf: (t: number) => number,
+  yFn: (v: number) => number
+): { upper: string; lower: string } | null {
+  const n = bins.length;
+  if (n < 2 || smoothedMean.length !== n) return null;
+  const x = (i: number) => xOf(bins[i]!.t);
+  const yA = (i: number) => yFn(smoothedMean[i]!);
+  const yMx = (i: number) => yFn(bins[i]!.max);
+  const yMn = (i: number) => yFn(bins[i]!.min);
+
+  let upper = `M ${x(0)} ${yA(0)}`;
+  for (let i = 1; i < n; i++) upper += ` L ${x(i)} ${yA(i)}`;
+  for (let i = n - 1; i >= 0; i--) upper += ` L ${x(i)} ${yMx(i)}`;
+  upper += ' Z';
+
+  let lower = `M ${x(0)} ${yA(0)}`;
+  for (let i = 1; i < n; i++) lower += ` L ${x(i)} ${yA(i)}`;
+  for (let i = n - 1; i >= 0; i--) lower += ` L ${x(i)} ${yMn(i)}`;
+  lower += ' Z';
+
+  return { upper, lower };
+}
+
+/** Exponential moving average (display only); after MA on per-bin means. */
 function exponentialSmooth1D(values: number[], alpha: number): number[] {
   if (values.length === 0) return [];
   const a = Math.min(1, Math.max(0.05, alpha));
@@ -194,7 +304,7 @@ function contiguousSegments(
   return segs;
 }
 
-/** Catmull–Rom-style cubic Beziers through pixel points (display smoothing; raw samples unchanged in DB). */
+/** Cubic smoothing through knots — smoothed mean line for PSI and temp. */
 function smoothSvgPathThroughPoints(pts: Array<{ x: number; y: number }>): string | null {
   if (pts.length === 0) return null;
   if (pts.length === 1) {
@@ -259,19 +369,29 @@ function rangeToWindowMs(timeRange: TimeRange): { startMs: number; endMs: number
 
 function SingleSeriesChart({
   drawPoints,
+  axisExtentPoints,
   seriesKey,
   color,
   startMs,
   endMs,
+  timeRange,
+  timeAxisStorageKey,
   ariaLabel,
 }: {
   drawPoints: TelemetryPoint[];
+  /** Full-resolution points for Y-axis span — drawPoints may be decimated and omit true PEAK/min. */
+  axisExtentPoints?: TelemetryPoint[];
   seriesKey: 'psi' | 'temp';
   color: string;
   startMs: number;
   endMs: number;
+  timeRange: TimeRange;
+  timeAxisStorageKey: string;
   ariaLabel: string;
 }): React.ReactNode {
+  const { timeAxisMode, toggleTimeAxisMode } = useLocalChartTimeAxisMode(timeAxisStorageKey);
+  const spreadBlurFilterId = React.useId().replace(/:/g, '');
+  const smooth = telemetrySmoothingForRange(timeRange);
   const W = 560;
   const H = 210;
   const ml = 48;
@@ -283,8 +403,21 @@ function SingleSeriesChart({
   const span = Math.max(1, endMs - startMs);
   const xOf = (t: number) => ml + ((t - startMs) / span) * pw;
 
-  const vals = drawPoints.map((p) => p[seriesKey]).filter((v): v is number => v != null && Number.isFinite(v));
-  const hasData = vals.length > 0;
+  const vals: number[] = [];
+  for (const p of drawPoints) {
+    const v = p[seriesKey];
+    if (v != null && Number.isFinite(v)) vals.push(v);
+  }
+  if (axisExtentPoints) {
+    for (const p of axisExtentPoints) {
+      const v = p[seriesKey];
+      if (v != null && Number.isFinite(v)) vals.push(v);
+    }
+  }
+  const hasData = drawPoints.some((p) => {
+    const v = p[seriesKey];
+    return v != null && Number.isFinite(v);
+  });
   const yMargin = seriesKey === 'psi' ? Y_MARGIN_PSI : Y_MARGIN_TEMP;
   const yR = yRange(vals, Y_PAD_RATIO, Y_FLAT_PAD, yMargin);
   const yFn = (v: number) => {
@@ -296,20 +429,33 @@ function SingleSeriesChart({
 
   const segs = contiguousSegments(drawPoints, seriesKey);
   const pathParts: string[] = [];
-  const binMs = seriesKey === 'temp' ? TEMP_DISPLAY_BIN_MS : PSI_DISPLAY_BIN_MS;
-  const maRadius = seriesKey === 'temp' ? TEMP_SMOOTH_RADIUS : PSI_SMOOTH_RADIUS;
+  const spreadPairs: Array<{ upper: string; lower: string }> = [];
 
-  for (const seg of segs) {
+  const {
+    displayBinMs: binMs,
+    smoothRadius: maRadius,
+    emaAlpha,
+    spreadFillOpacity,
+    spreadBlurStd,
+  } = smooth;
+
+  segs.forEach((seg) => {
     let tvpairs = seg.map((p) => ({ t: p.t, v: p[seriesKey] as number }));
+    let mmBins: Array<{ t: number; min: number; max: number; mean: number }> | null = null;
     if (binMs > 0 && tvpairs.length >= 2) {
-      tvpairs = downsampleByTimeAverage(tvpairs, binMs);
+      mmBins = downsampleByTimeMinMaxMean(tvpairs, binMs);
+      tvpairs = mmBins.map((b) => ({ t: b.t, v: b.mean }));
     }
     let vs = tvpairs.map((p) => p.v);
-    if (vs.length >= 3) {
+    if (maRadius > 0 && vs.length >= 3) {
       vs = smoothMovingAverage(vs, maRadius);
     }
-    if (seriesKey === 'temp' && vs.length >= 2) {
-      vs = exponentialSmooth1D(vs, TEMP_EMA_ALPHA);
+    if (vs.length >= 2) {
+      vs = exponentialSmooth1D(vs, emaAlpha);
+    }
+    if (mmBins && mmBins.length >= 2 && mmBins.length === vs.length) {
+      const sp = telemetrySpreadFillPaths(mmBins, vs, xOf, yFn);
+      if (sp) spreadPairs.push(sp);
     }
     const pixelPts = tvpairs.map((pair, i) => ({
       x: xOf(pair.t),
@@ -317,8 +463,34 @@ function SingleSeriesChart({
     }));
     const segD = smoothSvgPathThroughPoints(pixelPts);
     if (segD) pathParts.push(segD);
-  }
+  });
   const pathD = pathParts.length ? pathParts.join(' ') : null;
+
+  const spreadFills =
+    spreadPairs.length > 0 ? (
+      <>
+        <defs>
+          <filter
+            id={spreadBlurFilterId}
+            x="-55%"
+            y="-55%"
+            width="210%"
+            height="210%"
+            filterUnits="objectBoundingBox"
+          >
+            <feGaussianBlur in="SourceGraphic" stdDeviation={spreadBlurStd} />
+          </filter>
+        </defs>
+        <g filter={`url(#${spreadBlurFilterId})`}>
+          {spreadPairs.map((sp, i) => (
+            <React.Fragment key={`spf-${i}`}>
+              <path d={sp.upper} fill={color} fillOpacity={spreadFillOpacity} stroke="none" />
+              <path d={sp.lower} fill={color} fillOpacity={spreadFillOpacity} stroke="none" />
+            </React.Fragment>
+          ))}
+        </g>
+      </>
+    ) : null;
 
   const ticks = 4;
   const gridLines: React.ReactNode[] = [];
@@ -360,15 +532,13 @@ function SingleSeriesChart({
     }
   }
 
+  const startDate = new Date(startMs);
+  const endDate = new Date(endMs);
+  const xTimeTicks = getOscilloscopeTicksForMode(timeRange, startDate, endDate, timeAxisMode);
+  const xLabeled = buildOscilloscopeAxisDivisionLabels(timeRange, xTimeTicks, endDate, timeAxisMode);
   const xTickLabels: React.ReactNode[] = [];
-  const xTicks = 5;
-  for (let i = 0; i <= xTicks; i++) {
-    const frac = i / xTicks;
-    const t = startMs + span * frac;
-    const gx = ml + pw * frac;
-    const mins = Math.round((endMs - t) / 60_000);
-    const label =
-      mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.round(mins / 60)}h` : `${Math.round(mins / 1440)}d`;
+  xLabeled.forEach((tick, i) => {
+    const gx = ml + (tick.x / 100) * pw;
     xTickLabels.push(
       <text
         key={`xt${i}`}
@@ -379,36 +549,45 @@ function SingleSeriesChart({
         fontSize={9}
         fontFamily="var(--font-mono)"
       >
-        {label}
+        {tick.label}
       </text>
     );
-  }
+  });
 
   return (
-    <svg
-      className="compressor-telemetry-svg"
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="none"
-      width="100%"
-      height="100%"
-      aria-label={ariaLabel}
-    >
-      <rect x={ml} y={mt} width={pw} height={ph} fill="rgba(0,0,0,0.12)" stroke="none" />
-      {gridLines}
-      {pathD && (
-        <path
-          d={pathD}
-          fill="none"
-          stroke={color}
-          strokeWidth={1.75}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
+    <div className="compressor-telemetry-chart-stack">
+      <svg
+        className="compressor-telemetry-svg"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        width="100%"
+        height="100%"
+        aria-label={ariaLabel}
+      >
+        <rect x={ml} y={mt} width={pw} height={ph} fill="rgba(0,0,0,0.12)" stroke="none" />
+        {gridLines}
+        {spreadFills}
+        {pathD && (
+          <path
+            d={pathD}
+            fill="none"
+            stroke={color}
+            strokeWidth={1.75}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
+        {yTicks}
+        {xTickLabels}
+      </svg>
+      <div className="compressor-telemetry-xaxis-bar">
+        <ChartTimeAxisToggle
+          timeAxisMode={timeAxisMode}
+          toggleTimeAxisMode={toggleTimeAxisMode}
         />
-      )}
-      {yTicks}
-      {xTickLabels}
-    </svg>
+      </div>
+    </div>
   );
 }
 
@@ -440,73 +619,68 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
   useEffect(() => {
     let cancelled = false;
     const abortInitial = new AbortController();
+    let pollAbort: AbortController | null = null;
+    let pollChainTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const rangeBounds = () => {
-      const end = new Date();
-      const start = new Date(end);
-      switch (timeRange) {
-        case '1h':
-          start.setHours(start.getHours() - 1);
-          break;
-        case '8h':
-          start.setHours(start.getHours() - 8);
-          break;
-        case '24h':
-          start.setHours(start.getHours() - 24);
-          break;
-        case '7d':
-          start.setDate(start.getDate() - 7);
-          break;
-      }
-      return { start, end };
-    };
+    const samplesUrl = () => buildCompressorStatusSamplesUrl(compressorId, timeRange);
 
-    const samplesUrl = () => {
-      const { start, end } = rangeBounds();
-      return `${API_BASE_URL}/api/compressors/${compressorId}/status-samples?start_time=${encodeURIComponent(
-        start.toISOString()
-      )}&end_time=${encodeURIComponent(end.toISOString())}&limit=20000`;
-    };
-
-    const load = (signal: AbortSignal, showLoading: boolean) => {
-      if (showLoading) {
-        setLoading(true);
-        setError(null);
-      }
-      fetch(samplesUrl(), { signal, cache: 'no-store' })
-        .then((r) => {
-          if (!r.ok) throw new Error(r.statusText);
-          return r.json();
-        })
-        .then((samp) => {
-          if (cancelled) return;
-          setSamples(Array.isArray(samp) ? samp : []);
-          setLastFetchSuccessAt(new Date().toISOString());
-          setError(null);
-        })
-        .catch((e) => {
-          if (e.name === 'AbortError' || cancelled) return;
-          if (showLoading) {
-            setError(e.message || 'Failed to load samples');
-          }
-        })
-        .finally(() => {
-          if (!cancelled && showLoading) setLoading(false);
+    const runInitial = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const samp = await fetchCompressorStatusSamples(samplesUrl(), abortInitial.signal, {
+          isInitial: true,
         });
+        if (cancelled) return;
+        setSamples(samp as SampleRow[]);
+        setLastFetchSuccessAt(new Date().toISOString());
+        setError(null);
+      } catch (e) {
+        if (cancelled || abortInitial.signal.aborted) return;
+        if (!isCompressorChartAbortError(e)) {
+          setError(e instanceof Error ? e.message : 'Failed to load samples');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
 
-    load(abortInitial.signal, true);
-
-    const intervalId = window.setInterval(() => {
+    const scheduleNextPoll = () => {
       if (cancelled) return;
-      const ic = new AbortController();
-      load(ic.signal, false);
-    }, REFETCH_MS);
+      pollChainTimeout = window.setTimeout(() => void runPoll(), COMPRESSOR_CHART_REFETCH_MS);
+    };
+
+    const runPoll = async () => {
+      if (cancelled) return;
+      pollAbort?.abort();
+      pollAbort = new AbortController();
+      const signal = pollAbort.signal;
+      try {
+        const samp = await fetchCompressorStatusSamples(samplesUrl(), signal, { isInitial: false });
+        if (cancelled || signal.aborted) return;
+        setSamples(samp as SampleRow[]);
+        setLastFetchSuccessAt(new Date().toISOString());
+        setError(null);
+      } catch (e) {
+        if (cancelled || signal.aborted || isCompressorChartAbortError(e)) {
+          /* keep last good samples */
+        }
+      } finally {
+        if (!cancelled) scheduleNextPoll();
+      }
+    };
+
+    void runInitial().then(() => {
+      if (cancelled) return;
+      const jitter = Math.floor(Math.random() * 700);
+      pollChainTimeout = window.setTimeout(() => void runPoll(), COMPRESSOR_CHART_REFETCH_MS + jitter);
+    });
 
     return () => {
       cancelled = true;
       abortInitial.abort();
-      window.clearInterval(intervalId);
+      pollAbort?.abort();
+      if (pollChainTimeout !== null) window.clearTimeout(pollChainTimeout);
     };
   }, [compressorId, timeRange]);
 
@@ -536,10 +710,10 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
 
   const { startMs, endMs } = useMemo(() => rangeToWindowMs(timeRange), [timeRange]);
 
-  const drawPoints = useMemo(
-    () => decimatePoints(filterSeries(pointsWithLiveTail, seriesKey), MAX_DRAW_POINTS),
-    [pointsWithLiveTail, seriesKey]
-  );
+  const drawPoints = useMemo(() => {
+    const filtered = filterSeries(pointsWithLiveTail, seriesKey);
+    return mergeExtremaSamples(decimatePoints(filtered, MAX_DRAW_POINTS), filtered, seriesKey);
+  }, [pointsWithLiveTail, seriesKey]);
 
   const { unit, peak, hasSeries } = useMemo(() => {
     const unitKey = series === 'psi' ? 'psi_unit' : 'temp_unit';
@@ -601,7 +775,7 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
             <div className="pane-header-right-actions">
               <PollingStatusLight
                 lastUpdatedAt={lastFetchSuccessAt}
-                expectedIntervalMs={REFETCH_MS}
+                expectedIntervalMs={COMPRESSOR_CHART_REFETCH_MS}
                 ariaLabel={`Compressor ${headerTitle} chart data freshness`}
                 tooltipDetailLines={tooltipLines}
               />
@@ -659,10 +833,13 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
             <div className="compressor-telemetry-chart-wrap">
               <SingleSeriesChart
                 drawPoints={drawPoints}
+                axisExtentPoints={filterSeries(pointsWithLiveTail, seriesKey)}
                 seriesKey={seriesKey}
                 color={color}
                 startMs={startMs}
                 endMs={endMs}
+                timeRange={timeRange}
+                timeAxisStorageKey={`compressor-${compressorId}-${series}`}
                 ariaLabel={ariaChart}
               />
             </div>
