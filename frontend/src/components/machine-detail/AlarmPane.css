@@ -354,6 +354,24 @@
   flex-direction: column;
 }
 
+.compressor-telemetry-chart-stack {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.compressor-telemetry-xaxis-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+  padding-right: 1px;
+  min-height: 22px;
+}
+
 .compressor-telemetry-svg {
   flex: 1 1 auto;
   min-height: 150px;

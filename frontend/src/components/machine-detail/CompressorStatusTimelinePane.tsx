@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { API_BASE_URL } from '../../config/api';
 import type { StatusEvent } from '../../api/summary';
+import {
+  buildCompressorStatusSamplesUrl,
+  COMPRESSOR_CHART_REFETCH_MS,
+  fetchCompressorStatusSamples,
+  isCompressorChartAbortError,
+} from '../../utils/compressorChartSamples';
 import { asciiFooterLine, asciiHeaderLeft } from '../../utils/terminalFrame';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import { StatusOscilloscope } from '../ui/StatusOscilloscope';
@@ -14,9 +19,6 @@ interface SampleRow {
 }
 
 type TimeRange = '1h' | '8h' | '24h' | '7d';
-
-/** Chart HTTP refresh — match ~1 Hz compressor_status_samples so the oscilloscope advances smoothly. */
-const COMPRESSOR_TIMELINE_REFETCH_MS = 1_000;
 
 /** MQTT samples arrive ~1/s; oscilloscope draws a vertical tick per point — thin unchanged runs. */
 const OSCILLOSCOPE_DISPLAY_STRIDE = 5;
@@ -72,73 +74,68 @@ export const CompressorStatusTimelinePane: React.FC<CompressorStatusTimelinePane
   useEffect(() => {
     let cancelled = false;
     const abortInitial = new AbortController();
+    let pollAbort: AbortController | null = null;
+    let pollChainTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const rangeBounds = () => {
-      const end = new Date();
-      const start = new Date(end);
-      switch (timeRange) {
-        case '1h':
-          start.setHours(start.getHours() - 1);
-          break;
-        case '8h':
-          start.setHours(start.getHours() - 8);
-          break;
-        case '24h':
-          start.setHours(start.getHours() - 24);
-          break;
-        case '7d':
-          start.setDate(start.getDate() - 7);
-          break;
-      }
-      return { start, end };
-    };
+    const samplesUrl = () => buildCompressorStatusSamplesUrl(compressorId, timeRange);
 
-    const samplesUrl = () => {
-      const { start, end } = rangeBounds();
-      return `${API_BASE_URL}/api/compressors/${compressorId}/status-samples?start_time=${encodeURIComponent(
-        start.toISOString()
-      )}&end_time=${encodeURIComponent(end.toISOString())}&limit=20000`;
-    };
-
-    const load = (signal: AbortSignal, showLoading: boolean) => {
-      if (showLoading) {
-        setLoading(true);
-        setError(null);
-      }
-      fetch(samplesUrl(), { signal, cache: 'no-store' })
-        .then((r) => {
-          if (!r.ok) throw new Error(r.statusText);
-          return r.json();
-        })
-        .then((samp) => {
-          if (cancelled) return;
-          setSamples(Array.isArray(samp) ? samp : []);
-          setLastFetchSuccessAt(new Date().toISOString());
-          setError(null);
-        })
-        .catch((e) => {
-          if (e.name === 'AbortError' || cancelled) return;
-          if (showLoading) {
-            setError(e.message || 'Failed to load samples');
-          }
-        })
-        .finally(() => {
-          if (!cancelled && showLoading) setLoading(false);
+    const runInitial = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const samp = await fetchCompressorStatusSamples(samplesUrl(), abortInitial.signal, {
+          isInitial: true,
         });
+        if (cancelled) return;
+        setSamples(samp as SampleRow[]);
+        setLastFetchSuccessAt(new Date().toISOString());
+        setError(null);
+      } catch (e) {
+        if (cancelled || abortInitial.signal.aborted) return;
+        if (!isCompressorChartAbortError(e)) {
+          setError(e instanceof Error ? e.message : 'Failed to load samples');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
 
-    load(abortInitial.signal, true);
-
-    const intervalId = window.setInterval(() => {
+    const scheduleNextPoll = () => {
       if (cancelled) return;
-      const ic = new AbortController();
-      load(ic.signal, false);
-    }, COMPRESSOR_TIMELINE_REFETCH_MS);
+      pollChainTimeout = window.setTimeout(() => void runPoll(), COMPRESSOR_CHART_REFETCH_MS);
+    };
+
+    const runPoll = async () => {
+      if (cancelled) return;
+      pollAbort?.abort();
+      pollAbort = new AbortController();
+      const signal = pollAbort.signal;
+      try {
+        const samp = await fetchCompressorStatusSamples(samplesUrl(), signal, { isInitial: false });
+        if (cancelled || signal.aborted) return;
+        setSamples(samp as SampleRow[]);
+        setLastFetchSuccessAt(new Date().toISOString());
+        setError(null);
+      } catch (e) {
+        if (cancelled || signal.aborted || isCompressorChartAbortError(e)) {
+          /* keep last good samples */
+        }
+      } finally {
+        if (!cancelled) scheduleNextPoll();
+      }
+    };
+
+    void runInitial().then(() => {
+      if (cancelled) return;
+      const jitter = Math.floor(Math.random() * 700);
+      pollChainTimeout = window.setTimeout(() => void runPoll(), COMPRESSOR_CHART_REFETCH_MS + jitter);
+    });
 
     return () => {
       cancelled = true;
       abortInitial.abort();
-      window.clearInterval(intervalId);
+      pollAbort?.abort();
+      if (pollChainTimeout !== null) window.clearTimeout(pollChainTimeout);
     };
   }, [compressorId, timeRange]);
 
@@ -193,7 +190,7 @@ export const CompressorStatusTimelinePane: React.FC<CompressorStatusTimelinePane
             <div className="pane-header-right-actions">
               <PollingStatusLight
                 lastUpdatedAt={lastFetchSuccessAt}
-                expectedIntervalMs={COMPRESSOR_TIMELINE_REFETCH_MS}
+                expectedIntervalMs={COMPRESSOR_CHART_REFETCH_MS}
                 ariaLabel="Compressor timeline chart data freshness"
                 tooltipDetailLines={statusTooltipLines}
               />
@@ -233,6 +230,7 @@ export const CompressorStatusTimelinePane: React.FC<CompressorStatusTimelinePane
                 variant="compressor"
                 isOnline={isOnline}
                 fillHeight
+                timeAxisStorageKey={`compressor-${compressorId}-status-timeline`}
               />
             </div>
           )}
