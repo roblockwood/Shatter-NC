@@ -240,3 +240,40 @@ class PRD3StatusHistory(Base):
 
     def __repr__(self):
         return f"<PRD3StatusHistory(machine_id={self.machine_id}, time={self.time}, status='{self.status}', program_no='{self.program_no}')>"
+
+
+class CompressorStatusSample(Base):
+    """High-frequency compressor status samples (MQTT throttled; TimescaleDB hypertable)."""
+
+    __tablename__ = "compressor_status_samples"
+
+    time = Column(DateTime(timezone=True), primary_key=True, nullable=False)
+    compressor_id = Column(
+        Integer, ForeignKey("compressors.id", ondelete="CASCADE"), primary_key=True, nullable=False, index=True
+    )
+    status = Column(String(80), nullable=False, index=True)
+    metrics = Column(JSONB)
+
+    compressor = relationship("Compressor")
+
+    def __repr__(self):
+        return f"<CompressorStatusSample(compressor_id={self.compressor_id}, status='{self.status}', time={self.time})>"
+
+
+class CompressorStatusEvent(Base):
+    """Compressor status change events (TimescaleDB hypertable)."""
+
+    __tablename__ = "compressor_status_events"
+
+    time = Column(DateTime(timezone=True), primary_key=True, nullable=False)
+    compressor_id = Column(
+        Integer, ForeignKey("compressors.id", ondelete="CASCADE"), primary_key=True, nullable=False, index=True
+    )
+    status = Column(String(80), nullable=False, index=True)
+    previous_status = Column(String(80))
+    metrics = Column(JSONB)
+
+    compressor = relationship("Compressor")
+
+    def __repr__(self):
+        return f"<CompressorStatusEvent(compressor_id={self.compressor_id}, status='{self.status}', time={self.time})>"

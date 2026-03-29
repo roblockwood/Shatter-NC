@@ -7,32 +7,79 @@ interface StatusOscilloscopeProps {
   currentStatus?: string;
   timeRange: '1h' | '8h' | '24h' | '7d';
   compact?: boolean;
+  /** CNC (default) vs Kaeser compressor (infer_status-style strings). */
+  variant?: 'cnc' | 'compressor';
+  /** When variant=compressor, false forces bottom band (offline) for live endpoint. */
+  isOnline?: boolean;
+  /** Grow with parent flex layout instead of fixed 120px (e.g. compressor status timeline pane). */
+  fillHeight?: boolean;
 }
 
-// Status mapping for Y-axis (4 states: operating, standby, stopped, error)
-// Order: Operating (top), Standby, Stopped, Error (bottom)
-const STATUS_LEVELS: { [key: string]: number } = {
-  'operating': 3,
-  'standby': 2,
-  'stopped': 1,
-  'error': 0,
+// CNC: Operating (top) … Error (bottom)
+const CNC_STATUS_LEVELS: { [key: string]: number } = {
+  operating: 3,
+  standby: 2,
+  stopped: 1,
+  error: 0,
 };
 
-const STATUS_LABELS = ['OPERATING', 'STANDBY', 'STOPPED', 'ERROR'];
+const CNC_STATUS_LABELS = ['OPERATING', 'STANDBY', 'STOPPED', 'ERROR'];
 
-// Normalize status string to one of the 4 states (exclude 'off')
-const normalizeStatus = (status: string | undefined): string => {
+// Compressor: load (top) … offline (bottom); error sits above offline — aligns with infer_status + HMI text
+const COMPRESSOR_STATUS_LEVELS: { [key: string]: number } = {
+  load: 4,
+  idle: 3,
+  back_pressure: 3,
+  online: 3,
+  stopped: 2,
+  error: 1,
+  offline: 0,
+  unknown: 0,
+};
+
+const COMPRESSOR_STATUS_LABELS = ['LOAD', 'IDLE', 'STOPPED', 'ERROR', 'OFFLINE'];
+
+const normalizeCncStatus = (status: string | undefined, _isOnline?: boolean): string => {
   if (!status) return 'standby';
   const lower = status.toLowerCase().trim();
-  
-  // Map to actual machine statuses (exclude 'off')
+
   if (lower === 'operating' || lower.includes('operating') || lower.includes('running')) return 'operating';
   if (lower === 'standby' || lower.includes('standby') || lower.includes('idle')) return 'standby';
   if (lower === 'stopped' || lower.includes('stopped')) return 'stopped';
   if (lower === 'error' || lower.includes('error') || lower.includes('occurred')) return 'error';
-  
-  // Default to standby
+
   return 'standby';
+};
+
+const normalizeCompressorStatus = (status: string | undefined, isOnline?: boolean): string => {
+  if (isOnline === false) return 'offline';
+  if (!status) return 'unknown';
+  const lower = status.toLowerCase().trim();
+
+  if (
+    lower.includes('error') ||
+    lower.includes('fault') ||
+    lower.includes('alarm') ||
+    lower.includes('trip') ||
+    lower.includes('stör') ||
+    lower.includes('stoer')
+  ) {
+    return 'error';
+  }
+
+  if (lower === 'load' || lower.includes('on_load') || lower.includes('on load')) return 'load';
+  if (lower.includes('no_load') || lower.includes('no load') || lower.includes('unload')) return 'idle';
+  if (lower.includes('running') || lower.includes('operating') || lower.includes('production'))
+    return 'load';
+  if (lower.includes('load') && !lower.includes('download') && !lower.includes('unload')) return 'load';
+  if (lower === 'idle' || lower.includes('idle')) return 'idle';
+  if (lower.includes('back_pressure') || lower.includes('back pressure')) return 'back_pressure';
+  if (lower === 'online' || lower === 'on') return 'online';
+  if (lower === 'stopped' || lower.includes('stopped')) return 'stopped';
+  if (lower === 'offline' || lower === 'unknown' || lower.includes('unknown')) return 'unknown';
+
+  // Unknown slug from backend (e.g. automatic_operation) — not "idle"
+  return 'online';
 };
 
 export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
@@ -40,7 +87,16 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
   currentStatus,
   timeRange,
   compact = false,
+  variant = 'cnc',
+  isOnline,
+  fillHeight = false,
 }) => {
+  const norm =
+    variant === 'compressor' ? normalizeCompressorStatus : normalizeCncStatus;
+  const STATUS_LEVELS =
+    variant === 'compressor' ? COMPRESSOR_STATUS_LEVELS : CNC_STATUS_LEVELS;
+  const STATUS_LABELS =
+    variant === 'compressor' ? COMPRESSOR_STATUS_LABELS : CNC_STATUS_LABELS;
   const [oscilloscopeWidth, setOscilloscopeWidth] = useState(800);
   const [scaleX, setScaleX] = useState(1);
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; status: string; timestamp: Date } | null>(null);
@@ -71,11 +127,19 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
   const buildOscilloscopeData = () => {
     const dataPoints: Array<{ time: number; level: number; status: string }> = [];
     
-    // If no events, use current status
+    const defaultLive =
+      variant === 'compressor' ? 'unknown' : 'standby';
+
+    // No samples: only draw a flat span when we have live context (same as Brother StatusTimeline).
     if (statusHistory.length === 0) {
-      const normalized = normalizeStatus(currentStatus || 'standby');
-      dataPoints.push({ time: 0, level: STATUS_LEVELS[normalized] ?? 2, status: normalized });
-      dataPoints.push({ time: 100, level: STATUS_LEVELS[normalized] ?? 2, status: normalized });
+      const hasLiveData = currentStatus !== undefined || isOnline !== undefined;
+      if (!hasLiveData) {
+        return dataPoints;
+      }
+      const normalized = norm(currentStatus || defaultLive, isOnline);
+      const level = STATUS_LEVELS[normalized] ?? (variant === 'compressor' ? 0 : 2);
+      dataPoints.push({ time: 0, level, status: normalized });
+      dataPoints.push({ time: 100, level, status: normalized });
       return dataPoints;
     }
 
@@ -83,98 +147,63 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
       new Date(a.time).getTime() - new Date(b.time).getTime()
     );
 
-    // Add initial point
-    let initialStatus = currentStatus;
-    if (!initialStatus && sortedEvents.length > 0) {
-      initialStatus = sortedEvents[0].status;
-    }
-    if (!initialStatus) initialStatus = 'standby';
-    
-    const normalizedInitial = normalizeStatus(initialStatus);
-    dataPoints.push({
-      time: 0,
-      level: STATUS_LEVELS[normalizedInitial] ?? 2,
-      status: normalizedInitial,
-    });
+    // Do not add a synthetic point at time 0. A left-edge segment tied to currentStatus would
+    // jump on every load/idle flip; we only plot actual samples (StatusTimeline pattern).
 
-    // Add points for each event
     for (const event of sortedEvents) {
       const eventTime = new Date(event.time).getTime();
       if (eventTime >= startTime.getTime() && eventTime <= endTime.getTime()) {
-        const normalized = normalizeStatus(event.status);
+        const normalized = norm(event.status);
         const relativeTime = ((eventTime - startTime.getTime()) / totalDuration) * 100;
         dataPoints.push({
           time: relativeTime,
-          level: STATUS_LEVELS[normalized] ?? 2,
+          level: STATUS_LEVELS[normalized] ?? (variant === 'compressor' ? 3 : 2),
           status: normalized,
         });
       }
     }
 
-    // Add final point using current status
-    const finalStatus = currentStatus || (sortedEvents.length > 0 ? sortedEvents[sortedEvents.length - 1].status : 'standby');
-    const normalized = normalizeStatus(finalStatus);
-    dataPoints.push({
-      time: 100,
-      level: STATUS_LEVELS[normalized] ?? 2,
-      status: normalized,
-    });
+    // Extend to "now" only when live status is known — avoids inventing a tail from last sample.
+    if (currentStatus !== undefined) {
+      const normalized = norm(currentStatus, isOnline);
+      dataPoints.push({
+        time: 100,
+        level: STATUS_LEVELS[normalized] ?? (variant === 'compressor' ? 0 : 2),
+        status: normalized,
+      });
+    }
 
     return dataPoints;
   };
 
   const oscilloscopeData = buildOscilloscopeData();
 
-  // Calculate time divisions
+  // Evenly spaced ticks PAST (left) → NOW (right). Labels = how long before NOW (reading left→right: larger → smaller).
   const calculateTimeDivisions = () => {
-    const timeDivisions: Array<{ x: number; label: string; time: Date }> = [];
-    switch (timeRange) {
-      case '1h':
-        for (let i = 0; i <= 4; i++) {
-          const minutes = i * 15;
-          const divTime = new Date(startTime.getTime() + (minutes * 60 * 1000));
-          timeDivisions.push({
-            x: (i * 15 / 60) * 100,
-            label: `${minutes}m`,
-            time: divTime
-          });
-        }
-        break;
-      case '8h':
-        for (let i = 0; i <= 8; i++) {
-          const hours = i;
-          const divTime = new Date(startTime.getTime() + (hours * 60 * 60 * 1000));
-          timeDivisions.push({
-            x: (i / 8) * 100,
-            label: `${hours}h`,
-            time: divTime
-          });
-        }
-        break;
-      case '24h':
-        for (let i = 0; i <= 4; i++) {
-          const hours = i * 6;
-          const divTime = new Date(startTime.getTime() + (hours * 60 * 60 * 1000));
-          timeDivisions.push({
-            x: (i / 4) * 100,
-            label: `${hours}h`,
-            time: divTime
-          });
-        }
-        break;
-      case '7d':
-        for (let i = 0; i <= 7; i++) {
-          const days = i;
-          const divTime = new Date(startTime.getTime() + (days * 24 * 60 * 60 * 1000));
-          timeDivisions.push({
-            x: (i / 7) * 100,
-            label: `${days}d`,
-            time: divTime
-          });
-        }
-        break;
+    const totalMs = endTime.getTime() - startTime.getTime();
+    if (totalMs <= 0) return [];
+
+    const segmentCount =
+      timeRange === '1h' ? 4 : timeRange === '8h' ? 8 : timeRange === '24h' ? 4 : 7;
+    const tickCount = segmentCount + 1;
+    const out: Array<{ x: number; label: string; time: Date }> = [];
+
+    for (let i = 0; i < tickCount; i++) {
+      const x = (i / segmentCount) * 100;
+      const divTime = new Date(startTime.getTime() + (i / segmentCount) * totalMs);
+      const msBeforeNow = Math.max(0, endTime.getTime() - divTime.getTime());
+
+      let label: string;
+      if (timeRange === '1h') {
+        label = `${Math.round(msBeforeNow / 60000)}m`;
+      } else if (timeRange === '8h' || timeRange === '24h') {
+        label = `${Math.round(msBeforeNow / 3600000)}h`;
+      } else {
+        label = `${Math.round(msBeforeNow / 86400000)}d`;
+      }
+      out.push({ x, label, time: divTime });
     }
-    return timeDivisions;
+    return out;
   };
 
   const timeDivisions = calculateTimeDivisions();
@@ -224,22 +253,23 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
     }
 
     return () => resizeObserver.disconnect();
-  }, [compact]);
+  }, [compact, fillHeight]);
 
   // Generate SVG oscilloscope
   const renderOscilloscope = () => {
-    const statusLevels = [3, 2, 1, 0];
-    
+    const maxStatusLevel = variant === 'compressor' ? 4 : 3;
+    const statusBandCount = maxStatusLevel + 1;
+    const gridLevels = Array.from({ length: statusBandCount }, (_, i) => maxStatusLevel - i);
+
     // Convert data points to SVG coordinates (as percentages like PollingOscilloscope)
     const svgPoints: Array<{ x: number; y: number; status: string; timestamp: Date }> = [];
     
     if (oscilloscopeData.length > 0) {
       oscilloscopeData.forEach((point, idx) => {
         const x = point.time; // Already a percentage (0-100)
-        // Map Y to 4 states (0-3) with padding
-        const levelY = (1 - point.level / 3) * 100; // Invert Y (0 = bottom, 3 = top)
+        const levelY = (1 - point.level / maxStatusLevel) * 100;
         const paddedY = 8 + (levelY / 100) * 84; // Map to 8-92 range
-        const rowHeight = 84 / 4; // Each status row is ~21% of padded height
+        const rowHeight = 84 / statusBandCount;
         const rowCenter = paddedY;
         // Tight oscillation
         const oscillation = Math.sin(x * 2.5) * (rowHeight * 0.12);
@@ -252,7 +282,7 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
         if (idx < oscilloscopeData.length - 1) {
           const nextPoint = oscilloscopeData[idx + 1];
           const nextX = nextPoint.time; // Already a percentage
-          const nextLevelY = (1 - nextPoint.level / 3) * 100;
+          const nextLevelY = (1 - nextPoint.level / maxStatusLevel) * 100;
           const nextPaddedY = 8 + (nextLevelY / 100) * 84;
           
           if (Math.abs(point.level - nextPoint.level) > 0.1) {
@@ -325,8 +355,8 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
             }}
           >
             {/* Grid lines for each status level */}
-            {statusLevels.map((level) => {
-              const y = 8 + ((1 - level / 3) * 84);
+            {gridLevels.map((level) => {
+              const y = 8 + ((1 - level / maxStatusLevel) * 84);
               return (
                 <line
                   key={`grid-${level}`}
@@ -335,8 +365,8 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
                   x2="100"
                   y2={y}
                   stroke="var(--color-text-dim)"
-                  strokeWidth="0.3"
-                  opacity="0.2"
+                  strokeWidth="0.5"
+                  opacity="0.3"
                   vectorEffect="non-scaling-stroke"
                   shapeRendering="crispEdges"
                   style={{ filter: 'none' }}
@@ -344,12 +374,12 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
               );
             })}
 
-            {/* Oscilloscope trace */}
+            {/* Oscilloscope trace — match Brother StatusTimeline (strokeWidth 2, non-scaling) */}
             <path
               d={pathData}
               fill="none"
               stroke="var(--color-text-primary)"
-              strokeWidth="0.8"
+              strokeWidth="2"
               strokeLinecap="butt"
               strokeLinejoin="miter"
               className="status-oscilloscope-trace"
@@ -407,8 +437,8 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
                 }}
               >
               {/* Grid lines for each status level */}
-              {statusLevels.map((level) => {
-                const levelY = (1 - level / 3) * 100;
+              {gridLevels.map((level) => {
+                const levelY = (1 - level / maxStatusLevel) * 100;
                 const paddedY = 8 + (levelY / 100) * 84;
                 return (
                   <line
@@ -445,12 +475,12 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
                 />
               ))}
 
-              {/* Oscilloscope trace */}
+              {/* Oscilloscope trace — match Brother StatusTimeline (strokeWidth 2, non-scaling) */}
               <path
                 d={pathData}
                 fill="none"
                 stroke="var(--color-text-primary)"
-                strokeWidth="0.8"
+                strokeWidth="2"
                 strokeLinecap="butt"
                 strokeLinejoin="miter"
                 className="status-oscilloscope-trace"
@@ -464,7 +494,7 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
                 const x = dataPoint.time;
                 const timestamp = new Date(startTime.getTime() + (dataPoint.time / 100) * totalDuration);
                 const hoverRadius = 0.5;
-                const levelY = (1 - dataPoint.level / 3) * 100;
+                const levelY = (1 - dataPoint.level / maxStatusLevel) * 100;
                 const paddedY = 8 + (levelY / 100) * 84;
                 
                 return (
@@ -481,7 +511,7 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
                         const rect = e.currentTarget.getBoundingClientRect();
                         const containerRect = e.currentTarget.closest('.status-oscilloscope-full-wrapper')?.getBoundingClientRect();
                         if (containerRect) {
-                          const normalized = normalizeStatus(dataPoint.status);
+                          const normalized = norm(dataPoint.status);
                           setHoveredPoint({
                             x: x,
                             y: paddedY,
@@ -561,7 +591,7 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
                 <span
                   key={`time-label-${divIdx}-${div.label}`}
                   className="status-oscilloscope-x-label-division"
-                  style={{ left: `${div.x * scaleX}%`, transform: 'translateX(-50%)' }}
+                  style={{ left: `${div.x}%`, transform: 'translateX(-50%)' }}
                 >
                   {div.label}
                 </span>
@@ -575,21 +605,24 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
   };
 
   const svgHeight = compact ? 40 : 120;
+  const useFillHeight = fillHeight && !compact;
 
   return (
     <div 
-      className={`status-oscilloscope ${compact ? 'status-oscilloscope-compact' : 'status-oscilloscope-full'}`}
+      className={`status-oscilloscope ${compact ? 'status-oscilloscope-compact' : 'status-oscilloscope-full'}${useFillHeight ? ' status-oscilloscope--fill-height' : ''}`}
       ref={oscilloscopeRef}
       style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', boxSizing: 'border-box' }}
     >
       <div 
         className="status-oscilloscope-display"
         style={{ 
-          height: `${svgHeight}px`, 
-          width: '100%', 
-          maxWidth: '100%', 
-          overflow: 'hidden', 
-          boxSizing: 'border-box' 
+          ...(useFillHeight
+            ? { flex: 1, minHeight: 0, height: '100%' }
+            : { height: `${svgHeight}px` }),
+          width: '100%',
+          maxWidth: '100%',
+          overflow: 'hidden',
+          boxSizing: 'border-box',
         }}
       >
         {renderOscilloscope()}

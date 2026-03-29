@@ -6,6 +6,8 @@ Comprehensive documentation of the Shatter backend architecture, services, and d
 
 The Shatter backend is built on FastAPI, a modern Python web framework optimized for asynchronous operations and automatic API documentation. The architecture is designed for real-time CNC monitoring with concurrent polling, WebSocket broadcasting, and efficient data storage.
 
+Kaeser / SIGMA CONTROL 2 **compressors** (kaeser-sc2-api sidecar + MQTT/REST, separate from CNC Telnet) are documented in [COMPRESSOR_INTEGRATION.md](COMPRESSOR_INTEGRATION.md).
+
 ### Technology Stack
 
 | Component | Technology | Purpose |
