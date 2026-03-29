@@ -69,6 +69,46 @@
   padding: var(--spacing-sm);
 }
 
+/* Compressor add: moderate width; header row must share space with [✓]/[X] */
+.machine-card.add-machine-editing.add-compressor-editing {
+  width: 100%;
+  max-width: min(580px, 100%);
+  min-width: 0;
+  justify-self: start;
+}
+
+.add-machine-editing.add-compressor-editing .machine-card-header {
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+}
+
+.add-machine-editing.add-compressor-editing .machine-header-edit-row {
+  flex: 1 1 200px;
+  min-width: 0;
+  width: auto;
+}
+
+.add-machine-editing.add-compressor-editing .machine-name-input {
+  flex: 1 1 160px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.add-machine-editing.add-compressor-editing .machine-header-actions {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.add-machine-editing.add-compressor-editing .form-sections-horizontal {
+  grid-template-columns: 1fr;
+}
+
+.machine-card.add-machine-editing.add-compressor-editing.full-width {
+  max-width: 1400px;
+  width: 85vw;
+  justify-self: center;
+}
+
 .machine-name-input {
   background: transparent;
   border: none;

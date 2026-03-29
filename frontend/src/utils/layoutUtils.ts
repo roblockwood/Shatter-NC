@@ -2,7 +2,7 @@
  * Utility functions for layout configuration management
  */
 import type { PaneLayout, LayoutConfig } from '../types/layout';
-import { DEFAULT_LAYOUT } from '../types/layout';
+import { DEFAULT_LAYOUT, DEFAULT_COMPRESSOR_LAYOUT } from '../types/layout';
 
 /**
  * Get the default layout configuration
@@ -19,7 +19,7 @@ export function mergeLayoutWithDefaults(
   defaultLayout: PaneLayout[] = DEFAULT_LAYOUT
 ): PaneLayout[] {
   if (!custom || !Array.isArray(custom) || custom.length === 0) {
-    return getDefaultLayout();
+    return JSON.parse(JSON.stringify(defaultLayout));
   }
 
   // Create a map of custom panes by ID
@@ -104,6 +104,20 @@ export function layoutConfigToPanes(config: LayoutConfig | null | undefined): Pa
     return getDefaultLayout();
   }
   return mergeLayoutWithDefaults(config.panes);
+}
+
+export function getDefaultCompressorLayout(): PaneLayout[] {
+  return JSON.parse(JSON.stringify(DEFAULT_COMPRESSOR_LAYOUT));
+}
+
+export function layoutConfigToCompressorPanes(config: LayoutConfig | null | undefined): PaneLayout[] {
+  if (!config || !config.panes) {
+    return getDefaultCompressorLayout();
+  }
+  const cleaned = config.panes.filter((p) => p.i !== 'compressorTelemetry');
+  return mergeLayoutWithDefaults(cleaned, DEFAULT_COMPRESSOR_LAYOUT).filter(
+    (p) => p.i !== 'compressorTelemetry'
+  );
 }
 
 /**
