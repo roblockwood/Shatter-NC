@@ -32,6 +32,31 @@ class MachineStatusEventResponse(BaseModel):
         from_attributes = True
 
 
+class CompressorStatusEventResponse(BaseModel):
+    """Compressor status event response."""
+
+    time: datetime
+    compressor_id: int
+    status: str
+    previous_status: Optional[str] = None
+    metrics: Optional[Dict[str, Any]] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CompressorStatusSampleResponse(BaseModel):
+    """Single MQTT-throttled compressor status sample (time-ordered for oscilloscope)."""
+
+    time: datetime
+    compressor_id: int
+    status: str
+    metrics: Optional[Dict[str, Any]] = None
+
+    class Config:
+        from_attributes = True
+
+
 # ========== Alarm Events ==========
 
 class AlarmEventCreate(BaseModel):

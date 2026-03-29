@@ -703,6 +703,35 @@
   position: relative;
 }
 
+.compressor-card-hover-metric-block {
+  position: relative;
+}
+
+.compressor-card-operation-value {
+  text-align: right;
+  max-width: 68%;
+  word-break: break-word;
+}
+
+.compressor-card-hover-wrap--timeline {
+  max-height: min(360px, calc(100vh - 24px));
+  overflow: auto;
+}
+
+.compressor-card-hover-wrap--panel {
+  max-height: min(520px, calc(100vh - 24px));
+  overflow: auto;
+}
+
+.compressor-card-hover-wrap--history {
+  max-height: min(520px, calc(100vh - 24px));
+  overflow: auto;
+}
+
+.compressor-card-hover-wrap--telemetry {
+  overflow: auto;
+}
+
 .status-hover-pane,
 .program-hover-pane,
 .cycle-hover-pane {
