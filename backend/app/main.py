@@ -1,8 +1,12 @@
 """Main FastAPI application entrypoint."""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+
 from app.core.config import settings
+from app.db.base import engine
 import logging
+import sys
 
 # Configure logging level from settings
 logging.basicConfig(
@@ -12,16 +16,28 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
+def _compressor_status_samples_table_ok() -> bool:
+    """False if hypertable was never migrated (common on DB volumes created before migration 18)."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1 FROM compressor_status_samples LIMIT 1"))
+        return True
+    except Exception:
+        return False
+
+
 # Import routers
-from app.api import machines, status, programs, websocket, history, summary, tools
+from app.api import machines, status, programs, websocket, history, summary, tools, compressors
 from app.api import settings as settings_api
 
 # Import services
-from app.services import WebSocketManager, PollingService
+from app.services import WebSocketManager, PollingService, CompressorPollingService
 
 # Global service instances
 websocket_manager = WebSocketManager()
 polling_service = PollingService(websocket_manager)
+compressor_polling_service = CompressorPollingService(websocket_manager)
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -85,17 +101,39 @@ async def root():
 @app.get("/health")
 async def health():
     """Health check endpoint."""
+    aiomqtt_available = False
+    aiomqtt_error: str | None = None
+    try:
+        import aiomqtt
+
+        aiomqtt_available = True
+        _ = aiomqtt.Client
+    except ImportError as e:
+        aiomqtt_error = str(e)
+
     return {
         "status": "healthy",
+        "python_executable": sys.executable,
         "polling_service": {
             "running": polling_service.is_running,
             "active_machines": len(polling_service.pollers),
             "websocket_connections": websocket_manager.get_connection_count(),
         },
+        "compressor_polling_service": {
+            "running": compressor_polling_service.is_running,
+            "active_compressors": len(compressor_polling_service.pollers),
+        },
+        "compressor_mqtt": {
+            "broker_configured": bool(settings.MQTT_BROKER_HOST),
+            "aiomqtt_available": aiomqtt_available,
+            "import_error": aiomqtt_error,
+        },
+        "compressor_status_samples_table": _compressor_status_samples_table_ok(),
     }
 
 
 # Include routers
+app.include_router(compressors.router, prefix="/api/compressors", tags=["compressors"])
 app.include_router(machines.router, prefix="/api/machines", tags=["machines"])
 app.include_router(status.router, prefix="/api/machines", tags=["status"])
 app.include_router(programs.router, prefix="/api/programs", tags=["programs"])
@@ -108,6 +146,9 @@ app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"
 # Inject websocket manager into websocket router
 websocket.set_websocket_manager(websocket_manager)
 
+compressors.set_compressor_polling_service(compressor_polling_service)
+compressors.set_websocket_manager_for_compressors(websocket_manager)
+
 # Inject polling service into summary, machines, and status routers
 summary.set_polling_service(polling_service)
 machines.set_polling_service(polling_service)
@@ -118,10 +159,28 @@ status.set_polling_service(polling_service)
 async def startup_event():
     """Run on application startup."""
     print(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    
+    if settings.MQTT_BROKER_HOST:
+        try:
+            import aiomqtt
+
+            logger.info(
+                "aiomqtt available for compressor MQTT (python=%s)",
+                sys.executable,
+            )
+        except ImportError as e:
+            logger.error(
+                "aiomqtt not importable: %s — MQTT compressor updates disabled (python=%s)",
+                e,
+                sys.executable,
+            )
+    else:
+        logger.info("MQTT_BROKER_HOST unset — compressor status uses REST only")
+
     print("Starting background polling service...")
     await polling_service.start()
     print("Polling service started - monitoring all enabled machines")
+    await compressor_polling_service.start()
+    print("Compressor polling service started")
 
 
 @app.on_event("shutdown")
@@ -129,6 +188,7 @@ async def shutdown_event():
     """Run on application shutdown."""
     print(f"Shutting down {settings.APP_NAME}")
     print("Stopping background polling service...")
+    await compressor_polling_service.stop()
     await polling_service.stop()
     try:
         from app.clients.telnet_client import close_all_connections

@@ -6,12 +6,21 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 
 from app.db.base import get_db
-from app.models.event import MachineStatusEvent, AlarmEvent, ProductionRun, PRD3StatusHistory
+from app.models.event import (
+    MachineStatusEvent,
+    AlarmEvent,
+    ProductionRun,
+    PRD3StatusHistory,
+    CompressorStatusEvent,
+)
 from app.services.history_service import get_cycle_history, _build_status_intervals, get_production_runs_timeline
+from app.services.compressor_samples_query import get_compressor_status_samples_for_charts
 from app.schemas.event import (
     MachineStatusEventResponse,
     AlarmEventResponse,
-    ProductionRunResponse
+    ProductionRunResponse,
+    CompressorStatusEventResponse,
+    CompressorStatusSampleResponse,
 )
 
 router = APIRouter()
@@ -48,6 +57,49 @@ async def get_status_history(
     events = query.limit(limit).all()
 
     return events
+
+
+@router.get(
+    "/compressors/{compressor_id}/status-history",
+    response_model=List[CompressorStatusEventResponse],
+)
+async def get_compressor_status_history(
+    compressor_id: int,
+    start_time: Optional[datetime] = Query(None),
+    end_time: Optional[datetime] = Query(None),
+    limit: int = Query(100, le=1000),
+    offset: int = Query(0, ge=0, le=500_000),
+    db: Session = Depends(get_db),
+):
+    q = db.query(CompressorStatusEvent).filter(
+        CompressorStatusEvent.compressor_id == compressor_id
+    )
+    if start_time:
+        q = q.filter(CompressorStatusEvent.time >= start_time)
+    if end_time:
+        q = q.filter(CompressorStatusEvent.time <= end_time)
+    q = q.order_by(desc(CompressorStatusEvent.time))
+    return q.offset(offset).limit(limit).all()
+
+
+@router.get(
+    "/compressors/{compressor_id}/status-samples",
+    response_model=List[CompressorStatusSampleResponse],
+)
+async def get_compressor_status_samples(
+    compressor_id: int,
+    start_time: Optional[datetime] = Query(None),
+    end_time: Optional[datetime] = Query(None),
+    limit: int = Query(5000, le=20000),
+    db: Session = Depends(get_db),
+):
+    """
+    Time-ordered status samples for compressor oscilloscope / telemetry charts.
+    Recent window uses raw hypertable; older spans use 1-minute continuous aggregate (see migration 19).
+    """
+    return get_compressor_status_samples_for_charts(
+        db, compressor_id, start_time, end_time, limit
+    )
 
 
 # ========== Alarm History ==========

@@ -1,13 +1,18 @@
 import React, { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
+export type ExpandedAssetKind = 'cnc' | 'compressor';
+
 interface ExpandedMachineContextType {
   expandedMachine: {
     id: number;
     name: string;
   } | null;
+  /** Distinguish CNC machine vs compressor when both use numeric ids. */
+  expandedAssetKind: ExpandedAssetKind | null;
   layoutEditMode: boolean;
   setExpandedMachine: (machine: { id: number; name: string } | null) => void;
+  setExpandedAssetKind: (kind: ExpandedAssetKind | null) => void;
   setLayoutEditMode: (mode: boolean | ((prev: boolean) => boolean)) => void;
   onCollapse: (() => void) | null;
   setOnCollapse: (handler: (() => void) | null) => void;
@@ -24,6 +29,7 @@ const ExpandedMachineContext = createContext<ExpandedMachineContextType | undefi
 
 export const ExpandedMachineProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [expandedMachine, setExpandedMachine] = useState<{ id: number; name: string } | null>(null);
+  const [expandedAssetKind, setExpandedAssetKind] = useState<ExpandedAssetKind | null>(null);
   const [layoutEditMode, setLayoutEditMode] = useState(false);
   const [onCollapse, setOnCollapse] = useState<(() => void) | null>(null);
   const [onToggleLayoutEdit, setOnToggleLayoutEdit] = useState<(() => void) | null>(null);
@@ -34,8 +40,10 @@ export const ExpandedMachineProvider: React.FC<{ children: ReactNode }> = ({ chi
     <ExpandedMachineContext.Provider
       value={{
         expandedMachine,
+        expandedAssetKind,
         layoutEditMode,
         setExpandedMachine,
+        setExpandedAssetKind,
         setLayoutEditMode,
         onCollapse,
         setOnCollapse,

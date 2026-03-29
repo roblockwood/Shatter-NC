@@ -1,0 +1,317 @@
+/*
+ * Compressor HMI — Shatter terminal / phosphor (terminal.css tokens only).
+ * Layout echoes the physical SC2 screen; chrome stays dark CRT, not light LCD.
+ */
+
+.compressor-panel-pane {
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.compressor-panel-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: 0;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+/* ---- LCD: terminal frame + phosphor readout (same vocabulary as AlarmPane / terminal-box) ---- */
+.compressor-panel-lcd-bezel {
+  flex: 0 1 auto;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  box-sizing: border-box;
+}
+
+.cp-lcd-header {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-bg-darker);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  letter-spacing: 0.06em;
+}
+
+.cp-lcd-header-metric {
+  flex: 1 1 auto;
+  text-align: center;
+  min-width: 5rem;
+  color: var(--color-text-primary);
+}
+
+.cp-lcd-body {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg-darker);
+  color: var(--color-text-primary);
+  font-size: var(--font-sm);
+  line-height: 1.45;
+}
+
+.cp-lcd-section {
+  margin: 0;
+  padding: var(--spacing-xs) 0;
+}
+
+.cp-lcd-status-word {
+  margin: 0;
+  text-align: center;
+  font-size: var(--font-md);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: none;
+  color: var(--color-text-secondary);
+  text-shadow: var(--glow);
+}
+
+.cp-lcd-dash {
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--font-xs);
+  line-height: 1;
+  color: var(--color-text-dim);
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.cp-lcd-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+  color: var(--color-text-primary);
+}
+
+.cp-lcd-split-col--right {
+  text-align: right;
+}
+
+.cp-lcd-hours-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--spacing-sm);
+  align-items: baseline;
+  margin: 0;
+  padding: var(--spacing-xs) 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+  line-height: 1.35;
+}
+
+.cp-lcd-hours-col--left {
+  text-align: left;
+  min-width: 0;
+}
+
+.cp-lcd-hours-col--center {
+  text-align: center;
+  min-width: 0;
+}
+
+.cp-lcd-hours-col--right {
+  text-align: right;
+  min-width: 0;
+}
+
+/* ---- Icon strip: fixed 5 columns → two rows of five (SC2-style) ---- */
+.cp-icon-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) 0 0;
+  border-top: 1px dashed var(--color-border);
+}
+
+.cp-tile {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  min-height: 3.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs);
+  padding-top: 0.65rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-darker);
+  box-sizing: border-box;
+}
+
+.cp-tile--hint {
+  cursor: help;
+}
+
+.cp-tile--hint:focus {
+  outline: none;
+}
+
+.cp-tile--hint:focus-visible {
+  outline: 2px solid var(--color-border-light);
+  outline-offset: 2px;
+}
+
+.cp-tile-led {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  box-sizing: border-box;
+}
+
+.cp-tile-led--on.cp-tile-led--tone-green {
+  background: var(--color-success);
+  border-color: var(--color-border-dark);
+}
+
+.cp-tile-led--on.cp-tile-led--tone-amber {
+  background: var(--color-warning);
+  border-color: var(--color-border-dark);
+}
+
+.cp-tile-led--on.cp-tile-led--tone-red {
+  background: var(--color-error);
+  border-color: var(--color-border-dark);
+}
+
+.cp-tile-led--on.cp-tile-led--tone-blue {
+  background: var(--color-info);
+  border-color: var(--color-border-dark);
+}
+
+.cp-tile-led--off {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border-light);
+}
+
+.cp-tile-icon-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.5rem;
+  color: var(--color-text-dim);
+}
+
+/* Icon + label match the LED tone (same tokens as .cp-tile-led--tone-*). */
+.cp-tile[data-cp-icon-tone='green'] .cp-tile-icon-wrap,
+.cp-tile[data-cp-icon-tone='green'] .cp-tile-label {
+  color: var(--color-success);
+}
+
+.cp-tile[data-cp-icon-tone='amber'] .cp-tile-icon-wrap,
+.cp-tile[data-cp-icon-tone='amber'] .cp-tile-label {
+  color: var(--color-warning);
+}
+
+.cp-tile[data-cp-icon-tone='red'] .cp-tile-icon-wrap,
+.cp-tile[data-cp-icon-tone='red'] .cp-tile-label {
+  color: var(--color-error);
+}
+
+.cp-tile[data-cp-icon-tone='blue'] .cp-tile-icon-wrap,
+.cp-tile[data-cp-icon-tone='blue'] .cp-tile-label {
+  color: var(--color-info);
+}
+
+.cp-tile[data-cp-icon-tone='off'] .cp-tile-label {
+  color: var(--color-text-dim);
+}
+
+.cp-svg-icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.cp-tile-label {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.1;
+  margin-top: 2px;
+}
+
+/* Portal tooltip (StatusTile): terminal popover, aligned with PollingStatusLight */
+.cp-tile-tooltip {
+  z-index: 10000;
+  min-width: 200px;
+  max-width: min(320px, 92vw);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-light);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  line-height: 1.45;
+  letter-spacing: var(--letter-spacing);
+  box-shadow:
+    0 0 1px var(--color-text-dim),
+    0 0 16px rgba(0, 255, 0, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  text-align: left;
+  animation: cp-tile-tooltip-fade 0.1s ease-out;
+}
+
+@keyframes cp-tile-tooltip-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.cp-tile-tooltip__title {
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-xs);
+  padding-bottom: var(--spacing-xs);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.cp-tile-tooltip__body {
+  color: var(--color-text-primary);
+  text-shadow: 0 0 8px rgba(0, 255, 0, 0.15);
+  word-break: break-word;
+}
+
+.compressor-panel-foot {
+  margin-top: var(--spacing-xs);
+}
+
+@media (max-width: 400px) {
+  .cp-lcd-split {
+    grid-template-columns: 1fr;
+  }
+
+  .cp-lcd-split-col--right {
+    text-align: left;
+  }
+}
