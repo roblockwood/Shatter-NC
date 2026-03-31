@@ -173,21 +173,9 @@ jobs:
           pkgs_json="$(gh api --paginate "users/${owner}/packages?package_type=container&per_page=100")"
 
           # Find the exact package "name" field that matches our target, or empty if missing.
-          backend_pkg="$(printf '%s' "$pkgs_json" | WANT="$want_backend" python3 - <<'PY'
-import json, os, sys
-pkgs = json.load(sys.stdin)
-want = os.environ.get("WANT", "")
-print(next((p.get("name", "") for p in pkgs if p.get("name") == want), ""))
-PY
-)"
+          backend_pkg="$(printf '%s' "$pkgs_json" | WANT="$want_backend" python3 -c 'import json,os,sys; pkgs=json.load(sys.stdin); want=os.environ.get(\"WANT\",\"\"); print(next((p.get(\"name\",\"\") for p in pkgs if p.get(\"name\")==want), \"\"))')"
 
-          frontend_pkg="$(printf '%s' "$pkgs_json" | WANT="$want_frontend" python3 - <<'PY'
-import json, os, sys
-pkgs = json.load(sys.stdin)
-want = os.environ.get("WANT", "")
-print(next((p.get("name", "") for p in pkgs if p.get("name") == want), ""))
-PY
-)"
+          frontend_pkg="$(printf '%s' "$pkgs_json" | WANT="$want_frontend" python3 -c 'import json,os,sys; pkgs=json.load(sys.stdin); want=os.environ.get(\"WANT\",\"\"); print(next((p.get(\"name\",\"\") for p in pkgs if p.get(\"name\")==want), \"\"))')"
 
           urlenc () { python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
 
