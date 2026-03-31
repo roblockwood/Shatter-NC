@@ -37,8 +37,8 @@ function buildCompose(cfg) {
   // Packages-only compose:
   // - no bind mounts that require a private repo checkout
   // - backend image includes /app/migrations and runs migrations on startup
-  const backendImage = `ghcr.io/roblockwood/shatter-nc/backend:latest`;
-  const frontendImage = `ghcr.io/roblockwood/shatter-nc/frontend:latest`;
+  const backendImage = `ghcr.io/roblockwood/shatter-nc-install/backend:latest`;
+  const frontendImage = `ghcr.io/roblockwood/shatter-nc-install/frontend:latest`;
 
   return `services:
   postgres:
