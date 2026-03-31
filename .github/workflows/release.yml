@@ -153,56 +153,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Make published packages public
-        if: steps.filter.outputs.need_docker == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GHCR_PUBLISH_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "GHCR_PUBLISH_TOKEN is not set; skipping visibility update."
-            exit 0
-          fi
-          owner="${{ github.repository_owner }}"
-          target_repo="shatter-nc-install"
-          want_backend="${target_repo}/backend"
-          want_frontend="${target_repo}/frontend"
-
-          # Discover actual package names (avoids 404s due to name/encoding surprises).
-          # Requires PAT to include at least read:packages + write:packages.
-          pkgs_json="$(gh api --paginate "users/${owner}/packages?package_type=container&per_page=100")"
-
-          # Preflight: validate JSON and extraction logic quickly (fail-fast, before long builds).
-          echo "$pkgs_json" | jq -e 'type=="array"' >/dev/null
-
-          # Find the exact package "name" field that matches our target, or empty if missing.
-          backend_pkg="$(printf '%s' "$pkgs_json" | jq -r --arg want "$want_backend" '.[] | select(.name==$want) | .name' | head -n 1)"
-          frontend_pkg="$(printf '%s' "$pkgs_json" | jq -r --arg want "$want_frontend" '.[] | select(.name==$want) | .name' | head -n 1)"
-
-          echo "Discovered backend package: ${backend_pkg:-<none>}"
-          echo "Discovered frontend package: ${frontend_pkg:-<none>}"
-
-          urlenc () { jq -sRr @uri <<<"$1"; }
-
-          set_public () {
-            local pkg_name="$1"
-            if [ -z "$pkg_name" ]; then
-              return 1
-            fi
-            local pkg_enc
-            pkg_enc="$(urlenc "$pkg_name")"
-            gh api -X PUT "users/${owner}/packages/container/${pkg_enc}/visibility" -f visibility=public && return 0
-            gh api -X PUT "user/packages/container/${pkg_enc}/visibility" -f visibility=public && return 0
-            return 1
-          }
-
-          if ! set_public "$backend_pkg"; then
-            echo "Warning: backend package not found or visibility update failed (continuing)."
-          fi
-          if ! set_public "$frontend_pkg"; then
-            echo "Warning: frontend package not found or visibility update failed (continuing)."
-          fi
-
       - name: Build summary
         if: steps.filter.outputs.need_docker == 'true'
         run: |
