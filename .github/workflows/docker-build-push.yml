@@ -11,6 +11,8 @@ on:
       - 'backend/**'
       - 'frontend/**'
       - 'database/**'
+      - 'docker/**'
+      - 'vendor/kaeser-sc2-api/**'
       - 'docker-compose.prod.yml'
       - 'VERSION'
       - '.github/workflows/docker-build-push.yml'
@@ -60,6 +62,7 @@ jobs:
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_OUTPUT
           echo "BACKEND_IMAGE=ghcr.io/${OWNER}/${REPO_LOWER}/backend" >> $GITHUB_OUTPUT
           echo "FRONTEND_IMAGE=ghcr.io/${OWNER}/${REPO_LOWER}/frontend" >> $GITHUB_OUTPUT
+          echo "KAESER_SC2_API_IMAGE=ghcr.io/${OWNER}/${REPO_LOWER}/kaeser-sc2-api" >> $GITHUB_OUTPUT
 
       - name: Build and push backend image
         uses: docker/build-push-action@v5
@@ -94,6 +97,20 @@ jobs:
             ${{ steps.tags.outputs.FRONTEND_IMAGE }}:v${{ steps.version.outputs.version }}
             ${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.SHORT_SHA }}
             ${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.DATE_TAG }}-${{ steps.tags.outputs.SHORT_SHA }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Kaeser sidecar image (PR build validation)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./vendor/kaeser-sc2-api
+          file: ./vendor/kaeser-sc2-api/Dockerfile
+          target: production
+          platforms: linux/amd64
+          provenance: false
+          push: false
+          tags: |
+            ${{ steps.tags.outputs.KAESER_SC2_API_IMAGE }}:pr-${{ steps.tags.outputs.SHORT_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
