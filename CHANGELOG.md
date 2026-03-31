@@ -1,3 +1,13 @@
+# [0.12.0](https://github.com/roblockwood/Shatter-NC/compare/v0.11.5...v0.12.0) (2026-03-31)
+
+
+### Features
+
+* add compressor integration with Kaeser SIGMA CONTROL 2 ([d6510ac](https://github.com/roblockwood/Shatter-NC/commit/d6510accfacc8afdd173d8656af061b3d3147ee5))
+* enhance telemetry and oscilloscope components for improved time axis management ([1492275](https://github.com/roblockwood/Shatter-NC/commit/1492275ea8de6fe3f5b68e9387c2f77c294cb1d8))
+* implement Kaeser sidecar integration for enhanced compressor data handling ([ab25719](https://github.com/roblockwood/Shatter-NC/commit/ab25719485d0e8927e977a0130b886dc72d02985))
+* improve compressor telemetry visualization and data handling ([f1111c1](https://github.com/roblockwood/Shatter-NC/commit/f1111c198983be424af4953302abb58cee8cb1c3))
+
 ## [0.11.5](https://github.com/roblockwood/Shatter-NC/compare/v0.11.4...v0.11.5) (2026-03-31)
 
 
