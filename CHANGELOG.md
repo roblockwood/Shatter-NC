@@ -1,3 +1,10 @@
+## [0.12.1](https://github.com/roblockwood/Shatter-NC/compare/v0.12.0...v0.12.1) (2026-03-31)
+
+
+### Bug Fixes
+
+* make Kaeser sidecar image buildable ([85a4b9d](https://github.com/roblockwood/Shatter-NC/commit/85a4b9ddd4a087318badb5a19b3747d424f6327c))
+
 # [0.12.0](https://github.com/roblockwood/Shatter-NC/compare/v0.11.5...v0.12.0) (2026-03-31)
 
 
