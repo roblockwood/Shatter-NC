@@ -1,3 +1,10 @@
+## [0.11.2](https://github.com/roblockwood/Shatter-NC/compare/v0.11.1...v0.11.2) (2026-03-31)
+
+
+### Bug Fixes
+
+* **ci:** correct ghcr package visibility api calls ([6c01d80](https://github.com/roblockwood/Shatter-NC/commit/6c01d80dc2d99128ad38df9f93e3d4f3f127027a))
+
 ## [0.11.1](https://github.com/roblockwood/Shatter-NC/compare/v0.11.0...v0.11.1) (2026-03-31)
 
 
