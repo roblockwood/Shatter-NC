@@ -163,8 +163,24 @@ jobs:
             echo "GHCR_PUBLISH_TOKEN is not set; skipping visibility update."
             exit 0
           fi
-          gh api -X PUT "/user/packages/container/shatter-nc-install%2Fbackend/visibility" -f visibility=public
-          gh api -X PUT "/user/packages/container/shatter-nc-install%2Ffrontend/visibility" -f visibility=public
+          # For user-owned packages, prefer the explicit username endpoint.
+          # Package names for GHCR are nested like "shatter-nc-install/backend" (URL-encoded).
+          pkg_backend="shatter-nc-install%2Fbackend"
+          pkg_frontend="shatter-nc-install%2Ffrontend"
+
+          set_public () {
+            local pkg="$1"
+            gh api -X PUT "users/${{ github.repository_owner }}/packages/container/${pkg}/visibility" -f visibility=public && return 0
+            gh api -X PUT "user/packages/container/${pkg}/visibility" -f visibility=public && return 0
+            return 1
+          }
+
+          if ! set_public "$pkg_backend"; then
+            echo "Warning: failed to set backend package visibility to public (continuing)."
+          fi
+          if ! set_public "$pkg_frontend"; then
+            echo "Warning: failed to set frontend package visibility to public (continuing)."
+          fi
 
       - name: Build summary
         if: steps.filter.outputs.need_docker == 'true'
