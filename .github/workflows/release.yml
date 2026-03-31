@@ -121,6 +121,8 @@ jobs:
           platforms: linux/amd64
           provenance: false
           push: true
+          labels: |
+            org.opencontainers.image.source=https://github.com/roblockwood/shatter-nc-install
           tags: |
             ${{ steps.tags.outputs.BACKEND_IMAGE }}:latest
             ${{ steps.tags.outputs.BACKEND_IMAGE }}:v${{ steps.version.outputs.version }}
@@ -141,6 +143,8 @@ jobs:
           push: true
           build-args: |
             VITE_APP_VERSION=${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/roblockwood/shatter-nc-install
           tags: |
             ${{ steps.tags.outputs.FRONTEND_IMAGE }}:latest
             ${{ steps.tags.outputs.FRONTEND_IMAGE }}:v${{ steps.version.outputs.version }}
@@ -148,6 +152,15 @@ jobs:
             ${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.DATE_TAG }}-${{ steps.tags.outputs.SHORT_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Make published packages public
+        if: steps.filter.outputs.need_docker == 'true' && secrets.GHCR_PUBLISH_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.GHCR_PUBLISH_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh api -X PUT "/user/packages/container/shatter-nc-install%2Fbackend/visibility" -f visibility=public
+          gh api -X PUT "/user/packages/container/shatter-nc-install%2Ffrontend/visibility" -f visibility=public
 
       - name: Build summary
         if: steps.filter.outputs.need_docker == 'true'
