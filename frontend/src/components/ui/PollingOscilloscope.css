@@ -113,10 +113,37 @@
   font-family: var(--font-mono);
 }
 
+.polling-oscilloscope-x-middles {
+  position: absolute;
+  left: 3.5rem;
+  right: 5.25rem;
+  top: 0;
+  height: 100%;
+  pointer-events: none;
+}
+
+.polling-oscilloscope-x-axis-end {
+  position: absolute;
+  right: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  z-index: 1;
+}
+
 .oscilloscope-x-axis-label {
   position: absolute;
   transform: translateX(-50%);
   white-space: nowrap;
+}
+
+.polling-oscilloscope-x-axis-now {
+  position: relative;
+  transform: none;
+  left: auto;
+  right: auto;
+  font-weight: 700;
 }
 
 .oscilloscope-tooltip {

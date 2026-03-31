@@ -703,6 +703,35 @@
   position: relative;
 }
 
+.compressor-card-hover-metric-block {
+  position: relative;
+}
+
+.compressor-card-operation-value {
+  text-align: right;
+  max-width: 68%;
+  word-break: break-word;
+}
+
+.compressor-card-hover-wrap--timeline {
+  max-height: min(360px, calc(100vh - 24px));
+  overflow: auto;
+}
+
+.compressor-card-hover-wrap--panel {
+  max-height: min(520px, calc(100vh - 24px));
+  overflow: auto;
+}
+
+.compressor-card-hover-wrap--history {
+  max-height: min(520px, calc(100vh - 24px));
+  overflow: auto;
+}
+
+.compressor-card-hover-wrap--telemetry {
+  overflow: auto;
+}
+
 .status-hover-pane,
 .program-hover-pane,
 .cycle-hover-pane {
@@ -716,6 +745,23 @@
   min-width: 600px;
   max-width: 700px;
   max-height: 300px;
+}
+
+/* Compressor OPERATION hover: StatusOscilloscope uses fillHeight + flex; parent must have explicit
+   height or height:100% / flex:1 collapse to 0 and the chart is invisible. */
+.status-hover-pane.compressor-card-hover-wrap--timeline {
+  height: 340px;
+  max-height: min(340px, calc(100vh - 24px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.status-hover-pane.compressor-card-hover-wrap--timeline > .alarm-pane.terminal-box {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
 }
 
 .program-hover-pane {
