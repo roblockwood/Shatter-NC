@@ -163,23 +163,57 @@ jobs:
             echo "GHCR_PUBLISH_TOKEN is not set; skipping visibility update."
             exit 0
           fi
-          # For user-owned packages, prefer the explicit username endpoint.
-          # Package names for GHCR are nested like "shatter-nc-install/backend" (URL-encoded).
-          pkg_backend="shatter-nc-install%2Fbackend"
-          pkg_frontend="shatter-nc-install%2Ffrontend"
+          owner="${{ github.repository_owner }}"
+          target_repo="shatter-nc-install"
+          want_backend="${target_repo}/backend"
+          want_frontend="${target_repo}/frontend"
+
+          # Discover actual package names (avoids 404s due to name/encoding surprises).
+          # Requires PAT to include at least read:packages + write:packages.
+          pkgs_json="$(gh api --paginate "users/${owner}/packages?package_type=container&per_page=100")"
+
+          # Find the exact package "name" field that matches our target, or empty if missing.
+          backend_pkg="$(printf '%s' "$pkgs_json" | python3 - <<'PY'
+import json,sys
+pkgs=json.load(sys.stdin)
+want=sys.argv[1] if len(sys.argv)>1 else ""
+for p in pkgs:
+  if p.get("name")==want:
+    print(p["name"])
+    break
+PY
+"$want_backend")"
+
+          frontend_pkg="$(printf '%s' "$pkgs_json" | python3 - <<'PY'
+import json,sys
+pkgs=json.load(sys.stdin)
+want=sys.argv[1] if len(sys.argv)>1 else ""
+for p in pkgs:
+  if p.get("name")==want:
+    print(p["name"])
+    break
+PY
+"$want_frontend")"
+
+          urlenc () { python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
 
           set_public () {
-            local pkg="$1"
-            gh api -X PUT "users/${{ github.repository_owner }}/packages/container/${pkg}/visibility" -f visibility=public && return 0
-            gh api -X PUT "user/packages/container/${pkg}/visibility" -f visibility=public && return 0
+            local pkg_name="$1"
+            if [ -z "$pkg_name" ]; then
+              return 1
+            fi
+            local pkg_enc
+            pkg_enc="$(urlenc "$pkg_name")"
+            gh api -X PUT "users/${owner}/packages/container/${pkg_enc}/visibility" -f visibility=public && return 0
+            gh api -X PUT "user/packages/container/${pkg_enc}/visibility" -f visibility=public && return 0
             return 1
           }
 
-          if ! set_public "$pkg_backend"; then
-            echo "Warning: failed to set backend package visibility to public (continuing)."
+          if ! set_public "$backend_pkg"; then
+            echo "Warning: backend package not found or visibility update failed (continuing)."
           fi
-          if ! set_public "$pkg_frontend"; then
-            echo "Warning: failed to set frontend package visibility to public (continuing)."
+          if ! set_public "$frontend_pkg"; then
+            echo "Warning: frontend package not found or visibility update failed (continuing)."
           fi
 
       - name: Build summary
