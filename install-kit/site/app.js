@@ -39,8 +39,42 @@ function buildCompose(cfg) {
   // - backend image includes /app/migrations and runs migrations on startup
   const backendImage = `ghcr.io/roblockwood/shatter-nc-install/backend:latest`;
   const frontendImage = `ghcr.io/roblockwood/shatter-nc-install/frontend:latest`;
+  const kaeserSidecarImage = `ghcr.io/roblockwood/shatter-nc-install/kaeser-sc2-api:latest`;
 
   return `services:
+  kaeser-sc2-api:
+    profiles: ["kaeser"]
+    image: ${kaeserSidecarImage}
+    container_name: shatter-kaeser-sc2-api-prod
+    restart: unless-stopped
+    environment:
+      # Required (Kaeser SC2 portal)
+      KAESER_ADDRESS: \${KAESER_ADDRESS:-}
+      KAESER_USERNAME: \${KAESER_USERNAME:-}
+      KAESER_PASSWORD: \${KAESER_PASSWORD:-}
+      # Optional (publish to MQTT broker)
+      MQTT_HOST: \${MQTT_HOST:-mqtt}
+      MQTT_PORT: \${MQTT_PORT:-1883}
+      MQTT_USER: \${MQTT_USER:-}
+      MQTT_PASS: \${MQTT_PASS:-}
+      MQTT_TOPIC_ROOT: \${MQTT_TOPIC_ROOT:-kaeser-sc2-01}
+      LOG_LEVEL: \${KAESER_LOG_LEVEL:-info}
+    ports:
+      - "\${KAESER_SC2_API_PORT:-3004}:3004"
+    depends_on:
+      - mqtt
+    networks:
+      - shatter-network
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: shatter-mqtt-prod
+    restart: unless-stopped
+    ports:
+      - "\${MQTT_PORT:-1883}:1883"
+    networks:
+      - shatter-network
+
   postgres:
     image: timescale/timescaledb:latest-pg15
     container_name: shatter-db-prod
@@ -73,13 +107,25 @@ function buildCompose(cfg) {
       POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
       LOG_LEVEL: \${LOG_LEVEL:-WARNING}
       DEFAULT_POLL_INTERVAL: \${DEFAULT_POLL_INTERVAL:-5}
+      MQTT_BROKER_HOST: \${MQTT_BROKER_HOST:-mqtt}
+      MQTT_BROKER_PORT: \${MQTT_BROKER_PORT:-1883}
+      MQTT_USER: \${MQTT_USER:-}
+      MQTT_PASSWORD: \${MQTT_PASS:-}
+      COMPRESSOR_REST_REFRESH_SECONDS: \${COMPRESSOR_REST_REFRESH_SECONDS:-10}
+      COMPRESSOR_STATUS_SAMPLE_MIN_INTERVAL_SECONDS: \${COMPRESSOR_STATUS_SAMPLE_MIN_INTERVAL_SECONDS:-1}
+      COMPRESSOR_STATUS_SAMPLES_RAW_DAYS: \${COMPRESSOR_STATUS_SAMPLES_RAW_DAYS:-14}
+      KAESER_SIDECAR_ENV_DIR: \${KAESER_SIDECAR_ENV_DIR:-/docker/generated}
       SECRET_KEY: \${SECRET_KEY}
       CORS_ORIGINS: '["*"]'
+    volumes:
+      - generated_data:/docker/generated
     ports:
       - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
+      mqtt:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "--max-time", "10", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -107,6 +153,8 @@ function buildCompose(cfg) {
 
 volumes:
   postgres_data:
+    driver: local
+  generated_data:
     driver: local
 
 networks:
