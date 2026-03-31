@@ -1,3 +1,10 @@
+## [0.11.5](https://github.com/roblockwood/Shatter-NC/compare/v0.11.4...v0.11.5) (2026-03-31)
+
+
+### Bug Fixes
+
+* **ci:** use jq for ghcr package discovery to avoid python quoting ([c402212](https://github.com/roblockwood/Shatter-NC/commit/c402212f7a4cd1af7bf84ab4c4fee1b8feb912fe))
+
 ## [0.11.4](https://github.com/roblockwood/Shatter-NC/compare/v0.11.3...v0.11.4) (2026-03-31)
 
 
