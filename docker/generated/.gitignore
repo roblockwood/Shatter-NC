@@ -1,0 +1,3 @@
+# Shatter overwrites these from DB; do not commit secrets.
+*.env
+!*.env.example

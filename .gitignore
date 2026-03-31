@@ -1,5 +1,6 @@
 # Environment
 .env
+docker/kaeser-sc2-api.env
 .env.local
 .env.production
 .env.*.local
