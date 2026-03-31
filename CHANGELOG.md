@@ -1,3 +1,11 @@
+## [0.11.4](https://github.com/roblockwood/Shatter-NC/compare/v0.11.3...v0.11.4) (2026-03-31)
+
+
+### Bug Fixes
+
+* **ci:** fix python quoting in ghcr visibility step ([dd4b6f1](https://github.com/roblockwood/Shatter-NC/commit/dd4b6f10fac429c8bafdd5d0c741d4b1a5638393))
+* **ci:** repair release workflow yaml and ghcr visibility script ([493633c](https://github.com/roblockwood/Shatter-NC/commit/493633c52f8e671a83b3eac70baca187f0ff3a71))
+
 ## [0.11.3](https://github.com/roblockwood/Shatter-NC/compare/v0.11.2...v0.11.3) (2026-03-31)
 
 
