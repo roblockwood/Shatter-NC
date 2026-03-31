@@ -73,6 +73,7 @@ export const RunningSummaryRow: React.FC<RunningSummaryRowProps> = ({ machine, c
               currentStatus={machine.current_status}
               timeRange={timeRange}
               compact={true}
+              timeAxisStorageKey={`summary-running-${machine.machine_id}`}
             />
           ) : (
             <span className="text-dim">-</span>
@@ -101,6 +102,7 @@ export const RunningSummaryRow: React.FC<RunningSummaryRowProps> = ({ machine, c
             currentStatus={machine.current_status}
             timeRange={timeRange}
             compact={false}
+            timeAxisStorageKey={`summary-running-${machine.machine_id}`}
           />
         ) : (
           <span className="text-dim">-</span>

@@ -24,6 +24,8 @@ interface PollingStatusLightProps {
   /** Accessible / tooltip context */
   ariaLabel?: string;
   className?: string;
+  /** Extra monospace lines under freshness in the hover tooltip (e.g. ONLINE + status). */
+  tooltipDetailLines?: string[];
 }
 
 const HOVER_SHOW_MS = 50;
@@ -37,6 +39,7 @@ export const PollingStatusLight: React.FC<PollingStatusLightProps> = ({
   expectedIntervalMs = 10_000,
   ariaLabel = 'Data freshness',
   className = '',
+  tooltipDetailLines,
 }) => {
   const [freshness, setFreshness] = useState<PollingFreshness>('unknown');
   const [tooltipLines, setTooltipLines] = useState<{
@@ -114,7 +117,13 @@ export const PollingStatusLight: React.FC<PollingStatusLightProps> = ({
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
     };
-  }, [hoverOpen, tooltipLines.timeLine, tooltipLines.ageLine, tooltipLines.emptyMessage]);
+  }, [
+    hoverOpen,
+    tooltipLines.timeLine,
+    tooltipLines.ageLine,
+    tooltipLines.emptyMessage,
+    tooltipDetailLines,
+  ]);
 
   useEffect(() => {
     if (!hoverOpen) return;
@@ -178,6 +187,15 @@ export const PollingStatusLight: React.FC<PollingStatusLightProps> = ({
             <div className="polling-status-light-tooltip__time">{tooltipLines.timeLine}</div>
             <div className="polling-status-light-tooltip__age">{tooltipLines.ageLine}</div>
           </>
+        )}
+        {tooltipDetailLines != null && tooltipDetailLines.length > 0 && (
+          <div className="polling-status-light-tooltip__extra-block">
+            {tooltipDetailLines.map((line, i) => (
+              <div key={i} className="polling-status-light-tooltip__extra">
+                {line}
+              </div>
+            ))}
+          </div>
         )}
       </div>
     ) : null;

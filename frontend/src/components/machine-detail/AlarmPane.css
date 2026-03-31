@@ -267,6 +267,262 @@
   line-height: 1.4;
 }
 
+/* Kaeser compressor panes: full terminal-box like AlarmPane (ASCII frame + surface) */
+.compressor-terminal-pane.alarm-pane.terminal-box .terminal-box-content {
+  display: flex;
+  flex-direction: column;
+  align-content: stretch;
+  gap: var(--spacing-sm);
+  grid-template-columns: unset;
+}
+
+.compressor-overview-body,
+.compressor-timeline-pane-inner {
+  padding: 0;
+  font-size: var(--font-sm);
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* Status timeline: let oscilloscope consume pane height (no dead space below chart). */
+.compressor-timeline-pane--oscilloscope .compressor-timeline-pane-inner {
+  overflow: hidden;
+}
+
+.compressor-timeline-pane--oscilloscope .compressor-timeline-range-row {
+  flex-shrink: 0;
+  margin-bottom: var(--spacing-xs);
+}
+
+.compressor-timeline-pane--oscilloscope .compressor-oscilloscope-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+}
+
+.compressor-timeline-pane--telemetry .compressor-timeline-pane-inner {
+  overflow: hidden;
+}
+
+.compressor-timeline-pane--telemetry .compressor-timeline-range-row {
+  flex-shrink: 0;
+  margin-bottom: var(--spacing-xs);
+}
+
+.compressor-telemetry-legend-psi {
+  color: #3b82f6;
+}
+
+.compressor-telemetry-legend-temp {
+  color: #f97316;
+}
+
+.compressor-telemetry-pane-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  flex-shrink: 0;
+  margin-bottom: var(--spacing-xs);
+}
+
+.compressor-telemetry-pane-series {
+  font-weight: bold;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.compressor-telemetry-peak {
+  opacity: 0.92;
+  white-space: nowrap;
+}
+
+.compressor-telemetry-chart-wrap {
+  flex: 1 1 0;
+  min-height: 160px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.compressor-telemetry-chart-stack {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+}
+
+.compressor-telemetry-axis-toggle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  z-index: 2;
+}
+
+.compressor-telemetry-svg {
+  flex: 1 1 auto;
+  min-height: 150px;
+  width: 100%;
+}
+
+/* Status history: paginated list + fixed pagination bar (match Speedio pattern). */
+.compressor-history-pane-inner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.compressor-history-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Key–value rows (UX guide: STATE:, PROGRAM:, etc.) */
+.terminal-kv-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 11rem) 1fr;
+  gap: var(--spacing-sm);
+  align-items: baseline;
+  font-size: var(--font-sm);
+  line-height: 1.35;
+  padding: 1px 0;
+}
+
+.terminal-kv-label {
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--font-xs);
+}
+
+.terminal-kv-value {
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  word-break: break-word;
+}
+
+.terminal-kv-value.text-dim {
+  color: var(--color-text-dim);
+}
+
+.terminal-status-dot {
+  font-size: var(--font-md);
+  line-height: 1;
+  margin-right: var(--spacing-xs);
+}
+
+.compressor-pane-section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  background: rgba(0, 255, 0, 0.02);
+  box-sizing: border-box;
+}
+
+.compressor-pane-section-title {
+  color: var(--color-text-secondary);
+  font-size: var(--font-sm);
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: var(--spacing-sm);
+  padding-bottom: var(--spacing-xs);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.compressor-overview-body pre.compressor-registers-pre {
+  font-size: var(--font-xs);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 160px;
+  overflow: auto;
+  margin: var(--spacing-xs) 0 0;
+  opacity: 0.85;
+}
+
+.compressor-overview-body pre.compressor-operational-json {
+  max-height: min(50vh, 520px);
+  margin-top: var(--spacing-sm);
+}
+
+.compressor-error {
+  color: var(--color-error);
+}
+
+.compressor-timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.compressor-timeline-range-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+/* Match Brother StatusTimeline time-range controls (illuminated active = filled + glow). */
+.compressor-timeline-range-row .time-range-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.compressor-timeline-range-row .time-range-btn:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-text-primary);
+}
+
+.compressor-timeline-range-row .time-range-btn.active {
+  background: var(--color-text-primary);
+  color: var(--color-bg-primary);
+  box-shadow: var(--glow);
+}
+
+.compressor-oscilloscope-wrap {
+  margin-bottom: var(--spacing-sm);
+}
+
+.compressor-timeline-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.compressor-timeline-time {
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+}
+
+.compressor-timeline-status {
+  font-family: var(--font-mono);
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .alarm-pane .terminal-box-content {

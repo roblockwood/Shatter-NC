@@ -27,7 +27,11 @@ function Navigation() {
             className={`text-glow-strong ${isBetaMode ? 'beta-mode' : ''}`}
             onClick={handleLogoClick}
             style={{ cursor: 'pointer', userSelect: 'none' }}
-            title={isBetaMode ? 'BETA MODE ACTIVE - Click rapidly to disable' : 'Click rapidly to enable beta mode'}
+            title={
+              isBetaMode
+                ? 'BETA: Tools + Kaeser compressors — click rapidly to disable'
+                : 'Click rapidly to enable beta (Tools + compressors)'
+            }
           >
             SHATTER v{APP_VERSION}
           </span>

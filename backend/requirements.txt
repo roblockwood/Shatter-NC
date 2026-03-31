@@ -27,3 +27,6 @@ passlib[bcrypt]==1.7.4
 # Utilities
 python-dateutil==2.8.2
 pytz==2023.3
+
+# Kaeser sidecar MQTT subscriber (Brown-Industries kaeser-sc2-api)
+aiomqtt==2.3.0

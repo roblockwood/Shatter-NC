@@ -10,7 +10,14 @@ export type PaneId =
   | 'productionRuns'
   | 'statusHistory'
   | 'panel'
-  | 'fileManager';
+  | 'fileManager'
+  | 'compressorOverview'
+  | 'compressorAlarms'
+  | 'compressorStatusTimeline'
+  | 'compressorPsiTimeline'
+  | 'compressorTempTimeline'
+  | 'compressorStatusHistory'
+  | 'compressorPanel';
 
 export interface PaneLayout {
   i: string;        // Pane ID: 'statusTimeline', 'alarms', 'currentProgram', 'tools', 'productionRuns', 'statusHistory', etc.
@@ -39,7 +46,88 @@ export const PANE_IDS = {
   STATUS_HISTORY: 'statusHistory' as const,
   PANEL: 'panel' as const,
   FILE_MANAGER: 'fileManager' as const,
+  COMPRESSOR_OVERVIEW: 'compressorOverview' as const,
+  COMPRESSOR_ALARMS: 'compressorAlarms' as const,
+  COMPRESSOR_STATUS_TIMELINE: 'compressorStatusTimeline' as const,
+  COMPRESSOR_PSI_TIMELINE: 'compressorPsiTimeline' as const,
+  COMPRESSOR_TEMP_TIMELINE: 'compressorTempTimeline' as const,
+  COMPRESSOR_STATUS_HISTORY: 'compressorStatusHistory' as const,
+  COMPRESSOR_PANEL: 'compressorPanel' as const,
 } as const;
+
+/** Default grid for Kaeser / compressor detail (no CNC panes). */
+export const DEFAULT_COMPRESSOR_LAYOUT: PaneLayout[] = [
+  {
+    i: PANE_IDS.COMPRESSOR_PANEL,
+    x: 0,
+    y: 0,
+    w: 24,
+    h: 8,
+    minW: 8,
+    minH: 5,
+    visible: true,
+  },
+  {
+    i: PANE_IDS.COMPRESSOR_OVERVIEW,
+    x: 0,
+    y: 8,
+    w: 24,
+    h: 5,
+    minW: 6,
+    minH: 4,
+    visible: true,
+  },
+  {
+    i: PANE_IDS.COMPRESSOR_ALARMS,
+    x: 0,
+    y: 13,
+    w: 12,
+    h: 7,
+    minW: 3,
+    minH: 4,
+    visible: true,
+  },
+  {
+    i: PANE_IDS.COMPRESSOR_STATUS_TIMELINE,
+    x: 12,
+    y: 13,
+    w: 12,
+    h: 7,
+    minW: 6,
+    minH: 4,
+    visible: true,
+  },
+  {
+    i: PANE_IDS.COMPRESSOR_PSI_TIMELINE,
+    x: 0,
+    y: 20,
+    w: 12,
+    h: 7,
+    minW: 6,
+    minH: 4,
+    visible: true,
+  },
+  {
+    i: PANE_IDS.COMPRESSOR_TEMP_TIMELINE,
+    x: 12,
+    y: 20,
+    w: 12,
+    h: 7,
+    minW: 6,
+    minH: 4,
+    visible: true,
+  },
+  {
+    i: PANE_IDS.COMPRESSOR_STATUS_HISTORY,
+    x: 0,
+    y: 27,
+    w: 24,
+    h: 6,
+    minW: 6,
+    minH: 3,
+    visible: true,
+  },
+];
 
 // Default layout configuration matching current hardcoded structure
 // Grid uses 24 columns for finer positioning (doubled from 12 for 0.5-unit precision)

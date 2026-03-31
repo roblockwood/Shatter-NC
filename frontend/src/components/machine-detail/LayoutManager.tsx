@@ -25,6 +25,13 @@ const PANE_NAMES: Record<PaneId, string> = {
   statusHistory: 'Status History',
   panel: 'Panel',
   fileManager: 'File Manager',
+  compressorOverview: 'Compressor overview',
+  compressorAlarms: 'Compressor alarms',
+  compressorStatusTimeline: 'Compressor status timeline',
+  compressorPsiTimeline: 'Compressor PSI',
+  compressorTempTimeline: 'Compressor temperature',
+  compressorStatusHistory: 'Compressor status history',
+  compressorPanel: 'Compressor panel',
 };
 
 interface LayoutManagerProps {
@@ -47,6 +54,8 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
     setOnResetToDefault
   } = useExpandedMachine();
   const saveTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingLayoutRef = React.useRef<PaneLayout[] | null>(null);
+  const prevEditRef = React.useRef(false);
 
   // Debug: Log edit mode changes
   useEffect(() => {
@@ -76,13 +85,18 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
   // Debounced save function
   const debouncedSave = useCallback(
     (newLayout: PaneLayout[]) => {
+      pendingLayoutRef.current = newLayout;
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
-
+      const id = machineId;
       saveTimeoutRef.current = setTimeout(async () => {
+        saveTimeoutRef.current = null;
+        const toSave = pendingLayoutRef.current;
+        pendingLayoutRef.current = null;
+        if (!toSave) return;
         try {
-          await saveMachineLayout(machineId, newLayout);
+          await saveMachineLayout(id, toSave);
         } catch (error) {
           console.error('Error saving layout:', error);
         }
@@ -91,14 +105,39 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
     [machineId]
   );
 
-  // Cleanup timeout on unmount
   useEffect(() => {
+    const id = machineId;
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      const pending = pendingLayoutRef.current;
+      pendingLayoutRef.current = null;
+      if (pending) {
+        void saveMachineLayout(id, pending).catch((error) => {
+          console.error('Error saving layout:', error);
+        });
       }
     };
-  }, []);
+  }, [machineId]);
+
+  useEffect(() => {
+    if (prevEditRef.current && !isEditMode) {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      const pending = pendingLayoutRef.current;
+      pendingLayoutRef.current = null;
+      if (pending) {
+        void saveMachineLayout(machineId, pending).catch((error) => {
+          console.error('Error saving layout:', error);
+        });
+      }
+    }
+    prevEditRef.current = isEditMode;
+  }, [isEditMode, machineId]);
 
   // Filter visible panes for rendering
   const visibleLayout = useMemo(() => {
