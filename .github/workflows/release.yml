@@ -172,12 +172,17 @@ jobs:
           # Requires PAT to include at least read:packages + write:packages.
           pkgs_json="$(gh api --paginate "users/${owner}/packages?package_type=container&per_page=100")"
 
+          # Preflight: validate JSON and extraction logic quickly (fail-fast, before long builds).
+          echo "$pkgs_json" | jq -e 'type=="array"' >/dev/null
+
           # Find the exact package "name" field that matches our target, or empty if missing.
-          backend_pkg="$(printf '%s' "$pkgs_json" | WANT="$want_backend" python3 -c 'import json,os,sys; pkgs=json.load(sys.stdin); want=os.environ.get(\"WANT\",\"\"); print(next((p.get(\"name\",\"\") for p in pkgs if p.get(\"name\")==want), \"\"))')"
+          backend_pkg="$(printf '%s' "$pkgs_json" | jq -r --arg want "$want_backend" '.[] | select(.name==$want) | .name' | head -n 1)"
+          frontend_pkg="$(printf '%s' "$pkgs_json" | jq -r --arg want "$want_frontend" '.[] | select(.name==$want) | .name' | head -n 1)"
 
-          frontend_pkg="$(printf '%s' "$pkgs_json" | WANT="$want_frontend" python3 -c 'import json,os,sys; pkgs=json.load(sys.stdin); want=os.environ.get(\"WANT\",\"\"); print(next((p.get(\"name\",\"\") for p in pkgs if p.get(\"name\")==want), \"\"))')"
+          echo "Discovered backend package: ${backend_pkg:-<none>}"
+          echo "Discovered frontend package: ${frontend_pkg:-<none>}"
 
-          urlenc () { python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
+          urlenc () { jq -sRr @uri <<<"$1"; }
 
           set_public () {
             local pkg_name="$1"
