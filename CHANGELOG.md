@@ -1,3 +1,10 @@
+# [0.11.0](https://github.com/roblockwood/Shatter-NC/compare/v0.10.0...v0.11.0) (2026-03-31)
+
+
+### Features
+
+* add install kit for Shatter-NC with public packages and Komodo support ([2e18d6b](https://github.com/roblockwood/Shatter-NC/commit/2e18d6b8ba55095803d55c1f8d0b988d5c3a6c2e))
+
 # [0.10.0](https://github.com/roblockwood/Shatter-NC/compare/v0.9.2...v0.10.0) (2026-03-28)
 
 
