@@ -1,26 +1,41 @@
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 import { MachineCard } from '../components/MachineCard';
+import { CompressorCard } from '../components/CompressorCard';
 import { StatusIndicator } from '../components/ui';
 import { AddMachineCard } from '../components/AddMachineCard';
+import { AddCompressorCard } from '../components/AddCompressorCard';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { SummaryModal } from '../components/modals/SummaryModal';
 import { SummaryPopup } from '../components/modals/SummaryPopup';
 import { AsciiLoadingScreen } from '../components/AsciiLoadingScreen';
 import { useExpandedMachine } from '../contexts/ExpandedMachineContext';
+import { useBetaMode } from '../hooks/useBetaMode';
 import './Dashboard.css';
-import { useState, useRef, useEffect } from 'react';
-import { API_BASE } from '../config/api';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { API_BASE, getApiErrorMessage } from '../config/api';
+import type { CompressorStatus } from '../hooks/useWebSocket';
+
+type DeleteTarget =
+  | { kind: 'cnc'; data: { machine_id: number; machine_name: string } }
+  | { kind: 'compressor'; data: CompressorStatus };
 
 export const Dashboard = () => {
-  const { machines, isConnected, removeMachine, addMachine } = useWebSocketContext();
+  const { isBetaMode } = useBetaMode();
+  /** Kaeser compressors: same beta gate as [ TOOLS ] (logo rapid-click). Backend API/polling always available if compressors exist in DB. */
+  const showCompressorUi = isBetaMode;
+  const { machines, compressors, isConnected, removeMachine, addMachine, removeCompressor, addCompressor } =
+    useWebSocketContext();
   const [editMode, setEditMode] = useState(false);
   const [expandedMachineId, setExpandedMachineId] = useState<number | null>(null);
+  const [expandedCompressorId, setExpandedCompressorId] = useState<number | null>(null);
   const [editingMachineId, setEditingMachineId] = useState<number | null>(null);
+  const [editingCompressorId, setEditingCompressorId] = useState<number | null>(null);
   const [pendingEditMachineId, setPendingEditMachineId] = useState<number | null>(null);
   const [pendingCollapseMachineId, setPendingCollapseMachineId] = useState<number | null>(null);
+  const [pendingCollapseCompressorId, setPendingCollapseCompressorId] = useState<number | null>(null);
   const [scrollToStatusMachineId, setScrollToStatusMachineId] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deletingMachine, setDeletingMachine] = useState<any>(null);
+  const [deletingTarget, setDeletingTarget] = useState<DeleteTarget | null>(null);
   const [summaryModal, setSummaryModal] = useState<{
     isOpen: boolean;
     type: 'running' | 'online' | 'offline' | null;
@@ -30,23 +45,54 @@ export const Dashboard = () => {
     type: 'online' | 'offline' | 'running' | 'machines' | null;
   }>({ isOpen: false, type: null });
   const [isAddingMachine, setIsAddingMachine] = useState(false);
+  const [isAddingCompressor, setIsAddingCompressor] = useState(false);
 
   const runningRef = useRef<HTMLSpanElement>(null);
   const machinesRef = useRef<HTMLSpanElement>(null);
   const popupCloseTimerRef = useRef<number | null>(null);
 
-  // Handle Escape key to exit edit mode (only if no machine is being edited)
+  const {
+    expandedMachine,
+    setExpandedMachine,
+    setExpandedAssetKind,
+    layoutEditMode,
+    setLayoutEditMode,
+    onCollapse,
+    onToggleLayoutEdit,
+    showPaneList,
+    setShowPaneList,
+    onResetToDefault,
+  } = useExpandedMachine();
+
+  const clearExpansionChrome = useCallback(() => {
+    setExpandedMachine(null);
+    setExpandedAssetKind(null);
+    setLayoutEditMode(false);
+  }, [setExpandedAssetKind, setExpandedMachine, setLayoutEditMode]);
+
+  useEffect(() => {
+    if (!showCompressorUi) {
+      setExpandedCompressorId(null);
+      setEditingCompressorId(null);
+      setPendingCollapseCompressorId(null);
+    }
+  }, [showCompressorUi]);
+
+  const fleetCompressors = showCompressorUi ? compressors : [];
+
+  const isAnyAssetEditing =
+    editingMachineId !== null || editingCompressorId !== null || isAddingMachine || isAddingCompressor;
+
+  // Handle Escape key to exit edit mode (only if no asset is being edited in a card)
   useEffect(() => {
     if (!editMode) {
       return;
     }
 
-    // Don't exit edit mode if a machine is being edited - let MachineCard handle it first
-    if (editingMachineId !== null) {
+    if (editingMachineId !== null || editingCompressorId !== null) {
       return;
     }
 
-    // Don't exit edit mode if a modal or popup is open
     if (showDeleteConfirm || summaryModal.isOpen || summaryPopup.isOpen) {
       return;
     }
@@ -61,7 +107,7 @@ export const Dashboard = () => {
     return () => {
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [editMode, editingMachineId, showDeleteConfirm, summaryModal.isOpen, summaryPopup.isOpen]);
+  }, [editMode, editingMachineId, editingCompressorId, showDeleteConfirm, summaryModal.isOpen, summaryPopup.isOpen]);
 
   const handlePopupMouseEnter = (type: 'machines' | 'running') => {
     if (popupCloseTimerRef.current) {
@@ -77,66 +123,96 @@ export const Dashboard = () => {
     }, 200);
   };
 
-  const onlineCount = machines.filter(m => m.is_online === true).length;
-  const runningCount = machines.filter(m => m.is_online === true && (m.status?.toLowerCase() === 'operating' || m.status?.toLowerCase().includes('running'))).length;
-  const { 
-    expandedMachine, 
-    layoutEditMode, 
-    onCollapse, 
-    onToggleLayoutEdit,
-    showPaneList,
-    setShowPaneList,
-    onResetToDefault
-  } = useExpandedMachine();
+  const onlineCount = machines.filter((m) => m.is_online === true).length;
+  const runningCount = machines.filter(
+    (m) => m.is_online === true && (m.status?.toLowerCase() === 'operating' || m.status?.toLowerCase().includes('running'))
+  ).length;
+  const compressorsOnlineCount = fleetCompressors.filter((c) => c.is_online === true).length;
+  /** Fleet totals: compressors count as machines when beta UI is on (RUNNING stays CNC-only). */
+  const fleetAssetCount = machines.length + fleetCompressors.length;
+  const fleetOnlineCount = onlineCount + compressorsOnlineCount;
 
-  const handleDeleteMachine = (machine: any) => {
-    setDeletingMachine(machine);
+  const handleDeleteMachine = (machine: { machine_id: number; machine_name: string }) => {
+    setDeletingTarget({ kind: 'cnc', data: machine });
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteCompressor = (compressor: CompressorStatus) => {
+    setDeletingTarget({ kind: 'compressor', data: compressor });
     setShowDeleteConfirm(true);
   };
 
   const confirmDelete = async () => {
-    if (!deletingMachine) return;
+    if (!deletingTarget) return;
     try {
-      const machineId = deletingMachine.machine_id || deletingMachine.id;
-      console.log('Deleting machine:', { deletingMachine, machineId });
-      const response = await fetch(`${API_BASE}/machines/${machineId}`, {
-        method: 'DELETE'
-      });
-      if (response.ok) {
-        setShowDeleteConfirm(false);
-        setDeletingMachine(null);
-        // Remove machine from frontend state immediately
-        removeMachine(machineId);
+      if (deletingTarget.kind === 'cnc') {
+        const machineId = deletingTarget.data.machine_id;
+        const response = await fetch(`${API_BASE}/machines/${machineId}`, {
+          method: 'DELETE',
+        });
+        if (response.ok) {
+          setShowDeleteConfirm(false);
+          setDeletingTarget(null);
+          removeMachine(machineId);
+        } else {
+          const error = await response.json().catch(() => ({}));
+          alert(`Failed to delete machine: ${getApiErrorMessage(error.detail) || 'Unknown error'}`);
+        }
       } else {
-        const error = await response.json().catch(() => ({}));
-        console.error('Delete error response:', error);
-        alert(`Failed to delete machine: ${error.detail || 'Unknown error'}`);
+        const id = deletingTarget.data.compressor_id;
+        const response = await fetch(`${API_BASE}/compressors/${id}`, {
+          method: 'DELETE',
+        });
+        if (response.ok) {
+          setShowDeleteConfirm(false);
+          setDeletingTarget(null);
+          removeCompressor(id);
+          if (expandedCompressorId === id) {
+            setExpandedCompressorId(null);
+            clearExpansionChrome();
+          }
+        } else {
+          const error = await response.json().catch(() => ({}));
+          alert(`Failed to delete compressor: ${getApiErrorMessage(error.detail) || 'Unknown error'}`);
+        }
       }
     } catch (error) {
       console.error('Delete failed:', error);
-      alert('Failed to delete machine');
+      alert('Delete failed');
     }
+  };
+
+  const deleteModalName =
+    deletingTarget?.kind === 'cnc'
+      ? deletingTarget.data.machine_name
+      : deletingTarget?.kind === 'compressor'
+        ? deletingTarget.data.compressor_name
+        : '';
+
+  const collapseAllExpanded = () => {
+    setExpandedMachineId(null);
+    setExpandedCompressorId(null);
+    setScrollToStatusMachineId(null);
+    clearExpansionChrome();
   };
 
   return (
     <div className="dashboard">
-      {/* Fleet Overview */}
       <div className="fleet-overview">
         <div className="fleet-overview-left">
           <span
             className="machines-count clickable"
             onClick={() => {
-              // If a machine is being edited, check for unsaved changes first
               if (editingMachineId !== null) {
                 setPendingCollapseMachineId(editingMachineId);
+              } else if (editingCompressorId !== null) {
+                setPendingCollapseCompressorId(editingCompressorId);
               } else {
-                // No machine being edited, collapse immediately
-                setExpandedMachineId(null);
-                setScrollToStatusMachineId(null);
+                collapseAllExpanded();
               }
             }}
           >
-            MACHINES: {machines.length}
+            MACHINES: {fleetAssetCount}
           </span>
           <span className="separator">│</span>
           <span
@@ -155,7 +231,9 @@ export const Dashboard = () => {
             onMouseEnter={() => handlePopupMouseEnter('machines')}
             onMouseLeave={handlePopupMouseLeave}
           >
-            ONLINE: <span className="text-info">{onlineCount}</span><span className="text-dim">/</span><span className="text-info">{machines.length}</span>
+            ONLINE: <span className="text-info">{fleetOnlineCount}</span>
+            <span className="text-dim">/</span>
+            <span className="text-info">{fleetAssetCount}</span>
           </span>
         </div>
         {expandedMachine && (
@@ -169,7 +247,7 @@ export const Dashboard = () => {
                     e.stopPropagation();
                     setShowPaneList(!showPaneList);
                   }}
-                  title={showPaneList ? "Hide pane list" : "Show pane list"}
+                  title={showPaneList ? 'Hide pane list' : 'Show pane list'}
                 >
                   {showPaneList ? '[HIDE PANE LIST]' : '[SHOW PANE LIST]'}
                 </button>
@@ -191,7 +269,7 @@ export const Dashboard = () => {
                 e.stopPropagation();
                 onToggleLayoutEdit?.();
               }}
-              title={layoutEditMode ? "Exit layout edit mode" : "Customize layout"}
+              title={layoutEditMode ? 'Exit layout edit mode' : 'Customize layout'}
             >
               {layoutEditMode ? '[EXIT EDIT]' : '[CUSTOMIZE LAYOUT]'}
             </button>
@@ -209,13 +287,9 @@ export const Dashboard = () => {
         )}
       </div>
 
-      {/* Machine Grid */}
       <div className="machine-grid">
-        {machines.length === 0 && !isConnected && (
-          <AsciiLoadingScreen />
-        )}
+        {machines.length === 0 && fleetCompressors.length === 0 && !isConnected && <AsciiLoadingScreen />}
 
-        {/* When a machine is expanded, only show that machine card */}
         {expandedMachineId !== null ? (
           machines
             .filter((machine) => machine.machine_id === expandedMachineId)
@@ -226,114 +300,206 @@ export const Dashboard = () => {
                 editMode={editMode}
                 isExpanded={expandedMachineId === machine.machine_id}
                 isEditing={editingMachineId === machine.machine_id}
-                canEdit={editingMachineId === null || editingMachineId === machine.machine_id}
-              pendingEditSwitch={editingMachineId === machine.machine_id && pendingEditMachineId !== null}
-              isAnyMachineEditing={editingMachineId !== null || isAddingMachine}
-              onExpand={() => setExpandedMachineId(machine.machine_id)}
+                canEdit={
+                  editingCompressorId === null && (editingMachineId === null || editingMachineId === machine.machine_id)
+                }
+                pendingEditSwitch={editingMachineId === machine.machine_id && pendingEditMachineId !== null}
+                isAnyMachineEditing={isAnyAssetEditing}
+                onExpand={() => {
+                  setExpandedMachineId(machine.machine_id);
+                  setExpandedCompressorId(null);
+                }}
                 onCollapse={() => {
                   setExpandedMachineId(null);
                   setScrollToStatusMachineId(null);
+                  clearExpansionChrome();
                 }}
-                onEditStart={() => setEditingMachineId(machine.machine_id)}
+                onEditStart={() => {
+                  setEditingMachineId(machine.machine_id);
+                  setEditingCompressorId(null);
+                }}
                 onEditEnd={() => {
                   setEditingMachineId(null);
-                  // If there's a pending collapse, execute it now
                   if (pendingCollapseMachineId === machine.machine_id) {
-                    setExpandedMachineId(null);
-                    setScrollToStatusMachineId(null);
+                    collapseAllExpanded();
                     setPendingCollapseMachineId(null);
                     return;
                   }
-                  // If there's a pending edit, start it now
                   if (pendingEditMachineId !== null) {
                     setEditingMachineId(pendingEditMachineId);
                     setPendingEditMachineId(null);
                   }
                 }}
                 onRequestEditSwitch={() => {
-                  // Request to switch to this machine - trigger save confirmation on current
                   setPendingEditMachineId(machine.machine_id);
                 }}
                 onCancelEditSwitch={() => {
-                  // User cancelled the switch - clear pending
                   setPendingEditMachineId(null);
                 }}
                 pendingCollapse={pendingCollapseMachineId === machine.machine_id}
                 onCancelCollapse={() => {
-                  // User cancelled the collapse - clear pending
                   setPendingCollapseMachineId(null);
                 }}
                 onDelete={handleDeleteMachine}
                 scrollToStatus={scrollToStatusMachineId === machine.machine_id}
               />
             ))
+        ) : expandedCompressorId !== null && showCompressorUi ? (
+          fleetCompressors
+            .filter((c) => c.compressor_id === expandedCompressorId)
+            .map((c) => (
+              <CompressorCard
+                key={c.compressor_id}
+                compressor={c}
+                editMode={editMode}
+                isExpanded
+                isEditing={editingCompressorId === c.compressor_id}
+                canEdit={
+                  editingMachineId === null &&
+                  (editingCompressorId === null || editingCompressorId === c.compressor_id)
+                }
+                isAnyAssetEditing={isAnyAssetEditing}
+                onExpand={() => {
+                  setExpandedCompressorId(c.compressor_id);
+                  setExpandedMachineId(null);
+                }}
+                onCollapse={() => {
+                  setExpandedCompressorId(null);
+                  clearExpansionChrome();
+                }}
+                onEditStart={() => {
+                  setEditingCompressorId(c.compressor_id);
+                  setEditingMachineId(null);
+                }}
+                onEditEnd={() => {
+                  setEditingCompressorId(null);
+                  if (pendingCollapseCompressorId === c.compressor_id) {
+                    collapseAllExpanded();
+                    setPendingCollapseCompressorId(null);
+                  }
+                }}
+                pendingCollapse={pendingCollapseCompressorId === c.compressor_id}
+                onCancelCollapse={() => {
+                  setPendingCollapseCompressorId(null);
+                }}
+                onDelete={handleDeleteCompressor}
+              />
+            ))
         ) : (
-          // When no machine is expanded, show all machine cards (individual cards hide themselves when editing/adding)
-          machines.map((machine) => (
-            <MachineCard
-              key={machine.machine_id}
-              machine={machine}
-              editMode={editMode}
-              isExpanded={expandedMachineId === machine.machine_id}
-              isEditing={editingMachineId === machine.machine_id}
-              canEdit={editingMachineId === null || editingMachineId === machine.machine_id}
-              pendingEditSwitch={editingMachineId === machine.machine_id && pendingEditMachineId !== null}
-              isAnyMachineEditing={editingMachineId !== null || isAddingMachine}
-              onExpand={() => setExpandedMachineId(machine.machine_id)}
-              onCollapse={() => {
-                setExpandedMachineId(null);
-                setScrollToStatusMachineId(null);
-              }}
-              onEditStart={() => setEditingMachineId(machine.machine_id)}
-              onEditEnd={() => {
-                setEditingMachineId(null);
-                // If there's a pending collapse, execute it now
-                if (pendingCollapseMachineId === machine.machine_id) {
+          <>
+            {machines.map((machine) => (
+              <MachineCard
+                key={machine.machine_id}
+                machine={machine}
+                editMode={editMode}
+                isExpanded={false}
+                isEditing={editingMachineId === machine.machine_id}
+                canEdit={
+                  editingCompressorId === null && (editingMachineId === null || editingMachineId === machine.machine_id)
+                }
+                pendingEditSwitch={editingMachineId === machine.machine_id && pendingEditMachineId !== null}
+                isAnyMachineEditing={isAnyAssetEditing}
+                onExpand={() => {
+                  setExpandedMachineId(machine.machine_id);
+                  setExpandedCompressorId(null);
+                }}
+                onCollapse={() => {
                   setExpandedMachineId(null);
                   setScrollToStatusMachineId(null);
-                  setPendingCollapseMachineId(null);
-                  return;
-                }
-                // If there's a pending edit, start it now
-                if (pendingEditMachineId !== null) {
-                  setEditingMachineId(pendingEditMachineId);
+                  clearExpansionChrome();
+                }}
+                onEditStart={() => {
+                  setEditingMachineId(machine.machine_id);
+                  setEditingCompressorId(null);
+                }}
+                onEditEnd={() => {
+                  setEditingMachineId(null);
+                  if (pendingCollapseMachineId === machine.machine_id) {
+                    collapseAllExpanded();
+                    setPendingCollapseMachineId(null);
+                    return;
+                  }
+                  if (pendingEditMachineId !== null) {
+                    setEditingMachineId(pendingEditMachineId);
+                    setPendingEditMachineId(null);
+                  }
+                }}
+                onRequestEditSwitch={() => {
+                  setPendingEditMachineId(machine.machine_id);
+                }}
+                onCancelEditSwitch={() => {
                   setPendingEditMachineId(null);
-                }
-              }}
-              onRequestEditSwitch={() => {
-                // Request to switch to this machine - trigger save confirmation on current
-                setPendingEditMachineId(machine.machine_id);
-              }}
-              onCancelEditSwitch={() => {
-                // User cancelled the switch - clear pending
-                setPendingEditMachineId(null);
-              }}
-              pendingCollapse={pendingCollapseMachineId === machine.machine_id}
-              onCancelCollapse={() => {
-                // User cancelled the collapse - clear pending
-                setPendingCollapseMachineId(null);
-              }}
-              onDelete={handleDeleteMachine}
-              scrollToStatus={scrollToStatusMachineId === machine.machine_id}
-            />
-          ))
-        )}
-
-        {/* Always show AddMachineCard in grid, but hide when editing or when machine is expanded */}
-        {(machines.length > 0 || isConnected) && expandedMachineId === null && editingMachineId === null && (
-          <AddMachineCard onCancel={() => {}} onAdd={addMachine} onActiveChange={setIsAddingMachine} />
+                }}
+                pendingCollapse={pendingCollapseMachineId === machine.machine_id}
+                onCancelCollapse={() => {
+                  setPendingCollapseMachineId(null);
+                }}
+                onDelete={handleDeleteMachine}
+                scrollToStatus={scrollToStatusMachineId === machine.machine_id}
+              />
+            ))}
+            {showCompressorUi &&
+              fleetCompressors.map((c) => (
+                <CompressorCard
+                  key={c.compressor_id}
+                  compressor={c}
+                  editMode={editMode}
+                  isExpanded={false}
+                  isEditing={editingCompressorId === c.compressor_id}
+                  canEdit={
+                    editingMachineId === null &&
+                    (editingCompressorId === null || editingCompressorId === c.compressor_id)
+                  }
+                  isAnyAssetEditing={isAnyAssetEditing}
+                  onExpand={() => {
+                    setExpandedCompressorId(c.compressor_id);
+                    setExpandedMachineId(null);
+                  }}
+                  onCollapse={() => {
+                    setExpandedCompressorId(null);
+                    clearExpansionChrome();
+                  }}
+                  onEditStart={() => {
+                    setEditingCompressorId(c.compressor_id);
+                    setEditingMachineId(null);
+                  }}
+                  onEditEnd={() => {
+                    setEditingCompressorId(null);
+                    if (pendingCollapseCompressorId === c.compressor_id) {
+                      collapseAllExpanded();
+                      setPendingCollapseCompressorId(null);
+                    }
+                  }}
+                  pendingCollapse={pendingCollapseCompressorId === c.compressor_id}
+                  onCancelCollapse={() => {
+                    setPendingCollapseCompressorId(null);
+                  }}
+                  onDelete={handleDeleteCompressor}
+                />
+              ))}
+            {(machines.length > 0 || fleetCompressors.length > 0 || isConnected) &&
+              editingMachineId === null &&
+              editingCompressorId === null && (
+                <>
+                  {!isAddingCompressor && (
+                    <AddMachineCard onCancel={() => {}} onAdd={addMachine} onActiveChange={setIsAddingMachine} />
+                  )}
+                  {showCompressorUi && !isAddingMachine && (
+                    <AddCompressorCard onCancel={() => {}} onAdd={addCompressor} onActiveChange={setIsAddingCompressor} />
+                  )}
+                </>
+              )}
+          </>
         )}
       </div>
 
-      {/* Delete Confirmation Modal */}
       <DeleteConfirmModal
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={confirmDelete}
-        machineName={deletingMachine?.machine_name || ''}
+        machineName={deleteModalName}
       />
 
-      {/* Summary Modal (for Running only) */}
       {summaryModal.isOpen && summaryModal.type === 'running' && (
         <SummaryModal
           isOpen={summaryModal.isOpen}
@@ -342,22 +508,18 @@ export const Dashboard = () => {
         />
       )}
 
-      {/* Summary Popup (for Machines/Running hover) */}
       {summaryPopup.isOpen && summaryPopup.type && (
         <SummaryPopup
           summaryType={summaryPopup.type}
-          anchorRef={
-            summaryPopup.type === 'machines' ? machinesRef :
-            runningRef
-          }
+          anchorRef={summaryPopup.type === 'machines' ? machinesRef : runningRef}
           onClose={() => setSummaryPopup({ isOpen: false, type: null })}
           onMouseEnter={() => handlePopupMouseEnter(summaryPopup.type as 'machines' | 'running')}
           onMouseLeave={handlePopupMouseLeave}
           onMachineClick={(machineId) => {
             setExpandedMachineId(machineId);
+            setExpandedCompressorId(null);
             setScrollToStatusMachineId(machineId);
             setSummaryPopup({ isOpen: false, type: null });
-            // Reset scroll flag after a delay to allow re-triggering
             setTimeout(() => {
               setScrollToStatusMachineId(null);
             }, 1000);
@@ -365,11 +527,8 @@ export const Dashboard = () => {
         />
       )}
 
-      {/* Footer/Command Line */}
       <div className="dashboard-footer">
-        <div className="dashboard-divider">
-          ╠{'═'.repeat(100)}╣
-        </div>
+        <div className="dashboard-divider">╠{'═'.repeat(100)}╣</div>
         <div className="command-line">
           <span className="prompt">&gt;</span>
           <span className="cursor">STATUS: {editMode ? 'EDIT MODE' : 'MONITORING'}</span>

@@ -14,6 +14,26 @@
   height: 120px;
 }
 
+/* Fills parent flex area (compressor timeline pane) instead of fixed 120px */
+.status-oscilloscope.status-oscilloscope-full.status-oscilloscope--fill-height {
+  height: 100%;
+  max-height: 100%;
+  min-height: clamp(200px, 28vh, 560px);
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.status-oscilloscope--fill-height .status-oscilloscope-display {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.status-oscilloscope--fill-height .status-oscilloscope-y-label {
+  font-size: var(--font-sm);
+}
+
 .status-oscilloscope-display {
   position: relative;
   width: 100%;
@@ -193,10 +213,19 @@
 .status-oscilloscope-x-divisions {
   position: absolute;
   left: calc(60px + var(--spacing-xs) + 1ch);
-  right: 0;
+  right: 3.75rem;
   top: var(--spacing-xs);
   height: 100%;
   pointer-events: none;
+}
+
+.status-oscilloscope-x-axis-endgroup {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+  margin-left: auto;
+  z-index: 1;
 }
 
 .status-oscilloscope-x-label-start,

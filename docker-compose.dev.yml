@@ -19,6 +19,37 @@ services:
       timeout: 5s
       retries: 5
 
+  # Eclipse Mosquitto — kaeser-sc2-api publishes compressor telemetry here; backend subscribes.
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: shatter-mqtt
+    restart: unless-stopped
+    volumes:
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+
+  # Brown-Industries kaeser-sc2-api (GPL-3.0). One container per compressor in production.
+  # Start with: docker compose -f docker-compose.dev.yml --profile kaeser up -d
+  kaeser-sc2-api:
+    profiles: ["kaeser"]
+    build:
+      context: ./vendor/kaeser-sc2-api
+      target: production
+    container_name: shatter-kaeser-sc2-api
+    restart: unless-stopped
+    ports:
+      - "${KAESER_SC2_API_PORT:-3004}:3004"
+    # Env: copy docker/kaeser-sc2-api.env.example -> docker/kaeser-sc2-api.env (gitignored), and/or let Shatter
+    # write docker/generated/compressor-{id}.env (same keys). Later files override earlier (per Compose).
+    env_file:
+      - path: ./docker/kaeser-sc2-api.env
+        required: false
+      - path: ./docker/generated/compressor-1.env
+        required: false
+    depends_on:
+      - mqtt
+
   # Backend API service
   backend:
     build:
@@ -37,6 +68,14 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
       DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-5}
+      MQTT_BROKER_HOST: ${MQTT_BROKER_HOST:-mqtt}
+      MQTT_BROKER_PORT: ${MQTT_BROKER_PORT:-1883}
+      MQTT_USER: ${MQTT_USER:-dev}
+      MQTT_PASSWORD: ${MQTT_PASS:-dev}
+      COMPRESSOR_REST_REFRESH_SECONDS: ${COMPRESSOR_REST_REFRESH_SECONDS:-10}
+      COMPRESSOR_STATUS_SAMPLE_MIN_INTERVAL_SECONDS: ${COMPRESSOR_STATUS_SAMPLE_MIN_INTERVAL_SECONDS:-1}
+      COMPRESSOR_STATUS_SAMPLES_RAW_DAYS: ${COMPRESSOR_STATUS_SAMPLES_RAW_DAYS:-14}
+      KAESER_SIDECAR_ENV_DIR: /docker/generated
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
@@ -44,7 +83,10 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app  # Mount backend code for hot-reload in development
+      # Overlay migrations so run_migrations.py uses /app/migrations (bind mount hides image COPY)
+      - ./database/init:/app/migrations:ro
       - ./database/init:/docker-entrypoint-initdb.d:ro
+      - ./docker/generated:/docker/generated
 
   # Frontend web application
   frontend:

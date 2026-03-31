@@ -162,7 +162,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const [isEditTesting, setIsEditTesting] = useState(false);
   const [editTestResult, setEditTestResult] = useState<any>(null);
   const { 
-    setExpandedMachine, 
+    setExpandedMachine,
+    setExpandedAssetKind,
     layoutEditMode, 
     setLayoutEditMode, 
     setOnCollapse, 
@@ -701,6 +702,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
 
     // Card became expanded – register metadata and handlers once
     setExpandedMachine({ id: machine.machine_id, name: machine.machine_name });
+    setExpandedAssetKind('cnc');
 
     if (onCollapse) {
       setOnCollapse(() => onCollapse);
@@ -708,7 +710,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
 
     setOnToggleLayoutEdit(() => toggleLayoutEdit);
     hasRegisteredExpandedContextRef.current = true;
-  }, [isExpanded, machine.machine_id, machine.machine_name, onCollapse]);
+  }, [isExpanded, machine.machine_id, machine.machine_name, onCollapse, setExpandedAssetKind, setExpandedMachine]);
 
   // Render expanded view
   if (isExpanded && !isEditing && !editMode) {

@@ -68,6 +68,7 @@ export const MachineStatusRow: React.FC<MachineStatusRowProps> = ({ machine, com
         timeRange={timeRange}
         compact={compact}
         currentOnline={machine.is_online}
+        timeAxisStorageKey={`summary-polling-${machine.machine_id}`}
       />
     );
   };
