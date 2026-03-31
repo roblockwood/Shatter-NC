@@ -93,7 +93,9 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          # Cross-repo publishing (private source -> public package namespace) requires a PAT.
+          # Create repo secret GHCR_PUBLISH_TOKEN with write:packages.
+          password: ${{ secrets.GHCR_PUBLISH_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Generate image tags
         id: tags
@@ -102,12 +104,12 @@ jobs:
           SHORT_SHA=$(git rev-parse --short HEAD)
           DATE_TAG=$(date +%Y-%m-%d)
           OWNER="${{ github.repository_owner }}"
-          REPO="${{ github.event.repository.name }}"
-          REPO_LOWER=$(echo "$REPO" | tr '[:upper:]' '[:lower:]')
+          # Publish to the public install repo namespace (not the private source repo name).
+          TARGET_REPO_LOWER="shatter-nc-install"
           echo "SHORT_SHA=$SHORT_SHA" >> "$GITHUB_OUTPUT"
           echo "DATE_TAG=$DATE_TAG" >> "$GITHUB_OUTPUT"
-          echo "BACKEND_IMAGE=ghcr.io/${OWNER}/${REPO_LOWER}/backend" >> "$GITHUB_OUTPUT"
-          echo "FRONTEND_IMAGE=ghcr.io/${OWNER}/${REPO_LOWER}/frontend" >> "$GITHUB_OUTPUT"
+          echo "BACKEND_IMAGE=ghcr.io/${OWNER}/${TARGET_REPO_LOWER}/backend" >> "$GITHUB_OUTPUT"
+          echo "FRONTEND_IMAGE=ghcr.io/${OWNER}/${TARGET_REPO_LOWER}/frontend" >> "$GITHUB_OUTPUT"
 
       - name: Build and push backend image
         if: steps.filter.outputs.need_docker == 'true'
