@@ -360,16 +360,14 @@
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+  position: relative;
 }
 
-.compressor-telemetry-xaxis-bar {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  flex-shrink: 0;
-  margin-top: 2px;
-  padding-right: 1px;
-  min-height: 22px;
+.compressor-telemetry-axis-toggle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  z-index: 2;
 }
 
 .compressor-telemetry-svg {
