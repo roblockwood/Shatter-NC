@@ -1,3 +1,11 @@
+## [0.11.3](https://github.com/roblockwood/Shatter-NC/compare/v0.11.2...v0.11.3) (2026-03-31)
+
+
+### Bug Fixes
+
+* **ci:** discover ghcr package names before setting visibility ([3d90f57](https://github.com/roblockwood/Shatter-NC/commit/3d90f57a4312d35af342500331667efad7782cc9))
+* **ci:** repair release workflow script quoting ([51ac682](https://github.com/roblockwood/Shatter-NC/commit/51ac6827546fa0e5bcbedf9862a0a4caf63a5013))
+
 ## [0.11.2](https://github.com/roblockwood/Shatter-NC/compare/v0.11.1...v0.11.2) (2026-03-31)
 
 
