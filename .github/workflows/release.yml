@@ -154,11 +154,15 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Make published packages public
-        if: steps.filter.outputs.need_docker == 'true' && secrets.GHCR_PUBLISH_TOKEN != ''
+        if: steps.filter.outputs.need_docker == 'true'
         env:
           GH_TOKEN: ${{ secrets.GHCR_PUBLISH_TOKEN }}
         run: |
           set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "GHCR_PUBLISH_TOKEN is not set; skipping visibility update."
+            exit 0
+          fi
           gh api -X PUT "/user/packages/container/shatter-nc-install%2Fbackend/visibility" -f visibility=public
           gh api -X PUT "/user/packages/container/shatter-nc-install%2Ffrontend/visibility" -f visibility=public
 
