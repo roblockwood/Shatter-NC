@@ -1,3 +1,11 @@
+## [0.11.1](https://github.com/roblockwood/Shatter-NC/compare/v0.11.0...v0.11.1) (2026-03-31)
+
+
+### Bug Fixes
+
+* **ci:** avoid workflow parse failure on ghcr visibility step ([7b20abc](https://github.com/roblockwood/Shatter-NC/commit/7b20abc7e44b1ff487e557b4a095ba7783ad4fd8))
+* publish install images to public ghcr namespace ([437663b](https://github.com/roblockwood/Shatter-NC/commit/437663ba69b1f1f5698f51ff4b218b8487a02ccc))
+
 # [0.11.0](https://github.com/roblockwood/Shatter-NC/compare/v0.10.0...v0.11.0) (2026-03-31)
 
 
