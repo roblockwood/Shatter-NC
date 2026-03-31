@@ -172,27 +172,33 @@ function telemetrySmoothingForRange(range: TimeRange): TelemetryRangeSmoothing {
       };
     case '8h':
       return {
-        displayBinMs: 16_000,
-        smoothRadius: 9,
-        emaAlpha: 0.22,
-        spreadFillOpacity: 1,
-        spreadBlurStd: 3.5,
+        // 8h is visually “stair-steppy” if we keep too many knots (quantized telemetry).
+        // Bin more aggressively and smooth longer.
+        displayBinMs: 60_000,
+        smoothRadius: 18,
+        emaAlpha: 0.12,
+        // Keep haze, but make it wispy instead of blocky.
+        spreadFillOpacity: 0.22,
+        spreadBlurStd: 8,
       };
     case '24h':
       return {
-        displayBinMs: 28_000,
-        smoothRadius: 11,
-        emaAlpha: 0.18,
-        spreadFillOpacity: 0.96,
-        spreadBlurStd: 4.25,
+        // 24h needs fewer knots still; otherwise the line reads as steps.
+        displayBinMs: 180_000,
+        smoothRadius: 26,
+        emaAlpha: 0.1,
+        // Keep haze, but make it wispy instead of blocky.
+        spreadFillOpacity: 0.2,
+        spreadBlurStd: 9,
       };
     case '7d':
       return {
         displayBinMs: 900_000,
         smoothRadius: 14,
         emaAlpha: 0.12,
-        spreadFillOpacity: 0.94,
-        spreadBlurStd: 11,
+        // Keep a softer, subtler envelope on 7d (bins are wide).
+        spreadFillOpacity: 0.35,
+        spreadBlurStd: 6,
       };
   }
 }
@@ -304,7 +310,10 @@ function contiguousSegments(
   return segs;
 }
 
-/** Cubic smoothing through knots — smoothed mean line for PSI and temp. */
+/**
+ * Smoothed values are already MA+EMA filtered; we want a smooth curve without introducing
+ * visual overshoot. Use a monotone cubic interpolation (Fritsch–Carlson) in x.
+ */
 function smoothSvgPathThroughPoints(pts: Array<{ x: number; y: number }>): string | null {
   if (pts.length === 0) return null;
   if (pts.length === 1) {
@@ -316,17 +325,79 @@ function smoothSvgPathThroughPoints(pts: Array<{ x: number; y: number }>): strin
     const b = pts[1]!;
     return `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} L ${b.x.toFixed(2)} ${b.y.toFixed(2)}`;
   }
-  let d = `M ${pts[0]!.x.toFixed(2)} ${pts[0]!.y.toFixed(2)}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = i > 0 ? pts[i - 1]! : pts[i]!;
-    const p1 = pts[i]!;
-    const p2 = pts[i + 1]!;
-    const p3 = i < pts.length - 2 ? pts[i + 2]! : p2;
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+
+  // Ensure increasing x; if not, fall back to lines.
+  for (let i = 1; i < pts.length; i++) {
+    if (!(pts[i]!.x > pts[i - 1]!.x)) {
+      let d = `M ${pts[0]!.x.toFixed(2)} ${pts[0]!.y.toFixed(2)}`;
+      for (let j = 1; j < pts.length; j++) {
+        const p = pts[j]!;
+        d += ` L ${p.x.toFixed(2)} ${p.y.toFixed(2)}`;
+      }
+      return d;
+    }
+  }
+
+  const n = pts.length;
+  const x = pts.map((p) => p.x);
+  const y = pts.map((p) => p.y);
+  const dx: number[] = new Array(n - 1);
+  const m: number[] = new Array(n - 1);
+  for (let i = 0; i < n - 1; i++) {
+    dx[i] = x[i + 1]! - x[i]!;
+    m[i] = (y[i + 1]! - y[i]!) / dx[i]!;
+  }
+
+  // Tangents (slopes) at each knot.
+  const t: number[] = new Array(n);
+  t[0] = m[0]!;
+  t[n - 1] = m[n - 2]!;
+  for (let i = 1; i < n - 1; i++) {
+    const mPrev = m[i - 1]!;
+    const mNext = m[i]!;
+    if (mPrev === 0 || mNext === 0 || (mPrev > 0) !== (mNext > 0)) {
+      t[i] = 0;
+    } else {
+      // Weighted harmonic mean (Fritsch–Carlson)
+      const w1 = 2 * dx[i]! + dx[i - 1]!;
+      const w2 = dx[i]! + 2 * dx[i - 1]!;
+      t[i] = (w1 + w2) / (w1 / mPrev + w2 / mNext);
+    }
+  }
+
+  // Clamp tangents to prevent overshoot.
+  for (let i = 0; i < n - 1; i++) {
+    const mi = m[i]!;
+    if (mi === 0) {
+      t[i] = 0;
+      t[i + 1] = 0;
+      continue;
+    }
+    const a = t[i]! / mi;
+    const b = t[i + 1]! / mi;
+    const s = a * a + b * b;
+    if (s > 9) {
+      const tau = 3 / Math.sqrt(s);
+      t[i] = tau * a * mi;
+      t[i + 1] = tau * b * mi;
+    }
+  }
+
+  let d = `M ${x[0]!.toFixed(2)} ${y[0]!.toFixed(2)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const x0 = x[i]!;
+    const y0 = y[i]!;
+    const x1 = x[i + 1]!;
+    const y1 = y[i + 1]!;
+    const h = dx[i]!;
+    // Convert Hermite to cubic Bezier control points.
+    const cp1x = x0 + h / 3;
+    const cp1y = y0 + (t[i]! * h) / 3;
+    const cp2x = x1 - h / 3;
+    const cp2y = y1 - (t[i + 1]! * h) / 3;
+    d += ` C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(
+      2
+    )}, ${x1.toFixed(2)} ${y1.toFixed(2)}`;
   }
   return d;
 }
@@ -337,6 +408,27 @@ function peakInRange(points: TelemetryPoint[], key: 'psi' | 'temp'): number | nu
     .filter((v): v is number => v != null && Number.isFinite(v));
   if (vals.length === 0) return null;
   return Math.max(...vals);
+}
+
+function minMaxInRange(
+  points: TelemetryPoint[],
+  key: 'psi' | 'temp',
+  startMs: number,
+  endMs: number
+): { min: number; max: number } | null {
+  let min = Infinity;
+  let max = -Infinity;
+  let saw = false;
+  for (const p of points) {
+    if (p.t < startMs || p.t > endMs) continue;
+    const v = p[key];
+    if (v == null || !Number.isFinite(v)) continue;
+    saw = true;
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  if (!saw) return null;
+  return { min, max };
 }
 
 function formatTick(n: number): string {
@@ -467,7 +559,7 @@ function SingleSeriesChart({
   const pathD = pathParts.length ? pathParts.join(' ') : null;
 
   const spreadFills =
-    spreadPairs.length > 0 ? (
+    spreadPairs.length > 0 && spreadFillOpacity > 0.01 ? (
       <>
         <defs>
           <filter
@@ -581,7 +673,7 @@ function SingleSeriesChart({
         {yTicks}
         {xTickLabels}
       </svg>
-      <div className="compressor-telemetry-xaxis-bar">
+      <div className="compressor-telemetry-axis-toggle">
         <ChartTimeAxisToggle
           timeAxisMode={timeAxisMode}
           toggleTimeAxisMode={toggleTimeAxisMode}
@@ -734,6 +826,11 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
     return { unit: u, peak: pk, hasSeries: hs };
   }, [samples, liveOperational, pointsWithLiveTail, series, seriesKey]);
 
+  const range = useMemo(
+    () => minMaxInRange(pointsWithLiveTail, seriesKey, startMs, endMs),
+    [pointsWithLiveTail, seriesKey, startMs, endMs]
+  );
+
   const tooltipLines = useMemo(() => {
     const lines: string[] = [
       isOnline === false
@@ -755,11 +852,20 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
     if (series === 'psi' && peak != null) {
       lines.push(`PEAK (${timeRange}): ${formatTick(peak)}${unit ? unit : ''}`);
     }
+    if (range) {
+      lines.push(
+        `RANGE (${timeRange}): ${formatTick(range.min)}–${formatTick(range.max)}${unit ? unit : ''}`
+      );
+    }
     return lines;
-  }, [isOnline, liveOperational, series, peak, unit, timeRange]);
+  }, [isOnline, liveOperational, series, peak, unit, timeRange, range]);
 
   const subtitle = unit ? `${headerTitle} (${unit})` : headerTitle;
   const peakLine = peak != null ? `PEAK ${formatTick(peak)}${unit ? unit : ''}` : null;
+  const rangeLine =
+    range != null
+      ? `RANGE ${formatTick(range.min)}–${formatTick(range.max)}${unit ? unit : ''}`
+      : null;
   const ariaChart =
     series === 'psi' ? 'Compressor pressure over time' : 'Compressor outlet temperature over time';
 
@@ -813,6 +919,17 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
             >
               {subtitle}
             </span>
+            {rangeLine && (
+              <span
+                className={
+                  series === 'psi'
+                    ? 'compressor-telemetry-peak compressor-telemetry-legend-psi'
+                    : 'compressor-telemetry-peak compressor-telemetry-legend-temp'
+                }
+              >
+                {rangeLine}
+              </span>
+            )}
             {peakLine && (
               <span
                 className={
