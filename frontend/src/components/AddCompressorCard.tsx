@@ -3,14 +3,9 @@ import './AddMachineCard.css';
 import { API_BASE, getApiErrorMessage } from '../config/api';
 import type { CompressorStatus } from '../hooks/useWebSocket';
 
-const DEFAULT_SIDECAR = 'http://kaeser-sc2-api:3004';
-const DEFAULT_MQTT_ROOT = 'kaeser-sc2-01';
-
 interface CompressorForm {
   name: string;
   ip_address: string;
-  sidecar_rest_base_url: string;
-  mqtt_topic_root: string;
   poll_interval_seconds: number;
   enabled: boolean;
   kaeser_connect_base_url: string;
@@ -29,9 +24,7 @@ function emptyForm(): CompressorForm {
   return {
     name: '',
     ip_address: '',
-    sidecar_rest_base_url: DEFAULT_SIDECAR,
-    mqtt_topic_root: DEFAULT_MQTT_ROOT,
-    poll_interval_seconds: 5,
+    poll_interval_seconds: 1,
     enabled: true,
     kaeser_connect_base_url: '',
     kaeser_username: '',
@@ -72,8 +65,6 @@ export const AddCompressorCard: React.FC<AddCompressorCardProps> = ({
   const isFormValid = Boolean(
     formData.name?.trim() &&
       formData.ip_address?.trim() &&
-      formData.sidecar_rest_base_url?.trim() &&
-      formData.mqtt_topic_root?.trim() &&
       !kaeserPartial
   );
 
@@ -82,7 +73,7 @@ export const AddCompressorCard: React.FC<AddCompressorCardProps> = ({
       setError(
         kaeserPartial
           ? 'Kaeser Connect URL, username, and password must all be filled (or all left blank).'
-          : 'Name, SC2 host IP, sidecar URL, and MQTT topic root are required'
+          : 'Name and SC2 host are required'
       );
       return;
     }
@@ -115,8 +106,6 @@ export const AddCompressorCard: React.FC<AddCompressorCardProps> = ({
           compressor_name: row.name,
           ip_address: row.ip_address,
           enabled: row.enabled,
-          sidecar_rest_base_url: row.sidecar_rest_base_url,
-          mqtt_topic_root: row.mqtt_topic_root,
           poll_interval_seconds: row.poll_interval_seconds,
           kaeser_connect_base_url: row.kaeser_connect_base_url ?? undefined,
           kaeser_username: row.kaeser_username ?? undefined,
@@ -200,13 +189,9 @@ export const AddCompressorCard: React.FC<AddCompressorCardProps> = ({
 
       <div className="form-sections-horizontal">
         <div className="network-config-section">
-          <div className="network-config-header">KAESER SIDECAR</div>
+          <div className="network-config-header">KAESER SC2</div>
           <p className="form-hint" style={{ marginBottom: '0.75rem', lineHeight: 1.4 }}>
-            Optional: Kaeser Connect URL + user + password are saved in Shatter and written to{' '}
-            <code style={{ fontSize: '0.95em' }}>docker/generated/compressor-&lt;id&gt;.env</code> for the
-            sidecar (when <code style={{ fontSize: '0.95em' }}>KAESER_SIDECAR_ENV_DIR</code> is set). Point{' '}
-            <code style={{ fontSize: '0.95em' }}>docker-compose</code> <code>env_file</code> at that file, then
-            restart the sidecar after saving.
+            Kaeser Connect URL + user + password are saved in Shatter and used directly by the backend to poll SC2.
           </p>
           {error && <div className="form-error text-error">{error}</div>}
           <div className="form-row">
@@ -246,26 +231,6 @@ export const AddCompressorCard: React.FC<AddCompressorCardProps> = ({
               value={formData.kaeser_password}
               onChange={(e) => setFormData({ ...formData, kaeser_password: e.target.value })}
               autoComplete="new-password"
-              disabled={isSaving}
-            />
-          </div>
-          <div className="form-row">
-            <label>Sidecar REST URL:</label>
-            <input
-              type="text"
-              value={formData.sidecar_rest_base_url}
-              onChange={(e) => setFormData({ ...formData, sidecar_rest_base_url: e.target.value })}
-              placeholder="http://kaeser-sc2-api:3004"
-              disabled={isSaving}
-            />
-          </div>
-          <div className="form-row">
-            <label>MQTT topic root:</label>
-            <input
-              type="text"
-              value={formData.mqtt_topic_root}
-              onChange={(e) => setFormData({ ...formData, mqtt_topic_root: e.target.value.trim() })}
-              placeholder="kaeser-sc2-01"
               disabled={isSaving}
             />
           </div>

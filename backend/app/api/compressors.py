@@ -6,11 +6,6 @@ from typing import List, Any, Dict
 from app.db.base import get_db
 from app.models.compressor import Compressor
 from app.schemas.compressor import CompressorCreate, CompressorUpdate, CompressorResponse
-from app.services.kaeser_sidecar_env_writer import (
-    remove_compressor_sidecar_env,
-    write_compressor_sidecar_env,
-)
-
 import logging
 
 logger = logging.getLogger(__name__)
@@ -75,10 +70,6 @@ async def create_compressor(body: CompressorCreate, db: Session = Depends(get_db
     db.add(row)
     db.commit()
     db.refresh(row)
-    try:
-        write_compressor_sidecar_env(row)
-    except OSError as e:
-        logger.warning("Could not write sidecar env file: %s", e)
     return CompressorResponse.from_compressor(row)
 
 
@@ -108,10 +99,6 @@ async def update_compressor(
             setattr(row, k, v)
     db.commit()
     db.refresh(row)
-    try:
-        write_compressor_sidecar_env(row)
-    except OSError as e:
-        logger.warning("Could not write sidecar env file: %s", e)
 
     if websocket_manager_ref and compressor_polling_service:
         try:
@@ -169,7 +156,6 @@ async def delete_compressor(compressor_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compressor not found")
     db.delete(row)
     db.commit()
-    remove_compressor_sidecar_env(compressor_id)
     if websocket_manager_ref:
         websocket_manager_ref.pop_compressor_cache(compressor_id)
     return None
