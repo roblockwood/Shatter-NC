@@ -19,9 +19,6 @@ import {
 } from '../utils/compressorTelemetry';
 import './MachineCard.css';
 
-const DEFAULT_SIDECAR = 'http://kaeser-sc2-api:3004';
-const DEFAULT_MQTT_ROOT = 'kaeser-sc2-01';
-
 interface CompressorCardProps {
   compressor: CompressorStatus;
   editMode?: boolean;
@@ -41,8 +38,6 @@ interface CompressorCardProps {
 interface EditForm {
   name: string;
   ip_address: string;
-  sidecar_rest_base_url: string;
-  mqtt_topic_root: string;
   poll_interval_seconds: number;
   enabled: boolean;
   kaeser_connect_base_url: string;
@@ -139,9 +134,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
   const [editFormData, setEditFormData] = useState<EditForm>({
     name: compressor.compressor_name,
     ip_address: compressor.ip_address,
-    sidecar_rest_base_url: compressor.sidecar_rest_base_url ?? DEFAULT_SIDECAR,
-    mqtt_topic_root: compressor.mqtt_topic_root ?? DEFAULT_MQTT_ROOT,
-    poll_interval_seconds: compressor.poll_interval_seconds ?? 5,
+    poll_interval_seconds: compressor.poll_interval_seconds ?? 1,
     enabled: compressor.enabled !== false,
     kaeser_connect_base_url: compressor.kaeser_connect_base_url ?? '',
     kaeser_username: compressor.kaeser_username ?? '',
@@ -154,9 +147,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
       setEditFormData({
         name: compressor.compressor_name,
         ip_address: compressor.ip_address,
-        sidecar_rest_base_url: compressor.sidecar_rest_base_url ?? DEFAULT_SIDECAR,
-        mqtt_topic_root: compressor.mqtt_topic_root ?? DEFAULT_MQTT_ROOT,
-        poll_interval_seconds: compressor.poll_interval_seconds ?? 5,
+        poll_interval_seconds: compressor.poll_interval_seconds ?? 1,
         enabled: compressor.enabled !== false,
         kaeser_connect_base_url: compressor.kaeser_connect_base_url ?? '',
         kaeser_username: compressor.kaeser_username ?? '',
@@ -168,8 +159,6 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
     compressor.compressor_id,
     compressor.compressor_name,
     compressor.ip_address,
-    compressor.sidecar_rest_base_url,
-    compressor.mqtt_topic_root,
     compressor.poll_interval_seconds,
     compressor.enabled,
     compressor.kaeser_connect_base_url,
@@ -194,9 +183,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
     return (
       editCompressorName !== compressor.compressor_name ||
       editFormData.ip_address !== compressor.ip_address ||
-      editFormData.sidecar_rest_base_url !== (compressor.sidecar_rest_base_url ?? DEFAULT_SIDECAR) ||
-      editFormData.mqtt_topic_root !== (compressor.mqtt_topic_root ?? DEFAULT_MQTT_ROOT) ||
-      editFormData.poll_interval_seconds !== (compressor.poll_interval_seconds ?? 5) ||
+      editFormData.poll_interval_seconds !== (compressor.poll_interval_seconds ?? 1) ||
       editFormData.enabled !== (compressor.enabled !== false) ||
       editFormData.kaeser_connect_base_url.trim() !== (compressor.kaeser_connect_base_url ?? '').trim() ||
       editFormData.kaeser_username.trim() !== (compressor.kaeser_username ?? '').trim() ||
@@ -209,9 +196,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
     setEditFormData({
       name: compressor.compressor_name,
       ip_address: compressor.ip_address,
-      sidecar_rest_base_url: compressor.sidecar_rest_base_url ?? DEFAULT_SIDECAR,
-      mqtt_topic_root: compressor.mqtt_topic_root ?? DEFAULT_MQTT_ROOT,
-      poll_interval_seconds: compressor.poll_interval_seconds ?? 5,
+      poll_interval_seconds: compressor.poll_interval_seconds ?? 1,
       enabled: compressor.enabled !== false,
       kaeser_connect_base_url: compressor.kaeser_connect_base_url ?? '',
       kaeser_username: compressor.kaeser_username ?? '',
@@ -241,8 +226,6 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
       const body: Record<string, unknown> = {
         name: editCompressorName.trim(),
         ip_address: editFormData.ip_address,
-        sidecar_rest_base_url: editFormData.sidecar_rest_base_url,
-        mqtt_topic_root: editFormData.mqtt_topic_root,
         poll_interval_seconds: editFormData.poll_interval_seconds,
         enabled: editFormData.enabled,
         kaeser_connect_base_url: kUrl || null,
@@ -361,8 +344,6 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
   const editFormValid =
     editCompressorName.trim().length > 0 &&
     editFormData.ip_address.trim().length > 0 &&
-    editFormData.sidecar_rest_base_url.trim().length > 0 &&
-    editFormData.mqtt_topic_root.trim().length > 0 &&
     !kaeserPartialEdit;
 
   const pollTs = compressor.last_successful_poll_at || compressor.poll_timestamp;
@@ -714,28 +695,6 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
               />
             </div>
             <div className="form-row">
-              <label>REST URL:</label>
-              <input
-                type="text"
-                value={editFormData.sidecar_rest_base_url}
-                onChange={(e) =>
-                  setEditFormData({ ...editFormData, sidecar_rest_base_url: e.target.value })
-                }
-                disabled={isEditSaving}
-              />
-            </div>
-            <div className="form-row">
-              <label>MQTT root:</label>
-              <input
-                type="text"
-                value={editFormData.mqtt_topic_root}
-                onChange={(e) =>
-                  setEditFormData({ ...editFormData, mqtt_topic_root: e.target.value.trim() })
-                }
-                disabled={isEditSaving}
-              />
-            </div>
-            <div className="form-row">
               <label>POLL (s):</label>
               <input
                 type="number"
@@ -745,7 +704,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
                 onChange={(e) =>
                   setEditFormData({
                     ...editFormData,
-                    poll_interval_seconds: parseInt(e.target.value, 10) || 5,
+                    poll_interval_seconds: parseInt(e.target.value, 10) || 1,
                   })
                 }
                 disabled={isEditSaving}
