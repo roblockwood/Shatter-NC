@@ -24,18 +24,10 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = "shatter_user"
     POSTGRES_PASSWORD: str = "changeme"
 
-    # Kaeser sidecar (Brown-Industries kaeser-sc2-api) + MQTT
-    MQTT_BROKER_HOST: Optional[str] = None
-    MQTT_BROKER_PORT: int = 1883
-    MQTT_USER: Optional[str] = None
-    MQTT_PASSWORD: Optional[str] = None
-    COMPRESSOR_REST_REFRESH_SECONDS: int = 10
     # Min seconds between compressor_status_samples rows (MQTT + poll). 1 Hz matches sidecar operational publish cadence.
     COMPRESSOR_STATUS_SAMPLE_MIN_INTERVAL_SECONDS: float = Field(default=1.0, ge=0.1, le=5.0)
     # Raw hypertable retention window; older chart data comes from compressor_status_samples_1min (see DB migration 19).
     COMPRESSOR_STATUS_SAMPLES_RAW_DAYS: int = Field(default=14, ge=1, le=90)
-    # When set, POST/PUT/DELETE compressor writes sidecar env at {dir}/compressor-{id}.env (restart sidecar to apply).
-    KAESER_SIDECAR_ENV_DIR: Optional[str] = None
 
     # CNC Polling
     DEFAULT_POLL_INTERVAL: int = 5  # seconds

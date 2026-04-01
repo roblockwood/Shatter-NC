@@ -101,16 +101,6 @@ async def root():
 @app.get("/health")
 async def health():
     """Health check endpoint."""
-    aiomqtt_available = False
-    aiomqtt_error: str | None = None
-    try:
-        import aiomqtt
-
-        aiomqtt_available = True
-        _ = aiomqtt.Client
-    except ImportError as e:
-        aiomqtt_error = str(e)
-
     return {
         "status": "healthy",
         "python_executable": sys.executable,
@@ -122,11 +112,6 @@ async def health():
         "compressor_polling_service": {
             "running": compressor_polling_service.is_running,
             "active_compressors": len(compressor_polling_service.pollers),
-        },
-        "compressor_mqtt": {
-            "broker_configured": bool(settings.MQTT_BROKER_HOST),
-            "aiomqtt_available": aiomqtt_available,
-            "import_error": aiomqtt_error,
         },
         "compressor_status_samples_table": _compressor_status_samples_table_ok(),
     }
@@ -159,22 +144,6 @@ status.set_polling_service(polling_service)
 async def startup_event():
     """Run on application startup."""
     print(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    if settings.MQTT_BROKER_HOST:
-        try:
-            import aiomqtt
-
-            logger.info(
-                "aiomqtt available for compressor MQTT (python=%s)",
-                sys.executable,
-            )
-        except ImportError as e:
-            logger.error(
-                "aiomqtt not importable: %s — MQTT compressor updates disabled (python=%s)",
-                e,
-                sys.executable,
-            )
-    else:
-        logger.info("MQTT_BROKER_HOST unset — compressor status uses REST only")
 
     print("Starting background polling service...")
     await polling_service.start()
