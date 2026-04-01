@@ -1,3 +1,10 @@
+## [0.12.2](https://github.com/roblockwood/Shatter-NC/compare/v0.12.1...v0.12.2) (2026-04-01)
+
+
+### Bug Fixes
+
+* add missing body-parser dep for kaeser sidecar ([9c9d813](https://github.com/roblockwood/Shatter-NC/commit/9c9d81371a5a58718756060e5fb05873ac1b3b00))
+
 ## [0.12.1](https://github.com/roblockwood/Shatter-NC/compare/v0.12.0...v0.12.1) (2026-03-31)
 
 
