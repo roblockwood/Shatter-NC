@@ -1,3 +1,15 @@
+# [0.13.0](https://github.com/roblockwood/Shatter-NC/compare/v0.12.3...v0.13.0) (2026-04-01)
+
+
+### Bug Fixes
+
+* resolve issue with environment variable generation in install kit ([1811152](https://github.com/roblockwood/Shatter-NC/commit/1811152747ce8470ad26e1bb87921752513c93b5))
+
+
+### Features
+
+* migrate Kaeser integration to backend-direct SC2 client ([6cb501f](https://github.com/roblockwood/Shatter-NC/commit/6cb501f8751db0b188a899e4db6e95aab12c5a94))
+
 ## [0.12.3](https://github.com/roblockwood/Shatter-NC/compare/v0.12.2...v0.12.3) (2026-04-01)
 
 
