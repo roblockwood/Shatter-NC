@@ -1,3 +1,10 @@
+## [0.12.3](https://github.com/roblockwood/Shatter-NC/compare/v0.12.2...v0.12.3) (2026-04-01)
+
+
+### Bug Fixes
+
+* add nestjs platform-express to kaeser sidecar ([6e21f11](https://github.com/roblockwood/Shatter-NC/commit/6e21f11ab3b96ac94ae2baee8ee9d79ffadb24e4))
+
 ## [0.12.2](https://github.com/roblockwood/Shatter-NC/compare/v0.12.1...v0.12.2) (2026-04-01)
 
 
