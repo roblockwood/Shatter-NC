@@ -17,15 +17,6 @@ function buildEnv(cfg) {
   lines.push("");
   lines.push(`POSTGRES_PASSWORD=${cfg.POSTGRES_PASSWORD}`);
   lines.push(`SECRET_KEY=${cfg.SECRET_KEY}`);
-  if (cfg.KAESER_ENABLED) {
-    lines.push("");
-    lines.push("# Kaeser (beta) - optional");
-    lines.push(`KAESER_ADDRESS=${cfg.KAESER_ADDRESS}`);
-    lines.push(`KAESER_USERNAME=${cfg.KAESER_USERNAME}`);
-    lines.push(`KAESER_PASSWORD=${cfg.KAESER_PASSWORD}`);
-    lines.push(`MQTT_TOPIC_ROOT=${cfg.MQTT_TOPIC_ROOT}`);
-    lines.push(`KAESER_LOG_LEVEL=${cfg.KAESER_LOG_LEVEL}`);
-  }
   lines.push("");
   return lines.join("\n");
 }
@@ -38,15 +29,6 @@ function buildEnvPreview(cfg) {
   // Keep preview style simple and consistent with production feel.
   lines.push(`POSTGRES_PASSWORD=${cfg.POSTGRES_PASSWORD || "CHANGEME_STRONG_PASSWORD"}`);
   lines.push(`SECRET_KEY=${cfg.SECRET_KEY || "CHANGEME_GENERATE_RANDOM"}`);
-  if (cfg.KAESER_ENABLED) {
-    lines.push("");
-    lines.push("# Kaeser (beta) - optional");
-    lines.push(`KAESER_ADDRESS=${cfg.KAESER_ADDRESS || "https://YOUR_KAESER_SC2_HOST"}`);
-    lines.push(`KAESER_USERNAME=${cfg.KAESER_USERNAME || "CHANGEME"}`);
-    lines.push(`KAESER_PASSWORD=${cfg.KAESER_PASSWORD ? "********" : "CHANGEME"}`);
-    lines.push(`MQTT_TOPIC_ROOT=${cfg.MQTT_TOPIC_ROOT || "kaeser-sc2-01"}`);
-    lines.push(`KAESER_LOG_LEVEL=${cfg.KAESER_LOG_LEVEL || "info"}`);
-  }
   lines.push("");
   return lines.join("\n");
 }
@@ -57,44 +39,8 @@ function buildCompose(cfg) {
   // - backend image includes /app/migrations and runs migrations on startup
   const backendImage = `ghcr.io/roblockwood/shatter-nc-install/backend:latest`;
   const frontendImage = `ghcr.io/roblockwood/shatter-nc-install/frontend:latest`;
-  const kaeserSidecarImage = `ghcr.io/roblockwood/shatter-nc-install/kaeser-sc2-api:latest`;
-
-  const kaeserProfilesLine = cfg.KAESER_ENABLED ? "" : '    profiles: ["kaeser"]\n';
 
   return `services:
-  kaeser-sc2-api:
-${kaeserProfilesLine}` +
-`    image: ${kaeserSidecarImage}
-    container_name: shatter-kaeser-sc2-api-prod
-    restart: unless-stopped
-    environment:
-      # Required (Kaeser SC2 portal)
-      KAESER_ADDRESS: \${KAESER_ADDRESS:-}
-      KAESER_USERNAME: \${KAESER_USERNAME:-}
-      KAESER_PASSWORD: \${KAESER_PASSWORD:-}
-      # Optional (publish to MQTT broker)
-      MQTT_HOST: \${MQTT_HOST:-mqtt}
-      MQTT_PORT: \${MQTT_PORT:-1883}
-      MQTT_USER: \${MQTT_USER:-}
-      MQTT_PASS: \${MQTT_PASS:-}
-      MQTT_TOPIC_ROOT: \${MQTT_TOPIC_ROOT:-kaeser-sc2-01}
-      LOG_LEVEL: \${KAESER_LOG_LEVEL:-info}
-    ports:
-      - "\${KAESER_SC2_API_PORT:-3004}:3004"
-    depends_on:
-      - mqtt
-    networks:
-      - shatter-network
-
-  mqtt:
-    image: eclipse-mosquitto:2
-    container_name: shatter-mqtt-prod
-    restart: unless-stopped
-    ports:
-      - "\${MQTT_PORT:-1883}:1883"
-    networks:
-      - shatter-network
-
   postgres:
     image: timescale/timescaledb:latest-pg15
     container_name: shatter-db-prod
@@ -127,14 +73,8 @@ ${kaeserProfilesLine}` +
       POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
       LOG_LEVEL: \${LOG_LEVEL:-WARNING}
       DEFAULT_POLL_INTERVAL: \${DEFAULT_POLL_INTERVAL:-5}
-      MQTT_BROKER_HOST: \${MQTT_BROKER_HOST:-mqtt}
-      MQTT_BROKER_PORT: \${MQTT_BROKER_PORT:-1883}
-      MQTT_USER: \${MQTT_USER:-}
-      MQTT_PASSWORD: \${MQTT_PASS:-}
-      COMPRESSOR_REST_REFRESH_SECONDS: \${COMPRESSOR_REST_REFRESH_SECONDS:-10}
       COMPRESSOR_STATUS_SAMPLE_MIN_INTERVAL_SECONDS: \${COMPRESSOR_STATUS_SAMPLE_MIN_INTERVAL_SECONDS:-1}
       COMPRESSOR_STATUS_SAMPLES_RAW_DAYS: \${COMPRESSOR_STATUS_SAMPLES_RAW_DAYS:-14}
-      KAESER_SIDECAR_ENV_DIR: \${KAESER_SIDECAR_ENV_DIR:-/docker/generated}
       SECRET_KEY: \${SECRET_KEY}
       CORS_ORIGINS: '["*"]'
     volumes:
@@ -144,8 +84,6 @@ ${kaeserProfilesLine}` +
     depends_on:
       postgres:
         condition: service_healthy
-      mqtt:
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "--max-time", "10", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -187,22 +125,11 @@ function readConfig() {
   const cfg = {
     POSTGRES_PASSWORD: qs("pgPassword").value,
     SECRET_KEY: qs("secretKey").value,
-    KAESER_ENABLED: Boolean(document.getElementById("kaeserEnabled")?.checked),
-    KAESER_ADDRESS: document.getElementById("kaeserAddress")?.value?.trim() || "",
-    KAESER_USERNAME: document.getElementById("kaeserUsername")?.value?.trim() || "",
-    KAESER_PASSWORD: document.getElementById("kaeserPassword")?.value || "",
-    MQTT_TOPIC_ROOT: document.getElementById("kaeserMqttTopicRoot")?.value?.trim() || "kaeser-sc2-01",
-    KAESER_LOG_LEVEL: document.getElementById("kaeserLogLevel")?.value?.trim() || "info",
   };
 
   const errors = [];
   if (!cfg.POSTGRES_PASSWORD) errors.push("POSTGRES_PASSWORD is required");
   if (!cfg.SECRET_KEY) errors.push("SECRET_KEY is required");
-  if (cfg.KAESER_ENABLED) {
-    if (!cfg.KAESER_ADDRESS) errors.push("KAESER_ADDRESS is required when Kaeser is enabled");
-    if (!cfg.KAESER_USERNAME) errors.push("KAESER_USERNAME is required when Kaeser is enabled");
-    if (!cfg.KAESER_PASSWORD) errors.push("KAESER_PASSWORD is required when Kaeser is enabled");
-  }
 
   return { cfg, errors };
 }
@@ -224,12 +151,10 @@ function render() {
   const step6 = document.getElementById("step6");
   const step7 = document.getElementById("step7");
   const step8 = document.getElementById("step8");
-  const step9 = document.getElementById("step9");
   const state = window.__shatterInstallState || (window.__shatterInstallState = {
     step1Confirmed: false,
     step2Confirmed: false,
     step3Confirmed: false,
-    kaeserConfirmed: false,
     pgConfirmed: false,
     envConfirmed: false,
     composeConfirmed: false,
@@ -246,22 +171,20 @@ function render() {
   enablePanel(step2, state.step1Confirmed);
   enablePanel(step3, state.step2Confirmed);
   enablePanel(step4, state.step3Confirmed);
-  enablePanel(step5, state.kaeserConfirmed);
-  enablePanel(step6, state.pgConfirmed);
-  enablePanel(step7, keyOk);
-  enablePanel(step8, keyOk && state.envConfirmed);
-  enablePanel(step9, keyOk && state.composeConfirmed);
+  enablePanel(step5, state.pgConfirmed);
+  enablePanel(step6, keyOk);
+  enablePanel(step7, keyOk && state.envConfirmed);
+  enablePanel(step8, keyOk && state.composeConfirmed);
 
   // Next button enablement
   const toStep2 = document.getElementById("toStep2");
   const toStep3 = document.getElementById("toStep3");
   const toStep4 = document.getElementById("toStep4");
   const toStep5 = document.getElementById("toStep5");
-  const toStep6 = document.getElementById("toStep6");
   if (toStep2) toStep2.disabled = !osSelected;
   if (toStep3) toStep3.disabled = !state.step1Confirmed;
   if (toStep4) toStep4.disabled = !state.step2Confirmed;
-  if (toStep6) toStep6.disabled = !pgOk;
+  if (toStep5) toStep5.disabled = !pgOk;
 
   // Always show previews (placeholders) even before unlocked.
   if (!state.envEdited) envOut.value = errors.length ? buildEnvPreview(cfg) : buildEnv(cfg);
@@ -316,18 +239,10 @@ function downloadText(filename, text) {
 
 function bind() {
   const cfgInputs = [
-    "kaeserEnabled",
-    "kaeserAddress",
-    "kaeserUsername",
-    "kaeserPassword",
-    "kaeserMqttTopicRoot",
-    "kaeserLogLevel",
     "pgPassword",
     "secretKey",
   ];
   cfgInputs.forEach((id) => qs(id).addEventListener("input", render));
-  // checkbox uses "change" more reliably than "input"
-  document.getElementById("kaeserEnabled")?.addEventListener("change", render);
 
   qs("envOut").addEventListener("input", () => {
     const state = window.__shatterInstallState || (window.__shatterInstallState = {});
@@ -359,7 +274,7 @@ function bind() {
   qs("genSecret").addEventListener("click", () => {
     qs("secretKey").value = genSecretKeyHex(32);
     render();
-    document.getElementById("step7")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("step6")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   qs("copyEnv").addEventListener("click", async () => {
@@ -367,14 +282,14 @@ function bind() {
     const state = window.__shatterInstallState || (window.__shatterInstallState = {});
     state.envConfirmed = true;
     render();
-    document.getElementById("step8")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("step7")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
   qs("copyCompose").addEventListener("click", async () => {
     await copyText(qs("composeOut").value);
     const state = window.__shatterInstallState || (window.__shatterInstallState = {});
     state.composeConfirmed = true;
     render();
-    document.getElementById("step9")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("step8")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   const scrollTo = (id) => {
@@ -405,12 +320,6 @@ function bind() {
     scrollTo("step4");
   });
   document.getElementById("toStep5")?.addEventListener("click", () => {
-    const state = window.__shatterInstallState || (window.__shatterInstallState = {});
-    state.kaeserConfirmed = true;
-    render();
-    scrollTo("step5");
-  });
-  document.getElementById("toStep6")?.addEventListener("click", () => {
     if (!qs("pgPassword").value) {
       qs("pgPassword").focus();
       return;
@@ -418,7 +327,7 @@ function bind() {
     const state = window.__shatterInstallState || (window.__shatterInstallState = {});
     state.pgConfirmed = true;
     render();
-    scrollTo("step6");
+    scrollTo("step5");
   });
 
   render();
