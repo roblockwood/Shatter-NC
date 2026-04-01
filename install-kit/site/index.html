@@ -70,7 +70,86 @@
       </section>
 
       <section class="panel disabled" id="step4" aria-disabled="true">
-        <h2>4) Create a Postgres password</h2>
+        <h2>4) Optional: Kaeser compressor (beta)</h2>
+        <div class="callout warn" style="margin-bottom: 12px">
+          <strong>Beta feature:</strong> this Kaeser integration is experimental and may change or be removed.
+        </div>
+        <div class="callout" style="margin-bottom: 12px">
+          Enable this only if you have a Kaeser Sigma Control 2 portal. Shatter will read data from the Kaeser sidecar and publish to MQTT.
+        </div>
+
+        <div class="grid">
+          <label class="row" style="align-items: center; gap: 10px">
+            <input id="kaeserEnabled" type="checkbox" />
+            <span style="margin: 0">Enable Kaeser sidecar (one compressor)</span>
+          </label>
+
+          <label>
+            <span>KAESER_ADDRESS</span>
+            <input
+              id="kaeserAddress"
+              name="KAESER_ADDRESS"
+              type="text"
+              placeholder="https://<your-sc2-host>"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+          <label>
+            <span>KAESER_USERNAME</span>
+            <input
+              id="kaeserUsername"
+              name="KAESER_USERNAME"
+              type="text"
+              placeholder="optional if disabled"
+              autocomplete="username"
+              spellcheck="false"
+            />
+          </label>
+          <label>
+            <span>KAESER_PASSWORD</span>
+            <input
+              id="kaeserPassword"
+              name="KAESER_PASSWORD"
+              type="password"
+              placeholder="optional if disabled"
+              autocomplete="current-password"
+              spellcheck="false"
+            />
+          </label>
+          <label>
+            <span>MQTT_TOPIC_ROOT</span>
+            <input
+              id="kaeserMqttTopicRoot"
+              name="MQTT_TOPIC_ROOT"
+              type="text"
+              placeholder="kaeser-sc2-01"
+              value="kaeser-sc2-01"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+          <label>
+            <span>KAESER_LOG_LEVEL</span>
+            <input
+              id="kaeserLogLevel"
+              name="KAESER_LOG_LEVEL"
+              type="text"
+              placeholder="info"
+              value="info"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+        </div>
+
+        <div class="actions" style="margin-top: 12px">
+          <button id="toStep5" class="primary" type="button">Next</button>
+        </div>
+      </section>
+
+      <section class="panel disabled" id="step5" aria-disabled="true">
+        <h2>5) Create a Postgres password</h2>
         <div class="callout warn" style="margin-bottom: 12px">
           Pick a strong password. You will need it if you move/restore the database.
         </div>
@@ -89,12 +168,12 @@
           </label>
         </div>
         <div class="actions" style="margin-top: 12px">
-          <button id="toStep5" class="primary" type="button" disabled>Next</button>
+          <button id="toStep6" class="primary" type="button" disabled>Next</button>
         </div>
       </section>
 
-      <section class="panel disabled" id="step5" aria-disabled="true">
-        <h2>5) Generate key</h2>
+      <section class="panel disabled" id="step6" aria-disabled="true">
+        <h2>6) Generate key</h2>
         <div class="callout warn" style="margin-bottom: 12px">
           <strong>Security:</strong> this page never uploads your secrets. It only generates text locally.
         </div>
@@ -109,8 +188,8 @@
         </div>
       </section>
 
-      <section class="panel disabled" id="step6" aria-disabled="true">
-        <h2>6) .env</h2>
+      <section class="panel disabled" id="step7" aria-disabled="true">
+        <h2>7) .env</h2>
         <p class="muted">Copy to clipboard to proceed.</p>
 
         <textarea id="envOut" class="mono" rows="8" spellcheck="false"></textarea>
@@ -123,8 +202,8 @@
         </div>
       </section>
 
-      <section class="panel disabled" id="step7" aria-disabled="true">
-        <h2>7) docker-compose.yml</h2>
+      <section class="panel disabled" id="step8" aria-disabled="true">
+        <h2>8) docker-compose.yml</h2>
         <p class="muted">Copy to clipboard to proceed.</p>
 
         <div id="composeBlock">
@@ -139,8 +218,8 @@
         </div>
       </section>
 
-      <section class="panel disabled" id="step8" aria-disabled="true">
-        <h2>8) Deploy</h2>
+      <section class="panel disabled" id="step9" aria-disabled="true">
+        <h2>9) Deploy</h2>
         <div class="callout">
           <ol style="margin: 0; padding-left: 1.25rem">
             <li>Deploy the Stack.</li>
