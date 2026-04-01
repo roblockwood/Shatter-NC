@@ -1,4 +1,4 @@
-"""Pydantic schemas for compressor (Kaeser / kaeser-sc2-api sidecar) API."""
+"""Pydantic schemas for compressor (Kaeser SC2/Connect, backend-direct) API."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -10,26 +10,25 @@ from pydantic import BaseModel, Field, model_validator
 class CompressorBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     ip_address: str = Field(..., description="SC2 host (for display / ops)")
+    # Legacy fields retained for DB compatibility; ignored by backend-direct Kaeser polling.
     sidecar_rest_base_url: str = Field(
-        ...,
-        min_length=1,
+        default="",
         max_length=512,
-        description="Base URL of kaeser-sc2-api (e.g. http://kaeser-sc2-api:3004)",
+        description="(Legacy) Sidecar base URL (ignored in backend-direct mode).",
     )
     mqtt_topic_root: str = Field(
-        ...,
-        min_length=1,
+        default="",
         max_length=255,
-        description="MQTT topic prefix; must match sidecar MQTT_TOPIC_ROOT",
+        description="(Legacy) MQTT topic root (ignored in backend-direct mode).",
     )
-    poll_interval_seconds: int = Field(default=5, ge=1, le=300)
+    poll_interval_seconds: int = Field(default=1, ge=1, le=300)
     enabled: bool = Field(default=True)
     tags: List[str] = Field(default_factory=list)
     layout_config: Optional[Dict[str, Any]] = Field(default=None)
     kaeser_connect_base_url: Optional[str] = Field(
         None,
         max_length=512,
-        description="Kaeser Connect base URL (e.g. https://192.168.86.101); written to sidecar env file",
+        description="Kaeser SC2/Connect base URL (e.g. https://192.168.86.101)",
     )
     kaeser_username: Optional[str] = Field(None, max_length=255)
 

@@ -1,4 +1,4 @@
-"""Background polling for Kaeser compressors via kaeser-sc2-api sidecar (REST + MQTT)."""
+"""Background polling for Kaeser compressors directly via SC2/Connect (no sidecar, no MQTT)."""
 from __future__ import annotations
 
 import asyncio
@@ -9,51 +9,71 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
-from app.clients.kaeser_sidecar_bridge import KaeserSidecarBridge
 from app.core.config import settings
 from app.db.base import SessionLocal
 from app.models.compressor import Compressor
 from app.models.event import CompressorStatusEvent
 from app.services.compressor_status_sample_writer import record_compressor_status_sample_throttled
 from app.services.compressor_telemetry_sample import telemetry_fields_from_operational
+from app.integrations.kaeser_sc2.client import KaeserSc2Client
 
 logger = logging.getLogger(__name__)
 
 
 class CompressorPoller:
-    """One compressor: periodic REST refresh + merged status snapshot."""
+    """One compressor: periodic Kaeser poll + status snapshot."""
 
     def __init__(
         self,
         compressor: Compressor,
         websocket_manager,
-        bridge: KaeserSidecarBridge,
     ):
         self.compressor = compressor
         self.websocket_manager = websocket_manager
-        self.bridge = bridge
         self.last_fast_poll_time: Optional[datetime] = None
-        self.last_rest_refresh: Optional[datetime] = None
         self.consecutive_failures = 0
         self.last_status: Optional[str] = None
         self._log_lock = asyncio.Lock()
+        self._client: Optional[KaeserSc2Client] = None
+
+    def _get_client(self) -> KaeserSc2Client:
+        # Create once; session is reused between polls.
+        if self._client is None:
+            self._client = KaeserSc2Client(
+                base_url=self.compressor.kaeser_connect_base_url or "",
+                username=self.compressor.kaeser_username or "",
+                password=self.compressor.kaeser_password or "",
+                verify_tls=False,
+            )
+        return self._client
 
     async def poll(self) -> Dict[str, Any]:
         poll_start = time.time()
         poll_ts = datetime.now(timezone.utc)
         cid = self.compressor.id
 
-        now = poll_ts
-        need_rest = self.last_rest_refresh is None or (
-            (now - self.last_rest_refresh).total_seconds() >= settings.COMPRESSOR_REST_REFRESH_SECONDS
-        )
-        if need_rest:
-            await self.bridge.refresh_rest(self.compressor)
-            self.last_rest_refresh = now
+        bundle, err = await self._get_client().fetch_bundle()
 
         response_ms = int((time.time() - poll_start) * 1000)
-        status_data = await self.bridge.build_status(
-            self.compressor, poll_timestamp=poll_ts, response_time_ms=response_ms
+        from app.integrations.kaeser_sc2.sidecar_mapper import build_compressor_status_payload
+
+        operational = None
+        if bundle and isinstance(bundle.get("operational"), dict):
+            operational = bundle["operational"]
+        status_data = build_compressor_status_payload(
+            compressor_id=self.compressor.id,
+            compressor_name=self.compressor.name,
+            ip_address=self.compressor.ip_address,
+            enabled=self.compressor.enabled,
+            poll_interval_seconds=self.compressor.poll_interval_seconds,
+            sidecar_rest_base_url=self.compressor.sidecar_rest_base_url,
+            mqtt_topic_root=self.compressor.mqtt_topic_root,
+            operational=operational,
+            rest_bundle=bundle,
+            rest_error=err,
+            last_operational_mqtt_at=None,
+            poll_timestamp=poll_ts,
+            response_time_ms=response_ms,
         )
 
         is_online = status_data.get("is_online", False)
@@ -137,11 +157,10 @@ class CompressorPoller:
 
 
 class CompressorPollingService:
-    """Manages sidecar REST polling + shared MQTT bridge for all enabled compressors."""
+    """Manages Kaeser SC2 polling for all enabled compressors."""
 
     def __init__(self, websocket_manager):
         self.websocket_manager = websocket_manager
-        self.bridge = KaeserSidecarBridge(websocket_manager)
         self.pollers: Dict[int, CompressorPoller] = {}
         self.polling_task: Optional[asyncio.Task] = None
         self.is_running = False
@@ -150,7 +169,6 @@ class CompressorPollingService:
         if self.is_running:
             return
         self.is_running = True
-        await self.bridge.start()
         self.polling_task = asyncio.create_task(self._poll_loop())
         logger.info("Compressor polling service started")
 
@@ -163,7 +181,6 @@ class CompressorPollingService:
             except asyncio.CancelledError:
                 pass
             self.polling_task = None
-        await self.bridge.stop()
         logger.info("Compressor polling service stopped")
 
     async def _poll_loop(self):
@@ -187,7 +204,6 @@ class CompressorPollingService:
         db = SessionLocal()
         try:
             compressors = db.query(Compressor).filter(Compressor.enabled == True).all()
-            self.bridge.sync_compressors(compressors)
             ids = {c.id for c in compressors}
 
             for cid in list(self.pollers.keys()):
@@ -196,7 +212,7 @@ class CompressorPollingService:
 
             for c in compressors:
                 if c.id not in self.pollers:
-                    self.pollers[c.id] = CompressorPoller(c, self.websocket_manager, self.bridge)
+                    self.pollers[c.id] = CompressorPoller(c, self.websocket_manager)
                 else:
                     self.pollers[c.id].compressor = c
 
