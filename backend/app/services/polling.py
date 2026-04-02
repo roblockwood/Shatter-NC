@@ -1156,8 +1156,9 @@ class MachinePoller:
 class PollingService:
     """Manages background polling for all machines."""
 
-    def __init__(self, websocket_manager):
+    def __init__(self, websocket_manager, mqtt_publisher=None):
         self.websocket_manager = websocket_manager
+        self.mqtt_publisher = mqtt_publisher
         self.pollers: Dict[int, MachinePoller] = {}
         self.polling_task: Optional[asyncio.Task] = None
         self.tool_polling_task: Optional[asyncio.Task] = None  # Separate task for slow tool polling
@@ -1304,10 +1305,22 @@ class PollingService:
                         offline_status = poller._finalize_poll_failure(result, fail_ts, time.time())
                         if self.websocket_manager:
                             await self.websocket_manager.broadcast_status(offline_status)
+                        if self.mqtt_publisher:
+                            try:
+                                topic = f"{settings.MQTT_PUBLISH_TOPIC_PREFIX}/machines/{machine.id}/poll"
+                                await self.mqtt_publisher.publish_json(topic, offline_status, retain=True, qos=1)
+                            except Exception:
+                                pass
                     continue
 
                 # Broadcast successful poll results
                 await self.websocket_manager.broadcast_status(result)
+                if self.mqtt_publisher:
+                    try:
+                        topic = f"{settings.MQTT_PUBLISH_TOPIC_PREFIX}/machines/{machine.id}/poll"
+                        await self.mqtt_publisher.publish_json(topic, result, retain=True, qos=1)
+                    except Exception:
+                        pass
 
             logger.debug(f"Polled {len(machines_to_poll)} of {len(machines)} machines (per-machine intervals)")
 
