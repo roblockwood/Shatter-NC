@@ -47,6 +47,11 @@ services:
       COMPRESSOR_STATUS_SAMPLES_RAW_DAYS: ${COMPRESSOR_STATUS_SAMPLES_RAW_DAYS:-14}
       SECRET_KEY: ${SECRET_KEY}
       CORS_ORIGINS: '["*"]'
+      # Optional MQTT publishing (leave MQTT_PUBLISH_HOST empty to disable).
+      MQTT_PUBLISH_HOST: ${MQTT_PUBLISH_HOST:-}
+      MQTT_PUBLISH_PORT: ${MQTT_PUBLISH_PORT:-1883}
+      MQTT_PUBLISH_USERNAME: ${MQTT_PUBLISH_USERNAME:-}
+      MQTT_PUBLISH_PASSWORD: ${MQTT_PUBLISH_PASSWORD:-}
       # Migration directory - defaults to /app/migrations (baked into image)
       # Can override with MIGRATIONS_DIR env var or volume mount if needed
       # MIGRATIONS_DIR: /docker-entrypoint-initdb.d
@@ -81,6 +86,16 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - shatter-network
+
+  # Optional MQTT broker for telemetry fanout (CNC + compressors).
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: shatter-mosquitto-prod
+    restart: always
+    ports:
+      - "1883:1883"
     networks:
       - shatter-network
 
