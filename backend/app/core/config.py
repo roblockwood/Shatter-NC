@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     DEFAULT_TOOL_POLL_INTERVAL: int = 30  # seconds (tool table/ATC polling, separate from fast status polling)
     HEARTBEAT_INTERVAL_MINUTES: int = 2  # minutes between status/heartbeat log events when status unchanged
 
+    # MQTT publish (optional) - publish full snapshots to Mosquitto.
+    # Leave MQTT_PUBLISH_HOST unset/empty to disable publishing.
+    MQTT_PUBLISH_HOST: Optional[str] = None
+    MQTT_PUBLISH_PORT: int = 1883
+    MQTT_PUBLISH_USERNAME: Optional[str] = None
+    MQTT_PUBLISH_PASSWORD: Optional[str] = None
+    MQTT_PUBLISH_TOPIC_PREFIX: str = "shatter"
+
     # Security (optional)
     SECRET_KEY: Optional[str] = None
     ENABLE_AUTH: bool = False

@@ -38,6 +38,11 @@ services:
       COMPRESSOR_STATUS_SAMPLES_RAW_DAYS: ${COMPRESSOR_STATUS_SAMPLES_RAW_DAYS:-14}
       SECRET_KEY: ${SECRET_KEY}
       CORS_ORIGINS: '["*"]'
+      # Optional MQTT publishing (leave MQTT_PUBLISH_HOST empty to disable).
+      MQTT_PUBLISH_HOST: ${MQTT_PUBLISH_HOST:-}
+      MQTT_PUBLISH_PORT: ${MQTT_PUBLISH_PORT:-1883}
+      MQTT_PUBLISH_USERNAME: ${MQTT_PUBLISH_USERNAME:-}
+      MQTT_PUBLISH_PASSWORD: ${MQTT_PUBLISH_PASSWORD:-}
     volumes:
       - generated_data:/docker/generated
     ports:
@@ -67,6 +72,16 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - shatter-network
+
+  # Optional MQTT broker for telemetry fanout (CNC + compressors).
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: shatter-mosquitto-prod
+    restart: unless-stopped
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
     networks:
       - shatter-network
 

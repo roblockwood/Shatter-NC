@@ -66,8 +66,6 @@ class CompressorPoller:
             ip_address=self.compressor.ip_address,
             enabled=self.compressor.enabled,
             poll_interval_seconds=self.compressor.poll_interval_seconds,
-            sidecar_rest_base_url=self.compressor.sidecar_rest_base_url,
-            mqtt_topic_root=self.compressor.mqtt_topic_root,
             operational=operational,
             rest_bundle=bundle,
             rest_error=err,
@@ -159,8 +157,9 @@ class CompressorPoller:
 class CompressorPollingService:
     """Manages Kaeser SC2 polling for all enabled compressors."""
 
-    def __init__(self, websocket_manager):
+    def __init__(self, websocket_manager, mqtt_publisher=None):
         self.websocket_manager = websocket_manager
+        self.mqtt_publisher = mqtt_publisher
         self.pollers: Dict[int, CompressorPoller] = {}
         self.polling_task: Optional[asyncio.Task] = None
         self.is_running = False
@@ -249,8 +248,6 @@ class CompressorPollingService:
                         "ip_address": c.ip_address,
                         "enabled": c.enabled,
                         "poll_interval_seconds": c.poll_interval_seconds,
-                        "sidecar_rest_base_url": c.sidecar_rest_base_url,
-                        "mqtt_topic_root": c.mqtt_topic_root,
                         "is_online": False,
                         "status": "offline",
                         "alarms": [],
@@ -261,8 +258,20 @@ class CompressorPollingService:
                         "error": str(result),
                     }
                     await self.websocket_manager.broadcast_compressor_status(offline)
+                    if self.mqtt_publisher:
+                        try:
+                            topic = f"{settings.MQTT_PUBLISH_TOPIC_PREFIX}/compressors/{c.id}/poll"
+                            await self.mqtt_publisher.publish_json(topic, offline, retain=True, qos=1)
+                        except Exception:
+                            pass
                     continue
 
                 await self.websocket_manager.broadcast_compressor_status(result)
+                if self.mqtt_publisher:
+                    try:
+                        topic = f"{settings.MQTT_PUBLISH_TOPIC_PREFIX}/compressors/{c.id}/poll"
+                        await self.mqtt_publisher.publish_json(topic, result, retain=True, qos=1)
+                    except Exception:
+                        pass
         finally:
             db.close()

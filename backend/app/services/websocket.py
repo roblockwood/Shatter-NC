@@ -81,8 +81,6 @@ class WebSocketManager:
                         "enabled": comp.enabled,
                         "poll_interval_seconds": comp.poll_interval_seconds,
                         "layout_config": comp.layout_config,
-                        "sidecar_rest_base_url": comp.sidecar_rest_base_url,
-                        "mqtt_topic_root": comp.mqtt_topic_root,
                         "kaeser_connect_base_url": comp.kaeser_connect_base_url,
                         "kaeser_username": comp.kaeser_username,
                         "kaeser_credentials_configured": bool(

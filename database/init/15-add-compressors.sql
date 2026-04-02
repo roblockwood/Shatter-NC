@@ -1,12 +1,9 @@
--- Kaeser SIGMA CONTROL 2 compressors via Brown-Industries kaeser-sc2-api sidecar (REST + MQTT).
--- SC2 web UI (Kaeser Connect) is reached by the sidecar; Shatter talks to sidecar + MQTT broker only.
+-- Kaeser SIGMA CONTROL 2 compressors via backend-direct SC2/Connect polling.
 
 CREATE TABLE IF NOT EXISTS compressors (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
     ip_address VARCHAR(45) NOT NULL,
-    sidecar_rest_base_url VARCHAR(512) NOT NULL,
-    mqtt_topic_root VARCHAR(255) NOT NULL,
     poll_interval_seconds INTEGER NOT NULL DEFAULT 5,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     tags JSONB,
