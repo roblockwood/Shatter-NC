@@ -18,6 +18,13 @@ function buildEnv(cfg) {
   lines.push(`POSTGRES_PASSWORD=${cfg.POSTGRES_PASSWORD}`);
   lines.push(`SECRET_KEY=${cfg.SECRET_KEY}`);
   lines.push("");
+  lines.push("# Optional MQTT publishing (leave MQTT_PUBLISH_HOST empty to disable)");
+  lines.push(`MQTT_PUBLISH_HOST=${cfg.MQTT_PUBLISH_HOST || ""}`);
+  lines.push(`MQTT_PUBLISH_PORT=${cfg.MQTT_PUBLISH_PORT || "1883"}`);
+  lines.push(`MQTT_PUBLISH_TOPIC_PREFIX=${cfg.MQTT_PUBLISH_TOPIC_PREFIX || "shatter"}`);
+  lines.push(`MQTT_PUBLISH_USERNAME=${cfg.MQTT_PUBLISH_USERNAME || ""}`);
+  lines.push(`MQTT_PUBLISH_PASSWORD=${cfg.MQTT_PUBLISH_PASSWORD || ""}`);
+  lines.push("");
   return lines.join("\n");
 }
 
@@ -29,6 +36,13 @@ function buildEnvPreview(cfg) {
   // Keep preview style simple and consistent with production feel.
   lines.push(`POSTGRES_PASSWORD=${cfg.POSTGRES_PASSWORD || "CHANGEME_STRONG_PASSWORD"}`);
   lines.push(`SECRET_KEY=${cfg.SECRET_KEY || "CHANGEME_GENERATE_RANDOM"}`);
+  lines.push("");
+  lines.push("# Optional MQTT publishing (leave MQTT_PUBLISH_HOST empty to disable)");
+  lines.push(`MQTT_PUBLISH_HOST=${cfg.MQTT_PUBLISH_HOST || ""}`);
+  lines.push(`MQTT_PUBLISH_PORT=${cfg.MQTT_PUBLISH_PORT || "1883"}`);
+  lines.push(`MQTT_PUBLISH_TOPIC_PREFIX=${cfg.MQTT_PUBLISH_TOPIC_PREFIX || "shatter"}`);
+  lines.push(`MQTT_PUBLISH_USERNAME=${cfg.MQTT_PUBLISH_USERNAME || ""}`);
+  lines.push(`MQTT_PUBLISH_PASSWORD=${cfg.MQTT_PUBLISH_PASSWORD || ""}`);
   lines.push("");
   return lines.join("\n");
 }
@@ -77,6 +91,11 @@ function buildCompose(cfg) {
       COMPRESSOR_STATUS_SAMPLES_RAW_DAYS: \${COMPRESSOR_STATUS_SAMPLES_RAW_DAYS:-14}
       SECRET_KEY: \${SECRET_KEY}
       CORS_ORIGINS: '["*"]'
+      MQTT_PUBLISH_HOST: \${MQTT_PUBLISH_HOST:-}
+      MQTT_PUBLISH_PORT: \${MQTT_PUBLISH_PORT:-1883}
+      MQTT_PUBLISH_TOPIC_PREFIX: \${MQTT_PUBLISH_TOPIC_PREFIX:-shatter}
+      MQTT_PUBLISH_USERNAME: \${MQTT_PUBLISH_USERNAME:-}
+      MQTT_PUBLISH_PASSWORD: \${MQTT_PUBLISH_PASSWORD:-}
     volumes:
       - generated_data:/docker/generated
     ports:
@@ -109,6 +128,16 @@ function buildCompose(cfg) {
     networks:
       - shatter-network
 
+  # Optional MQTT broker (leave MQTT_PUBLISH_HOST empty to disable publishing).
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: shatter-mosquitto-prod
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    networks:
+      - shatter-network
+
 volumes:
   postgres_data:
     driver: local
@@ -125,6 +154,11 @@ function readConfig() {
   const cfg = {
     POSTGRES_PASSWORD: qs("pgPassword").value,
     SECRET_KEY: qs("secretKey").value,
+    MQTT_PUBLISH_HOST: qs("mqttHost").value,
+    MQTT_PUBLISH_PORT: qs("mqttPort").value,
+    MQTT_PUBLISH_TOPIC_PREFIX: qs("mqttPrefix").value,
+    MQTT_PUBLISH_USERNAME: qs("mqttUser").value,
+    MQTT_PUBLISH_PASSWORD: qs("mqttPass").value,
   };
 
   const errors = [];
@@ -241,6 +275,11 @@ function bind() {
   const cfgInputs = [
     "pgPassword",
     "secretKey",
+    "mqttHost",
+    "mqttPort",
+    "mqttPrefix",
+    "mqttUser",
+    "mqttPass",
   ];
   cfgInputs.forEach((id) => qs(id).addEventListener("input", render));
 

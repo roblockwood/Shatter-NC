@@ -1,4 +1,4 @@
-"""Map kaeser-sc2-api (REST/MQTT) payloads to Shatter compressor_status shape."""
+"""Map Kaeser SC2/Connect payloads to Shatter compressor_status shape."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -134,7 +134,7 @@ def build_metrics(
             if k in rest_bundle and rest_bundle[k] is not None:
                 m[k] = rest_bundle[k]
     if rest_error:
-        m["sidecar_rest_error"] = rest_error
+        m["error"] = rest_error
     if mqtt_stale:
         m["mqtt_stale"] = True
     return m
@@ -147,8 +147,6 @@ def build_compressor_status_payload(
     ip_address: str,
     enabled: bool,
     poll_interval_seconds: int,
-    sidecar_rest_base_url: str,
-    mqtt_topic_root: str,
     operational: Optional[Dict[str, Any]],
     rest_bundle: Optional[Dict[str, Any]],
     rest_error: Optional[str],
@@ -193,8 +191,6 @@ def build_compressor_status_payload(
         "ip_address": ip_address,
         "enabled": enabled,
         "poll_interval_seconds": poll_interval_seconds,
-        "sidecar_rest_base_url": sidecar_rest_base_url,
-        "mqtt_topic_root": mqtt_topic_root,
         "is_online": is_online,
         "status": status,
         "alarms": alarms,

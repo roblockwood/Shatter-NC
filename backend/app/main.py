@@ -32,12 +32,13 @@ from app.api import machines, status, programs, websocket, history, summary, too
 from app.api import settings as settings_api
 
 # Import services
-from app.services import WebSocketManager, PollingService, CompressorPollingService
+from app.services import WebSocketManager, PollingService, CompressorPollingService, MqttPublisher
 
 # Global service instances
 websocket_manager = WebSocketManager()
-polling_service = PollingService(websocket_manager)
-compressor_polling_service = CompressorPollingService(websocket_manager)
+mqtt_publisher = MqttPublisher()
+polling_service = PollingService(websocket_manager, mqtt_publisher=mqtt_publisher)
+compressor_polling_service = CompressorPollingService(websocket_manager, mqtt_publisher=mqtt_publisher)
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -113,6 +114,7 @@ async def health():
             "running": compressor_polling_service.is_running,
             "active_compressors": len(compressor_polling_service.pollers),
         },
+        "mqtt_publish": mqtt_publisher.status().__dict__,
         "compressor_status_samples_table": _compressor_status_samples_table_ok(),
     }
 
@@ -145,6 +147,7 @@ async def startup_event():
     """Run on application startup."""
     print(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
 
+    await mqtt_publisher.start()
     print("Starting background polling service...")
     await polling_service.start()
     print("Polling service started - monitoring all enabled machines")
@@ -159,6 +162,7 @@ async def shutdown_event():
     print("Stopping background polling service...")
     await compressor_polling_service.stop()
     await polling_service.stop()
+    await mqtt_publisher.stop()
     try:
         from app.clients.telnet_client import close_all_connections
         await close_all_connections()

@@ -107,6 +107,33 @@
             </div>
           </label>
         </div>
+
+        <h3 style="margin-top: 16px">Optional: MQTT publishing</h3>
+        <p class="muted" style="margin-top: 6px">
+          If set, Shatter will publish full retained snapshots to Mosquitto. Leave host blank to disable.
+        </p>
+        <div class="grid">
+          <label>
+            <span>MQTT_PUBLISH_HOST</span>
+            <input id="mqttHost" name="MQTT_PUBLISH_HOST" type="text" placeholder="mosquitto (or blank to disable)" spellcheck="false" />
+          </label>
+          <label>
+            <span>MQTT_PUBLISH_PORT</span>
+            <input id="mqttPort" name="MQTT_PUBLISH_PORT" type="number" min="1" max="65535" placeholder="1883" spellcheck="false" />
+          </label>
+          <label>
+            <span>MQTT_PUBLISH_TOPIC_PREFIX</span>
+            <input id="mqttPrefix" name="MQTT_PUBLISH_TOPIC_PREFIX" type="text" placeholder="shatter" spellcheck="false" />
+          </label>
+          <label>
+            <span>MQTT_PUBLISH_USERNAME</span>
+            <input id="mqttUser" name="MQTT_PUBLISH_USERNAME" type="text" placeholder="optional" spellcheck="false" />
+          </label>
+          <label>
+            <span>MQTT_PUBLISH_PASSWORD</span>
+            <input id="mqttPass" name="MQTT_PUBLISH_PASSWORD" type="password" placeholder="optional" autocomplete="new-password" spellcheck="false" />
+          </label>
+        </div>
       </section>
 
       <section class="panel disabled" id="step6" aria-disabled="true">
