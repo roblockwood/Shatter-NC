@@ -1,4 +1,4 @@
-"""API endpoints for air compressors (Kaeser / kaeser-sc2-api sidecar)."""
+"""API endpoints for air compressors (Kaeser SC2/Connect, backend-direct)."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Any, Dict
@@ -111,8 +111,6 @@ async def update_compressor(
                 "ip_address": row.ip_address,
                 "enabled": row.enabled,
                 "poll_interval_seconds": row.poll_interval_seconds,
-                "sidecar_rest_base_url": row.sidecar_rest_base_url,
-                "mqtt_topic_root": row.mqtt_topic_root,
                 "kaeser_connect_base_url": row.kaeser_connect_base_url,
                 "kaeser_username": row.kaeser_username,
                 "kaeser_credentials_configured": bool(

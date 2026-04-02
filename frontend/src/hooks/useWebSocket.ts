@@ -45,15 +45,13 @@ export interface MachineStatus {
   layout_config?: Record<string, unknown> | null;
 }
 
-/** Kaeser compressor live status (kaeser-sc2-api sidecar + MQTT/REST) */
+/** Kaeser compressor live status (backend-direct SC2/Connect polling). */
 export interface CompressorStatus {
   asset_kind: 'compressor';
   compressor_id: number;
   compressor_name: string;
   ip_address: string;
   enabled?: boolean;
-  sidecar_rest_base_url?: string;
-  mqtt_topic_root?: string;
   kaeser_connect_base_url?: string | null;
   kaeser_username?: string | null;
   kaeser_credentials_configured?: boolean;

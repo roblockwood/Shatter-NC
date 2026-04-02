@@ -10,17 +10,6 @@ from pydantic import BaseModel, Field, model_validator
 class CompressorBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     ip_address: str = Field(..., description="SC2 host (for display / ops)")
-    # Legacy fields retained for DB compatibility; ignored by backend-direct Kaeser polling.
-    sidecar_rest_base_url: str = Field(
-        default="",
-        max_length=512,
-        description="(Legacy) Sidecar base URL (ignored in backend-direct mode).",
-    )
-    mqtt_topic_root: str = Field(
-        default="",
-        max_length=255,
-        description="(Legacy) MQTT topic root (ignored in backend-direct mode).",
-    )
     poll_interval_seconds: int = Field(default=1, ge=1, le=300)
     enabled: bool = Field(default=True)
     tags: List[str] = Field(default_factory=list)
@@ -53,8 +42,6 @@ class CompressorCreate(CompressorBase):
 class CompressorUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     ip_address: Optional[str] = None
-    sidecar_rest_base_url: Optional[str] = Field(None, min_length=1, max_length=512)
-    mqtt_topic_root: Optional[str] = Field(None, min_length=1, max_length=255)
     poll_interval_seconds: Optional[int] = Field(None, ge=1, le=300)
     enabled: Optional[bool] = None
     tags: Optional[List[str]] = None
@@ -80,8 +67,6 @@ class CompressorResponse(CompressorBase):
             id=row.id,
             name=row.name,
             ip_address=row.ip_address,
-            sidecar_rest_base_url=row.sidecar_rest_base_url,
-            mqtt_topic_root=row.mqtt_topic_root,
             poll_interval_seconds=row.poll_interval_seconds,
             enabled=row.enabled,
             tags=row.tags or [],
