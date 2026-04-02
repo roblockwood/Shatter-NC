@@ -203,7 +203,8 @@ class TOLNIParserV2:
                 elif field_def.data_type == str:
                     # Remove single quotes from tool name if present
                     if field_def.name == "tool_name" and field_value.startswith("'") and field_value.endswith("'"):
-                        tool[field_def.name] = field_value[1:-1].strip()
+                        # Preserve internal spacing (tool tables often use fixed-width names)
+                        tool[field_def.name] = field_value[1:-1]
                     else:
                         tool[field_def.name] = field_value
                 else:

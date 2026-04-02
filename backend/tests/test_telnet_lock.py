@@ -4,7 +4,7 @@ import pytest
 from app.clients.telnet_client import _get_machine_lock
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_same_key_returns_same_lock():
     """Same (ip, port) returns the same asyncio.Lock instance."""
     lock1 = await _get_machine_lock("192.168.1.1", 10000)
@@ -13,7 +13,7 @@ async def test_same_key_returns_same_lock():
     assert isinstance(lock1, asyncio.Lock)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_different_keys_return_different_locks():
     """Different (ip, port) return different locks."""
     lock_a = await _get_machine_lock("192.168.1.1", 10000)
@@ -24,7 +24,7 @@ async def test_different_keys_return_different_locks():
     assert lock_b is not lock_c
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_lock_serializes_concurrent_access():
     """Two coroutines using the same machine lock run one after the other."""
     order = []

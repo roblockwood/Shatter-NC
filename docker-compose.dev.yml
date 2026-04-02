@@ -39,6 +39,11 @@ services:
       DEFAULT_POLL_INTERVAL: ${DEFAULT_POLL_INTERVAL:-5}
       COMPRESSOR_STATUS_SAMPLE_MIN_INTERVAL_SECONDS: ${COMPRESSOR_STATUS_SAMPLE_MIN_INTERVAL_SECONDS:-1}
       COMPRESSOR_STATUS_SAMPLES_RAW_DAYS: ${COMPRESSOR_STATUS_SAMPLES_RAW_DAYS:-14}
+      # MQTT broker is optional; enable by starting the mosquitto service.
+      MQTT_PUBLISH_HOST: ${MQTT_PUBLISH_HOST:-}
+      MQTT_PUBLISH_PORT: ${MQTT_PUBLISH_PORT:-1883}
+      MQTT_PUBLISH_USERNAME: ${MQTT_PUBLISH_USERNAME:-}
+      MQTT_PUBLISH_PASSWORD: ${MQTT_PUBLISH_PASSWORD:-}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
@@ -69,6 +74,14 @@ services:
       - ./frontend:/app
       - /app/node_modules
     command: npm run dev
+
+  # Optional MQTT broker for telemetry fanout (CNC + compressors).
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: shatter-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
 
 volumes:
   postgres_data:
