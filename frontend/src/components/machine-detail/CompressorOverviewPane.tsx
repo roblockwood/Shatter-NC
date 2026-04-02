@@ -26,7 +26,7 @@ function statusBracket(status: string, online: boolean): string {
 export const CompressorOverviewPane: React.FC<CompressorOverviewPaneProps> = ({ compressor }) => {
   const metrics = compressor.metrics || {};
   const operational = metrics.operational as Record<string, unknown> | undefined;
-  const sidecarRestErr = metrics.sidecar_rest_error as string | undefined;
+  const pollErr = (metrics.error as string | undefined) || compressor.error;
   const online = compressor.is_online === true;
   const linkDot = online ? '●' : '○';
   const linkLabel = online ? 'ONLINE' : 'OFFLINE';
@@ -76,15 +76,7 @@ export const CompressorOverviewPane: React.FC<CompressorOverviewPaneProps> = ({ 
           </div>
 
           <div className="compressor-pane-section">
-            <div className="compressor-pane-section-title">Sidecar</div>
-            <div className="terminal-kv-row">
-              <span className="terminal-kv-label">REST URL</span>
-              <span className="terminal-kv-value text-dim">{compressor.sidecar_rest_base_url || '—'}</span>
-            </div>
-            <div className="terminal-kv-row">
-              <span className="terminal-kv-label">MQTT root</span>
-              <span className="terminal-kv-value text-dim">{compressor.mqtt_topic_root || '—'}</span>
-            </div>
+            <div className="compressor-pane-section-title">Kaeser Connect</div>
             <div className="terminal-kv-row">
               <span className="terminal-kv-label">Kaeser creds</span>
               <span className="terminal-kv-value">
@@ -99,30 +91,11 @@ export const CompressorOverviewPane: React.FC<CompressorOverviewPaneProps> = ({ 
             )}
           </div>
 
-          {compressor.error && (
+          {pollErr && (
             <div className="compressor-pane-section">
               <div className="compressor-pane-section-title">Error</div>
               <p className="compressor-error" style={{ margin: 0, fontSize: 'var(--font-sm)' }}>
-                {compressor.error}
-              </p>
-              {(compressor.error.includes('Name or service not known') ||
-                compressor.error.includes('service not known')) && (
-                <p className="text-dim" style={{ margin: '0.5rem 0 0', fontSize: 'var(--font-xs)', lineHeight: 1.45 }}>
-                  Usually kaeser-sc2-api is not running or the backend cannot resolve that hostname. Start with{' '}
-                  <code style={{ fontSize: 'var(--font-xs)' }}>
-                    docker compose -f docker-compose.dev.yml --profile kaeser up -d
-                  </code>
-                  , or set Sidecar REST to a reachable URL (e.g. host IP:3004).
-                </p>
-              )}
-            </div>
-          )}
-
-          {sidecarRestErr && !compressor.error && (
-            <div className="compressor-pane-section">
-              <div className="compressor-pane-section-title">Sidecar REST</div>
-              <p className="compressor-error" style={{ margin: 0, fontSize: 'var(--font-sm)' }}>
-                {sidecarRestErr}
+                {pollErr}
               </p>
             </div>
           )}
@@ -130,7 +103,7 @@ export const CompressorOverviewPane: React.FC<CompressorOverviewPaneProps> = ({ 
           <div className="compressor-pane-section">
             <div className="compressor-pane-section-title">Operational JSON</div>
             <p className="text-dim" style={{ margin: '0 0 var(--spacing-xs)', fontSize: 'var(--font-xs)', lineHeight: 1.45 }}>
-              Last merged <code>metrics.operational</code> from MQTT + REST (debug).
+              Latest <code>metrics.operational</code> bundle (debug).
             </p>
             {operational != null && Object.keys(operational).length > 0 ? (
               <pre className="compressor-registers-pre compressor-operational-json" aria-label="Raw operational JSON">

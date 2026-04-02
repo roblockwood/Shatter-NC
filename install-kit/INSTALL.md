@@ -37,6 +37,7 @@ Then open Komodo at `http://<host>:9120`.
 2. Fill in:
    - `POSTGRES_PASSWORD`
    - `SECRET_KEY` (use Generate)
+   - (Optional) `MQTT_PUBLISH_HOST` / `MQTT_PUBLISH_PORT` / credentials (to publish telemetry to Mosquitto)
    - GHCR owner/repo + image tag
 3. Download:
    - `.env`
