@@ -1,3 +1,10 @@
+# [0.14.0](https://github.com/roblockwood/Shatter-NC/compare/v0.13.0...v0.14.0) (2026-04-02)
+
+
+### Features
+
+* add optional MQTT publishing for compressor telemetry ([2d0fbc3](https://github.com/roblockwood/Shatter-NC/commit/2d0fbc3c61e6bd5dd51325a72c55e641ccaf4b26))
+
 # [0.13.0](https://github.com/roblockwood/Shatter-NC/compare/v0.12.3...v0.13.0) (2026-04-01)
 
 
