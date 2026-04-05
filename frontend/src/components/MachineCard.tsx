@@ -58,10 +58,6 @@ interface MachineStatus {
   response_time_ms?: number;
   tool_response_time_ms?: number;
   ip_address?: string;
-  telnet_host?: string;
-  telnet_port?: number;
-  ftp_host?: string;
-  http_host?: string;
   ftp_username?: string;
   ftp_password?: string;
   ftp_port?: number;
@@ -332,13 +328,10 @@ export const MachineCard: React.FC<MachineCardProps> = ({
 
   const [editFormData, setEditFormData] = useState({
     ip_address: machine.ip_address || '',
-    telnet_host: (machine as any).telnet_host || '',
-    telnet_port: (machine as any).telnet_port || 10000,
-    ftp_host: (machine as any).ftp_host || '',
-    http_host: (machine as any).http_host || '',
     ftp_username: machine.ftp_username || '',
     ftp_password: machine.ftp_password || '',
     ftp_port: machine.ftp_port || 21,
+    // http_port removed - Telnet port is always 10000
     path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
     poll_interval_seconds: machine.poll_interval_seconds || 5,
     tool_poll_interval_seconds: (machine as any).tool_poll_interval_seconds || 30,
@@ -370,13 +363,10 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           // Store the fetched data as the original baseline
           const fetchedFormData = {
             ip_address: fullMachineData.ip_address || '',
-            telnet_host: fullMachineData.telnet_host || '',
-            telnet_port: fullMachineData.telnet_port || 10000,
-            ftp_host: fullMachineData.ftp_host || '',
-            http_host: fullMachineData.http_host || '',
             ftp_username: fullMachineData.ftp_username || '',
             ftp_password: fullMachineData.ftp_password || '',
             ftp_port: fullMachineData.ftp_port || 21,
+            // http_port removed - Telnet port is always 10000
             path: fullMachineData.path !== undefined && fullMachineData.path !== null ? fullMachineData.path : '/',
             poll_interval_seconds: fullMachineData.poll_interval_seconds || 5,
             tool_poll_interval_seconds: fullMachineData.tool_poll_interval_seconds || 30,
@@ -470,13 +460,10 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       setEditMachineName(machine.machine_name || '');
       setEditFormData({
         ip_address: machine.ip_address || '',
-        telnet_host: (machine as any).telnet_host || '',
-        telnet_port: (machine as any).telnet_port || 10000,
-        ftp_host: (machine as any).ftp_host || '',
-        http_host: (machine as any).http_host || '',
         ftp_username: machine.ftp_username || '',
         ftp_password: machine.ftp_password || '',
         ftp_port: machine.ftp_port || 21,
+        // http_port removed - Telnet port is always 10000
         path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
         poll_interval_seconds: machine.poll_interval_seconds || 5,
         tool_poll_interval_seconds: (machine as any).tool_poll_interval_seconds || 30,
@@ -972,45 +959,12 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               <div className="network-config-header">NETWORK CONFIGURATION</div>
 
               <div className="form-row">
-                <label>PRIMARY HOST:</label>
+                <label>IP:</label>
               <input
                 type="text"
                 value={editFormData.ip_address}
                 onChange={(e) => setEditFormData({ ...editFormData, ip_address: e.target.value })}
                 placeholder="192.168.1.100"
-                disabled={isEditSaving}
-              />
-            </div>
-
-            <div className="form-row">
-              <label>TELNET HOST:</label>
-              <input
-                type="text"
-                value={editFormData.telnet_host}
-                onChange={(e) => setEditFormData({ ...editFormData, telnet_host: e.target.value })}
-                placeholder="Optional override, e.g. host.docker.internal"
-                disabled={isEditSaving}
-              />
-            </div>
-
-            <div className="form-row">
-              <label>FTP HOST:</label>
-              <input
-                type="text"
-                value={editFormData.ftp_host}
-                onChange={(e) => setEditFormData({ ...editFormData, ftp_host: e.target.value })}
-                placeholder="Optional override"
-                disabled={isEditSaving}
-              />
-            </div>
-
-            <div className="form-row">
-              <label>HTTP HOST:</label>
-              <input
-                type="text"
-                value={editFormData.http_host}
-                onChange={(e) => setEditFormData({ ...editFormData, http_host: e.target.value })}
-                placeholder="Optional override"
                 disabled={isEditSaving}
               />
             </div>
@@ -1061,15 +1015,14 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 />
               </div>
               <div>
-                <label>TELNET PORT:</label>
+                <label>COM PORT:</label>
                 <input
                   type="number"
                   min="1"
                   max="65535"
-                  value={editFormData.telnet_port}
-                  onChange={(e) => setEditFormData({ ...editFormData, telnet_port: parseInt(e.target.value) })}
-                  disabled={isEditSaving}
-                  title="Telnet communication port"
+                  value={10000}
+                  disabled={true}
+                  title="Telnet communication port (fixed at 10000)"
                 />
               </div>
             </div>

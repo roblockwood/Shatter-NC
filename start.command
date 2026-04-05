@@ -11,22 +11,6 @@ if [ ! -f .env ]; then
     echo ".env created with a random database password."
 fi
 
-echo "Starting optional host relay(s)..."
-./scripts/start_host_relays.sh || {
-    echo ""
-    echo "Relay/proxy startup failed. Check .relay/*.log"
-    read -n 1 -p "Press any key to close..."
-    exit 1
-}
-
-echo "Checking host relay/proxy status..."
-./scripts/check_host_relays.sh || {
-    echo ""
-    echo "Relay/proxy health check failed. Check .relay/*.log"
-    read -n 1 -p "Press any key to close..."
-    exit 1
-}
-
 echo "Starting Shatter..."
 docker compose -f docker-compose.dev.yml up -d
 

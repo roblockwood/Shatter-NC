@@ -9,12 +9,8 @@ class MachineBase(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=255)
     model: str = Field(default="Brother CNC", max_length=100)
-    ip_address: str = Field(..., description="Primary machine host or IP address used unless a protocol override is set")
-    telnet_host: Optional[str] = Field(default=None, description="Optional Telnet host override")
-    telnet_port: int = Field(default=10000, ge=1, le=65535, description="Telnet port")
-    ftp_host: Optional[str] = Field(default=None, description="Optional FTP host override")
+    ip_address: str = Field(..., description="IPv4 or IPv6 address")
     ftp_port: int = Field(default=21, ge=1, le=65535)
-    http_host: Optional[str] = Field(default=None, description="Optional HTTP host override")
     http_port: int = Field(default=80, ge=1, le=65535)
     ftp_username: str = Field(default="anonymous", max_length=255)
     ftp_password: str = Field(default="anonymous", max_length=255)
@@ -50,11 +46,7 @@ class MachineUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     model: Optional[str] = Field(None, max_length=100)
     ip_address: Optional[str] = None
-    telnet_host: Optional[str] = None
-    telnet_port: Optional[int] = Field(None, ge=1, le=65535)
-    ftp_host: Optional[str] = None
     ftp_port: Optional[int] = Field(None, ge=1, le=65535)
-    http_host: Optional[str] = None
     http_port: Optional[int] = Field(None, ge=1, le=65535)
     ftp_username: Optional[str] = Field(None, max_length=255)
     ftp_password: Optional[str] = Field(None, max_length=255)

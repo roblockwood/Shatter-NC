@@ -27,11 +27,10 @@ services:
       target: development  # Use development target for hot-reload
     container_name: shatter-backend
     restart: unless-stopped
-    network_mode: host
     init: true
     stop_grace_period: 20s
     environment:
-      POSTGRES_HOST: localhost
+      POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-shatter}
       POSTGRES_USER: ${POSTGRES_USER:-shatter_user}
@@ -45,6 +44,8 @@ services:
       MQTT_PUBLISH_PORT: ${MQTT_PUBLISH_PORT:-1883}
       MQTT_PUBLISH_USERNAME: ${MQTT_PUBLISH_USERNAME:-}
       MQTT_PUBLISH_PASSWORD: ${MQTT_PUBLISH_PASSWORD:-}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy

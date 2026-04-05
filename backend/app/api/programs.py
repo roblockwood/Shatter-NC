@@ -12,7 +12,6 @@ from app.parsers.gcode_parser import parse_gcode
 # Note: get_work_offset from posni_parser is deprecated - use parse_posni_v2 instead
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
-from app.utils.machine_endpoints import get_ftp_endpoint, get_http_endpoint, get_telnet_endpoint
 from app.schemas.program import (
     ProgramUploadRequest,
     ProgramUploadResponse,
@@ -137,7 +136,7 @@ async def validate_program(
     machine_tool_data = {}
     machine_tool_fetch_failed = False
     try:
-        http_client = CNCHttpClient(get_http_endpoint(machine)[0], get_http_endpoint(machine)[1])
+        http_client = CNCHttpClient(machine.ip_address, machine.http_port)
         machine_tool_data = http_client.get_tool_data()
     except Exception as e:
         machine_tool_fetch_failed = True
@@ -191,8 +190,8 @@ async def validate_program(
 
         # Create fresh connection
         telnet_client = await create_fresh_connection(
-            ip_address=get_telnet_endpoint(machine)[0],
-            port=get_telnet_endpoint(machine)[1],
+            ip_address=machine.ip_address,
+            port=10000,
             timeout=10
         )
         
@@ -325,8 +324,8 @@ async def validate_file_on_machine(
     # Download file via FTP
     try:
         ftp_client = CNCFtpClient(
-            get_ftp_endpoint(machine)[0],
-            get_ftp_endpoint(machine)[1],
+            machine.ip_address,
+            machine.ftp_port,
             machine.ftp_username,
             machine.ftp_password
         )

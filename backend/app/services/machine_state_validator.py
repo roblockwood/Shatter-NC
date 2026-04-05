@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from app.models.machine import Machine
 from app.api.status import get_machine_status
-from app.utils.machine_endpoints import get_telnet_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +73,8 @@ class MachineStateValidator:
             from app.parsers.mem_parser_v2 import parse_mem_v2
 
             telnet_client = await create_fresh_connection(
-                ip_address=get_telnet_endpoint(db_machine)[0],
-                port=get_telnet_endpoint(db_machine)[1],
+                ip_address=db_machine.ip_address,
+                port=10000,
                 timeout=10
             )
             

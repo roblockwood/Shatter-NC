@@ -6,10 +6,6 @@ import { Select } from './ui/Select';
 interface MachineData {
   name: string;
   ip_address: string;
-  telnet_host?: string;
-  telnet_port?: number;
-  ftp_host?: string;
-  http_host?: string;
   ftp_username: string;
   ftp_password: string;
   ftp_port?: number;
@@ -58,10 +54,6 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
   const [formData, setFormData] = useState<MachineData>({
     name: '',
     ip_address: '',
-    telnet_host: '',
-    telnet_port: 10000,
-    ftp_host: '',
-    http_host: '',
     ftp_username: 'anonymous',
     ftp_password: 'anonymous',
     ftp_port: 21,
@@ -105,10 +97,6 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
         setFormData({
           name: '',
           ip_address: '',
-          telnet_host: '',
-          telnet_port: 10000,
-          ftp_host: '',
-          http_host: '',
           ftp_username: 'anonymous',
           ftp_password: 'anonymous',
           ftp_port: 21,
@@ -160,10 +148,6 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
     setFormData({
       name: '',
       ip_address: '',
-    telnet_host: '',
-    telnet_port: 10000,
-    ftp_host: '',
-    http_host: '',
       ftp_username: 'anonymous',
       ftp_password: 'anonymous',
       ftp_port: 21,
@@ -279,45 +263,12 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
           </div>
 
           <div className="form-row">
-            <label>PRIMARY HOST:</label>
+            <label>IP:</label>
             <input
               type="text"
               value={formData.ip_address}
               onChange={(e) => setFormData({ ...formData, ip_address: e.target.value })}
               placeholder="192.168.1.100"
-              disabled={isSaving}
-            />
-          </div>
-
-          <div className="form-row">
-            <label>TELNET HOST:</label>
-            <input
-              type="text"
-              value={formData.telnet_host || ''}
-              onChange={(e) => setFormData({ ...formData, telnet_host: e.target.value })}
-              placeholder="Optional override, e.g. host.docker.internal"
-              disabled={isSaving}
-            />
-          </div>
-
-          <div className="form-row">
-            <label>FTP HOST:</label>
-            <input
-              type="text"
-              value={formData.ftp_host || ''}
-              onChange={(e) => setFormData({ ...formData, ftp_host: e.target.value })}
-              placeholder="Optional override"
-              disabled={isSaving}
-            />
-          </div>
-
-          <div className="form-row">
-            <label>HTTP HOST:</label>
-            <input
-              type="text"
-              value={formData.http_host || ''}
-              onChange={(e) => setFormData({ ...formData, http_host: e.target.value })}
-              placeholder="Optional override"
               disabled={isSaving}
             />
           </div>
@@ -368,15 +319,14 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
               />
             </div>
             <div>
-              <label>TELNET PORT:</label>
+              <label>COM PORT:</label>
               <input
                 type="number"
                 min="1"
                 max="65535"
-                value={formData.telnet_port}
-                onChange={(e) => setFormData({ ...formData, telnet_port: parseInt(e.target.value) })}
-                disabled={isSaving}
-                title="Telnet communication port"
+                value={10000}
+                disabled={true}
+                title="Telnet communication port (fixed at 10000)"
               />
             </div>
           </div>
