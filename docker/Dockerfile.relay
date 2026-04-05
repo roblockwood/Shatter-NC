@@ -1,0 +1,16 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install bash and lsof for health checks
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash lsof curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Scripts will be mounted at runtime
+# Just need python to be available
+
+COPY docker/relay-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

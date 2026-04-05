@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(nc -zv -w 5 192.168.1.135 10000)",
+      "Bash(nc -zv -w 5 192.168.1.135 21)",
+      "Bash(wait)",
+      "Bash(docker network:*)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Driver:', d[0]['Driver']\\); print\\('Subnet:', d[0]['IPAM']['Config']\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(curl -v http://localhost:3000)",
+      "Bash(curl -v http://127.0.0.1:3000)",
+      "Bash(docker exec:*)",
+      "Bash(docker compose:*)",
+      "Bash(ls -la /Users/blackwellengineering/code/Shatter-NC-BE/.env*)",
+      "Bash(ls /Users/blackwellengineering/code/Shatter-NC-BE/docker-compose*)",
+      "Bash(ls -la /Users/blackwellengineering/code/Shatter-NC-BE/backend/.env*)",
+      "Bash(git checkout:*)",
+      "Bash(ping -c 4 192.168.1.135)",
+      "Bash(docker stop:*)",
+      "Bash(nc -zv 192.168.1.135 10000)",
+      "Bash(docker start:*)",
+      "Bash(python3 -c ':*)",
+      "Bash(nc -w3 192.168.1.135 10000)",
+      "Bash(xxd)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(nc -zv -w2 192.168.1.135 10000)",
+      "Bash(docker version:*)",
+      "Bash(docker info:*)",
+      "Bash(defaults read:*)"
+    ]
+  }
+}
