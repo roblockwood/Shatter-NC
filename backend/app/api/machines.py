@@ -7,6 +7,7 @@ from app.models.machine import Machine
 from app.schemas.machine import MachineCreate, MachineUpdate, MachineResponse
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
+from app.utils.machine_endpoints import get_endpoint_summary, get_ftp_endpoint, get_http_endpoint, get_telnet_endpoint
 from app.utils.protocol_detector import detect_protocols
 import logging
 
@@ -144,14 +145,15 @@ async def test_connection(machine_id: int, db: Session = Depends(get_db)):
         "machine_id": machine_id,
         "machine_name": db_machine.name,
         "ip_address": db_machine.ip_address,
+        "endpoints": get_endpoint_summary(db_machine),
     }
 
     # Test Telnet connection (primary communication protocol)
     try:
         from app.clients.telnet_client import CNCTelnetClient
         telnet_client = CNCTelnetClient(
-            db_machine.ip_address,
-            port=10000,  # Telnet port is always 10000
+            get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=5,
         )
         results["telnet"] = await telnet_client.test_connection()
@@ -164,8 +166,8 @@ async def test_connection(machine_id: int, db: Session = Depends(get_db)):
     # Test FTP connection (for file operations)
     try:
         ftp_client = CNCFtpClient(
-            db_machine.ip_address,
-            port=db_machine.ftp_port,
+            get_ftp_endpoint(db_machine)[0],
+            port=get_ftp_endpoint(db_machine)[1],
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
             timeout=5,
@@ -213,8 +215,8 @@ async def detect_machine_protocols(machine_id: int, db: Session = Depends(get_db
 
         try:
             http_client = CNCHttpClient(
-                db_machine.ip_address,
-                port=db_machine.http_port,
+                get_http_endpoint(db_machine)[0],
+                port=get_http_endpoint(db_machine)[1],
                 timeout=5,
             )
         except Exception as e:
@@ -222,8 +224,8 @@ async def detect_machine_protocols(machine_id: int, db: Session = Depends(get_db
 
         try:
             ftp_client = CNCFtpClient(
-                ip_address=db_machine.ip_address,
-                port=db_machine.ftp_port,
+                ip_address=get_ftp_endpoint(db_machine)[0],
+                port=get_ftp_endpoint(db_machine)[1],
                 username=db_machine.ftp_username,
                 password=db_machine.ftp_password,
                 timeout=5,
@@ -234,7 +236,7 @@ async def detect_machine_protocols(machine_id: int, db: Session = Depends(get_db
         # Run protocol detection
         results = await detect_protocols(
             ip_address=db_machine.ip_address,
-            http_port=db_machine.http_port,
+            http_port=get_http_endpoint(db_machine)[1],
             ftp_client=ftp_client,
             http_client=http_client,
         )
@@ -265,15 +267,15 @@ async def disconnect_machine(machine_id: int, db: Session = Depends(get_db)):
 
     try:
         ftp_client = CNCFtpClient(
-            db_machine.ip_address,
-            port=db_machine.ftp_port,
+            get_ftp_endpoint(db_machine)[0],
+            port=get_ftp_endpoint(db_machine)[1],
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
         )
         ftp_client.disconnect()
         return {
             "status": "success",
-            "message": f"Disconnected from {db_machine.name} ({db_machine.ip_address})",
+            "message": f"Disconnected from {db_machine.name} ({get_ftp_endpoint(db_machine)[0]})",
         }
     except Exception as e:
         logger.error(f"Error disconnecting machine {machine_id}: {e}")
@@ -364,8 +366,8 @@ async def refresh_program_name(machine_id: int, db: Session = Depends(get_db)):
 
         # Create fresh connection
         telnet_client = await create_fresh_connection(
-            ip_address=machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(machine)[0],
+            port=get_telnet_endpoint(machine)[1],
             timeout=10
         )
         mem_data = await telnet_client.get_memory_data(verbose=False)

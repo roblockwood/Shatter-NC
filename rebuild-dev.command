@@ -8,6 +8,15 @@ COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.dev.yml"
 
 cd "$SCRIPT_DIR"
 
+echo "Stopping host relay/proxy..."
+./scripts/stop_host_relays.sh || true
+
+echo "Starting optional host relay/proxy..."
+./scripts/start_host_relays.sh
+
+echo "Checking host relay/proxy status..."
+./scripts/check_host_relays.sh
+
 echo "Pulling latest from GitHub..."
 git pull
 

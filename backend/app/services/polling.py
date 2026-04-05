@@ -21,6 +21,7 @@ from app.models.event import (
 from app.clients.http_client import CNCHttpClient
 from app.core.config import settings
 from app.db.base import SessionLocal
+from app.utils.machine_endpoints import get_telnet_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -184,8 +185,8 @@ class MachinePoller:
         try:
             # Create fresh connection
             telnet_client = await create_fresh_connection(
-                ip_address=self.machine.ip_address,
-                port=10000,
+                ip_address=get_telnet_endpoint(self.machine)[0],
+                port=get_telnet_endpoint(self.machine)[1],
                 timeout=10
             )
 
@@ -239,8 +240,8 @@ class MachinePoller:
             # Create fresh connection
             step_start = time.time()
             telnet_client = await create_fresh_connection(
-                ip_address=self.machine.ip_address,
-                port=10000,
+                ip_address=get_telnet_endpoint(self.machine)[0],
+                port=get_telnet_endpoint(self.machine)[1],
                 timeout=10
             )
             step_times['get_connection'] = time.time() - step_start
@@ -410,8 +411,8 @@ class MachinePoller:
             # Create fresh connection
             step_start = time.time()
             telnet_client = await create_fresh_connection(
-                ip_address=self.machine.ip_address,
-                port=10000,
+                ip_address=get_telnet_endpoint(self.machine)[0],
+                port=get_telnet_endpoint(self.machine)[1],
                 timeout=10
             )
             step_times['get_connection'] = time.time() - step_start
@@ -1514,8 +1515,8 @@ class PollingService:
                 telnet_client = None
                 try:
                     telnet_client = await create_fresh_connection(
-                        ip_address=m.ip_address,
-                        port=10000,
+                        ip_address=get_telnet_endpoint(m)[0],
+                        port=get_telnet_endpoint(m)[1],
                         timeout=10
                     )
                     # This will detect and cache the control version

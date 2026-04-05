@@ -33,6 +33,10 @@ export interface MachineStatus {
   tool_table_timestamp?: string | null;
   macros_timestamp?: string | null;
   ip_address?: string;
+  telnet_host?: string;
+  telnet_port?: number;
+  ftp_host?: string;
+  http_host?: string;
   ftp_username?: string;
   ftp_password?: string;
   ftp_port?: number;

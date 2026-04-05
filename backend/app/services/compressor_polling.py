@@ -35,16 +35,24 @@ class CompressorPoller:
         self.last_status: Optional[str] = None
         self._log_lock = asyncio.Lock()
         self._client: Optional[KaeserSc2Client] = None
+        self._client_signature: Optional[tuple[str, str, str]] = None
 
     def _get_client(self) -> KaeserSc2Client:
-        # Create once; session is reused between polls.
-        if self._client is None:
+        # Recreate when connection settings change so updates apply immediately.
+        signature = (
+            self.compressor.kaeser_connect_base_url or "",
+            self.compressor.kaeser_username or "",
+            self.compressor.kaeser_password or "",
+        )
+
+        if self._client is None or self._client_signature != signature:
             self._client = KaeserSc2Client(
                 base_url=self.compressor.kaeser_connect_base_url or "",
                 username=self.compressor.kaeser_username or "",
                 password=self.compressor.kaeser_password or "",
                 verify_tls=False,
             )
+            self._client_signature = signature
         return self._client
 
     async def poll(self) -> Dict[str, Any]:

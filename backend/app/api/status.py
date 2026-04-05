@@ -9,6 +9,7 @@ from app.db.base import get_db
 from app.models.machine import Machine
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
+from app.utils.machine_endpoints import get_ftp_endpoint, get_http_endpoint, get_telnet_endpoint
 from app.parsers.gcode_parser import parse_gcode
 import logging
 import io
@@ -93,8 +94,8 @@ async def get_machine_status(
 
         # Create fresh connection
         telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=10
         )
         
@@ -251,8 +252,8 @@ async def get_running_log(machine_id: int, db: Session = Depends(get_db)):
         from datetime import datetime
 
         telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=10
         )
         
@@ -317,8 +318,8 @@ async def get_work_counters(machine_id: int, db: Session = Depends(get_db)):
         from datetime import datetime
 
         telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=10
         )
         
@@ -381,8 +382,8 @@ async def get_alarms(machine_id: int, db: Session = Depends(get_db)):
         from datetime import datetime
 
         telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=10
         )
         
@@ -458,8 +459,8 @@ async def get_tools(
             
             # Create fresh connection for this operation
             telnet_client = await create_fresh_connection(
-                ip_address=db_machine.ip_address,
-                port=10000,  # Telnet port
+                ip_address=get_telnet_endpoint(db_machine)[0],
+                port=get_telnet_endpoint(db_machine)[1],
                 timeout=10
             )
             
@@ -569,7 +570,7 @@ async def get_tools(
             
             # If raw_html requested, still use HTTP for now (for debugging)
             if raw_html:
-                http_client = CNCHttpClient(db_machine.ip_address, port=db_machine.http_port)
+                http_client = CNCHttpClient(get_http_endpoint(db_machine)[0], port=get_http_endpoint(db_machine)[1])
                 html = http_client._send_request("/tool")
                 return {
                     "machine_id": machine_id,
@@ -579,8 +580,8 @@ async def get_tools(
             
             # Create fresh connection for this operation
             telnet_client = await create_fresh_connection(
-                ip_address=db_machine.ip_address,
-                port=10000,  # Telnet port
+                ip_address=get_telnet_endpoint(db_machine)[0],
+                port=get_telnet_endpoint(db_machine)[1],
                 timeout=10
             )
             
@@ -831,8 +832,8 @@ async def change_tool_color(
         # Create fresh connection for operation
         from app.clients.telnet_client import create_fresh_connection
         telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=10
         )
         
@@ -975,8 +976,8 @@ async def batch_change_tool_colors(
 
         # Create fresh connection
         telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=10
         )
         
@@ -1131,8 +1132,8 @@ async def change_tool_assignment(
         
         from app.clients.telnet_client import create_fresh_connection
         telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=10
         )
         
@@ -1248,8 +1249,8 @@ async def change_tool_type(
         
         from app.clients.telnet_client import create_fresh_connection
         telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=10
         )
         
@@ -1362,8 +1363,8 @@ async def delete_tool_from_pot(
         
         from app.clients.telnet_client import create_fresh_connection
         telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=10
         )
         
@@ -1470,8 +1471,8 @@ async def change_spindle_tool(
         
         from app.clients.telnet_client import create_fresh_connection
         telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=10
         )
         
@@ -1584,8 +1585,8 @@ async def set_tool_life(
         
         from app.clients.telnet_client import create_fresh_connection
         telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=10
         )
         
@@ -1698,8 +1699,8 @@ async def set_tool_offset(
         
         from app.clients.telnet_client import create_fresh_connection
         telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=10
         )
         
@@ -1783,8 +1784,8 @@ async def list_programs(
 
     try:
         ftp_client = CNCFtpClient(
-            ip_address=db_machine.ip_address,
-            port=db_machine.ftp_port,
+            ip_address=get_ftp_endpoint(db_machine)[0],
+            port=get_ftp_endpoint(db_machine)[1],
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
         )
@@ -1826,8 +1827,8 @@ async def get_position(machine_id: int, db: Session = Depends(get_db)):
         
         # Create fresh connection
         telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
+            ip_address=get_telnet_endpoint(db_machine)[0],
+            port=get_telnet_endpoint(db_machine)[1],
             timeout=10
         )
         
@@ -1889,8 +1890,8 @@ async def download_file(
 
     try:
         ftp_client = CNCFtpClient(
-            ip_address=db_machine.ip_address,
-            port=db_machine.ftp_port,
+            ip_address=get_ftp_endpoint(db_machine)[0],
+            port=get_ftp_endpoint(db_machine)[1],
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
         )
@@ -1942,8 +1943,8 @@ async def get_file_metadata(
 
     try:
         ftp_client = CNCFtpClient(
-            ip_address=db_machine.ip_address,
-            port=db_machine.ftp_port,
+            ip_address=get_ftp_endpoint(db_machine)[0],
+            port=get_ftp_endpoint(db_machine)[1],
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
         )
@@ -2007,8 +2008,8 @@ async def view_file(
 
     try:
         ftp_client = CNCFtpClient(
-            ip_address=db_machine.ip_address,
-            port=db_machine.ftp_port,
+            ip_address=get_ftp_endpoint(db_machine)[0],
+            port=get_ftp_endpoint(db_machine)[1],
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
         )
@@ -2076,8 +2077,8 @@ async def upload_file(
         file_content = await file.read()
 
         ftp_client = CNCFtpClient(
-            ip_address=db_machine.ip_address,
-            port=db_machine.ftp_port,
+            ip_address=get_ftp_endpoint(db_machine)[0],
+            port=get_ftp_endpoint(db_machine)[1],
             username=db_machine.ftp_username,
             password=db_machine.ftp_password,
         )

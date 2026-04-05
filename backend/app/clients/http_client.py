@@ -591,11 +591,12 @@ class CNCHttpClient:
             import asyncio
             from app.clients.telnet_client import create_fresh_connection
             from app.parsers.mem_parser_v2 import parse_mem_v2
+            from app.utils.machine_endpoints import get_telnet_endpoint
 
             async def fetch_mem():
                 telnet_client = await create_fresh_connection(
-                    ip_address=machine.ip_address,
-                    port=10000,
+                    ip_address=get_telnet_endpoint(machine)[0],
+                    port=get_telnet_endpoint(machine)[1],
                     timeout=10
                 )
                 try:

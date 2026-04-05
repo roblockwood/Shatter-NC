@@ -26,6 +26,48 @@ docker compose -f docker-compose.dev.yml up -d
 
 Open http://localhost:3000 and add your CNC machines through the web UI.
 
+### Optional macOS Relay/Proxy Auto-Start
+
+If Docker Desktop containers cannot reach your CNC directly on macOS, Shatter can auto-start host-side protocol bridges when launching via `start.command` or `rebuild-dev.sh`.
+
+Set these in `.env`:
+
+```bash
+SHATTER_TELNET_RELAY_ENABLED=1
+SHATTER_TELNET_RELAY_TARGET_HOST=192.168.1.135
+SHATTER_TELNET_RELAY_TARGET_PORT=10000
+
+SHATTER_FTP_PROXY_ENABLED=1
+SHATTER_FTP_PROXY_TARGET_HOST=192.168.1.135
+SHATTER_FTP_PROXY_TARGET_PORT=21
+SHATTER_FTP_PROXY_LISTEN_PORT=2121
+
+SHATTER_SC2_RELAY_ENABLED=1
+SHATTER_SC2_RELAY_TARGET_HOST=192.168.1.222
+SHATTER_SC2_RELAY_TARGET_PORT=80
+SHATTER_SC2_RELAY_LISTEN_PORT=8082
+```
+
+Then set machine endpoint overrides:
+
+- `telnet_host = host.docker.internal`
+- `telnet_port = 10000`
+- `ftp_host = host.docker.internal`
+- `ftp_port = 2121`
+
+For Kaeser SC2 compressor entries:
+
+- `ip_address = 192.168.1.222` (real compressor host)
+- `kaeser_connect_base_url = http://host.docker.internal:8082` (relay URL)
+
+The FTP proxy is passive-mode aware and rewrites PASV control responses so data channels are bridged through the host.
+
+Useful host relay commands:
+
+- `./scripts/start_host_relays.sh` to start relay/proxy manually
+- `./scripts/check_host_relays.sh` to verify required listener ports are active
+- `./scripts/stop_host_relays.sh` to stop relay/proxy processes
+
 **For detailed deployment options**, see [Docker Deployment Guide](docs/DOCKER_DEPLOYMENT.md).
 
 ## Architecture
