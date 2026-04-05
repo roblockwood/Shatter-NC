@@ -1,3 +1,6 @@
+# Brother Manuals
+docs/brother-manuals/
+
 # Environment
 .env
 docker/kaeser-sc2-api.env

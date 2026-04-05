@@ -10,16 +10,26 @@ SELECT remove_compression_policy('compressor_status_samples', if_exists => TRUE)
 SELECT add_compression_policy('compressor_status_samples', INTERVAL '1 day', if_not_exists => TRUE);
 
 -- Downsampled history (last row per minute per compressor) for ranges older than raw retention.
-CREATE MATERIALIZED VIEW compressor_status_samples_1min
-WITH (timescaledb.continuous) AS
-SELECT
-  time_bucket(INTERVAL '1 minute', time) AS bucket,
-  compressor_id,
-  last(status, time) AS status,
-  last(metrics, time) AS metrics
-FROM compressor_status_samples
-GROUP BY 1, 2
-WITH NO DATA;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM timescaledb_information.continuous_aggregates
+    WHERE view_name = 'compressor_status_samples_1min'
+  ) THEN
+    EXECUTE $q$
+      CREATE MATERIALIZED VIEW compressor_status_samples_1min
+      WITH (timescaledb.continuous) AS
+      SELECT
+        time_bucket(INTERVAL '1 minute', time) AS bucket,
+        compressor_id,
+        last(status, time) AS status,
+        last(metrics, time) AS metrics
+      FROM compressor_status_samples
+      GROUP BY 1, 2
+      WITH NO DATA
+    $q$;
+  END IF;
+END $$;
 
 -- Include data not yet fully materialized so recent windows stay consistent with refresh lag.
 ALTER MATERIALIZED VIEW compressor_status_samples_1min SET (timescaledb.materialized_only = false);
