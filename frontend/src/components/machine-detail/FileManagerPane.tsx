@@ -9,6 +9,21 @@ import { MachineCardAsciiDivider } from '../MachineCardAsciiDivider';
 import { PaneTerminalFooter, PaneTerminalFooterInner, PaneTerminalHeader } from './PaneTerminalChrome';
 import './FileManagerPane.css';
 
+/** JSON often sends numbers as strings; primitives lack .toFixed — must coerce before formatting. */
+function asFiniteNumber(value: unknown, fallback = 0): number {
+  if (value == null || value === '') return fallback;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** For optional tolerances: undefined/null/invalid → undefined so we show "—" instead of throwing. */
+function optionalFiniteNumber(value: unknown): number | undefined {
+  if (value == null || value === '') return undefined;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 interface Program {
   name: string;
   size: number;
@@ -1125,7 +1140,9 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                             const toolNumber = parseInt(toolKey, 10);
                             if (isNaN(toolNumber)) return null;
                             const isExpanded = expandedTools.has(toolNumber);
-                            const notInNC = validation.required_diameter === 0 && validation.required_length === 0;
+                            const reqD = asFiniteNumber(validation.required_diameter);
+                            const reqL = asFiniteNumber(validation.required_length);
+                            const notInNC = reqD === 0 && reqL === 0;
 
                             if (notInNC) {
                               return (
@@ -1133,7 +1150,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                                   <td className="text-muted">─</td>
                                   <td>T{String(toolNumber).padStart(2, '0')}</td>
                                   <td>
-                                    Ø{(validation.machine_tool_data?.diameter || 0).toFixed(3)}" L{(validation.machine_tool_data?.length || 0).toFixed(2)}"
+                                    Ø{asFiniteNumber(validation.machine_tool_data?.diameter).toFixed(3)}" L{asFiniteNumber(validation.machine_tool_data?.length).toFixed(2)}"
                                     {validation.machine_tool_data?.tool_name && (
                                       <span className="text-muted"> ({validation.machine_tool_data.tool_name})</span>
                                     )}
@@ -1152,18 +1169,24 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                             const statusClass = hasError ? 'text-error' : hasWarning ? 'text-warning' : 'text-success';
                             const statusIcon = hasError ? '✕' : hasWarning ? '⚠' : '✓';
                             const expandIcon = isExpanded ? '▼' : '▶';
-                            const actualLength = validation.machine_tool_data?.length || 0;
-                            const requiredLength = validation.required_length || 0;
+                            const actualLength = asFiniteNumber(validation.machine_tool_data?.length);
+                            const requiredLength = asFiniteNumber(validation.required_length);
                             const lengthDiff = actualLength - requiredLength;
-                            const actualDiameter = validation.machine_tool_data?.diameter || 0;
-                            const requiredDiameter = validation.required_diameter || 0;
+                            const actualDiameter = asFiniteNumber(validation.machine_tool_data?.diameter);
+                            const requiredDiameter = asFiniteNumber(validation.required_diameter);
                             const diameterDiff = actualDiameter - requiredDiameter;
+                            const lenTolPlus = optionalFiniteNumber(validation.length_tolerance_plus);
+                            const lenTolMinus = optionalFiniteNumber(validation.length_tolerance_minus);
+                            const diaTol = optionalFiniteNumber(validation.diameter_tolerance);
 
                             return (
                               <React.Fragment key={toolNumber}>
                                 <tr
                                   className="file-manager-tool-summary-row clickable"
                                   onClick={() => validation.available && toggleToolExpanded(toolNumber)}
+                                  onTouchStart={(e) => e.stopPropagation()}
+                                  onTouchEnd={(e) => e.stopPropagation()}
+                                  onTouchCancel={(e) => e.stopPropagation()}
                                   style={{ cursor: validation.available ? 'pointer' : 'default' }}
                                 >
                                   <td className={statusClass}>{statusIcon}</td>
@@ -1198,8 +1221,8 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                                         {lengthDiff.toFixed(2)}"
                                       </td>
                                       <td>
-                                        {validation.length_tolerance_plus !== undefined && validation.length_tolerance_minus !== undefined
-                                          ? `+${validation.length_tolerance_plus.toFixed(4)}"/-${validation.length_tolerance_minus.toFixed(4)}"`
+                                        {lenTolPlus !== undefined && lenTolMinus !== undefined
+                                          ? `+${lenTolPlus.toFixed(4)}"/-${lenTolMinus.toFixed(4)}"`
                                           : '-'}
                                       </td>
                                       <td className={validation.length_sufficient ? 'text-success' : 'text-error'}>
@@ -1215,9 +1238,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                                         {diameterDiff.toFixed(3)}"
                                       </td>
                                       <td>
-                                        {validation.diameter_tolerance !== undefined
-                                          ? `±${validation.diameter_tolerance.toFixed(4)}"`
-                                          : '-'}
+                                        {diaTol !== undefined ? `±${diaTol.toFixed(4)}"` : '-'}
                                       </td>
                                       <td className={validation.diameter_match ? 'text-success' : 'text-error'}>
                                         {validation.diameter_match ? '✓' : '✕'}
@@ -1267,6 +1288,9 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                               <tr 
                                 className="file-manager-wcs-summary-row clickable"
                                 onClick={() => setExpandedWCS(!expandedWCS)}
+                                onTouchStart={(e) => e.stopPropagation()}
+                                onTouchEnd={(e) => e.stopPropagation()}
+                                onTouchCancel={(e) => e.stopPropagation()}
                                 style={{ cursor: 'pointer' }}
                               >
                                 <td className="text-warning">⚠</td>
@@ -1280,12 +1304,12 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                                 <td className="text-warning">WARN</td>
                               </tr>
                               {expandedWCS && ['x', 'y', 'z'].map((axis) => {
-                                const actual = (wcs.actual as any)[axis];
+                                const actual = asFiniteNumber((wcs.actual as any)[axis]);
                                 return (
                                   <tr key={axis} className="file-manager-wcs-detail-row">
                                     <td></td>
                                     <td className="file-manager-detail-label">{axis.toUpperCase()}</td>
-                                    <td>{(actual || 0).toFixed(4)}"</td>
+                                    <td>{actual.toFixed(4)}"</td>
                                     <td className="text-muted">────</td>
                                     <td className="text-muted">────</td>
                                     <td className="text-muted">─</td>
@@ -1325,6 +1349,9 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                             <tr
                               className="file-manager-wcs-summary-row clickable"
                               onClick={() => setExpandedWCS(!expandedWCS)}
+                              onTouchStart={(e) => e.stopPropagation()}
+                              onTouchEnd={(e) => e.stopPropagation()}
+                              onTouchCancel={(e) => e.stopPropagation()}
                               style={{ cursor: 'pointer' }}
                             >
                               <td className={statusClass}>{statusIcon}</td>
@@ -1340,22 +1367,23 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                               </td>
                             </tr>
                             {expandedWCS && ['x', 'y', 'z'].map((axis) => {
-                              const expected = (wcs.expected as any)[axis];
-                              const actual = (wcs.actual as any)[axis];
-                              const difference = (wcs.difference as any)[axis];
-                              const diff = Math.abs(difference || 0);
-                              const withinTol = diff <= (wcs.tolerance || 0.1);
+                              const expected = asFiniteNumber((wcs.expected as any)[axis]);
+                              const actual = asFiniteNumber((wcs.actual as any)[axis]);
+                              const difference = asFiniteNumber((wcs.difference as any)[axis]);
+                              const diff = Math.abs(difference);
+                              const tol = asFiniteNumber(wcs.tolerance, 0.1);
+                              const withinTol = diff <= tol;
 
                               return (
                                 <tr key={axis} className="file-manager-wcs-detail-row">
                                   <td></td>
                                   <td className="file-manager-detail-label">{axis.toUpperCase()}</td>
-                                  <td>{(actual || 0).toFixed(4)}"</td>
-                                  <td>{(expected || 0).toFixed(4)}"</td>
+                                  <td>{actual.toFixed(4)}"</td>
+                                  <td>{expected.toFixed(4)}"</td>
                                   <td className={withinTol ? 'text-success' : 'text-error'}>
                                     {diff.toFixed(4)}"
                                   </td>
-                                  <td>±{(wcs.tolerance || 0.1).toFixed(4)}</td>
+                                  <td>±{tol.toFixed(4)}</td>
                                   <td className={withinTol ? 'text-success' : 'text-error'}>
                                     {withinTol ? '✓' : '✕'}
                                   </td>

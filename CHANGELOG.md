@@ -1,3 +1,12 @@
+## [0.14.1](https://github.com/roblockwood/Shatter-NC/compare/v0.14.0...v0.14.1) (2026-04-17)
+
+
+### Bug Fixes
+
+* **tablet:** panel sections stack in portrait and in panes narrower than 700px; restore multi-column layout in wide landscape via container queries and a higher grid min track width.
+* **panel:** add a visual separator between MODE/SCREEN text and switch LED groups; drop extra margin under the info row now that the divider provides spacing.
+* **file manager:** coerce tool validation numbers (including JSON string values) before formatting; tolerate optional tolerances safely; reduce accidental row activation from touch event bubbling on tablet.
+
 # [0.14.0](https://github.com/roblockwood/Shatter-NC/compare/v0.13.0...v0.14.0) (2026-04-02)
 
 
