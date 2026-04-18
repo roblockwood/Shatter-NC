@@ -78,6 +78,7 @@ function buildPwaManifest(): Record<string, unknown> {
     start_url: resolvePwaStartUrl(),
     scope: './',
     display: 'standalone',
+    display_override: ['standalone', 'minimal-ui'],
     theme_color: '#0a0a0a',
     background_color: '#0a0a0a',
     icons: [
