@@ -1,112 +1,233 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import type { CompressorStatus } from '../../hooks/useWebSocket';
+import { useCompressorStatusHistoryPreview } from '../../hooks/useCompressorStatusHistoryPreview';
+import {
+  compressorCardStatusDisplay,
+  compressorCardStatusValueClass,
+  compressorCardTelemetryLines,
+} from '../../utils/compressorCardSummary';
 import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
+import '../MachineCard.css';
 import './AlarmPane.css';
+import './MachineOverviewPane.css';
 
-interface CompressorOverviewPaneProps {
+export interface CompressorOverviewPaneProps {
   compressor: CompressorStatus;
+  /** When set (tablet kiosk), summary rows navigate to sibling panes under this base path. Dashboard embed omits this. */
+  tabletRouteBase?: string;
 }
 
-function safeJsonStringify(value: unknown): string {
-  try {
-    return JSON.stringify(value, null, 2) ?? 'null';
-  } catch {
-    return String(value);
-  }
+function shortEventTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
 }
 
-function statusBracket(status: string, online: boolean): string {
-  if (!online) return `[OFFLINE]`;
-  const s = (status || 'unknown').toUpperCase().replace(/\s+/g, '_');
-  const short = s.length > 14 ? s.slice(0, 14) : s;
-  return `[${short}]`;
+function truncateText(s: string, maxLen: number): string {
+  const t = s.trim();
+  if (t.length <= maxLen) return t;
+  return `${t.slice(0, Math.max(0, maxLen - 1))}…`;
 }
 
-export const CompressorOverviewPane: React.FC<CompressorOverviewPaneProps> = ({ compressor }) => {
-  const metrics = compressor.metrics || {};
-  const operational = metrics.operational as Record<string, unknown> | undefined;
-  const pollErr = (metrics.error as string | undefined) || compressor.error;
-  const online = compressor.is_online === true;
-  const linkDot = online ? '●' : '○';
-  const linkLabel = online ? 'ONLINE' : 'OFFLINE';
+export const CompressorOverviewPane: React.FC<CompressorOverviewPaneProps> = ({
+  compressor,
+  tabletRouteBase,
+}) => {
+  const navigate = useNavigate();
+  const pollTs = compressor.last_successful_poll_at || compressor.poll_timestamp;
+
+  const { psiLine, tempLine, controllerDetail } = useMemo(
+    () => compressorCardTelemetryLines(compressor),
+    [compressor]
+  );
+
+  const alarmCount = compressor.alarms?.length ?? 0;
+  const alarms = compressor.alarms ?? [];
+  const { events: recentStatusEvents, loading: historyLoading } = useCompressorStatusHistoryPreview(
+    compressor.compressor_id,
+    10
+  );
+
+  const go = useCallback(
+    (slug: string) => {
+      if (!tabletRouteBase) return;
+      navigate(`${tabletRouteBase}/${slug}`);
+    },
+    [navigate, tabletRouteBase]
+  );
+
+  const Row = ({
+    slug,
+    label,
+    valueClassName,
+    children,
+  }: {
+    slug: string;
+    label: string;
+    valueClassName?: string;
+    children: React.ReactNode;
+  }) => {
+    const inner = (
+      <>
+        <span className="label">{label}</span>
+        <span className={`value ${valueClassName ?? ''}`.trim()}>{children}</span>
+      </>
+    );
+
+    if (tabletRouteBase) {
+      return (
+        <button
+          type="button"
+          className="compressor-overview-nav-row machine-row machine-row-hoverable"
+          onClick={() => go(slug)}
+        >
+          {inner}
+        </button>
+      );
+    }
+
+    return (
+      <div className="machine-row">
+        <span className="label">{label}</span>
+        <span className={`value ${valueClassName ?? ''}`.trim()}>{children}</span>
+      </div>
+    );
+  };
 
   return (
     <div
-      className="alarm-pane terminal-box compressor-terminal-pane compressor-overview-pane"
+      className="alarm-pane terminal-box compressor-terminal-pane compressor-overview-pane machine-overview-pane"
       onClick={(e) => e.stopPropagation()}
     >
       <PaneTerminalHeader label="COMPRESSOR OVERVIEW">
         <PollingStatusLight
-          lastUpdatedAt={compressor.last_successful_poll_at || compressor.poll_timestamp}
+          lastUpdatedAt={pollTs}
           expectedIntervalMs={Math.max((compressor.poll_interval_seconds ?? 5) * 1000, 1000)}
           ariaLabel="Compressor telemetry freshness"
         />
       </PaneTerminalHeader>
 
       <div className="terminal-box-content">
-        <div className="compressor-overview-body">
-          <div className="compressor-pane-section">
-            <div className="compressor-pane-section-title">Connection</div>
-            <div className="terminal-kv-row">
-              <span className="terminal-kv-label">Link</span>
-              <span className={`terminal-kv-value ${online ? 'text-success' : 'text-error'}`}>
-                <span className="terminal-status-dot" aria-hidden>
-                  {linkDot}
-                </span>
-                {linkLabel}
-              </span>
-            </div>
-            <div className="terminal-kv-row">
-              <span className="terminal-kv-label">Status</span>
-              <span className="terminal-kv-value">{statusBracket(compressor.status || '', online)}</span>
-            </div>
-            <div className="terminal-kv-row">
-              <span className="terminal-kv-label">SC2 host</span>
-              <span className="terminal-kv-value">{compressor.ip_address || '—'}</span>
-            </div>
-          </div>
-
-          <div className="compressor-pane-section">
-            <div className="compressor-pane-section-title">Kaeser Connect</div>
-            <div className="terminal-kv-row">
-              <span className="terminal-kv-label">Kaeser creds</span>
-              <span className="terminal-kv-value">
-                {compressor.kaeser_credentials_configured ? 'YES (env on save)' : 'NO'}
-              </span>
-            </div>
-            {compressor.kaeser_connect_base_url && (
-              <div className="terminal-kv-row">
-                <span className="terminal-kv-label">Connect URL</span>
-                <span className="terminal-kv-value text-dim">{compressor.kaeser_connect_base_url}</span>
+        <div className="machine-overview-pane-body machine-card-content">
+          <section className="machine-overview-section" aria-labelledby="cov-summary-h">
+            {tabletRouteBase ? (
+              <button
+                id="cov-summary-h"
+                type="button"
+                className="machine-overview-section-head"
+                onClick={() => go('panel')}
+              >
+                [ SUMMARY ]
+              </button>
+            ) : (
+              <div id="cov-summary-h" className="machine-overview-section-head" style={{ cursor: 'default' }}>
+                [ SUMMARY ]
               </div>
             )}
-          </div>
+            <div className="machine-overview-detail">
+              <Row slug="panel" label="STATUS:" valueClassName={compressorCardStatusValueClass(compressor)}>
+                {compressorCardStatusDisplay(compressor)}
+              </Row>
 
-          {pollErr && (
-            <div className="compressor-pane-section">
-              <div className="compressor-pane-section-title">Error</div>
-              <p className="compressor-error" style={{ margin: 0, fontSize: 'var(--font-sm)' }}>
-                {pollErr}
-              </p>
+              <Row slug="status" label="OPERATION:" valueClassName="compressor-card-operation-value">
+                {controllerDetail || '—'}
+              </Row>
+
+              <Row slug="psi" label="PSI:">
+                {psiLine}
+              </Row>
+
+              <Row slug="temp" label="TEMP:">
+                {tempLine}
+              </Row>
+
+              <Row slug="alarms" label="ALARMS:">
+                {alarmCount}
+              </Row>
             </div>
-          )}
+          </section>
 
-          <div className="compressor-pane-section">
-            <div className="compressor-pane-section-title">Operational JSON</div>
-            <p className="text-dim" style={{ margin: '0 0 var(--spacing-xs)', fontSize: 'var(--font-xs)', lineHeight: 1.45 }}>
-              Latest <code>metrics.operational</code> bundle (debug).
-            </p>
-            {operational != null && Object.keys(operational).length > 0 ? (
-              <pre className="compressor-registers-pre compressor-operational-json" aria-label="Raw operational JSON">
-                {safeJsonStringify(operational)}
-              </pre>
+          <section className="machine-overview-section" aria-labelledby="cov-hist-h">
+            {tabletRouteBase ? (
+              <button
+                id="cov-hist-h"
+                type="button"
+                className="machine-overview-section-head"
+                onClick={() => go('history')}
+              >
+                [ RECENT STATE ]
+              </button>
             ) : (
-              <p className="text-dim" style={{ margin: 0, fontSize: 'var(--font-sm)' }}>
-                No operational payload yet.
-              </p>
+              <div id="cov-hist-h" className="machine-overview-section-head" style={{ cursor: 'default' }}>
+                [ RECENT STATE ]
+              </div>
             )}
-          </div>
+            <div className="machine-overview-detail">
+              {historyLoading && recentStatusEvents.length === 0 && (
+                <div className="machine-overview-detail-muted">Loading history…</div>
+              )}
+              {!historyLoading && recentStatusEvents.length === 0 && (
+                <div className="machine-overview-detail-muted">No transitions recorded.</div>
+              )}
+              {recentStatusEvents.slice(0, 8).map((ev, idx) => (
+                <div key={`${ev.time}-${idx}`} className="machine-overview-prd3-line">
+                  <span className="machine-overview-prd3-time">{shortEventTime(ev.time)}</span>
+                  <span className="machine-overview-prd3-status text-success">{ev.status}</span>
+                  {ev.previous_status ? (
+                    <span className="machine-overview-prd3-prog text-dim" title={`was: ${ev.previous_status}`}>
+                      ← {ev.previous_status}
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+              <div className="machine-overview-detail-muted" style={{ marginTop: 'var(--spacing-xs)' }}>
+                Updates every minute.
+              </div>
+            </div>
+          </section>
+
+          {alarms.length > 0 ? (
+            <section className="machine-overview-section" aria-labelledby="cov-alarm-detail-h">
+              {tabletRouteBase ? (
+                <button
+                  id="cov-alarm-detail-h"
+                  type="button"
+                  className="machine-overview-section-head"
+                  onClick={() => go('alarms')}
+                >
+                  [ ALARM DETAIL ]
+                </button>
+              ) : (
+                <div id="cov-alarm-detail-h" className="machine-overview-section-head" style={{ cursor: 'default' }}>
+                  [ ALARM DETAIL ]
+                </div>
+              )}
+              <div className="machine-overview-detail">
+                {alarms.map((a, idx) => (
+                  <div key={`${a.code}-${idx}`} className="machine-overview-alarm-line">
+                    <span className={a.severity?.toLowerCase().includes('crit') ? 'text-error' : 'text-warning'}>
+                      <strong>{a.code}</strong>
+                      {' · '}
+                      {truncateText(a.message || '—', 96)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="machine-footer" style={{ marginTop: 'var(--spacing-sm)' }}>
+        <div className="machine-timestamp" style={{ width: '100%', textAlign: 'right' }}>
+          {compressor.is_online ? 'LAST UPDATE' : 'LAST SEEN'}: {new Date(pollTs).toLocaleTimeString()}
         </div>
       </div>
 

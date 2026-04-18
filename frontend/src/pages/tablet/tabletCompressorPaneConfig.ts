@@ -1,10 +1,10 @@
 /** URL segments under `/tablet/compressor/:id/:paneSlug` — one pane per fullscreen swipe/nav slot.
- * Bottom nav order: panel left (first), then status through history (matches machine tablet). */
+ * Bottom nav order: overview left (first), then panel through history (matches CNC tablet). */
 export const TABLET_COMPRESSOR_PANE_SLUGS = [
+  'overview',
   'panel',
   'status',
   'alarms',
-  'overview',
   'psi',
   'temp',
   'history',
@@ -19,14 +19,14 @@ export function isTabletCompressorPaneSlug(s: string): s is TabletCompressorPane
 }
 
 export const TABLET_COMPRESSOR_NAV_ITEMS: { slug: TabletCompressorPaneSlug; label: string }[] = [
+  { slug: 'overview', label: 'OVERVIEW' },
   { slug: 'panel', label: 'PANEL' },
   { slug: 'status', label: 'STATUS' },
   { slug: 'alarms', label: 'ALARMS' },
-  { slug: 'overview', label: 'OVERVIEW' },
   { slug: 'psi', label: 'PSI' },
   { slug: 'temp', label: 'TEMP' },
   { slug: 'history', label: 'HISTORY' },
 ];
 
-/** Opening `/tablet/compressor/:id` lands here (aligned with CNC default `status`). */
-export const TABLET_DEFAULT_COMPRESSOR_PANE: TabletCompressorPaneSlug = 'status';
+/** Opening `/tablet/compressor/:id` lands here (aligned with CNC tablet default). */
+export const TABLET_DEFAULT_COMPRESSOR_PANE: TabletCompressorPaneSlug = 'overview';
