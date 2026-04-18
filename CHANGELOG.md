@@ -1,3 +1,25 @@
+# [0.15.0](https://github.com/roblockwood/Shatter-NC/compare/v0.14.0...v0.15.0) (2026-04-18)
+
+
+### Bug Fixes
+
+* PWA icons + viewport safe-area; nginx manifest no-cache ([58d6e59](https://github.com/roblockwood/Shatter-NC/commit/58d6e591dd2688d0dd501653f82a50172eda3221))
+* PWA manifest start_url targets tablet route (build-time overrides) ([1714e00](https://github.com/roblockwood/Shatter-NC/commit/1714e00f058283986c732fb5e935fd65e9e73407))
+* revert fleet grid stretch rules so dashboard cards and expanded view scroll ([4ab29b2](https://github.com/roblockwood/Shatter-NC/commit/4ab29b2e3887ba97ebb95a982465068673008af3))
+* serve web manifest with correct MIME so PWA standalone applies ([b9c69ab](https://github.com/roblockwood/Shatter-NC/commit/b9c69ab9dd7461d4d9fbacc7bd7fb28aa1267cba))
+* stretch dashboard machine cards and tablet panes to fill viewport ([8951028](https://github.com/roblockwood/Shatter-NC/commit/8951028909c743eb2d0c6a53ae7d4d2b0a6d7e1d))
+
+
+### Features
+
+* add tablet kiosk route for single machine view ([fd8d6fe](https://github.com/roblockwood/Shatter-NC/commit/fd8d6feea2eddf43813317a7fe0db5479220c63c))
+* add web app manifest with display standalone for PWA ([d8042bc](https://github.com/roblockwood/Shatter-NC/commit/d8042bccfba9e6cd6aaa7c59cd771b1ac62f7df6))
+* **frontend:** tablet kiosk, compressor shell, and terminal/pane polish ([a31cc3f](https://github.com/roblockwood/Shatter-NC/commit/a31cc3f8280f3246a3f5c1ff01f47e78d3b7082e))
+* per-tablet machine id via localStorage and setup UI ([c841a66](https://github.com/roblockwood/Shatter-NC/commit/c841a668b68af3285afad39d77486c709d53bac6))
+* show machine and compressor IDs on edit forms ([76defc3](https://github.com/roblockwood/Shatter-NC/commit/76defc3089adecea5750794336297f7d4ab8863c))
+* swipe left/right to change tablet detail panes ([ae531ca](https://github.com/roblockwood/Shatter-NC/commit/ae531ca1b50d74587fc5080ffffc220b338a9f18))
+* tablet kiosk URLs with per-pane routes and bottom nav ([328957d](https://github.com/roblockwood/Shatter-NC/commit/328957da5d2c1959cf4b5466db296c175477b215))
+
 # [0.14.0](https://github.com/roblockwood/Shatter-NC/compare/v0.13.0...v0.14.0) (2026-04-02)
 
 
