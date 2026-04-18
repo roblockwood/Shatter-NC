@@ -919,6 +919,11 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             </div>
           )}
 
+          <div className="form-row asset-id-field">
+            <label>MACHINE ID:</label>
+            <span className="asset-id-value">{machine.machine_id}</span>
+          </div>
+
           {/* Basic Settings */}
           <div className="form-row-inline">
             <div style={{ flex: '0 0 auto', minWidth: '200px' }}>
