@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
@@ -60,9 +61,75 @@ function getVersion(): string {
 
 const version = getVersion()
 
+/** PWA install launch URL: tablet UI, not dashboard `/`. Override with VITE_PWA_START_URL or VITE_TABLET_MACHINE_ID. */
+function resolvePwaStartUrl(): string {
+  const explicit = process.env.VITE_PWA_START_URL?.trim()
+  if (explicit) {
+    return explicit
+  }
+  const tabletId = process.env.VITE_TABLET_MACHINE_ID?.trim()
+  if (tabletId && /^\d+$/.test(tabletId)) {
+    return `./tablet/${tabletId}/status`
+  }
+  return './tablet'
+}
+
+function buildPwaManifest(): Record<string, unknown> {
+  return {
+    name: 'Shatter',
+    short_name: 'Shatter',
+    description: 'CNC machine monitoring',
+    start_url: resolvePwaStartUrl(),
+    scope: './',
+    display: 'standalone',
+    theme_color: '#0a0a0a',
+    background_color: '#0a0a0a',
+    icons: [
+      {
+        src: './favicon.svg',
+        sizes: 'any',
+        type: 'image/svg+xml',
+        purpose: 'any',
+      },
+    ],
+  }
+}
+
+function pwaManifestPlugin(): Plugin {
+  return {
+    name: 'shatter-pwa-manifest',
+    enforce: 'pre',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = req.url?.split('?')[0] ?? ''
+        if (url === '/manifest.webmanifest' || url === '/manifest.json') {
+          try {
+            const manifest = buildPwaManifest()
+            res.setHeader('Content-Type', 'application/manifest+json')
+            res.end(JSON.stringify(manifest, null, 2))
+          } catch (e) {
+            next(e as Error)
+          }
+          return
+        }
+        next()
+      })
+    },
+    generateBundle(_options, _bundle, isWrite) {
+      if (!isWrite) return
+      const manifest = buildPwaManifest()
+      this.emitFile({
+        type: 'asset',
+        fileName: 'manifest.webmanifest',
+        source: JSON.stringify(manifest, null, 2),
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [pwaManifestPlugin(), react()],
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(version),
   },
