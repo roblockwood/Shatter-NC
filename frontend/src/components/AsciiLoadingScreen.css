@@ -7,8 +7,11 @@
   align-items: center;
   justify-content: center;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   min-height: 400px;
   padding: var(--spacing-xl);
+  overflow-x: hidden;
 }
 
 .ascii-logo {
@@ -19,14 +22,8 @@
   width: 100%;
 }
 
+/* Shared .ascii-art metrics + mobile sizes: terminal.css — keep loading-only glow here */
 .ascii-art {
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  line-height: 1.2;
-  color: var(--color-text-primary);
-  white-space: pre;
-  margin: 0;
-  display: inline-block;
   animation: acid-glow 4s ease-in-out infinite;
 }
 
@@ -47,7 +44,7 @@
 }
 
 .loading-spinner {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-ascii);
   font-size: var(--font-lg);
   color: var(--color-text-secondary);
   text-align: center;
@@ -77,18 +74,7 @@
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .ascii-art {
-    font-size: 8px;
-  }
-
   .loading-spinner {
     font-size: var(--font-md);
-  }
-}
-
-/* Very small screens - make ASCII logo even smaller */
-@media (max-width: 480px) {
-  .ascii-art {
-    font-size: 6px;
   }
 }

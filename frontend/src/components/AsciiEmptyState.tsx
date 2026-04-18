@@ -1,4 +1,4 @@
-import { SHATTER_ASCII_LOGO } from '../pages/tablet/shatterAsciiLogo';
+import { ShatterAsciiLogo } from './ShatterAsciiLogo';
 import './AsciiLoadingScreen.css';
 
 interface AsciiEmptyStateProps {
@@ -9,7 +9,7 @@ export const AsciiEmptyState = ({ onAddMachine }: AsciiEmptyStateProps) => {
   return (
     <div className="ascii-loading-screen">
       <div className="ascii-logo">
-        <pre className="ascii-art">{SHATTER_ASCII_LOGO}</pre>
+        <ShatterAsciiLogo variant="empty" />
       </div>
       <div className="empty-state-message clickable" onClick={onAddMachine}>
         [ CLICK HERE TO ADD YOUR FIRST MACHINE ]
