@@ -1,4 +1,5 @@
 export const TABLET_PANE_SLUGS = [
+  'overview',
   'panel',
   'status',
   'alarms',
@@ -19,6 +20,7 @@ export function isTabletPaneSlug(s: string): s is TabletPaneSlug {
 
 /** Bottom nav: slug + short label */
 export const TABLET_NAV_ITEMS: { slug: TabletPaneSlug; label: string }[] = [
+  { slug: 'overview', label: 'OVERVIEW' },
   { slug: 'panel', label: 'PANEL' },
   { slug: 'status', label: 'STATUS' },
   { slug: 'alarms', label: 'ALARMS' },
@@ -30,4 +32,4 @@ export const TABLET_NAV_ITEMS: { slug: TabletPaneSlug; label: string }[] = [
 ];
 
 /** Default pane when opening /tablet/:id */
-export const TABLET_DEFAULT_PANE: TabletPaneSlug = 'status';
+export const TABLET_DEFAULT_PANE: TabletPaneSlug = 'overview';

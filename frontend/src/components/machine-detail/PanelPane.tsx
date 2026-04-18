@@ -3,7 +3,8 @@ import { PollingStatusLight } from '../ui/PollingStatusLight';
 import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
 import './PanelPane.css';
 
-interface PanelData {
+/** CNC panel poll payload (doors, mode/screen, overrides). Reused by overview mini panel. */
+export interface PanelData {
   doors?: {
     outer_door?: number;
     inner_door?: number;
