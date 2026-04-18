@@ -52,7 +52,10 @@
   font-family: var(--font-mono);
   margin: 0;
   white-space: pre;
-  word-break: break-all;
+  word-break: normal;
+  overflow-wrap: normal;
+  letter-spacing: 0;
+  font-variant-ligatures: none;
 }
 
 .modal-message {

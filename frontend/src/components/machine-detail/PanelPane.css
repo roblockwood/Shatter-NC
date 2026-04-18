@@ -1,14 +1,21 @@
 .panel-pane {
   font-family: var(--font-mono);
   color: var(--color-text-primary);
-  height: 100%;
   width: 100%;
-  min-height: 200px;
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 0%;
   min-width: 0;
   min-height: 0;
+}
+
+/* Fill the flex parent: .terminal-box is also a column flex shell; without flex:1 it only
+   wraps its content and leaves a gap below the footer in tablet / expanded layouts. */
+.panel-pane > .terminal-box {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  min-width: 0;
 }
 
 .panel-empty {

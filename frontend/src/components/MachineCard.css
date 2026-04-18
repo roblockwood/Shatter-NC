@@ -18,6 +18,10 @@
   grid-row: span 2;
   padding: 0;
   cursor: default;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  align-self: stretch;
 }
 
 .machine-card.edit-mode {
@@ -500,16 +504,35 @@
   text-align: center;
 }
 
-.machine-card-divider,
-.machine-card-divider-thin {
-  color: var(--color-border-bright);
+/* Matches ToolsPane terminal header/footer dash rows (flex + overflow-hidden fill). */
+.machine-card-divider-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
   margin: var(--spacing-sm) 0;
-  white-space: pre;
+  font-family: var(--font-mono);
   font-size: var(--font-sm);
+  letter-spacing: normal;
+  white-space: normal;
+  color: var(--color-border-bright);
 }
 
-.machine-card-divider-thin {
+.machine-card-divider-row--thin {
   color: var(--color-text-dim);
+}
+
+.machine-card-divider-cap {
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.machine-card-divider-fill {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .machine-card-content {
@@ -709,6 +732,25 @@
 
 .machine-row-hoverable {
   position: relative;
+}
+
+/* Compressor compact cards are shorter than CNC cards in the same grid row; stretch the card and
+   pin the divider + [edit] / LAST SEEN block to the bottom like the machine footer region. */
+.machine-grid > .machine-card.compressor-card:not(.expanded):not(.edit-mode) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.machine-grid > .machine-card.compressor-card:not(.expanded):not(.edit-mode) > .machine-card-content {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.machine-grid > .machine-card.compressor-card:not(.expanded):not(.edit-mode)
+  > .machine-card-content
+  > .machine-card-divider-row--thin {
+  margin-top: auto;
 }
 
 .compressor-card-hover-metric-block {
@@ -1127,6 +1169,24 @@
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Fill the expanded card body so react-grid-layout / pane wrappers get a real height */
+.machine-card.expanded .layout-manager {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.machine-card.expanded .layout-container {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
 }
 
 /* Legacy grid classes - kept for backwards compatibility but not used by LayoutManager */

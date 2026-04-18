@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './AddMachineCard.css';
+import { MachineCardAsciiDivider } from './MachineCardAsciiDivider';
 import { API_BASE, getApiErrorMessage } from '../config/api';
 import type { CompressorStatus } from '../hooks/useWebSocket';
 
@@ -185,7 +186,7 @@ export const AddCompressorCard: React.FC<AddCompressorCardProps> = ({
         </div>
       </div>
 
-      <div className="machine-card-divider">├{'─'.repeat(30)}┤</div>
+      <MachineCardAsciiDivider />
 
       <div className="form-sections-horizontal">
         <div className="network-config-section">

@@ -50,6 +50,20 @@
   max-width: none;
 }
 
+/* Single expanded asset card should consume the grid’s vertical space so LayoutManager /
+   terminal panes (e.g. Panel) get a definite height instead of shrinking to content. */
+.dashboard .machine-grid:has(> .machine-card.expanded) {
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
+}
+
+.dashboard .machine-grid > .machine-card.expanded {
+  grid-row: auto;
+  align-self: stretch;
+  height: 100%;
+  min-height: 0;
+}
+
 @media (max-width: 768px) {
   .machine-grid .machine-card.expanded {
     grid-column: 1 / -1; /* Still span all columns on mobile */

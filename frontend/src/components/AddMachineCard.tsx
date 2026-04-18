@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './AddMachineCard.css';
+import { MachineCardAsciiDivider } from './MachineCardAsciiDivider';
 import { API_BASE } from '../config/api';
 import { Select } from './ui/Select';
 
@@ -230,9 +231,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
         </div>
       </div>
 
-      <div className="machine-card-divider">
-        ├{'─'.repeat(30)}┤
-      </div>
+      <MachineCardAsciiDivider />
 
       {/* Horizontal Form Sections */}
       <div className="form-sections-horizontal">
