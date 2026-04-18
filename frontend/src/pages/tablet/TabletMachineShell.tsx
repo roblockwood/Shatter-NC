@@ -22,6 +22,7 @@ import {
 import { writeStoredTabletMachineId } from './tabletMachineStorage';
 import { TabletScreensaver } from './TabletScreensaver';
 import { useTabletPaneSwipe } from './useTabletPaneSwipe';
+import { useTabletScreensaverIdleMs } from './useTabletScreensaverIdleMs';
 import './tablet.css';
 
 function parsePositiveInt(raw: string | undefined): number | null {
@@ -145,12 +146,17 @@ function TabletMachineShellLoaded({
   slug: TabletPaneSlug;
 }) {
   const [screensaver, setScreensaver] = useState(false);
+  const screensaverIdleMs = useTabletScreensaverIdleMs();
   const swipeNav = useTabletPaneSwipe(machine.machine_id, slug);
   const base = `/tablet/${machine.machine_id}`;
 
   return (
     <>
-      <TabletScreensaver active={screensaver} onActiveChange={setScreensaver} />
+      <TabletScreensaver
+        active={screensaver}
+        onActiveChange={setScreensaver}
+        idleMs={screensaverIdleMs}
+      />
       <div className="tablet-machine-shell">
       <header className="tablet-machine-shell-header">
         <button
