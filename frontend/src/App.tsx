@@ -5,6 +5,7 @@ import { FileBrowser } from './pages/FileBrowser';
 import { TabletEntry } from './pages/tablet/TabletEntry';
 import { TabletMachineShell } from './pages/tablet/TabletMachineShell';
 import { TabletRedirectToDefaultPane } from './pages/tablet/TabletRedirectToDefaultPane';
+import { TabletSetupPage } from './pages/tablet/TabletSetupPage';
 import { ToolManagement } from './pages/ToolManagement';
 import { useBetaMode, useBetaModeActivator } from './hooks/useBetaMode';
 import { BetaRoute } from './components/BetaRoute';
@@ -83,6 +84,7 @@ function AppLayout() {
       {!hideChrome && <Navigation />}
       <div className={`app-content${hideChrome ? ' app-content--tablet-kiosk' : ''}`}>
         <Routes>
+          <Route path="/tablet/setup" element={<TabletSetupPage />} />
           <Route path="/tablet/:machineId/:paneSlug" element={<TabletMachineShell />} />
           <Route path="/tablet/:machineId" element={<TabletRedirectToDefaultPane />} />
           <Route path="/tablet" element={<TabletEntry />} />

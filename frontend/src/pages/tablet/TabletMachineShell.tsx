@@ -1,5 +1,6 @@
 import type { ComponentProps } from 'react';
-import { Navigate, NavLink, useParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, Navigate, NavLink, useParams } from 'react-router-dom';
 import { AsciiLoadingScreen } from '../../components/AsciiLoadingScreen';
 import { AlarmPane } from '../../components/machine-detail/AlarmPane';
 import { CurrentProgramPane } from '../../components/machine-detail/CurrentProgramPane';
@@ -18,6 +19,7 @@ import {
   TABLET_NAV_ITEMS,
   type TabletPaneSlug,
 } from './tabletPaneConfig';
+import { writeStoredTabletMachineId } from './tabletMachineStorage';
 import './tablet.css';
 
 function parsePositiveInt(raw: string | undefined): number | null {
@@ -142,6 +144,12 @@ export const TabletMachineShell = () => {
   const machine =
     machineIdNum !== null ? machines.find((m) => m.machine_id === machineIdNum) : undefined;
 
+  useEffect(() => {
+    if (machineIdNum !== null && machine) {
+      writeStoredTabletMachineId(machine.machine_id);
+    }
+  }, [machineIdNum, machine?.machine_id]);
+
   if (machineIdNum === null) {
     return (
       <div className="tablet-route">
@@ -190,11 +198,16 @@ export const TabletMachineShell = () => {
     <div className="tablet-machine-shell">
       <header className="tablet-machine-shell-header">
         <span className="tablet-machine-shell-title">{machine.machine_name}</span>
-        <span className="tablet-machine-shell-meta">
-          ID {machine.machine_id}
-          {' · '}
-          {machine.is_online ? 'ONLINE' : 'OFFLINE'}
-        </span>
+        <div className="tablet-machine-shell-header-aside">
+          <span className="tablet-machine-shell-meta">
+            ID {machine.machine_id}
+            {' · '}
+            {machine.is_online ? 'ONLINE' : 'OFFLINE'}
+          </span>
+          <Link to="/tablet/setup" className="tablet-shell-link">
+            [ CHANGE MACHINE ]
+          </Link>
+        </div>
       </header>
 
       <div className="tablet-machine-shell-body">
