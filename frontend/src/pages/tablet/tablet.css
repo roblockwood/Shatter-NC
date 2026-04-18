@@ -208,34 +208,15 @@ button.tablet-machine-shell-title:hover {
   min-height: clamp(10px, 2.8vmin, 14px);
 }
 
-/* OVERRIDE sliders: grid row stretch + height:100% was clipping tracks */
-.tablet-machine-shell-body .panel-pane .slider-group {
+/* Overrides: sizing comes from PanelPane (.panel-section-overrides + cq units); tablet only fixes flex stretch/clipping */
+.tablet-machine-shell-body .panel-pane .panel-section-overrides .slider-group {
   align-items: start;
-  gap: clamp(3px, 0.8vmin, var(--spacing-xs)) clamp(4px, 1vmin, var(--spacing-sm));
-  padding: clamp(2px, 0.5vmin, var(--spacing-xs)) 0;
 }
 
-.tablet-machine-shell-body .panel-pane .vertical-slider-ascii {
-  /* PanelPane ties height to grid row — with flex+hidden parents that became 0/infinite clips */
+.tablet-machine-shell-body .panel-pane .panel-section-overrides .vertical-slider-ascii {
   height: auto;
   min-height: 0;
   align-self: start;
-  min-width: clamp(26px, 8vmin, 40px);
-  max-width: clamp(34px, 11vmin, 50px);
-}
-
-.tablet-machine-shell-body .panel-pane .slider-track-ascii {
-  width: clamp(22px, 6vmin, 28px);
-}
-
-.tablet-machine-shell-body .panel-pane .slider-segment {
-  height: clamp(6px, 1.8vmin, 9px);
-  font-size: clamp(6px, 1.6vmin, 9px);
-}
-
-.tablet-machine-shell-body .panel-pane .slider-value-box {
-  width: clamp(26px, 7.5vmin, 32px);
-  height: clamp(14px, 4vmin, 20px);
 }
 
 .tablet-machine-shell-body .panel-pane .terminal-box-content > .panel-section:nth-child(2) {
@@ -261,29 +242,10 @@ button.tablet-machine-shell-title:hover {
   justify-items: center;
 }
 
-/* ── Tablet panel / compressor panel: drop decorative copy; keep polling + controls ── */
-.tablet-machine-shell-body .panel-pane .pane-terminal-title-start,
-.tablet-machine-shell-body .panel-pane .pane-terminal-title-fill,
-.tablet-machine-shell-body .panel-pane .pane-terminal-title-corner {
-  display: none !important;
-}
-
-.tablet-machine-shell-body .panel-pane .pane-terminal-title-row {
-  justify-content: flex-end;
-  min-height: 0;
-}
-
-.tablet-machine-shell-body .panel-pane .terminal-box-header.pane-terminal-header .terminal-box-top {
+/* ── Tablet panel / compressor: keep terminal title row + section labels; tight header padding ── */
+.tablet-machine-shell-body .panel-pane .terminal-box-header.pane-terminal-header .terminal-box-top,
+.tablet-machine-shell-body .compressor-panel-pane .terminal-box-header.pane-terminal-header .terminal-box-top {
   padding-block: var(--spacing-xs);
-}
-
-.tablet-machine-shell-body .panel-pane .terminal-box-footer.pane-terminal-footer {
-  display: none;
-}
-
-.tablet-machine-shell-body .panel-pane .panel-section-title,
-.tablet-machine-shell-body .panel-pane .panel-subsection-title {
-  display: none;
 }
 
 /* MODE + SCREEN on one row (PanelPane media query forces 1fr stack on narrow viewports) */
@@ -305,25 +267,6 @@ button.tablet-machine-shell-title:hover {
 
 .tablet-machine-shell-body .panel-pane .led-group-separator {
   margin: clamp(2px, 0.6vmin, var(--spacing-xs)) 0;
-}
-
-.tablet-machine-shell-body .compressor-panel-pane .pane-terminal-title-start,
-.tablet-machine-shell-body .compressor-panel-pane .pane-terminal-title-fill,
-.tablet-machine-shell-body .compressor-panel-pane .pane-terminal-title-corner {
-  display: none !important;
-}
-
-.tablet-machine-shell-body .compressor-panel-pane .pane-terminal-title-row {
-  justify-content: flex-end;
-  min-height: 0;
-}
-
-.tablet-machine-shell-body .compressor-panel-pane .terminal-box-header.pane-terminal-header .terminal-box-top {
-  padding-block: var(--spacing-xs);
-}
-
-.tablet-machine-shell-body .compressor-panel-pane .terminal-box-footer.pane-terminal-footer {
-  display: none;
 }
 
 .tablet-bottom-nav {
