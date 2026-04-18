@@ -5,6 +5,16 @@
 * **tablet:** CNC and compressor kiosk routes add an **OVERVIEW** pane (compact dashboard-style summary) as the first bottom-nav item and default when opening `/tablet/:id` or `/tablet/compressor/:id`; compressor overview rows navigate when opened from tablet routes.
 * **tablet:** OVERVIEW panes surface **PRD3 intervals**, **recent production runs** (up to four), **program poll fields** (cycle time, MEM mode/op), **alarm text lines**, **compressor state history**, and **alarm details** so tablet users get context without hover.
 
+### Bug Fixes
+
+* **frontend:** tablet kiosk shell fills embedded/split layouts (html/body/`#root` flex chain); CNC overview and panel/alarm grids use stretch row sizing and wide breakpoints; CNC-only alarm grid rules exclude `.compressor-terminal-pane` so Kaeser panes keep flex layouts.
+
+# [0.16.0](https://github.com/roblockwood/Shatter-NC/compare/v0.15.1...v0.16.0) (2026-04-18)
+
+
+### Features
+
+* **tablet:** kiosk panel layout, compressor chart tuning, screensaver idle ([926a87b](https://github.com/roblockwood/Shatter-NC/commit/926a87b8f034a984ec2fb560f9605389d8b79bd5))
 
 ## [0.15.1](https://github.com/roblockwood/Shatter-NC/compare/v0.15.0...v0.15.1) (2026-04-18)
 
