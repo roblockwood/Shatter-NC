@@ -89,16 +89,29 @@
   box-sizing: border-box;
 }
 
-html, body {
+/* html as flex container so body/#root reliably fill (fixes height % / flex chains on wide layouts) */
+html {
   width: 100%;
   height: 100%;
-  /* Dynamic viewport avoids mobile browser UI clipping layout (prefer over 100vh alone) */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  /* Apply min-height here only — if `html, body` sets it, specificity beats `body { min-height: 0 }` */
   min-height: 100vh;
   min-height: 100dvh;
+}
+
+html, body {
+  width: 100%;
   overflow: hidden;
 }
 
+/* Flex column so #root fills the real containing block (iframe / embed / preview) — not only 100dvh */
 body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   font-family: var(--font-mono);
   font-size: var(--font-md);
   line-height: 1.5;
@@ -111,9 +124,10 @@ body {
 
 #root {
   width: 100%;
-  height: 100%;
-  min-height: 100vh;
-  min-height: 100dvh;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Selection */
