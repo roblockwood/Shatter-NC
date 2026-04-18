@@ -1,11 +1,11 @@
 export const TABLET_PANE_SLUGS = [
+  'panel',
   'status',
   'alarms',
   'program',
   'tools',
   'runs',
   'history',
-  'panel',
   'files',
 ] as const;
 
@@ -19,13 +19,13 @@ export function isTabletPaneSlug(s: string): s is TabletPaneSlug {
 
 /** Bottom nav: slug + short label */
 export const TABLET_NAV_ITEMS: { slug: TabletPaneSlug; label: string }[] = [
+  { slug: 'panel', label: 'PANEL' },
   { slug: 'status', label: 'STATUS' },
   { slug: 'alarms', label: 'ALARMS' },
   { slug: 'program', label: 'PROGRAM' },
   { slug: 'tools', label: 'TOOLS' },
   { slug: 'runs', label: 'RUNS' },
   { slug: 'history', label: 'HISTORY' },
-  { slug: 'panel', label: 'PANEL' },
   { slug: 'files', label: 'FILES' },
 ];
 

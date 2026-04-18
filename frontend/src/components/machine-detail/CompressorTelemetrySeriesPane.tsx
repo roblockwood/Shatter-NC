@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import type { CompressorChartSamplesProfile } from '../../utils/compressorChartSamples';
 import {
   buildCompressorStatusSamplesUrl,
-  COMPRESSOR_CHART_REFETCH_MS,
+  compressorChartRefetchMs,
   fetchCompressorStatusSamples,
   isCompressorChartAbortError,
 } from '../../utils/compressorChartSamples';
@@ -28,6 +29,8 @@ type TimeRange = '1h' | '8h' | '24h' | '7d';
 export type CompressorTelemetrySeries = 'psi' | 'temp';
 
 const MAX_DRAW_POINTS = 1_400;
+/** Tablet kiosk: fewer SVG knots after decimation (matches reduced `/status-samples` limits). */
+const MAX_DRAW_POINTS_TABLET = 800;
 
 const COLOR_PSI = '#3b82f6';
 const COLOR_TEMP = '#f97316';
@@ -689,6 +692,8 @@ interface CompressorTelemetrySeriesPaneProps {
   liveOperational?: Record<string, unknown>;
   isOnline?: boolean;
   pollTimestamp?: string | null;
+  /** Tablet routes: smaller sample limits + slower refetch (see `compressorChartSamples.ts`). */
+  samplesProfile?: CompressorChartSamplesProfile;
 }
 
 export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPaneProps> = ({
@@ -697,6 +702,7 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
   liveOperational,
   isOnline,
   pollTimestamp,
+  samplesProfile = 'default',
 }) => {
   const seriesKey = series === 'psi' ? 'psi' : 'temp';
   const color = series === 'psi' ? COLOR_PSI : COLOR_TEMP;
@@ -708,13 +714,15 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
   const [error, setError] = useState<string | null>(null);
   const [lastFetchSuccessAt, setLastFetchSuccessAt] = useState<string | null>(null);
 
+  const chartRefetchMs = compressorChartRefetchMs(samplesProfile);
+
   useEffect(() => {
     let cancelled = false;
     const abortInitial = new AbortController();
     let pollAbort: AbortController | null = null;
     let pollChainTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const samplesUrl = () => buildCompressorStatusSamplesUrl(compressorId, timeRange);
+    const samplesUrl = () => buildCompressorStatusSamplesUrl(compressorId, timeRange, samplesProfile);
 
     const runInitial = async () => {
       setLoading(true);
@@ -739,7 +747,7 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
 
     const scheduleNextPoll = () => {
       if (cancelled) return;
-      pollChainTimeout = window.setTimeout(() => void runPoll(), COMPRESSOR_CHART_REFETCH_MS);
+      pollChainTimeout = window.setTimeout(() => void runPoll(), chartRefetchMs);
     };
 
     const runPoll = async () => {
@@ -765,7 +773,7 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
     void runInitial().then(() => {
       if (cancelled) return;
       const jitter = Math.floor(Math.random() * 700);
-      pollChainTimeout = window.setTimeout(() => void runPoll(), COMPRESSOR_CHART_REFETCH_MS + jitter);
+      pollChainTimeout = window.setTimeout(() => void runPoll(), chartRefetchMs + jitter);
     });
 
     return () => {
@@ -774,7 +782,7 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
       pollAbort?.abort();
       if (pollChainTimeout !== null) window.clearTimeout(pollChainTimeout);
     };
-  }, [compressorId, timeRange]);
+  }, [compressorId, timeRange, samplesProfile]);
 
   const pointsFromApi = useMemo(() => rowsToPoints(samples), [samples]);
 
@@ -804,8 +812,9 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
 
   const drawPoints = useMemo(() => {
     const filtered = filterSeries(pointsWithLiveTail, seriesKey);
-    return mergeExtremaSamples(decimatePoints(filtered, MAX_DRAW_POINTS), filtered, seriesKey);
-  }, [pointsWithLiveTail, seriesKey]);
+    const maxPts = samplesProfile === 'tablet' ? MAX_DRAW_POINTS_TABLET : MAX_DRAW_POINTS;
+    return mergeExtremaSamples(decimatePoints(filtered, maxPts), filtered, seriesKey);
+  }, [pointsWithLiveTail, seriesKey, samplesProfile]);
 
   const { unit, peak, hasSeries } = useMemo(() => {
     const unitKey = series === 'psi' ? 'psi_unit' : 'temp_unit';
@@ -877,7 +886,7 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
       <PaneTerminalHeader label={headerTitle}>
         <PollingStatusLight
           lastUpdatedAt={lastFetchSuccessAt}
-          expectedIntervalMs={COMPRESSOR_CHART_REFETCH_MS}
+          expectedIntervalMs={chartRefetchMs}
           ariaLabel={`Compressor ${headerTitle} chart data freshness`}
           tooltipDetailLines={tooltipLines}
         />
