@@ -2,6 +2,8 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
   font-family: var(--font-mono);
