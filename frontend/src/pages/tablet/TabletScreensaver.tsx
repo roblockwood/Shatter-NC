@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SHATTER_ASCII_LOGO } from './shatterAsciiLogo';
+import { TABLET_SCREENSAVER_IDLE_MS_DEFAULT } from './tabletScreensaverStorage';
 import './TabletScreensaver.css';
-
-const DEFAULT_IDLE_MS = 5 * 60 * 1000;
 
 const SPINNER_FRAMES = ['/', '─', '\\', '│'];
 
@@ -13,6 +12,8 @@ type TabletScreensaverProps = {
   /** Time with no pointer/keyboard activity before auto-opening (default 5 min) */
   idleMs?: number;
 };
+
+const DEFAULT_IDLE_MS = TABLET_SCREENSAVER_IDLE_MS_DEFAULT;
 
 function useWakeLock(enabled: boolean) {
   const sentinelRef = useRef<WakeLockSentinel | null>(null);
