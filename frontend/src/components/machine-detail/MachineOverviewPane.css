@@ -1,0 +1,198 @@
+/* Overview: single scroll region; inner body is a responsive grid (landscape / wide → columns). */
+.machine-overview-pane.alarm-pane .terminal-box-content {
+  display: flex;
+  flex-direction: column;
+  align-content: stretch;
+  gap: var(--spacing-sm);
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.machine-overview-pane-body {
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  /* Fewer, wider columns on large displays (1fr expands); min avoids cramming the mini panel */
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  gap: var(--spacing-sm);
+  align-content: start;
+  align-items: stretch;
+  justify-items: stretch;
+}
+
+/* Compressor overview: ~3 tiles, lighter density — narrower min column than CNC (mini panel, etc.) */
+.compressor-overview-pane.machine-overview-pane .machine-overview-pane-body {
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+}
+
+/* Portrait or physically tall aspect: keep a single vertical stack */
+@media (orientation: portrait) {
+  .alarm-pane.machine-overview-pane .machine-overview-pane-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Split-screen / narrow pane (inherits `tablet-pane` container from shell) */
+@container tablet-pane (max-width: 760px) {
+  .alarm-pane.machine-overview-pane .machine-overview-pane-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Full-width bands inside the grid (tools/files, poll error, etc.) */
+.machine-overview-span-full {
+  grid-column: 1 / -1;
+}
+
+.machine-overview-section {
+  border: 1px solid var(--color-border);
+  background: rgba(0, 255, 0, 0.02);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.machine-overview-section-head {
+  appearance: none;
+  font: inherit;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  margin: 0 0 var(--spacing-xs) 0;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--font-sm);
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.machine-overview-section-head:hover {
+  color: var(--color-text-primary);
+}
+
+.machine-overview-section-head:focus-visible {
+  outline: 1px solid var(--color-text-secondary);
+  outline-offset: 2px;
+}
+
+.machine-overview-detail {
+  font-size: var(--font-xs);
+  line-height: 1.45;
+  color: var(--color-text-primary);
+  min-width: 0;
+  /* Lets mini panel react when this column is narrow (multi-column overview) */
+  container-type: inline-size;
+  container-name: overview-detail;
+}
+
+.machine-overview-detail-muted {
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+}
+
+/* Match PRD3 / history line rhythm; machine-row defaults use larger card typography */
+.machine-overview-section .machine-overview-detail > .machine-row {
+  font-size: var(--font-xs);
+  padding: 2px 0;
+  margin-bottom: 0;
+  background: transparent;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.machine-overview-section .machine-overview-detail > .machine-row:last-child {
+  border-bottom: none;
+}
+
+.machine-overview-prd3-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--spacing-sm);
+  align-items: baseline;
+  padding: 2px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+  font-family: var(--font-mono);
+}
+
+.machine-overview-prd3-line:last-child {
+  border-bottom: none;
+}
+
+.machine-overview-prd3-time {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.machine-overview-prd3-status {
+  flex: 1 1 auto;
+  text-transform: uppercase;
+  min-width: 6rem;
+}
+
+.machine-overview-prd3-dur {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.machine-overview-prd3-prog {
+  flex: 0 1 auto;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.machine-overview-alarm-line {
+  padding: 3px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+  font-size: var(--font-xs);
+  line-height: 1.35;
+}
+
+.machine-overview-alarm-line:last-child {
+  border-bottom: none;
+}
+
+.machine-overview-run-block {
+  padding: var(--spacing-xs) 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.machine-overview-run-block:last-child {
+  border-bottom: none;
+}
+
+.machine-overview-run-block .production-run-summary {
+  flex-wrap: wrap;
+}
+
+.machine-overview-link-row {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  margin-top: 0;
+  border: 1px solid var(--color-border);
+  background: rgba(0, 255, 0, 0.02);
+  box-sizing: border-box;
+}
+
+.machine-overview-section-head--inline {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  margin-bottom: 0;
+  text-align: center;
+  padding: var(--spacing-xs) 0;
+}

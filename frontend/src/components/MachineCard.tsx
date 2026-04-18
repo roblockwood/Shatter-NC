@@ -17,7 +17,10 @@ import { PANE_IDS } from '../types/layout';
 import { useExpandedMachine } from '../contexts/ExpandedMachineContext';
 import './MachineCard.css';
 import { API_BASE_URL } from '../config/api';
+import { useLatestMachineProductionRun } from '../hooks/useLatestMachineProductionRun';
+import { alarmStopLevel } from '../utils/alarmStopLevel';
 import { fastPollLastSuccessAt } from '../utils/machinePollFreshness';
+import { ProductionRunCompactSummary } from './machine-detail/ProductionRunCompactSummary';
 
 interface Tool {
   tool_number: number;
@@ -197,15 +200,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const fileManagerPaneRef = useRef<HTMLDivElement>(null);
   const expandedContentRef = useRef<HTMLDivElement>(null);
   const [currentProgram, setCurrentProgram] = useState<string | null>(null);
-  const [latestRun, setLatestRun] = useState<{
-    program_no: string | null;
-    run_start: string;
-    run_end: string;
-    cycles: number;
-    part_count: number;
-    segments: { status: string | null; start_time: string; end_time: string }[];
-  } | null>(null);
-  const [latestRunLoading, setLatestRunLoading] = useState(false);
+  const { latestRun, latestRunLoading } = useLatestMachineProductionRun(machine.machine_id);
   
   // Cache alarms from machine prop to avoid refetching
   useEffect(() => {
@@ -213,19 +208,6 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       setCachedAlarms(machine.alarms);
     }
   }, [machine.alarms]);
-
-  const getAlarmSeverityLevel = (alarm: Alarm): number => {
-    // Mirror AlarmPane: stop_level 5..1 (5 highest). Default to 3 if missing/invalid.
-    const raw = alarm.stop_level;
-    if (raw !== undefined && raw !== null && String(raw) !== '') {
-      const level = parseInt(String(raw), 10);
-      if (!isNaN(level) && level >= 1 && level <= 5) {
-        return level;
-      }
-    }
-    return 3;
-  };
-
 
   // Use program_name from machine status (active program from polling)
   // This shows the actual program running on the machine, not just the most recent deployment
@@ -246,47 +228,6 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       setCurrentProgram(null);
     }
   }, [machine.program_name, machine.machine_name]);
-
-  // Fetch most recent production run for compact card summary
-  useEffect(() => {
-    let cancelled = false;
-    const fetchLatestRun = async () => {
-      try {
-        setLatestRunLoading(true);
-        const endTime = new Date();
-        const startTime = new Date(endTime);
-        startTime.setDate(startTime.getDate() - 7);
-
-        const resp = await fetch(
-          `${API_BASE_URL}/api/machines/${machine.machine_id}/production-runs-timeline?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&limit=1&offset=0`
-        );
-        if (!resp.ok) {
-          if (!cancelled) {
-            setLatestRun(null);
-          }
-          return;
-        }
-        const data = await resp.json();
-        const runs = Array.isArray(data) ? data : [];
-        if (!cancelled) {
-          setLatestRun(runs[0] || null);
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setLatestRun(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setLatestRunLoading(false);
-        }
-      }
-    };
-
-    fetchLatestRun();
-    return () => {
-      cancelled = true;
-    };
-  }, [machine.machine_id]);
 
   // Helper function to find pane element within current card
   const findPaneElement = (paneId: string): HTMLElement | null => {
@@ -1448,69 +1389,11 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           >
             <span className="label">PRODUCTION RUN:</span>
             <span className="value production-run-summary">
-              {latestRunLoading && !latestRun && 'LOADING...'}
-              {!latestRunLoading && !latestRun && 'NO RECENT RUNS'}
-              {latestRun && (
-                <>
-                  <span className="production-run-meta">
-                    {latestRun.program_no || 'UNKNOWN'} ·{' '}
-                    {(machine.part_display_mode || 'parts') === 'cycle'
-                      ? `cycles: ${latestRun.cycles}`
-                      : `parts: ${latestRun.part_count}`}
-                  </span>
-                  {(() => {
-                    const runStartMs = new Date(latestRun.run_start).getTime();
-                    const runEndMs = new Date(latestRun.run_end).getTime();
-                    const totalMs = Math.max(1, runEndMs - runStartMs);
-                    let activeMs = 0;
-                    for (const seg of latestRun.segments || []) {
-                      if ((seg.status || '').toLowerCase() !== 'operating') continue;
-                      const s0 = new Date(seg.start_time).getTime();
-                      const s1 = new Date(seg.end_time).getTime();
-                      if (!isNaN(s0) && !isNaN(s1) && s1 >= s0) activeMs += s1 - s0;
-                    }
-                    const utilPct = Math.min(100, Math.max(0, Math.round((activeMs / totalMs) * 100)));
-                    const runStartMs2 = new Date(latestRun.run_start).getTime();
-                    const runEndMs2 = new Date(latestRun.run_end).getTime();
-                    const span = Math.max(1, runEndMs2 - runStartMs2);
-                    return (
-                      <span className="production-run-util-row">
-                        <span className="production-run-util text-dim" title="Operating time / total run time">
-                          util: {utilPct}%
-                        </span>
-                        <span className="production-run-bar-track">
-                          {latestRun.segments.map((seg, idx) => {
-                        const sStartMs = new Date(seg.start_time).getTime();
-                        const sEndMs = new Date(seg.end_time).getTime();
-                        const left = ((sStartMs - runStartMs2) / span) * 100;
-                        const width = Math.max(2, ((sEndMs - sStartMs) / span) * 100);
-                        const status = (seg.status || '').toLowerCase();
-                        const statusClass =
-                          status === 'operating'
-                            ? 'mini-segment-operating'
-                            : status === 'standby'
-                            ? 'mini-segment-standby'
-                            : status === 'stopped'
-                            ? 'mini-segment-stopped'
-                            : status === 'error'
-                            ? 'mini-segment-error'
-                            : status === 'off'
-                            ? 'mini-segment-off'
-                            : 'mini-segment-standby';
-                        return (
-                          <span
-                            key={idx}
-                            className={`production-run-segment ${statusClass}`}
-                            style={{ left: `${left}%`, width: `${width}%` }}
-                          />
-                        );
-                          })}
-                        </span>
-                      </span>
-                    );
-                  })()}
-                </>
-              )}
+              <ProductionRunCompactSummary
+                latestRun={latestRun}
+                latestRunLoading={latestRunLoading}
+                partDisplayMode={machine.part_display_mode || 'parts'}
+              />
             </span>
             {showProductionRunsHover && productionRunsHoverPosition && (
               <div
@@ -1626,8 +1509,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
 
           {!isEditing && (() => {
             const allAlarms = machine.alarms || [];
-            const criticalAlarms = allAlarms.filter((a) => getAlarmSeverityLevel(a) >= 4);
-            const warningAlarms = allAlarms.filter((a) => getAlarmSeverityLevel(a) < 4);
+            const criticalAlarms = allAlarms.filter((a) => alarmStopLevel(a) >= 4);
+            const warningAlarms = allAlarms.filter((a) => alarmStopLevel(a) < 4);
 
             const showHoverAt = (el: HTMLElement | null) => {
               if (!el || allAlarms.length === 0) return;

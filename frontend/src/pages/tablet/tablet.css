@@ -143,6 +143,51 @@ button.tablet-machine-shell-title:hover {
   min-height: 0;
 }
 
+/* Alarm-style terminal panes (overview, alarms, files, …): fill the pane region like PanelPane */
+.tablet-machine-shell-body .tablet-pane-root > .alarm-pane.terminal-box {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+/* CNC overview pane: semantic <button> rows match machine-card row layout */
+.tablet-machine-shell-body button.machine-overview-nav-row {
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  margin: 0;
+  padding: var(--spacing-xs) 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tablet-machine-shell-body button.machine-overview-nav-row:focus-visible {
+  outline: 1px solid var(--color-text-secondary);
+  outline-offset: 2px;
+}
+
+.tablet-machine-shell-body button.compressor-overview-nav-row {
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  margin: 0;
+  padding: var(--spacing-xs) 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tablet-machine-shell-body button.compressor-overview-nav-row:focus-visible {
+  outline: 1px solid var(--color-text-secondary);
+  outline-offset: 2px;
+}
+
 /* Panel detail: intrinsic section heights + ONE scroll area (terminal body) — no clipping panels */
 .tablet-machine-shell-body .panel-pane {
   --font-xs: clamp(8px, 2.2vmin, 12px);

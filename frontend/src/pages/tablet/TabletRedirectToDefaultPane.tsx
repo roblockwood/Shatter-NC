@@ -13,7 +13,7 @@ function parsePositiveInt(raw: string | undefined): number | null {
   return n;
 }
 
-/** `/tablet/:machineId` → canonical `/tablet/:machineId/status` */
+/** `/tablet/:machineId` → canonical `/tablet/:machineId/:TABLET_DEFAULT_PANE` */
 export const TabletRedirectToDefaultPane = () => {
   const { machineId } = useParams<{ machineId: string }>();
   const id = parsePositiveInt(machineId);

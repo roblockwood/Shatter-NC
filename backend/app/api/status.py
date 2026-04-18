@@ -10,6 +10,7 @@ from app.models.machine import Machine
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
 from app.parsers.gcode_parser import parse_gcode
+from app.utils.montr_program_name import meaningful_montr_operation_program_no
 import logging
 import io
 
@@ -169,7 +170,6 @@ async def get_machine_status(
             "ip_address": db_machine.ip_address,
             "timestamp": datetime.now().isoformat(),
             "units": db_machine.units,
-            "program_name": program_info.get("operation_program_no", "----"),
             "cycle_time": format_time(time_info.get("total_operation_time", "000000000")),
             "cutting_time": format_time(time_info.get("operation_time", "000000000")),
             "non_cutting_time": "000000:00.0",
@@ -189,6 +189,10 @@ async def get_machine_status(
                 for i, c in enumerate(counters)
             ],
         }
+
+        _pn_api = meaningful_montr_operation_program_no(program_info)
+        if _pn_api:
+            status_data["program_name"] = _pn_api
         
         # Get alarms from Telnet
         try:
