@@ -61,15 +61,11 @@ function getVersion(): string {
 
 const version = getVersion()
 
-/** PWA install launch URL: tablet UI, not dashboard `/`. Override with VITE_PWA_START_URL or VITE_TABLET_MACHINE_ID. */
+/** PWA launch URL; machine id is chosen per device at runtime (localStorage / setup), not at build time. */
 function resolvePwaStartUrl(): string {
   const explicit = process.env.VITE_PWA_START_URL?.trim()
   if (explicit) {
     return explicit
-  }
-  const tabletId = process.env.VITE_TABLET_MACHINE_ID?.trim()
-  if (tabletId && /^\d+$/.test(tabletId)) {
-    return `./tablet/${tabletId}/status`
   }
   return './tablet'
 }
