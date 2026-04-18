@@ -295,22 +295,18 @@ export const StatusOscilloscope: React.FC<StatusOscilloscopeProps> = ({
       });
     }
 
-    // Build SVG path using quadratic bezier (like PollingOscilloscope)
+    // Same path as Brother StatusTimeline: Q through midpoint then smooth T to next point
     const buildPath = () => {
       if (svgPoints.length === 0) return '';
-      
-      let path = `M ${svgPoints[0].x} ${svgPoints[0].y}`;
-      
+
+      let path = `M ${svgPoints[0].x},${svgPoints[0].y}`;
       for (let i = 1; i < svgPoints.length; i++) {
         const prev = svgPoints[i - 1];
         const curr = svgPoints[i];
-        
-        // Use quadratic bezier for smooth curves
-        const cpX = (prev.x + curr.x) / 2;
-        const cpY = (prev.y + curr.y) / 2;
-        path += ` Q ${cpX} ${prev.y} ${cpX} ${cpY} Q ${cpX} ${curr.y} ${curr.x} ${curr.y}`;
+        const midX = (prev.x + curr.x) / 2;
+        const midY = (prev.y + curr.y) / 2;
+        path += ` Q ${prev.x},${prev.y} ${midX},${midY} T ${curr.x},${curr.y}`;
       }
-      
       return path;
     };
 

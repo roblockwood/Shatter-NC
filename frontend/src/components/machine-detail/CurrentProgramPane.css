@@ -16,6 +16,15 @@
   max-height: none;
 }
 
+.current-program-pane .refresh-indicator {
+  color: var(--color-text-dim);
+  font-size: 12px;
+}
+
+.current-program-pane .pane-header-right-actions .expand-toggle {
+  margin-left: 0;
+}
+
 .current-program-pane .terminal-box-content {
   overflow-y: auto;
   overflow-x: hidden;
@@ -28,7 +37,7 @@
   flex-direction: column;
 }
 
-.terminal-box-title-row {
+.current-program-pane .terminal-box-title-row {
   display: flex;
   align-items: center;
   gap: 0;

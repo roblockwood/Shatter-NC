@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SHATTER_ASCII_LOGO } from '../pages/tablet/shatterAsciiLogo';
 import './AsciiLoadingScreen.css';
 
 export const AsciiLoadingScreen = () => {
@@ -16,14 +17,7 @@ export const AsciiLoadingScreen = () => {
   return (
     <div className="ascii-loading-screen">
       <div className="ascii-logo">
-        <pre className="ascii-art">
-{` ███████╗██╗  ██╗ █████╗ ████████╗████████╗███████╗██████╗
- ██╔════╝██║  ██║██╔══██╗╚══██╔══╝╚══██╔══╝██╔════╝██╔══██╗
- ███████╗███████║███████║   ██║      ██║   █████╗  ██████╔╝
- ╚════██║██╔══██║██╔══██║   ██║      ██║   ██╔══╝  ██╔══██╗
- ███████║██║  ██║██║  ██║   ██║      ██║   ███████╗██║  ██║
- ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝`}
-        </pre>
+        <pre className="ascii-art">{SHATTER_ASCII_LOGO}</pre>
       </div>
       <div className="loading-spinner">
         [{spinnerFrames[frame]}] LOADING...

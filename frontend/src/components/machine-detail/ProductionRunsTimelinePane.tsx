@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { API_BASE_URL } from '../../config/api';
 import { earlierIsoTimestamp } from '../ui/pollingFreshness';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
+import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
 import './ProductionRunsTimelinePane.css';
 
 interface RunSegment {
@@ -128,20 +129,13 @@ export const ProductionRunsTimelinePane: React.FC<ProductionRunsTimelinePaneProp
       className="production-runs-pane terminal-box"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="terminal-box-header">
-        <div className="terminal-box-top">
-          <div className="terminal-box-title-row">
-            <span>┌─ PRODUCTION RUNS {'─'.repeat(25)}┐</span>
-            <span className="pane-header-status-light-wrap">
-              <PollingStatusLight
-                lastUpdatedAt={statusLightLastUpdatedAt}
-                expectedIntervalMs={120_000}
-                ariaLabel="Production runs data freshness"
-              />
-            </span>
-          </div>
-        </div>
-      </div>
+      <PaneTerminalHeader label="PRODUCTION RUNS">
+        <PollingStatusLight
+          lastUpdatedAt={statusLightLastUpdatedAt}
+          expectedIntervalMs={120_000}
+          ariaLabel="Production runs data freshness"
+        />
+      </PaneTerminalHeader>
       <div className="terminal-box-content">
         <div className="runs-controls">
           <div className="runs-range-controls">
@@ -262,9 +256,7 @@ export const ProductionRunsTimelinePane: React.FC<ProductionRunsTimelinePaneProp
           </div>,
           document.body
         )}
-      <div className="terminal-box-footer">
-        └{'─'.repeat(42)}┘
-      </div>
+      <PaneTerminalFooter />
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { MachineCardAsciiDivider } from './MachineCardAsciiDivider';
 import { SaveConfirmModal } from './SaveConfirmModal';
 import { AlarmPane } from './machine-detail/AlarmPane';
 import { CompressorLayoutManager } from './machine-detail/CompressorLayoutManager';
@@ -600,7 +601,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
 
   return (
     <div
-      className={`machine-card ${isExpanded ? 'expanded' : ''} ${isEditing ? 'edit-mode' : ''} ${
+      className={`machine-card compressor-card ${isExpanded ? 'expanded' : ''} ${isEditing ? 'edit-mode' : ''} ${
         isAnyAssetEditing && !isEditing ? 'hidden-when-editing' : ''
       }`}
       onClick={handleCardClick}
@@ -639,7 +640,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
         <div className="machine-header-actions" />
       </div>
 
-      <div className="machine-card-divider">├{'─'.repeat(30)}┤</div>
+      <MachineCardAsciiDivider />
 
       {isEditing ? (
         <div className="machine-edit-form">
@@ -925,7 +926,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
             )}
           </div>
 
-          <div className="machine-card-divider-thin">{'─'.repeat(32)}</div>
+          <MachineCardAsciiDivider variant="thin" />
           <div className="machine-footer">
             <button
               type="button"

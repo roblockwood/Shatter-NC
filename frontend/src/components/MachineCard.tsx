@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ToolListModal } from './ToolListModal';
 import { UploadConfirmationModal } from './UploadConfirmationModal';
+import { MachineCardAsciiDivider } from './MachineCardAsciiDivider';
 import { SaveConfirmModal } from './SaveConfirmModal';
 import { Select } from './ui/Select';
 import { AlarmPane } from './machine-detail/AlarmPane';
@@ -894,9 +895,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         </div>
       </div>
 
-      <div className="machine-card-divider">
-        ├{'─'.repeat(30)}┤
-      </div>
+      <MachineCardAsciiDivider />
 
       {isEditing ? (
         <div className="machine-edit-form">
@@ -1725,9 +1724,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             );
           })()}
 
-          <div className="machine-card-divider-thin">
-            {'─'.repeat(32)}
-          </div>
+          <MachineCardAsciiDivider variant="thin" />
 
           <div className="machine-actions">
             <button
@@ -1739,9 +1736,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             </button>
           </div>
 
-          <div className="machine-card-divider-thin">
-            {'─'.repeat(32)}
-          </div>
+          <MachineCardAsciiDivider variant="thin" />
 
           <div className="machine-footer">
             {!isEditing && (

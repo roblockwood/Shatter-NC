@@ -16,9 +16,7 @@
   max-height: none;
 }
 
-.terminal-box {
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
+.alarm-pane.terminal-box {
   height: 100%;
   width: 100%;
   display: flex;
@@ -26,17 +24,6 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
-}
-
-.terminal-box-header {
-  color: var(--color-text-secondary);
-  font-size: var(--font-sm);
-  line-height: 1.2;
-  white-space: pre;
-}
-
-.terminal-box-top {
-  padding: var(--spacing-xs) var(--spacing-sm);
 }
 
 /* Main content grid - adapts to available width */
@@ -53,14 +40,6 @@
   height: 100%;
   padding: var(--spacing-xs) var(--spacing-sm);
   box-sizing: border-box;
-}
-
-.terminal-box-footer {
-  color: var(--color-text-secondary);
-  font-size: var(--font-sm);
-  line-height: 1;
-  white-space: pre;
-  padding: var(--spacing-xs) var(--spacing-sm);
 }
 
 .alarm-loading,
@@ -176,14 +155,6 @@
   color: var(--color-text-dim);
   font-size: var(--font-xs);
   margin-left: calc(var(--spacing-sm) + var(--font-md) + var(--spacing-sm));
-}
-
-
-.terminal-box-title-row {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  width: 100%;
 }
 
 .alarm-pane .pane-header-right-actions .expand-toggle {
@@ -374,6 +345,12 @@
   flex: 1 1 auto;
   min-height: 150px;
   width: 100%;
+}
+
+/* Inherit from body: --letter-spacing distorts monospaced tick numbers; keep tabular. */
+.compressor-telemetry-svg text {
+  letter-spacing: 0;
+  text-rendering: geometricPrecision;
 }
 
 /* Status history: paginated list + fixed pagination bar (match Speedio pattern). */

@@ -10,6 +10,8 @@ import {
 import { ChartTimeAxisToggle } from '../ui/ChartTimeAxisToggle';
 import { earlierIsoTimestamp } from '../ui/pollingFreshness';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
+import '../ui/TerminalBox.css';
+import { TERMINAL_RULE_FILL } from '../../utils/terminalAsciiRule';
 import './StatusTimeline.css';
 
 interface StatusEvent {
@@ -613,16 +615,22 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
       className="status-timeline"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="status-timeline-header">
-        <div className="status-timeline-title-row">
-          <span>┌─ STATUS TIMELINE {'─'.repeat(25)}┐</span>
-          <span className="pane-header-status-light-wrap">
-            <PollingStatusLight
-              lastUpdatedAt={statusLightLastUpdatedAt}
-              expectedIntervalMs={60_000}
-              ariaLabel="Status timeline data freshness"
-            />
-          </span>
+      <div className="terminal-box-header pane-terminal-header">
+        <div className="terminal-box-top">
+          <div className="terminal-box-title-row pane-terminal-title-row">
+            <span className="pane-terminal-title-start">┌─ STATUS TIMELINE</span>
+            <span className="pane-terminal-title-fill" aria-hidden>
+              {TERMINAL_RULE_FILL}
+            </span>
+            <div className="pane-header-right-actions">
+              <PollingStatusLight
+                lastUpdatedAt={statusLightLastUpdatedAt}
+                expectedIntervalMs={60_000}
+                ariaLabel="Status timeline data freshness"
+              />
+            </div>
+            <span className="pane-terminal-title-corner">┐</span>
+          </div>
         </div>
       </div>
       <div className="status-timeline-controls">
@@ -1025,8 +1033,14 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
           </div>
         )}
       </div>
-      <div className="status-timeline-footer">
-        └{'─'.repeat(42)}┘
+      <div className="terminal-box-footer pane-terminal-footer">
+        <div className="pane-terminal-footer-row">
+          <span className="pane-terminal-footer-corner">└</span>
+          <span className="pane-terminal-footer-fill" aria-hidden>
+            {TERMINAL_RULE_FILL}
+          </span>
+          <span className="pane-terminal-footer-corner">┘</span>
+        </div>
       </div>
     </div>
   );

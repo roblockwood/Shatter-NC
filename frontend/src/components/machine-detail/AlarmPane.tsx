@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
+import '../ui/TerminalBox.css';
+import { TERMINAL_RULE_FILL } from '../../utils/terminalAsciiRule';
 import './AlarmPane.css';
 
 interface Alarm {
@@ -143,10 +145,13 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({
       className="alarm-pane terminal-box"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="terminal-box-header">
+      <div className="terminal-box-header pane-terminal-header">
         <div className="terminal-box-top">
-          <div className="terminal-box-title-row">
-            <span>┌─ ALARMS ({alarms.length}) {'─'.repeat(Math.max(0, 40 - 10 - String(alarms.length).length))}</span>
+          <div className="terminal-box-title-row pane-terminal-title-row">
+            <span className="pane-terminal-title-start">┌─ ALARMS ({alarms.length})</span>
+            <span className="pane-terminal-title-fill" aria-hidden>
+              {TERMINAL_RULE_FILL}
+            </span>
             <div className="pane-header-right-actions">
               <PollingStatusLight
                 lastUpdatedAt={pollTimestamp}
@@ -165,8 +170,8 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({
                   [EXPAND]
                 </button>
               )}
-              <span>┐</span>
             </div>
+            <span className="pane-terminal-title-corner">┐</span>
           </div>
         </div>
       </div>
@@ -321,8 +326,14 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({
           </>
         )}
       </div>
-      <div className="terminal-box-footer">
-        └{'─'.repeat(42)}┘
+      <div className="terminal-box-footer pane-terminal-footer">
+        <div className="pane-terminal-footer-row">
+          <span className="pane-terminal-footer-corner">└</span>
+          <span className="pane-terminal-footer-fill" aria-hidden>
+            {TERMINAL_RULE_FILL}
+          </span>
+          <span className="pane-terminal-footer-corner">┘</span>
+        </div>
       </div>
       
       {/* Alarm Code Tooltip - Rendered via Portal to avoid clipping */}

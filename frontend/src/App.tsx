@@ -2,6 +2,8 @@ import { useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
 import { FileBrowser } from './pages/FileBrowser';
+import { TabletCompressorShell } from './pages/tablet/TabletCompressorShell';
+import { TabletCompressorRedirectToDefaultPane } from './pages/tablet/TabletCompressorRedirectToDefaultPane';
 import { TabletEntry } from './pages/tablet/TabletEntry';
 import { TabletMachineShell } from './pages/tablet/TabletMachineShell';
 import { TabletRedirectToDefaultPane } from './pages/tablet/TabletRedirectToDefaultPane';
@@ -85,6 +87,8 @@ function AppLayout() {
       <div className={`app-content${hideChrome ? ' app-content--tablet-kiosk' : ''}`}>
         <Routes>
           <Route path="/tablet/setup" element={<TabletSetupPage />} />
+          <Route path="/tablet/compressor/:compressorId/:paneSlug" element={<TabletCompressorShell />} />
+          <Route path="/tablet/compressor/:compressorId" element={<TabletCompressorRedirectToDefaultPane />} />
           <Route path="/tablet/:machineId/:paneSlug" element={<TabletMachineShell />} />
           <Route path="/tablet/:machineId" element={<TabletRedirectToDefaultPane />} />
           <Route path="/tablet" element={<TabletEntry />} />
