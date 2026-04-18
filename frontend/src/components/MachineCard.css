@@ -160,6 +160,14 @@
   margin-bottom: var(--spacing-xs);
 }
 
+.machine-card.edit-mode .form-row.asset-id-field .asset-id-value {
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: 0.02em;
+}
+
 .form-row label {
   color: var(--color-text-secondary);
   font-size: var(--font-sm);
