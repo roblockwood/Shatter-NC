@@ -458,6 +458,7 @@ export const PanelPane: React.FC<PanelPaneProps> = ({
                 </div>
               )}
             </div>
+            <div className="led-group-separator" aria-hidden="true" />
             <div className="led-group led-group-switches">
               <LED 
                 on={modeFunc.block_skip === 1} 
@@ -524,7 +525,7 @@ export const PanelPane: React.FC<PanelPaneProps> = ({
           </div>
 
           {/* Overrides Section */}
-          <div className="panel-section">
+          <div className="panel-section panel-section-overrides">
             <div className="panel-section-title">OVERRIDES</div>
             <div className="slider-group">
               {overrides.rapid_traverse_override !== undefined && (

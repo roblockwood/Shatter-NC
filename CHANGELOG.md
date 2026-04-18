@@ -8,6 +8,12 @@
 * revert fleet grid stretch rules so dashboard cards and expanded view scroll ([4ab29b2](https://github.com/roblockwood/Shatter-NC/commit/4ab29b2e3887ba97ebb95a982465068673008af3))
 * serve web manifest with correct MIME so PWA standalone applies ([b9c69ab](https://github.com/roblockwood/Shatter-NC/commit/b9c69ab9dd7461d4d9fbacc7bd7fb28aa1267cba))
 * stretch dashboard machine cards and tablet panes to fill viewport ([8951028](https://github.com/roblockwood/Shatter-NC/commit/8951028909c743eb2d0c6a53ae7d4d2b0a6d7e1d))
+* **tablet:** restore full panel terminal chrome (ASCII title row and footer) and in-panel section/subsection titles on kiosk routes; align compressor panel header with the same treatment.
+* **tablet:** panel sections stack in portrait and in panes narrower than 700px; restore multi-column layout in wide landscape via container queries and a higher grid min track width.
+* **panel:** add a visual separator between MODE/SCREEN text and switch LED groups; drop extra margin under the info row now that the divider provides spacing.
+* **panel:** overrides section uses an inline-size container and fluid `clamp` / `cqw` scaling for vertical sliders so narrow columns stay readable in multi-column layouts.
+* **panel:** fix slider segment and value-box colors after fluid overrides CSS raised selector specificity (restore grey/orange/yellow/green/red styling).
+* **file manager:** coerce tool validation numbers (including JSON string values) before formatting; tolerate optional tolerances safely; reduce accidental row activation from touch event bubbling on tablet.
 
 
 ### Features

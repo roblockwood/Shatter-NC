@@ -133,6 +133,9 @@ button.tablet-machine-shell-title:hover {
   flex-direction: column;
   align-self: stretch;
   width: 100%;
+  /* Panel grid column-count uses @container queries below */
+  container-type: inline-size;
+  container-name: tablet-pane;
 }
 
 .tablet-machine-shell-body .tablet-pane-root > .panel-pane {
@@ -140,43 +143,130 @@ button.tablet-machine-shell-title:hover {
   min-height: 0;
 }
 
-/* Panel detail: terminal body is full height, but the default CSS grid + align-content:start
-   leaves a dead band. Use a column flex stack and grow MODE & FUNCTIONS (2nd section) so that
-   block’s LED grid uses the spare vertical space; doors + overrides stay compact. */
+/* Panel detail: intrinsic section heights + ONE scroll area (terminal body) — no clipping panels */
+.tablet-machine-shell-body .panel-pane {
+  --font-xs: clamp(8px, 2.2vmin, 12px);
+  --font-sm: clamp(10px, 2.7vmin, 14px);
+}
+
+/* Landscape / wide pane: auto-fit columns. Portrait or narrow pane: stack (see @container + @media). */
 .tablet-machine-shell-body .panel-pane .terminal-box-content {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: clamp(4px, 1vmin, var(--spacing-sm));
+  align-content: start;
   align-items: stretch;
-  gap: var(--spacing-sm);
-  /* override PanelPane.css grid */
-  grid-template-columns: none;
-  align-content: unset;
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* Narrow tile (split-screen, small window): single column even in landscape */
+@container tablet-pane (max-width: 700px) {
+  .tablet-machine-shell-body .panel-pane .terminal-box-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Vertical aspect: always stack — auto-fit would still pack 2–3 columns at full tablet width */
+@media (orientation: portrait) {
+  .tablet-machine-shell-body .panel-pane .terminal-box-content {
+    grid-template-columns: 1fr;
+  }
 }
 
 .tablet-machine-shell-body .panel-pane .terminal-box-content > .panel-section {
-  flex: 0 0 auto;
   min-width: 0;
+  overflow: visible;
+  padding: clamp(4px, 1vmin, var(--spacing-xs)) clamp(6px, 1.4vmin, var(--spacing-sm));
+}
+
+.tablet-machine-shell-body .panel-pane .led-indicator {
+  gap: clamp(2px, 0.5vmin, var(--spacing-xs));
+}
+
+.tablet-machine-shell-body .panel-pane .led {
+  width: clamp(16px, 4.5vmin, 24px);
+  height: clamp(16px, 4.5vmin, 24px);
+}
+
+.tablet-machine-shell-body .panel-pane .led-inner {
+  width: clamp(8px, 2.2vmin, 12px);
+  height: clamp(8px, 2.2vmin, 12px);
+}
+
+.tablet-machine-shell-body .panel-pane .led-glow {
+  width: clamp(14px, 3.8vmin, 20px);
+  height: clamp(14px, 3.8vmin, 20px);
+}
+
+.tablet-machine-shell-body .panel-pane .led-status {
+  min-height: clamp(10px, 2.8vmin, 14px);
+}
+
+/* Overrides: sizing comes from PanelPane (.panel-section-overrides + cq units); tablet only fixes flex stretch/clipping */
+.tablet-machine-shell-body .panel-pane .panel-section-overrides .slider-group {
+  align-items: start;
+}
+
+.tablet-machine-shell-body .panel-pane .panel-section-overrides .vertical-slider-ascii {
+  height: auto;
+  min-height: 0;
+  align-self: start;
 }
 
 .tablet-machine-shell-body .panel-pane .terminal-box-content > .panel-section:nth-child(2) {
-  flex: 1 1 auto;
-  min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
 .tablet-machine-shell-body .panel-pane .terminal-box-content > .panel-section:nth-child(2) .led-group {
-  flex: 1 1 auto;
-  min-height: 0;
-  /* Spread row tracks across the expanded MODE section (not packed at the top) */
-  align-content: space-evenly;
-  /* auto-fit + minmax() puts every switch on one row when wide; cap at 4 cols → 8 switches = two rows */
-  grid-template-columns: repeat(4, minmax(48px, 1fr));
+  flex: 0 0 auto;
+  align-content: start;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(3px, 1vmin, var(--spacing-sm));
+}
+
+@media (max-width: 420px) {
+  .tablet-machine-shell-body .panel-pane .terminal-box-content > .panel-section:nth-child(2) .led-group {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .tablet-machine-shell-body .panel-pane .terminal-box-content:has(> .panel-empty) {
+  place-content: center;
+  justify-items: center;
+}
+
+/* ── Tablet panel / compressor: keep terminal title row + section labels; tight header padding ── */
+.tablet-machine-shell-body .panel-pane .terminal-box-header.pane-terminal-header .terminal-box-top,
+.tablet-machine-shell-body .compressor-panel-pane .terminal-box-header.pane-terminal-header .terminal-box-top {
+  padding-block: var(--spacing-xs);
+}
+
+/* MODE + SCREEN on one row (PanelPane media query forces 1fr stack on narrow viewports) */
+.tablet-machine-shell-body .panel-pane .panel-info-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
   justify-content: center;
-  align-items: center;
+  gap: var(--spacing-sm) var(--spacing-lg);
+  width: 100%;
+  grid-template-columns: unset;
+}
+
+.tablet-machine-shell-body .panel-pane .panel-info-grid .info-item {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.tablet-machine-shell-body .panel-pane .led-group-separator {
+  margin: clamp(2px, 0.6vmin, var(--spacing-xs)) 0;
 }
 
 .tablet-bottom-nav {
