@@ -1,0 +1,105 @@
+/* Shared tablet/kiosk route chrome */
+.tablet-route {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tablet-route-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  color: var(--color-text-secondary);
+  font-size: var(--font-md);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.tablet-route-state.text-error {
+  color: var(--color-error);
+}
+
+/* Shell: header + scrollable pane + bottom nav */
+.tablet-machine-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-bg-primary);
+}
+
+.tablet-machine-shell-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.tablet-machine-shell-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tablet-machine-shell-meta {
+  flex-shrink: 0;
+  color: var(--color-text-dim);
+  font-size: var(--font-xs);
+}
+
+.tablet-machine-shell-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--spacing-sm);
+}
+
+.tablet-machine-shell-body .tablet-pane-root {
+  min-height: min(100%, 480px);
+}
+
+.tablet-bottom-nav {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-xs);
+  background: var(--color-bg-surface);
+  border-top: 1px solid var(--color-border);
+}
+
+.tablet-nav-link {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  font-weight: 700;
+  border: 1px solid transparent;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tablet-nav-link:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border-bright);
+}
+
+.tablet-nav-link.active {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-primary);
+  text-shadow: var(--glow);
+}
