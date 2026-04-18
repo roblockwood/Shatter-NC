@@ -7,6 +7,8 @@ import './ToolsPane.css';
 import { API_BASE_URL } from '../../config/api';
 import { ColorSelect } from './ColorSelect';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
+import '../ui/TerminalBox.css';
+import { TERMINAL_RULE_FILL } from '../../utils/terminalAsciiRule';
 
 // Define type locally to avoid Vite import issues
 type ToolModificationOperationType = 
@@ -797,8 +799,6 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const toolsListTitleMid =
     toolSource === 'atc' ? `ATC (${tools.length})` : `TABLE (${tools.length})`;
   /** Long run clipped by flex so header rule length matches pane width for any label. */
-  const terminalRuleFill = '─'.repeat(320);
-
   const isHoverPreview = variant === 'hover';
 
   return (
@@ -807,22 +807,15 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       onClick={(e) => e.stopPropagation()}
     >
       <div 
-        className="terminal-box-header"
+        className="terminal-box-header pane-terminal-header"
       >
         <div className="terminal-box-top">
           <div className="terminal-box-title-row tools-pane-title-row">
             <span className="tools-pane-title-label">┌─ {toolsListTitleMid}</span>
             <span className="tools-pane-title-dash-fill" aria-hidden>
-              {terminalRuleFill}
+              {TERMINAL_RULE_FILL}
             </span>
             <div className="pane-header-right-actions tools-pane-header-actions">
-              {!isHoverPreview && (
-                <PollingStatusLight
-                  lastUpdatedAt={toolsDataLastUpdatedAt}
-                  expectedIntervalMs={toolExpectedIntervalMs}
-                  ariaLabel={`Tools (${toolSource.toUpperCase()}) data freshness`}
-                />
-              )}
               {!isHoverPreview && isBetaMode && (
                 <button
                   type="button"
@@ -896,8 +889,15 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                   </button>
                 </div>
               )}
-              <span>┐</span>
+              {!isHoverPreview && (
+                <PollingStatusLight
+                  lastUpdatedAt={toolsDataLastUpdatedAt}
+                  expectedIntervalMs={toolExpectedIntervalMs}
+                  ariaLabel={`Tools (${toolSource.toUpperCase()}) data freshness`}
+                />
+              )}
             </div>
+            <span className="pane-terminal-title-corner">┐</span>
           </div>
         </div>
       </div>
@@ -1060,10 +1060,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           </div>
         )}
       </div>
-      <div className="terminal-box-footer tools-pane-footer">
+      <div className="terminal-box-footer pane-terminal-footer tools-pane-footer">
         <span className="tools-pane-footer-corner">└</span>
         <span className="tools-pane-footer-dash-fill" aria-hidden>
-          {terminalRuleFill}
+          {TERMINAL_RULE_FILL}
         </span>
         <span className="tools-pane-footer-corner">┘</span>
       </div>

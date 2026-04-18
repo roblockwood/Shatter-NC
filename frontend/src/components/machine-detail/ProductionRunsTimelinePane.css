@@ -6,12 +6,6 @@
   font-size: 11px;
 }
 
-.production-runs-pane .terminal-box-title-row {
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
 .production-runs-pane .terminal-box-content {
   flex: 1;
   min-height: 0;

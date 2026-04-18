@@ -1,7 +1,7 @@
 import React from 'react';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import type { CompressorStatus } from '../../hooks/useWebSocket';
-import { asciiFooterLine, asciiHeaderLeft } from '../../utils/terminalFrame';
+import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
 import './AlarmPane.css';
 
 interface CompressorOverviewPaneProps {
@@ -36,21 +36,13 @@ export const CompressorOverviewPane: React.FC<CompressorOverviewPaneProps> = ({ 
       className="alarm-pane terminal-box compressor-terminal-pane compressor-overview-pane"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="terminal-box-header">
-        <div className="terminal-box-top">
-          <div className="terminal-box-title-row">
-            <span>{asciiHeaderLeft('Compressor overview')}</span>
-            <div className="pane-header-right-actions">
-              <PollingStatusLight
-                lastUpdatedAt={compressor.last_successful_poll_at || compressor.poll_timestamp}
-                expectedIntervalMs={Math.max((compressor.poll_interval_seconds ?? 5) * 1000, 1000)}
-                ariaLabel="Compressor telemetry freshness"
-              />
-              <span>┐</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PaneTerminalHeader label="COMPRESSOR OVERVIEW">
+        <PollingStatusLight
+          lastUpdatedAt={compressor.last_successful_poll_at || compressor.poll_timestamp}
+          expectedIntervalMs={Math.max((compressor.poll_interval_seconds ?? 5) * 1000, 1000)}
+          ariaLabel="Compressor telemetry freshness"
+        />
+      </PaneTerminalHeader>
 
       <div className="terminal-box-content">
         <div className="compressor-overview-body">
@@ -118,7 +110,7 @@ export const CompressorOverviewPane: React.FC<CompressorOverviewPaneProps> = ({ 
         </div>
       </div>
 
-      <div className="terminal-box-footer">{asciiFooterLine(42)}</div>
+      <PaneTerminalFooter />
     </div>
   );
 };
