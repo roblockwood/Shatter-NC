@@ -16,6 +16,7 @@ import { PANE_IDS } from '../types/layout';
 import { useExpandedMachine } from '../contexts/ExpandedMachineContext';
 import './MachineCard.css';
 import { API_BASE_URL } from '../config/api';
+import { fastPollLastSuccessAt } from '../utils/machinePollFreshness';
 
 interface Tool {
   tool_number: number;
@@ -68,14 +69,6 @@ interface MachineStatus {
   part_display_mode?: 'cycle' | 'parts';
   enabled?: boolean;
   units?: 'in' | 'mm';
-}
-
-/** Fast-poll freshness time for status/alarms/panel: last successful controller poll only (falls back to legacy poll_timestamp if field absent). */
-function fastPollLastSuccessAt(machine: MachineStatus): string | null | undefined {
-  if (machine.last_successful_poll_at !== undefined) {
-    return machine.last_successful_poll_at;
-  }
-  return machine.poll_timestamp;
 }
 
 interface MachineCardProps {
