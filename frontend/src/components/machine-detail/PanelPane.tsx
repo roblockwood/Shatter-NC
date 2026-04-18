@@ -458,6 +458,7 @@ export const PanelPane: React.FC<PanelPaneProps> = ({
                 </div>
               )}
             </div>
+            <div className="led-group-separator" aria-hidden="true" />
             <div className="led-group led-group-switches">
               <LED 
                 on={modeFunc.block_skip === 1} 
