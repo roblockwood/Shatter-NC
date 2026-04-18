@@ -64,10 +64,15 @@
   min-height: 0;
   overflow: auto;
   padding: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
 }
 
 .tablet-machine-shell-body .tablet-pane-root {
-  min-height: min(100%, 480px);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .tablet-bottom-nav {

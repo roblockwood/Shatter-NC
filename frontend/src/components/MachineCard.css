@@ -1149,6 +1149,37 @@
   grid-column: 1 / -1;
 }
 
+/* Dashboard fleet grid: cards fill each cell (full column width + share row height) */
+.machine-grid > .machine-card:not(.edit-mode) {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.machine-grid > .machine-card:not(.expanded):not(.edit-mode) .machine-card-content {
+  flex: 1;
+  min-height: 0;
+}
+
+.machine-grid > .machine-card.expanded:not(.edit-mode) .machine-card-expanded-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.machine-grid > .machine-card.expanded:not(.edit-mode) .machine-card-expanded-content > .layout-manager {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* Responsive: horizontal form sections collapse on smaller screens */
 @media (max-width: 1300px) {
   .machine-card.edit-mode .form-sections-horizontal {
