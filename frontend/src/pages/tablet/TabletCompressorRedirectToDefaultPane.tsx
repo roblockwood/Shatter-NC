@@ -13,7 +13,7 @@ function parsePositiveInt(raw: string | undefined): number | null {
   return n;
 }
 
-/** `/tablet/compressor/:compressorId` → canonical pane URL */
+/** `/tablet/compressor/:compressorId` → `/tablet/compressor/:id/:TABLET_DEFAULT_COMPRESSOR_PANE` */
 export const TabletCompressorRedirectToDefaultPane = () => {
   const { compressorId } = useParams<{ compressorId: string }>();
   const id = parsePositiveInt(compressorId);

@@ -121,17 +121,19 @@ export const useWebSocket = (url: string) => {
                 const m = d as MachineStatus;
                 setMachines((prev) => {
                   const updated = new Map(prev);
-                  updated.set(m.machine_id, m);
+                  const prior = prev.get(m.machine_id);
+                  // Shallow merge: polls sometimes send partial payloads (JSON omits unchanged keys).
+                  // Replacing the whole object caused cycle_time, MEM fields, etc. to flicker away.
+                  updated.set(m.machine_id, prior ? { ...prior, ...m } : m);
                   return updated;
                 });
               }
             } else if (message.type === 'compressor_status_update' && message.data && 'compressor_id' in message.data) {
+              const c = message.data as CompressorStatus;
               setCompressors((prev) => {
                 const updated = new Map(prev);
-                updated.set(
-                  (message.data as CompressorStatus).compressor_id,
-                  message.data as CompressorStatus
-                );
+                const prior = prev.get(c.compressor_id);
+                updated.set(c.compressor_id, prior ? { ...prior, ...c } : c);
                 return updated;
               });
             }
