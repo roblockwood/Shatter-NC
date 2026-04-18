@@ -1,3 +1,10 @@
+# [0.16.0](https://github.com/roblockwood/Shatter-NC/compare/v0.15.1...v0.16.0) (2026-04-18)
+
+
+### Features
+
+* **tablet:** kiosk panel layout, compressor chart tuning, screensaver idle ([926a87b](https://github.com/roblockwood/Shatter-NC/commit/926a87b8f034a984ec2fb560f9605389d8b79bd5))
+
 ## [0.15.1](https://github.com/roblockwood/Shatter-NC/compare/v0.15.0...v0.15.1) (2026-04-18)
 
 
