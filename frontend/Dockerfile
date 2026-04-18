@@ -36,7 +36,7 @@ COPY . .
 ARG VITE_APP_VERSION=0.1.0
 ENV VITE_APP_VERSION=$VITE_APP_VERSION
 
-# Optional: kiosk PWA opens ./tablet/{id}/status when set (see vite.config.ts resolvePwaStartUrl)
+# Optional lab default for tablet resolution when localStorage unset (prefer per-device setup UI)
 ARG VITE_TABLET_MACHINE_ID=
 ENV VITE_TABLET_MACHINE_ID=$VITE_TABLET_MACHINE_ID
 ARG VITE_PWA_START_URL=

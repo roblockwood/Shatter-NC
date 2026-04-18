@@ -47,6 +47,15 @@
   text-transform: uppercase;
 }
 
+.tablet-machine-shell-header-aside {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .tablet-machine-shell-title {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -107,4 +116,95 @@
   color: var(--color-text-primary);
   border-color: var(--color-text-primary);
   text-shadow: var(--glow);
+}
+
+.tablet-setup-panel {
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.tablet-setup-intro {
+  margin: 0 0 var(--spacing-md);
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  text-transform: none;
+}
+
+.tablet-setup-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.tablet-setup-label {
+  font-size: var(--font-xs);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+
+.tablet-setup-input {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  padding: var(--spacing-sm);
+}
+
+.tablet-setup-input:focus {
+  outline: none;
+  border-color: var(--color-text-primary);
+}
+
+.tablet-setup-error {
+  font-size: var(--font-sm);
+  text-transform: none;
+}
+
+.tablet-setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+}
+
+.tablet-setup-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 700;
+  padding: var(--spacing-xs) var(--spacing-md);
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.tablet-setup-btn:hover {
+  border-color: var(--color-text-primary);
+  color: var(--color-text-primary);
+}
+
+.tablet-setup-btn.primary {
+  border-color: var(--color-text-primary);
+  color: var(--color-text-primary);
+}
+
+.tablet-shell-link {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-dim);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  font-weight: 700;
+  padding: 2px 8px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.tablet-shell-link:hover {
+  border-color: var(--color-text-secondary);
+  color: var(--color-text-secondary);
 }

@@ -1,6 +1,8 @@
 import { Navigate } from 'react-router-dom';
 import { useSearchParams } from 'react-router-dom';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import { TabletSetupPanel } from './TabletSetupPanel';
+import { readStoredTabletMachineId, writeStoredTabletMachineId } from './tabletMachineStorage';
 import { TABLET_DEFAULT_PANE } from './tabletPaneConfig';
 import './tablet.css';
 
@@ -16,34 +18,52 @@ function parsePositiveInt(raw: string | undefined | null): number | null {
 }
 
 /**
- * Handles `/tablet` without path segments: optional `?machineId=` or build-time fallback, else error.
+ * `/tablet` — resolve machine id from:
+ * 1) ?machineId= (saved to localStorage for next launch)
+ * 2) localStorage (per tablet device)
+ * 3) optional VITE_TABLET_MACHINE_ID (deploy default)
+ * 4) setup form
  */
 export const TabletEntry = () => {
   const [searchParams] = useSearchParams();
 
-  const targetId = useMemo(() => {
+  const resolution = useMemo(() => {
     const fromQuery = parsePositiveInt(searchParams.get('machineId'));
-    if (fromQuery !== null) {
-      return fromQuery;
-    }
-    return parsePositiveInt(import.meta.env.VITE_TABLET_MACHINE_ID ?? null);
+    const fromStorage = readStoredTabletMachineId();
+    const fromEnv = parsePositiveInt(import.meta.env.VITE_TABLET_MACHINE_ID ?? null);
+    return { fromQuery, fromStorage, fromEnv };
   }, [searchParams]);
+
+  const targetId = useMemo(() => {
+    if (resolution.fromQuery !== null) {
+      return resolution.fromQuery;
+    }
+    if (resolution.fromStorage !== null) {
+      return resolution.fromStorage;
+    }
+    if (resolution.fromEnv !== null) {
+      return resolution.fromEnv;
+    }
+    return null;
+  }, [resolution]);
+
+  useEffect(() => {
+    if (resolution.fromQuery !== null) {
+      writeStoredTabletMachineId(resolution.fromQuery);
+    } else if (resolution.fromEnv !== null && resolution.fromStorage === null) {
+      writeStoredTabletMachineId(resolution.fromEnv);
+    }
+  }, [resolution.fromQuery, resolution.fromEnv, resolution.fromStorage]);
 
   if (targetId !== null) {
     return (
-      <Navigate
-        to={`/tablet/${targetId}/${TABLET_DEFAULT_PANE}`}
-        replace
-      />
+      <Navigate to={`/tablet/${targetId}/${TABLET_DEFAULT_PANE}`} replace />
     );
   }
 
   return (
     <div className="tablet-route">
-      <div className="tablet-route-state text-error">
-        Missing machine id. Use URL path /tablet/ numeric id / pane slug, query ?machineId= on /tablet, or set
-        VITE_TABLET_MACHINE_ID.
-      </div>
+      <TabletSetupPanel />
     </div>
   );
 };
