@@ -13,9 +13,14 @@
 
 .file-manager-terminal-box {
   height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  flex: 1;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
 }
 
 .file-manager-terminal-box .terminal-box-content {
@@ -60,6 +65,35 @@
   padding: var(--spacing-xs) var(--spacing-sm);
   font-size: var(--font-xs);
   flex-shrink: 0;
+}
+
+/* ASCII rule lines: match pane-terminal chrome (shared TERMINAL_RULE_FILL). */
+.file-manager-panel-header.file-manager-pane-terminal-line,
+.file-manager-preview-header.file-manager-pane-terminal-line {
+  color: var(--color-text-primary);
+  font-size: var(--font-sm);
+  font-family: var(--font-mono);
+  letter-spacing: normal;
+}
+
+/* Nested └──┘ rows inherit panel footer color unless forced. */
+.file-manager-panel-footer .pane-terminal-footer-row,
+.file-manager-preview-footer .pane-terminal-footer-row {
+  color: var(--color-text-primary);
+  font-size: var(--font-sm);
+  letter-spacing: normal;
+}
+
+.file-manager-pane-terminal-line {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+}
+
+.file-manager-table-divider .machine-card-divider-row {
+  margin: 4px 0;
 }
 
 .file-manager-loading,
@@ -396,7 +430,7 @@
   color: var(--color-text-secondary);
   padding: 2px var(--spacing-xs);
   border-bottom: 1px solid var(--color-border);
-  white-space: pre;
+  white-space: normal;
   line-height: 1;
   font-size: var(--font-xs);
   flex-shrink: 0;

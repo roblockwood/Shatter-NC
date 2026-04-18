@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ToolListModal } from './ToolListModal';
 import { UploadConfirmationModal } from './UploadConfirmationModal';
+import { MachineCardAsciiDivider } from './MachineCardAsciiDivider';
 import { SaveConfirmModal } from './SaveConfirmModal';
 import { Select } from './ui/Select';
 import { AlarmPane } from './machine-detail/AlarmPane';
@@ -16,6 +17,7 @@ import { PANE_IDS } from '../types/layout';
 import { useExpandedMachine } from '../contexts/ExpandedMachineContext';
 import './MachineCard.css';
 import { API_BASE_URL } from '../config/api';
+import { fastPollLastSuccessAt } from '../utils/machinePollFreshness';
 
 interface Tool {
   tool_number: number;
@@ -68,14 +70,6 @@ interface MachineStatus {
   part_display_mode?: 'cycle' | 'parts';
   enabled?: boolean;
   units?: 'in' | 'mm';
-}
-
-/** Fast-poll freshness time for status/alarms/panel: last successful controller poll only (falls back to legacy poll_timestamp if field absent). */
-function fastPollLastSuccessAt(machine: MachineStatus): string | null | undefined {
-  if (machine.last_successful_poll_at !== undefined) {
-    return machine.last_successful_poll_at;
-  }
-  return machine.poll_timestamp;
 }
 
 interface MachineCardProps {
@@ -901,9 +895,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         </div>
       </div>
 
-      <div className="machine-card-divider">
-        ├{'─'.repeat(30)}┤
-      </div>
+      <MachineCardAsciiDivider />
 
       {isEditing ? (
         <div className="machine-edit-form">
@@ -918,6 +910,11 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               Machine updated successfully!
             </div>
           )}
+
+          <div className="form-row asset-id-field">
+            <label>MACHINE ID:</label>
+            <span className="asset-id-value">{machine.machine_id}</span>
+          </div>
 
           {/* Basic Settings */}
           <div className="form-row-inline">
@@ -1727,9 +1724,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             );
           })()}
 
-          <div className="machine-card-divider-thin">
-            {'─'.repeat(32)}
-          </div>
+          <MachineCardAsciiDivider variant="thin" />
 
           <div className="machine-actions">
             <button
@@ -1741,9 +1736,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             </button>
           </div>
 
-          <div className="machine-card-divider-thin">
-            {'─'.repeat(32)}
-          </div>
+          <MachineCardAsciiDivider variant="thin" />
 
           <div className="machine-footer">
             {!isEditing && (
