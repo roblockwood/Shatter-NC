@@ -1,3 +1,13 @@
+## [0.14.2](https://github.com/roblockwood/Shatter-NC/compare/v0.14.1...v0.14.2) (2026-04-18)
+
+
+### Bug Fixes
+
+* **tablet:** restore full panel terminal chrome (ASCII title row and footer) and in-panel section/subsection titles on kiosk routes; align compressor panel header with the same treatment.
+* **panel:** overrides section uses an inline-size container and fluid `clamp` / `cqw` scaling for vertical sliders so narrow columns stay readable in multi-column layouts.
+* **panel:** fix slider segment and value-box colors after fluid overrides CSS raised selector specificity (restore grey/orange/yellow/green/red styling).
+
+
 ## [0.14.1](https://github.com/roblockwood/Shatter-NC/compare/v0.14.0...v0.14.1) (2026-04-17)
 
 

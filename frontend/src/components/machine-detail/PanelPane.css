@@ -74,6 +74,12 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+.panel-pane .panel-section-overrides .panel-section-title {
+  font-size: clamp(10px, max(11cqw, 2.6vmin), var(--font-sm));
+  margin-bottom: clamp(4px, max(8cqw, 1.5vmin), var(--spacing-sm));
+  padding-bottom: clamp(2px, max(4cqw, 0.75vmin), var(--spacing-xs));
+}
+
 .panel-subsection {
   display: flex;
   flex-direction: column;
@@ -204,65 +210,72 @@
   opacity: 0.6;
 }
 
-/* Vertical Sliders (ASCII Audio Mixer Style) */
-.slider-group {
+/* Vertical Sliders (ASCII Audio Mixer Style) — scoped to overrides; sizes scale with column via cq units */
+.panel-pane .panel-section-overrides {
+  container-type: inline-size;
+  container-name: panel-overrides;
+}
+
+.panel-pane .panel-section-overrides .slider-group {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(45px, 1fr));
-  gap: var(--spacing-xs) var(--spacing-sm);
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(clamp(26px, max(42cqw, 9vmin), 56px), 1fr)
+  );
+  gap: clamp(2px, max(2.5cqw, 1vmin), var(--spacing-xs)) clamp(4px, max(5cqw, 2vmin), var(--spacing-sm));
   align-items: stretch;
   justify-items: center;
-  padding: var(--spacing-xs) 0;
+  padding: clamp(2px, max(2cqw, 1vmin), var(--spacing-xs)) 0;
   width: 100%;
   box-sizing: border-box;
 }
 
-.vertical-slider-ascii {
+.panel-pane .panel-section-overrides .vertical-slider-ascii {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: var(--spacing-xs);
+  gap: clamp(2px, max(2cqw, 1vmin), var(--spacing-xs));
   width: 100%;
-  max-width: 50px;
-  min-width: 40px; /* Ensure sliders don't get too compressed */
+  max-width: clamp(38px, max(46cqw, 10vmin), 56px);
+  min-width: clamp(28px, max(36cqw, 8vmin), 48px);
   height: 100%;
 }
 
-.slider-label {
-  font-size: var(--font-xs);
+.panel-pane .panel-section-overrides .slider-label {
+  font-size: clamp(8px, max(10cqw, 2.4vmin), var(--font-xs));
   color: var(--color-text-secondary);
   text-align: center;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
-.slider-track-ascii {
+.panel-pane .panel-section-overrides .slider-track-ascii {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: clamp(0px, max(0.5cqw, 0.25vmin), 2px);
   border: 1px solid var(--color-border);
   background: #0a0a0a;
-  padding: 2px;
-  width: 28px;
+  padding: clamp(1px, max(1.5cqw, 0.6vmin), 3px);
+  width: clamp(22px, max(26cqw, 5vmin), 32px);
   margin-top: auto; /* Push track to bottom, keeping label at top */
-  /* Natural height based on segment count - no fixed height */
 }
 
-.slider-track-long {
-  /* No fixed height - let it be natural based on segments */
-}
-
-.slider-segment {
-  height: 9px; /* Fixed height - reduced from 13px for more compact sliders */
+/* Layout only — color comes from .slider-segment-{grey|green|…}.filled (lower specificity otherwise loses) */
+.panel-pane .panel-section-overrides .slider-segment {
+  height: clamp(5px, max(5.5cqw, 2.5vmin), 11px);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px; /* Smaller font to fit reduced segment height */
+  font-size: clamp(6px, max(5.5cqw, 2.2vmin), 10px);
   font-family: var(--font-mono);
   line-height: 1;
+  flex-shrink: 0;
+}
+
+.panel-pane .panel-section-overrides .slider-segment:not(.filled) {
   color: #666;
   background: #1a1a1a;
-  flex-shrink: 0;
 }
 
 .slider-segment-filled {
@@ -299,41 +312,44 @@
   background: #2a1f1a;
 }
 
-.slider-value-box {
-  width: 32px;
-  height: 20px;
+/* Dimensions + typography only — border shorthand was overriding .slider-value-* border-color */
+.panel-pane .panel-section-overrides .slider-value-box {
+  width: clamp(26px, max(30cqw, 6.5vmin), 38px);
+  height: clamp(14px, max(14cqw, 3.5vmin), 22px);
   background: #1a1a1a;
-  border: 1px solid var(--color-border);
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--color-border);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--font-xs);
+  font-size: clamp(8px, max(9cqw, 2.2vmin), var(--font-xs));
   font-family: var(--font-mono);
   font-weight: bold;
   flex-shrink: 0;
 }
 
-.slider-value-grey {
+.panel-pane .panel-section-overrides .slider-value-box.slider-value-grey {
   color: #aaa;
   border-color: var(--color-border);
 }
 
-.slider-value-green {
+.panel-pane .panel-section-overrides .slider-value-box.slider-value-green {
   color: #00ff00;
   border-color: #00ff00;
 }
 
-.slider-value-red {
+.panel-pane .panel-section-overrides .slider-value-box.slider-value-red {
   color: #ff0000;
   border-color: #ff0000;
 }
 
-.slider-value-yellow {
+.panel-pane .panel-section-overrides .slider-value-box.slider-value-yellow {
   color: #ffff00;
   border-color: #ffff00;
 }
 
-.slider-value-orange {
+.panel-pane .panel-section-overrides .slider-value-box.slider-value-orange {
   color: #ff8800;
   border-color: #ff8800;
 }
@@ -382,25 +398,6 @@
   
   .led-group-switches {
     grid-template-columns: repeat(auto-fit, minmax(55px, 1fr));
-  }
-  
-  .slider-group {
-    grid-template-columns: repeat(auto-fit, minmax(45px, 1fr));
-    gap: var(--spacing-sm);
-  }
-  
-  .vertical-slider-ascii {
-    max-width: 45px;
-  }
-  
-  .slider-track-ascii {
-    width: 24px;
-    min-height: 60px;
-  }
-  
-  .slider-segment {
-    min-height: 12px;
-    font-size: var(--font-xs);
   }
   
   .panel-info-grid {
