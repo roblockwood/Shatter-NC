@@ -3,6 +3,7 @@ import { API_BASE_URL } from '../../config/api';
 import { useBetaMode } from '../../hooks/useBetaMode';
 import { earlierIsoTimestamp } from '../ui/pollingFreshness';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
+import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
 import './StatusHistoryPane.css';
 
 interface PRD3StatusInterval {
@@ -139,29 +140,22 @@ export const StatusHistoryPane: React.FC<StatusHistoryPaneProps> = ({
       className="status-history-pane terminal-box"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="terminal-box-header">
-        <div className="terminal-box-top">
-          <div className="terminal-box-title-row">
-            <span>┌─ STATUS HISTORY {'─'.repeat(25)}┐</span>
-            <div className="pane-header-right-actions">
-              <PollingStatusLight
-                lastUpdatedAt={statusLightLastUpdatedAt}
-                expectedIntervalMs={60_000}
-                ariaLabel="Status history data freshness"
-              />
-              {isBetaMode && (
-                <button
-                  type="button"
-                  className={`status-history-color-toggle ${colorMode ? 'active' : ''}`}
-                  onClick={() => setColorMode((prev) => !prev)}
-                >
-                  [COLOR]
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <PaneTerminalHeader label="STATUS HISTORY">
+        {isBetaMode && (
+          <button
+            type="button"
+            className={`status-history-color-toggle ${colorMode ? 'active' : ''}`}
+            onClick={() => setColorMode((prev) => !prev)}
+          >
+            [COLOR]
+          </button>
+        )}
+        <PollingStatusLight
+          lastUpdatedAt={statusLightLastUpdatedAt}
+          expectedIntervalMs={60_000}
+          ariaLabel="Status history data freshness"
+        />
+      </PaneTerminalHeader>
       <div className="terminal-box-content">
         {loading ? (
           <div className="status-history-loading">LOADING...</div>
@@ -291,9 +285,7 @@ export const StatusHistoryPane: React.FC<StatusHistoryPaneProps> = ({
           </div>
         )}
       </div>
-      <div className="terminal-box-footer">
-        └{'─'.repeat(42)}┘
-      </div>
+      <PaneTerminalFooter />
     </div>
   );
 };

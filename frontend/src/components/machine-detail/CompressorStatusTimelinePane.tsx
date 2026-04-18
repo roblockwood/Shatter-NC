@@ -6,7 +6,7 @@ import {
   fetchCompressorStatusSamples,
   isCompressorChartAbortError,
 } from '../../utils/compressorChartSamples';
-import { asciiFooterLine, asciiHeaderLeft } from '../../utils/terminalFrame';
+import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import { StatusOscilloscope } from '../ui/StatusOscilloscope';
 import './AlarmPane.css';
@@ -20,8 +20,8 @@ interface SampleRow {
 
 type TimeRange = '1h' | '8h' | '24h' | '7d';
 
-/** MQTT samples arrive ~1/s; oscilloscope draws a vertical tick per point — thin unchanged runs. */
-const OSCILLOSCOPE_DISPLAY_STRIDE = 5;
+/** Match CNC StatusTimeline: plot every sample (path smoothing + beziers handle visual density). */
+const OSCILLOSCOPE_DISPLAY_STRIDE = 1;
 
 function decimateSamplesForOscilloscope<T extends { time: string; status: string }>(
   rows: T[],
@@ -183,22 +183,14 @@ export const CompressorStatusTimelinePane: React.FC<CompressorStatusTimelinePane
       className="alarm-pane terminal-box compressor-terminal-pane compressor-timeline-pane compressor-timeline-pane--oscilloscope"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="terminal-box-header">
-        <div className="terminal-box-top">
-          <div className="terminal-box-title-row">
-            <span>{asciiHeaderLeft('Status timeline')}</span>
-            <div className="pane-header-right-actions">
-              <PollingStatusLight
-                lastUpdatedAt={lastFetchSuccessAt}
-                expectedIntervalMs={COMPRESSOR_CHART_REFETCH_MS}
-                ariaLabel="Compressor timeline chart data freshness"
-                tooltipDetailLines={statusTooltipLines}
-              />
-              <span>┐</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PaneTerminalHeader label="STATUS TIMELINE">
+        <PollingStatusLight
+          lastUpdatedAt={lastFetchSuccessAt}
+          expectedIntervalMs={COMPRESSOR_CHART_REFETCH_MS}
+          ariaLabel="Compressor timeline chart data freshness"
+          tooltipDetailLines={statusTooltipLines}
+        />
+      </PaneTerminalHeader>
 
       <div className="terminal-box-content">
         <div className="compressor-timeline-pane-inner">
@@ -241,7 +233,7 @@ export const CompressorStatusTimelinePane: React.FC<CompressorStatusTimelinePane
         </div>
       </div>
 
-      <div className="terminal-box-footer">{asciiFooterLine(42)}</div>
+      <PaneTerminalFooter />
     </div>
   );
 };

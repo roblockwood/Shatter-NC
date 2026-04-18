@@ -53,6 +53,18 @@
   line-height: 1;
 }
 
+/* Match PaneTerminalChrome metrics (tools use alternate class names for label/fill/corners). */
+.tools-pane.terminal-box .tools-pane-title-label,
+.tools-pane.terminal-box .tools-pane-title-dash-fill,
+.tools-pane.terminal-box .tools-pane-footer-corner,
+.tools-pane.terminal-box .tools-pane-footer-dash-fill,
+.tools-pane.terminal-box .pane-terminal-title-corner {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  line-height: 1;
+  letter-spacing: normal;
+}
+
 .tools-pane-content-inner {
   display: flex;
   flex-direction: column;
@@ -182,9 +194,9 @@
 }
 
 .tools-pane--hover-preview .tools-col-color {
-  width: 96px;
-  min-width: 96px;
-  max-width: 96px;
+  width: 90px;
+  min-width: 90px;
+  max-width: 90px;
 }
 
 .tools-pane--hover-preview .color-select {
@@ -214,14 +226,15 @@
 
 .tools-table-wrapper {
   width: 100%;
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: visible;
   padding: 0;
   flex: 1;
   min-height: 0;
   min-width: 0;
 }
 
-.terminal-box-title-row {
+.tools-pane .terminal-box-title-row {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
@@ -229,7 +242,7 @@
   width: 100%;
 }
 
-.terminal-box-title-row.tools-pane-title-row {
+.tools-pane .terminal-box-title-row.tools-pane-title-row {
   gap: 0;
   min-width: 0;
 }
@@ -327,9 +340,13 @@
   box-sizing: border-box;
 }
 
+/*
+ * Balance: fill the pane (avoid max-content sprawl); TOOL NAME keeps a floor so it won’t collapse
+ * to glyph-stacking, and a vw/rem cap so long names wrap instead of widening the sheet.
+ */
 .tools-table {
   width: 100%;
-  table-layout: fixed;
+  table-layout: auto;
   border-collapse: separate;
   border-spacing: 0;
   font-family: var(--font-mono);
@@ -394,40 +411,56 @@
 
 .tools-col-pot,
 .tools-col-number {
-  width: 50px;
+  width: auto;
+  min-width: 1.95rem;
+  max-width: 3.45rem;
   text-align: right;
+  white-space: nowrap;
 }
 
 .tools-col-name {
-  width: 26%;
-  min-width: 100px;
-  word-wrap: break-word;
+  width: auto;
+  min-width: 9.25rem;
+  /* % is of the table → tracks actual pane width; rem absolute cap on huge layouts */
+  max-width: min(32%, 11.25rem);
+  white-space: normal;
+  word-break: normal;
   overflow-wrap: break-word;
+  hyphens: none;
 }
 
 .tools-col-diameter,
 .tools-col-length {
-  width: 90px;
+  width: auto;
+  min-width: 3.35rem;
+  max-width: 4.15rem;
   text-align: right;
   font-family: var(--font-mono);
+  white-space: nowrap;
 }
 
 .tools-col-group,
 .tools-col-life {
-  width: 70px;
+  width: auto;
+  min-width: 2.5rem;
+  max-width: 3.45rem;
   text-align: center;
   font-family: var(--font-mono);
+  white-space: nowrap;
 }
 
 .tools-col-type {
-  width: 80px;
+  width: auto;
+  min-width: 3rem;
+  max-width: 3.75rem;
   text-align: center;
+  white-space: nowrap;
 }
 
 .tools-col-color {
-  width: 108px;
-  min-width: 108px;
-  max-width: 108px;
+  width: 90px;
+  min-width: 90px;
+  max-width: 90px;
   text-align: left;
   padding: var(--spacing-xs) var(--spacing-sm);
   vertical-align: middle;
