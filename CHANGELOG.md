@@ -1,3 +1,11 @@
+## [0.15.1](https://github.com/roblockwood/Shatter-NC/compare/v0.15.0...v0.15.1) (2026-04-18)
+
+
+### Bug Fixes
+
+* **frontend:** tablet panel chrome, fluid overrides, slider colors (v0.14.2) ([5acb664](https://github.com/roblockwood/Shatter-NC/commit/5acb664a948a754ca9ceac7681711d7031e898f0))
+* **frontend:** tablet panel layout, mode separator, file manager coercions (v0.14.1) ([7c165fa](https://github.com/roblockwood/Shatter-NC/commit/7c165fa56b1d9ebc43bbaf7be744cfc31167e899))
+
 # [0.15.0](https://github.com/roblockwood/Shatter-NC/compare/v0.14.0...v0.15.0) (2026-04-18)
 
 
