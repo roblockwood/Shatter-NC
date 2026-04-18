@@ -1,3 +1,16 @@
+# [0.17.0](https://github.com/roblockwood/Shatter-NC/compare/v0.16.0...v0.17.0) (2026-04-18)
+
+
+### Bug Fixes
+
+* **frontend:** self-host mono fonts for SHATTER logo alignment ([07b9ead](https://github.com/roblockwood/Shatter-NC/commit/07b9ead46f55cacfe03751dd71d4c7db7bdc6147))
+* **frontend:** tablet kiosk pane fill and overview grid layouts ([1d0a480](https://github.com/roblockwood/Shatter-NC/commit/1d0a4804b10988d3854f2f417c378e30fed59f59))
+
+
+### Features
+
+* **tablet:** overview panes, layout tuning, and program stability ([fd52b81](https://github.com/roblockwood/Shatter-NC/commit/fd52b81691adcb166bcd97e5484e17e312f84585)), closes [#101](https://github.com/roblockwood/Shatter-NC/issues/101)
+
 ## Unreleased
 
 ### Features
