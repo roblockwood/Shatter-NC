@@ -1,0 +1,17 @@
+/* Fade in only after webfonts resolve — avoids Android painting ⊞/█ from mixed fallbacks */
+.shatter-logo-font-wrap {
+  display: inline-block;
+  vertical-align: top;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.shatter-logo-font-wrap--ready {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shatter-logo-font-wrap {
+    transition: none;
+  }
+}

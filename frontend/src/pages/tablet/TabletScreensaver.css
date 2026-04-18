@@ -16,22 +16,20 @@
   position: fixed;
   left: 0;
   top: 0;
-  will-change: transform;
+  /* Avoid compositing the whole logo subtree — will-change + transform broke monospace
+     horizontal metrics on some Android GPUs (misaligned block chars vs loading screen). */
   pointer-events: none;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--spacing-md);
+  /* Bounce loop uses offsetWidth; keep the box no wider than the visual viewport */
+  max-width: min(100%, 100vw);
+  box-sizing: border-box;
 }
 
+/* Base typography: terminal.css (.tablet-screensaver-art). Only saver-specific animation here. */
 .tablet-screensaver-art {
-  font-family: var(--font-mono);
-  font-size: clamp(6px, 1.6vw, var(--font-sm));
-  line-height: 1.2;
-  color: var(--color-text-primary);
-  white-space: pre;
-  margin: 0;
-  display: inline-block;
   animation: tablet-saver-glow 4s ease-in-out infinite;
 }
 
@@ -52,7 +50,7 @@
 }
 
 .tablet-screensaver-spinner {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-ascii);
   font-size: var(--font-md);
   color: var(--color-text-secondary);
   letter-spacing: 0.08em;

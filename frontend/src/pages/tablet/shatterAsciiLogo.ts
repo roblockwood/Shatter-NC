@@ -1,4 +1,4 @@
-/** Shared SHATTER block logo (same art as AsciiLoadingScreen). */
+/** Shared SHATTER block logo text (rendered via `ShatterAsciiLogo` + `terminal.css`). */
 export const SHATTER_ASCII_LOGO = ` ███████╗██╗  ██╗ █████╗ ████████╗████████╗███████╗██████╗ 
  ██╔════╝██║  ██║██╔══██╗╚══██╔══╝╚══██╔══╝██╔════╝██╔══██╗
  ███████╗███████║███████║   ██║      ██║   █████╗  ██████╔╝
