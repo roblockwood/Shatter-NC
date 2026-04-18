@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SHATTER_ASCII_LOGO } from './shatterAsciiLogo';
+import { ShatterAsciiLogo } from '../../components/ShatterAsciiLogo';
 import { TABLET_SCREENSAVER_IDLE_MS_DEFAULT } from './tabletScreensaverStorage';
 import './TabletScreensaver.css';
 
@@ -155,10 +155,11 @@ export function TabletScreensaver({
 
     const placeRandom = () => {
       const el = bounceRef.current;
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const w = el?.offsetWidth ?? 400;
-      const h = el?.offsetHeight ?? 200;
+      const vv = window.visualViewport;
+      const vw = Math.min(vv?.width ?? window.innerWidth, window.innerWidth);
+      const vh = Math.min(vv?.height ?? window.innerHeight, window.innerHeight);
+      const w = el ? Math.min(el.offsetWidth, vw) : 400;
+      const h = el ? Math.min(el.offsetHeight, vh) : 200;
       const maxX = Math.max(8, vw - w - 8);
       const maxY = Math.max(8, vh - h - 8);
       pos = {
@@ -178,10 +179,11 @@ export function TabletScreensaver({
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
 
-      const w = el.offsetWidth;
-      const h = el.offsetHeight;
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
+      const vv = window.visualViewport;
+      const vw = Math.min(vv?.width ?? window.innerWidth, window.innerWidth);
+      const vh = Math.min(vv?.height ?? window.innerHeight, window.innerHeight);
+      const w = Math.min(el.offsetWidth, vw);
+      const h = Math.min(el.offsetHeight, vh);
 
       pos.x += vel.vx * dt;
       pos.y += vel.vy * dt;
@@ -239,9 +241,7 @@ export function TabletScreensaver({
       }}
     >
       <div ref={bounceRef} className="tablet-screensaver-bounce">
-        <pre className="tablet-screensaver-art" aria-hidden>
-          {SHATTER_ASCII_LOGO}
-        </pre>
+        <ShatterAsciiLogo variant="screensaver" />
         <div className="tablet-screensaver-spinner" aria-hidden>
           [{SPINNER_FRAMES[spin]}] SHATTER · TAP ANYWHERE
         </div>

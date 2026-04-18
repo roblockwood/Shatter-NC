@@ -5,6 +5,7 @@ import { AsciiLoadingScreen } from '../../components/AsciiLoadingScreen';
 import { AlarmPane } from '../../components/machine-detail/AlarmPane';
 import { CurrentProgramPane } from '../../components/machine-detail/CurrentProgramPane';
 import { FileManagerPane } from '../../components/machine-detail/FileManagerPane';
+import { MachineOverviewPane } from '../../components/machine-detail/MachineOverviewPane';
 import { PanelPane } from '../../components/machine-detail/PanelPane';
 import { ProductionRunsTimelinePane } from '../../components/machine-detail/ProductionRunsTimelinePane';
 import { StatusHistoryPane } from '../../components/machine-detail/StatusHistoryPane';
@@ -46,6 +47,12 @@ function TabletPaneContent({
   const pollAt = fastPollLastSuccessAt(machine);
 
   switch (slug) {
+    case 'overview':
+      return (
+        <div className="tablet-pane-root">
+          <MachineOverviewPane machine={machine} />
+        </div>
+      );
     case 'status':
       return (
         <div className="tablet-pane-root">
