@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
 import { FileBrowser } from './pages/FileBrowser';
+import { TabletMachinePage } from './pages/TabletMachinePage';
 import { ToolManagement } from './pages/ToolManagement';
 import { useBetaMode, useBetaModeActivator } from './hooks/useBetaMode';
 import { BetaRoute } from './components/BetaRoute';
@@ -67,6 +68,37 @@ function Navigation() {
   );
 }
 
+function isTabletKioskPath(pathname: string): boolean {
+  return pathname === '/tablet' || pathname.startsWith('/tablet/');
+}
+
+function AppLayout() {
+  const location = useLocation();
+  const hideChrome = isTabletKioskPath(location.pathname);
+
+  return (
+    <div className="app">
+      {!hideChrome && <Navigation />}
+      <div className={`app-content${hideChrome ? ' app-content--tablet-kiosk' : ''}`}>
+        <Routes>
+          <Route path="/tablet/:machineId" element={<TabletMachinePage />} />
+          <Route path="/tablet" element={<TabletMachinePage />} />
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/files" element={<FileBrowser />} />
+          <Route
+            path="/tools"
+            element={
+              <BetaRoute>
+                <ToolManagement />
+              </BetaRoute>
+            }
+          />
+        </Routes>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   useEffect(() => {
     document.title = `Shatter v${APP_VERSION}`;
@@ -76,24 +108,7 @@ function App() {
     <WebSocketProvider>
       <ExpandedMachineProvider>
         <Router>
-          <div className="app">
-            <Navigation />
-
-            <div className="app-content">
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/files" element={<FileBrowser />} />
-                <Route
-                  path="/tools"
-                  element={
-                    <BetaRoute>
-                      <ToolManagement />
-                    </BetaRoute>
-                  }
-                />
-              </Routes>
-            </div>
-          </div>
+          <AppLayout />
         </Router>
       </ExpandedMachineProvider>
     </WebSocketProvider>
