@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
 import { FileBrowser } from './pages/FileBrowser';
-import { TabletMachinePage } from './pages/TabletMachinePage';
+import { TabletEntry } from './pages/tablet/TabletEntry';
+import { TabletMachineShell } from './pages/tablet/TabletMachineShell';
+import { TabletRedirectToDefaultPane } from './pages/tablet/TabletRedirectToDefaultPane';
 import { ToolManagement } from './pages/ToolManagement';
 import { useBetaMode, useBetaModeActivator } from './hooks/useBetaMode';
 import { BetaRoute } from './components/BetaRoute';
@@ -81,8 +83,9 @@ function AppLayout() {
       {!hideChrome && <Navigation />}
       <div className={`app-content${hideChrome ? ' app-content--tablet-kiosk' : ''}`}>
         <Routes>
-          <Route path="/tablet/:machineId" element={<TabletMachinePage />} />
-          <Route path="/tablet" element={<TabletMachinePage />} />
+          <Route path="/tablet/:machineId/:paneSlug" element={<TabletMachineShell />} />
+          <Route path="/tablet/:machineId" element={<TabletRedirectToDefaultPane />} />
+          <Route path="/tablet" element={<TabletEntry />} />
           <Route path="/" element={<Dashboard />} />
           <Route path="/files" element={<FileBrowser />} />
           <Route
@@ -104,10 +107,16 @@ function App() {
     document.title = `Shatter v${APP_VERSION}`;
   }, []);
 
+  const routerBasename = useMemo(() => {
+    const raw = import.meta.env.BASE_URL || '/';
+    const trimmed = raw.replace(/\/$/, '');
+    return trimmed === '' ? '/' : trimmed;
+  }, []);
+
   return (
     <WebSocketProvider>
       <ExpandedMachineProvider>
-        <Router>
+        <Router basename={routerBasename}>
           <AppLayout />
         </Router>
       </ExpandedMachineProvider>
