@@ -19,6 +19,7 @@ import {
 import { writeStoredTabletCompressorId } from './tabletCompressorStorage';
 import { TabletScreensaver } from './TabletScreensaver';
 import { useTabletCompressorPaneSwipe } from './useTabletCompressorPaneSwipe';
+import { useTabletScreensaverIdleMs } from './useTabletScreensaverIdleMs';
 import './tablet.css';
 
 function parsePositiveInt(raw: string | undefined): number | null {
@@ -73,6 +74,7 @@ function TabletCompressorPaneContent({
             liveStatus={compressor.status}
             isOnline={compressor.is_online}
             pollTimestamp={pollTs}
+            samplesProfile="tablet"
           />
         </div>
       );
@@ -85,6 +87,7 @@ function TabletCompressorPaneContent({
             liveOperational={asRecord(compressor.metrics?.operational)}
             isOnline={compressor.is_online}
             pollTimestamp={pollTs}
+            samplesProfile="tablet"
           />
         </div>
       );
@@ -97,6 +100,7 @@ function TabletCompressorPaneContent({
             liveOperational={asRecord(compressor.metrics?.operational)}
             isOnline={compressor.is_online}
             pollTimestamp={pollTs}
+            samplesProfile="tablet"
           />
         </div>
       );
@@ -121,12 +125,17 @@ function TabletCompressorShellLoaded({
   slug: TabletCompressorPaneSlug;
 }) {
   const [screensaver, setScreensaver] = useState(false);
+  const screensaverIdleMs = useTabletScreensaverIdleMs();
   const swipeNav = useTabletCompressorPaneSwipe(compressor.compressor_id, slug);
   const base = `/tablet/compressor/${compressor.compressor_id}`;
 
   return (
     <>
-      <TabletScreensaver active={screensaver} onActiveChange={setScreensaver} />
+      <TabletScreensaver
+        active={screensaver}
+        onActiveChange={setScreensaver}
+        idleMs={screensaverIdleMs}
+      />
       <div className="tablet-machine-shell">
       <header className="tablet-machine-shell-header">
         <button
