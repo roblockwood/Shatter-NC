@@ -79,6 +79,11 @@
   flex-direction: column;
 }
 
+/* Prefer vertical scrolling for inner panes; horizontal swipes handled in JS for pane nav */
+.tablet-machine-shell-body--swipe {
+  touch-action: pan-y;
+}
+
 .tablet-machine-shell-body .tablet-pane-root {
   flex: 1;
   min-height: 0;
