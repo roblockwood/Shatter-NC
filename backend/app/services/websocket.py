@@ -2,6 +2,22 @@
 import json
 import logging
 from typing import List, Dict, Any
+
+from app.utils.montr_program_name import (
+    is_meaningful_machine_program_name,
+    is_placeholder_machine_program_name,
+)
+
+# MONTR/time/MEM snapshot fields — preserve when a partial WS payload omits them (matches client-side merge).
+_STATUS_SNAPSHOT_KEYS_FROM_CACHE = (
+    "cycle_time",
+    "cutting_time",
+    "non_cutting_time",
+    "operation_time",
+    "power_on_hours",
+    "mem_mode",
+    "mem_operation_status",
+)
 from fastapi import WebSocket
 from datetime import datetime
 from app.db.base import SessionLocal
@@ -129,6 +145,14 @@ class WebSocketManager:
             # Preserve program_name from cache if new status doesn't have it
             if "program_name" in cached and "program_name" not in status_data:
                 status_data["program_name"] = cached["program_name"]
+            # MONTR intermittently omits operation_program_no; fast poll used to send "----" and
+            # wiped the cached O-number. Don't replace a known-good name with placeholders.
+            elif (
+                "program_name" in cached
+                and is_placeholder_machine_program_name(status_data.get("program_name"))
+                and is_meaningful_machine_program_name(cached.get("program_name"))
+            ):
+                status_data["program_name"] = cached["program_name"]
             
             # Preserve panel data from cache if new status doesn't have it
             if "panel" in cached and "panel" not in status_data:
@@ -156,6 +180,10 @@ class WebSocketManager:
             # Preserve last successful fast poll time when partial updates omit it (e.g. tool-only broadcast)
             if "last_successful_poll_at" in cached and "last_successful_poll_at" not in status_data:
                 status_data["last_successful_poll_at"] = cached["last_successful_poll_at"]
+
+            for _snap_key in _STATUS_SNAPSHOT_KEYS_FROM_CACHE:
+                if _snap_key in cached and _snap_key not in status_data:
+                    status_data[_snap_key] = cached[_snap_key]
             
             self.last_status[machine_id] = status_data
 
