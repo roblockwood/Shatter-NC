@@ -2,11 +2,36 @@ import { API_BASE_URL } from '../config/api';
 
 export type CompressorChartTimeRange = '1h' | '8h' | '24h' | '7d';
 
+/** Profile for compressor `/status-samples`: tablet kiosk uses smaller payloads + slower refetch. */
+export type CompressorChartSamplesProfile = 'default' | 'tablet';
+
 /** Slower than 1 Hz avoids stacking slow /status-samples calls (browser connection limit → Failed to fetch). */
 export const COMPRESSOR_CHART_REFETCH_MS = 2_500;
 
+/** Tablet kiosk: fewer rows per request + longer poll interval (first reduced-data preset). */
+export const COMPRESSOR_CHART_TABLET_REFETCH_MS = 10_000;
+
+export function compressorChartRefetchMs(profile: CompressorChartSamplesProfile = 'default'): number {
+  return profile === 'tablet' ? COMPRESSOR_CHART_TABLET_REFETCH_MS : COMPRESSOR_CHART_REFETCH_MS;
+}
+
 /** Smaller payloads for short windows; charts decimate anyway. Reduces JSON parse + transfer time. */
-export function compressorStatusSamplesLimit(range: CompressorChartTimeRange): number {
+export function compressorStatusSamplesLimit(
+  range: CompressorChartTimeRange,
+  profile: CompressorChartSamplesProfile = 'default'
+): number {
+  if (profile === 'tablet') {
+    switch (range) {
+      case '1h':
+        return 2_800;
+      case '8h':
+        return 2_000;
+      case '24h':
+        return 2_800;
+      case '7d':
+        return 4_000;
+    }
+  }
   switch (range) {
     case '1h':
       return 4_500;
@@ -41,10 +66,11 @@ export function compressorChartRangeBounds(timeRange: CompressorChartTimeRange):
 
 export function buildCompressorStatusSamplesUrl(
   compressorId: number,
-  timeRange: CompressorChartTimeRange
+  timeRange: CompressorChartTimeRange,
+  profile: CompressorChartSamplesProfile = 'default'
 ): string {
   const { start, end } = compressorChartRangeBounds(timeRange);
-  const limit = compressorStatusSamplesLimit(timeRange);
+  const limit = compressorStatusSamplesLimit(timeRange, profile);
   return `${API_BASE_URL}/api/compressors/${compressorId}/status-samples?start_time=${encodeURIComponent(
     start.toISOString()
   )}&end_time=${encodeURIComponent(end.toISOString())}&limit=${limit}`;

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { StatusEvent } from '../../api/summary';
+import type { CompressorChartSamplesProfile } from '../../utils/compressorChartSamples';
 import {
   buildCompressorStatusSamplesUrl,
-  COMPRESSOR_CHART_REFETCH_MS,
+  compressorChartRefetchMs,
   fetchCompressorStatusSamples,
   isCompressorChartAbortError,
 } from '../../utils/compressorChartSamples';
@@ -20,8 +21,28 @@ interface SampleRow {
 
 type TimeRange = '1h' | '8h' | '24h' | '7d';
 
-/** Match CNC StatusTimeline: plot every sample (path smoothing + beziers handle visual density). */
+/** Desktop: plot every sample (path smoothing + beziers handle visual density). */
 const OSCILLOSCOPE_DISPLAY_STRIDE = 1;
+
+/** Tablet kiosk: thin dense traces on long windows — keeps StatusOscilloscope responsive. */
+function oscilloscopeStrideForProfile(
+  range: TimeRange,
+  profile: CompressorChartSamplesProfile
+): number {
+  if (profile !== 'tablet') return OSCILLOSCOPE_DISPLAY_STRIDE;
+  switch (range) {
+    case '1h':
+      return 8;
+    case '8h':
+      return 36;
+    case '24h':
+      return 48;
+    case '7d':
+      return 72;
+    default:
+      return OSCILLOSCOPE_DISPLAY_STRIDE;
+  }
+}
 
 function decimateSamplesForOscilloscope<T extends { time: string; status: string }>(
   rows: T[],
@@ -57,6 +78,7 @@ interface CompressorStatusTimelinePaneProps {
   isOnline?: boolean;
   /** Last successful compressor poll (ISO) — extends trace to “now” between HTTP refetches. */
   pollTimestamp?: string | null;
+  samplesProfile?: CompressorChartSamplesProfile;
 }
 
 export const CompressorStatusTimelinePane: React.FC<CompressorStatusTimelinePaneProps> = ({
@@ -64,6 +86,7 @@ export const CompressorStatusTimelinePane: React.FC<CompressorStatusTimelinePane
   liveStatus,
   isOnline,
   pollTimestamp,
+  samplesProfile = 'default',
 }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('1h');
   const [samples, setSamples] = useState<SampleRow[]>([]);
@@ -71,13 +94,15 @@ export const CompressorStatusTimelinePane: React.FC<CompressorStatusTimelinePane
   const [error, setError] = useState<string | null>(null);
   const [lastFetchSuccessAt, setLastFetchSuccessAt] = useState<string | null>(null);
 
+  const chartRefetchMs = compressorChartRefetchMs(samplesProfile);
+
   useEffect(() => {
     let cancelled = false;
     const abortInitial = new AbortController();
     let pollAbort: AbortController | null = null;
     let pollChainTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const samplesUrl = () => buildCompressorStatusSamplesUrl(compressorId, timeRange);
+    const samplesUrl = () => buildCompressorStatusSamplesUrl(compressorId, timeRange, samplesProfile);
 
     const runInitial = async () => {
       setLoading(true);
@@ -102,7 +127,7 @@ export const CompressorStatusTimelinePane: React.FC<CompressorStatusTimelinePane
 
     const scheduleNextPoll = () => {
       if (cancelled) return;
-      pollChainTimeout = window.setTimeout(() => void runPoll(), COMPRESSOR_CHART_REFETCH_MS);
+      pollChainTimeout = window.setTimeout(() => void runPoll(), chartRefetchMs);
     };
 
     const runPoll = async () => {
@@ -128,7 +153,7 @@ export const CompressorStatusTimelinePane: React.FC<CompressorStatusTimelinePane
     void runInitial().then(() => {
       if (cancelled) return;
       const jitter = Math.floor(Math.random() * 700);
-      pollChainTimeout = window.setTimeout(() => void runPoll(), COMPRESSOR_CHART_REFETCH_MS + jitter);
+      pollChainTimeout = window.setTimeout(() => void runPoll(), chartRefetchMs + jitter);
     });
 
     return () => {
@@ -137,7 +162,7 @@ export const CompressorStatusTimelinePane: React.FC<CompressorStatusTimelinePane
       pollAbort?.abort();
       if (pollChainTimeout !== null) window.clearTimeout(pollChainTimeout);
     };
-  }, [compressorId, timeRange]);
+  }, [compressorId, timeRange, samplesProfile]);
 
   /** One trailing point from live WS/poll when newer than last API row (fills gap until DB catches up). */
   const samplesWithLiveTail = useMemo(() => {
@@ -160,9 +185,15 @@ export const CompressorStatusTimelinePane: React.FC<CompressorStatusTimelinePane
     return [...samples, row];
   }, [samples, liveStatus, isOnline, pollTimestamp, compressorId]);
 
-  const sampleHistoryForOscilloscope: StatusEvent[] = decimateSamplesForOscilloscope(
-    samplesWithLiveTail.map((s) => ({ time: s.time, status: s.status })),
-    OSCILLOSCOPE_DISPLAY_STRIDE
+  const oscilloscopeStride = oscilloscopeStrideForProfile(timeRange, samplesProfile);
+
+  const sampleHistoryForOscilloscope: StatusEvent[] = useMemo(
+    () =>
+      decimateSamplesForOscilloscope(
+        samplesWithLiveTail.map((s) => ({ time: s.time, status: s.status })),
+        oscilloscopeStride
+      ),
+    [samplesWithLiveTail, oscilloscopeStride]
   );
 
   const statusTooltipLines = useMemo(() => {
@@ -186,7 +217,7 @@ export const CompressorStatusTimelinePane: React.FC<CompressorStatusTimelinePane
       <PaneTerminalHeader label="STATUS TIMELINE">
         <PollingStatusLight
           lastUpdatedAt={lastFetchSuccessAt}
-          expectedIntervalMs={COMPRESSOR_CHART_REFETCH_MS}
+          expectedIntervalMs={chartRefetchMs}
           ariaLabel="Compressor timeline chart data freshness"
           tooltipDetailLines={statusTooltipLines}
         />
