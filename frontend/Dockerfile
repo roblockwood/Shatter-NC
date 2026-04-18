@@ -36,6 +36,12 @@ COPY . .
 ARG VITE_APP_VERSION=0.1.0
 ENV VITE_APP_VERSION=$VITE_APP_VERSION
 
+# Optional: kiosk PWA opens ./tablet/{id}/status when set (see vite.config.ts resolvePwaStartUrl)
+ARG VITE_TABLET_MACHINE_ID=
+ENV VITE_TABLET_MACHINE_ID=$VITE_TABLET_MACHINE_ID
+ARG VITE_PWA_START_URL=
+ENV VITE_PWA_START_URL=$VITE_PWA_START_URL
+
 # Build application
 RUN npm run build
 
