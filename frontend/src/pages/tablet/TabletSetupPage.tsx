@@ -1,3 +1,4 @@
+import { TabletScreensaverSetupSection } from './TabletScreensaverSetupSection';
 import { TabletSetupPanel } from './TabletSetupPanel';
 import './tablet.css';
 
@@ -17,6 +18,7 @@ export const TabletSetupPage = () => {
         </h2>
         <TabletSetupPanel kind="compressor" />
       </section>
+      <TabletScreensaverSetupSection />
     </div>
   );
 };

@@ -179,6 +179,14 @@ button.tablet-machine-shell-title:hover {
   }
 }
 
+/* CNC panel route only: vertically center DOORS/MODE/overrides columns when shorter than the terminal body.
+   Not applied to `.tablet-pane-root > *` globally — avoids shrinking/clipping status, charts, and history. */
+@media (orientation: landscape) {
+  .tablet-machine-shell-body .tablet-pane-root > .panel-pane .terminal-box-content {
+    align-content: safe center;
+  }
+}
+
 .tablet-machine-shell-body .panel-pane .terminal-box-content > .panel-section {
   min-width: 0;
   overflow: visible;
@@ -217,6 +225,48 @@ button.tablet-machine-shell-title:hover {
   height: auto;
   min-height: 0;
   align-self: start;
+}
+
+/* Portrait: overrides sliders stack tall (20 segments each) — scale type + segment pitch down so the section fits without excess scroll */
+@media (orientation: portrait) {
+  .tablet-machine-shell-body .panel-pane .panel-section-overrides .panel-section-title {
+    font-size: clamp(9px, min(2.8vmin, 3.2vw), var(--font-sm));
+    margin-bottom: clamp(2px, 1.2vmin, var(--spacing-xs));
+    padding-bottom: clamp(1px, 0.8vmin, var(--spacing-xs));
+  }
+
+  .tablet-machine-shell-body .panel-pane .panel-section-overrides .slider-group {
+    gap: clamp(1px, 1.5vmin, var(--spacing-xs)) clamp(2px, 2vmin, var(--spacing-sm));
+    padding: clamp(1px, 0.8vmin, var(--spacing-xs)) 0;
+  }
+
+  .tablet-machine-shell-body .panel-pane .panel-section-overrides .vertical-slider-ascii {
+    gap: clamp(1px, 1vmin, var(--spacing-xs));
+    max-width: clamp(32px, min(40cqw, 11vmin), 48px);
+    min-width: clamp(22px, min(30cqw, 8vmin), 40px);
+  }
+
+  .tablet-machine-shell-body .panel-pane .panel-section-overrides .slider-label {
+    font-size: clamp(6px, min(2vmin, 2.6vw), 10px);
+    line-height: 1.05;
+  }
+
+  .tablet-machine-shell-body .panel-pane .panel-section-overrides .slider-track-ascii {
+    gap: clamp(0px, 0.35vmin, 1px);
+    padding: clamp(0px, 0.8vmin, 2px);
+    width: clamp(18px, min(22cqw, 5.5vmin), 28px);
+  }
+
+  .tablet-machine-shell-body .panel-pane .panel-section-overrides .slider-segment {
+    height: clamp(4px, min(4.2cqw, 1.85vmin), 9px);
+    font-size: clamp(5px, min(4.8cqw, 1.65vmin), 8px);
+  }
+
+  .tablet-machine-shell-body .panel-pane .panel-section-overrides .slider-value-box {
+    width: clamp(22px, min(26cqw, 7vmin), 34px);
+    height: clamp(11px, min(11cqw, 3vmin), 18px);
+    font-size: clamp(6px, min(7cqw, 2vmin), var(--font-xs));
+  }
 }
 
 .tablet-machine-shell-body .panel-pane .terminal-box-content > .panel-section:nth-child(2) {
