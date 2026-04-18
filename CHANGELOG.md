@@ -1,3 +1,11 @@
+## Unreleased
+
+### Features
+
+* **tablet:** CNC and compressor kiosk routes add an **OVERVIEW** pane (compact dashboard-style summary) as the first bottom-nav item and default when opening `/tablet/:id` or `/tablet/compressor/:id`; compressor overview rows navigate when opened from tablet routes.
+* **tablet:** OVERVIEW panes surface **PRD3 intervals**, **recent production runs** (up to four), **program poll fields** (cycle time, MEM mode/op), **alarm text lines**, **compressor state history**, and **alarm details** so tablet users get context without hover.
+
+
 ## [0.15.1](https://github.com/roblockwood/Shatter-NC/compare/v0.15.0...v0.15.1) (2026-04-18)
 
 

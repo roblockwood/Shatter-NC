@@ -52,7 +52,10 @@ function TabletCompressorPaneContent({
     case 'overview':
       return (
         <div className="tablet-pane-root">
-          <CompressorOverviewPane compressor={compressor} />
+          <CompressorOverviewPane
+            compressor={compressor}
+            tabletRouteBase={`/tablet/compressor/${compressor.compressor_id}`}
+          />
         </div>
       );
     case 'alarms':

@@ -12,12 +12,12 @@ import { PANE_IDS } from '../types/layout';
 import { useExpandedMachine } from '../contexts/ExpandedMachineContext';
 import type { CompressorStatus } from '../hooks/useWebSocket';
 import { API_BASE, getApiErrorMessage } from '../config/api';
+import { asRecord } from '../utils/compressorTelemetry';
 import {
-  asRecord,
-  readCompressorControllerStatus,
-  readOutletTempLine,
-  readPressureLine,
-} from '../utils/compressorTelemetry';
+  compressorCardStatusDisplay,
+  compressorCardStatusValueClass,
+  compressorCardTelemetryLines,
+} from '../utils/compressorCardSummary';
 import './MachineCard.css';
 
 interface CompressorCardProps {
@@ -44,20 +44,6 @@ interface EditForm {
   kaeser_connect_base_url: string;
   kaeser_username: string;
   kaeser_password: string;
-}
-
-function statusDisplay(c: CompressorStatus): string {
-  if (!c.is_online) return 'OFFLINE';
-  const s = (c.status || '').toLowerCase();
-  if (s === 'offline') return 'OFFLINE';
-  if (s.includes('error')) return 'ERROR';
-  return 'ONLINE';
-}
-
-function statusValueClass(c: CompressorStatus): string {
-  const d = statusDisplay(c);
-  if (d === 'OFFLINE' || d === 'ERROR') return 'text-error';
-  return 'text-success';
 }
 
 function findCompressorPane(paneId: string): HTMLElement | null {
@@ -349,16 +335,10 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
 
   const pollTs = compressor.last_successful_poll_at || compressor.poll_timestamp;
 
-  const { psiLine, tempLine, controllerDetail } = useMemo(() => {
-    const metrics = compressor.metrics || {};
-    const operational = asRecord(metrics.operational);
-    const online = compressor.is_online;
-    return {
-      psiLine: online ? readPressureLine(operational) : '—',
-      tempLine: online ? readOutletTempLine(operational) : '—',
-      controllerDetail: readCompressorControllerStatus(compressor),
-    };
-  }, [compressor]);
+  const { psiLine, tempLine, controllerDetail } = useMemo(
+    () => compressorCardTelemetryLines(compressor),
+    [compressor]
+  );
 
   const [showStatusPanelPreview, setShowStatusPanelPreview] = useState(false);
   const [statusPanelPreviewPosition, setStatusPanelPreviewPosition] = useState<{
@@ -767,7 +747,9 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
           >
             <div className="machine-row machine-row-hoverable" style={{ cursor: 'pointer' }}>
               <span className="label">STATUS:</span>
-              <span className={`value ${statusValueClass(compressor)}`}>{statusDisplay(compressor)}</span>
+              <span className={`value ${compressorCardStatusValueClass(compressor)}`}>
+                {compressorCardStatusDisplay(compressor)}
+              </span>
             </div>
             {showStatusPanelPreview && statusPanelPreviewPosition && (
               <div
