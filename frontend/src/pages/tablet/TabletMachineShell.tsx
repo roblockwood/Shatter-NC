@@ -20,6 +20,7 @@ import {
   type TabletPaneSlug,
 } from './tabletPaneConfig';
 import { writeStoredTabletMachineId } from './tabletMachineStorage';
+import { useTabletPaneSwipe } from './useTabletPaneSwipe';
 import './tablet.css';
 
 function parsePositiveInt(raw: string | undefined): number | null {
@@ -135,6 +136,54 @@ function TabletPaneContent({
   }
 }
 
+function TabletMachineShellLoaded({
+  machine,
+  slug,
+}: {
+  machine: MachineStatus;
+  slug: TabletPaneSlug;
+}) {
+  const swipeNav = useTabletPaneSwipe(machine.machine_id, slug);
+  const base = `/tablet/${machine.machine_id}`;
+
+  return (
+    <div className="tablet-machine-shell">
+      <header className="tablet-machine-shell-header">
+        <span className="tablet-machine-shell-title">{machine.machine_name}</span>
+        <div className="tablet-machine-shell-header-aside">
+          <span className="tablet-machine-shell-meta">
+            ID {machine.machine_id}
+            {' · '}
+            {machine.is_online ? 'ONLINE' : 'OFFLINE'}
+          </span>
+          <Link to="/tablet/setup" className="tablet-shell-link">
+            [ CHANGE MACHINE ]
+          </Link>
+        </div>
+      </header>
+
+      <div
+        className="tablet-machine-shell-body tablet-machine-shell-body--swipe"
+        {...swipeNav}
+      >
+        <TabletPaneContent slug={slug} machine={machine} />
+      </div>
+
+      <nav className="tablet-bottom-nav" aria-label="Machine detail panes">
+        {TABLET_NAV_ITEMS.map(({ slug: navSlug, label }) => (
+          <NavLink
+            key={navSlug}
+            to={`${base}/${navSlug}`}
+            className={({ isActive }) => `tablet-nav-link ${isActive ? 'active' : ''}`}
+          >
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
 export const TabletMachineShell = () => {
   const { machineId: midStr, paneSlug } = useParams<{ machineId: string; paneSlug: string }>();
   const machineIdNum = parsePositiveInt(midStr);
@@ -192,39 +241,5 @@ export const TabletMachineShell = () => {
     );
   }
 
-  const base = `/tablet/${machine.machine_id}`;
-
-  return (
-    <div className="tablet-machine-shell">
-      <header className="tablet-machine-shell-header">
-        <span className="tablet-machine-shell-title">{machine.machine_name}</span>
-        <div className="tablet-machine-shell-header-aside">
-          <span className="tablet-machine-shell-meta">
-            ID {machine.machine_id}
-            {' · '}
-            {machine.is_online ? 'ONLINE' : 'OFFLINE'}
-          </span>
-          <Link to="/tablet/setup" className="tablet-shell-link">
-            [ CHANGE MACHINE ]
-          </Link>
-        </div>
-      </header>
-
-      <div className="tablet-machine-shell-body">
-        <TabletPaneContent slug={slug} machine={machine} />
-      </div>
-
-      <nav className="tablet-bottom-nav" aria-label="Machine detail panes">
-        {TABLET_NAV_ITEMS.map(({ slug: navSlug, label }) => (
-          <NavLink
-            key={navSlug}
-            to={`${base}/${navSlug}`}
-            className={({ isActive }) => `tablet-nav-link ${isActive ? 'active' : ''}`}
-          >
-            {label}
-          </NavLink>
-        ))}
-      </nav>
-    </div>
-  );
+  return <TabletMachineShellLoaded machine={machine} slug={slug} />;
 };
