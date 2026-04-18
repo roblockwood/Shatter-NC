@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, useParams } from 'react-router-dom';
 import { AsciiLoadingScreen } from '../../components/AsciiLoadingScreen';
 import { AlarmPane } from '../../components/machine-detail/AlarmPane';
@@ -20,6 +20,7 @@ import {
   type TabletPaneSlug,
 } from './tabletPaneConfig';
 import { writeStoredTabletMachineId } from './tabletMachineStorage';
+import { TabletScreensaver } from './TabletScreensaver';
 import { useTabletPaneSwipe } from './useTabletPaneSwipe';
 import './tablet.css';
 
@@ -143,13 +144,23 @@ function TabletMachineShellLoaded({
   machine: MachineStatus;
   slug: TabletPaneSlug;
 }) {
+  const [screensaver, setScreensaver] = useState(false);
   const swipeNav = useTabletPaneSwipe(machine.machine_id, slug);
   const base = `/tablet/${machine.machine_id}`;
 
   return (
-    <div className="tablet-machine-shell">
+    <>
+      <TabletScreensaver active={screensaver} onActiveChange={setScreensaver} />
+      <div className="tablet-machine-shell">
       <header className="tablet-machine-shell-header">
-        <span className="tablet-machine-shell-title">{machine.machine_name}</span>
+        <button
+          type="button"
+          className="tablet-machine-shell-title"
+          onClick={() => setScreensaver(true)}
+          title="Screensaver"
+        >
+          {machine.machine_name}
+        </button>
         <div className="tablet-machine-shell-header-aside">
           <span className="tablet-machine-shell-meta">
             ID {machine.machine_id}
@@ -157,7 +168,7 @@ function TabletMachineShellLoaded({
             {machine.is_online ? 'ONLINE' : 'OFFLINE'}
           </span>
           <Link to="/tablet/setup" className="tablet-shell-link">
-            [ CHANGE MACHINE ]
+            [ CHANGE ASSET ]
           </Link>
         </div>
       </header>
@@ -181,6 +192,7 @@ function TabletMachineShellLoaded({
         ))}
       </nav>
     </div>
+    </>
   );
 }
 

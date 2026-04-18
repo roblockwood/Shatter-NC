@@ -107,15 +107,44 @@
             </div>
           </label>
         </div>
+      </section>
 
-        <h3 style="margin-top: 16px">Optional: MQTT publishing</h3>
-        <p class="muted" style="margin-top: 6px">
-          If set, Shatter will publish full retained snapshots to Mosquitto. Leave host blank to disable.
+      <section class="panel disabled" id="step6" aria-disabled="true">
+        <h2>6) .env</h2>
+        <p class="muted">Copy to clipboard to proceed.</p>
+
+        <textarea id="envOut" class="mono" rows="8" spellcheck="false"></textarea>
+        <div class="actions" style="margin-top: 12px">
+          <button id="copyEnv" type="button">Copy .env</button>
+        </div>
+
+        <div class="callout" style="margin-top: 12px">
+          In Komodo (in your Stack): paste or upload this as the Stack <code>.env</code>.
+        </div>
+      </section>
+
+      <section class="panel disabled" id="step7mqtt" aria-disabled="true">
+        <h2>7) Optional: MQTT publishing</h2>
+        <p class="muted">
+          Shatter can publish full retained snapshots to Mosquitto. You can skip this step and configure MQTT later by editing
+          the compose/env directly.
         </p>
-        <div class="grid">
+
+        <div class="callout warn" style="margin-bottom: 12px">
+          If you enable MQTT here, the generator will include a <code>mosquitto</code> service and backend <code>MQTT_PUBLISH_*</code> env vars.
+        </div>
+
+        <div class="grid" style="grid-template-columns: 1fr; margin-bottom: 10px">
+          <label style="display: flex; gap: 10px; align-items: center">
+            <input id="mqttEnable" type="checkbox" style="width: auto" />
+            <span style="margin: 0">Enable MQTT publishing</span>
+          </label>
+        </div>
+
+        <div id="mqttFields" class="grid hidden">
           <label>
             <span>MQTT_PUBLISH_HOST</span>
-            <input id="mqttHost" name="MQTT_PUBLISH_HOST" type="text" placeholder="mosquitto (or blank to disable)" spellcheck="false" />
+            <input id="mqttHost" name="MQTT_PUBLISH_HOST" type="text" placeholder="mosquitto" spellcheck="false" />
           </label>
           <label>
             <span>MQTT_PUBLISH_PORT</span>
@@ -134,24 +163,15 @@
             <input id="mqttPass" name="MQTT_PUBLISH_PASSWORD" type="password" placeholder="optional" autocomplete="new-password" spellcheck="false" />
           </label>
         </div>
-      </section>
 
-      <section class="panel disabled" id="step6" aria-disabled="true">
-        <h2>6) .env</h2>
-        <p class="muted">Copy to clipboard to proceed.</p>
-
-        <textarea id="envOut" class="mono" rows="8" spellcheck="false"></textarea>
         <div class="actions" style="margin-top: 12px">
-          <button id="copyEnv" type="button">Copy .env</button>
-        </div>
-
-        <div class="callout" style="margin-top: 12px">
-          In Komodo (in your Stack): paste or upload this as the Stack <code>.env</code>.
+          <button id="skipMqtt" type="button">Skip</button>
+          <button id="confirmMqtt" class="primary" type="button">Continue</button>
         </div>
       </section>
 
-      <section class="panel disabled" id="step7" aria-disabled="true">
-        <h2>7) docker-compose.yml</h2>
+      <section class="panel disabled" id="step8compose" aria-disabled="true">
+        <h2>8) docker-compose.yml</h2>
         <p class="muted">Copy to clipboard to proceed.</p>
 
         <div id="composeBlock">
@@ -166,8 +186,8 @@
         </div>
       </section>
 
-      <section class="panel disabled" id="step8" aria-disabled="true">
-        <h2>8) Deploy</h2>
+      <section class="panel disabled" id="step9" aria-disabled="true">
+        <h2>9) Deploy</h2>
         <div class="callout">
           <ol style="margin: 0; padding-left: 1.25rem">
             <li>Deploy the Stack.</li>

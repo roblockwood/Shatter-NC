@@ -4,6 +4,10 @@
   font-family: var(--font-mono);
   color: var(--color-text-primary);
   user-select: none;
+  /* Shell shared by all detail panes (was previously leaked from AlarmPane.css). */
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  box-sizing: border-box;
 }
 
 .terminal-box-header,
@@ -20,4 +24,105 @@
 .terminal-box-glow .terminal-box-header,
 .terminal-box-glow .terminal-box-footer {
   text-shadow: var(--glow);
+}
+
+/* ── Pane chrome: ┌─ TITLE + dash fill + actions + ┐ / └ + fill + ┘ (shared with ToolsPane) ── */
+.terminal-box-header.pane-terminal-header,
+.terminal-box-footer.pane-terminal-footer {
+  white-space: normal;
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  font-size: var(--font-sm);
+  line-height: 1;
+  /* body uses --letter-spacing; box-drawing + em rules need tabular width */
+  letter-spacing: normal;
+}
+
+.terminal-box-header.pane-terminal-header .terminal-box-top {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  line-height: 1;
+}
+
+/* Pane-level font-size / font-family (e.g. 11px Roboto on status history) must not affect
+   .pane-terminal-* spans — metrics are set on each glyph class below. */
+
+.terminal-box-footer.pane-terminal-footer {
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.terminal-box-title-row.pane-terminal-title-row {
+  gap: 0;
+}
+
+.pane-terminal-title-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 0;
+}
+
+/* Middle segment grows; actions sit before the closing corner (no margin-left:auto here). */
+.pane-terminal-title-row .pane-header-right-actions {
+  margin-left: 0;
+}
+
+.pane-terminal-title-start {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  letter-spacing: normal;
+}
+
+.pane-terminal-title-fill {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 1;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  letter-spacing: normal;
+}
+
+.pane-terminal-title-corner {
+  flex: 0 0 auto;
+  line-height: 1;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  letter-spacing: normal;
+}
+
+/* Same breathing room as Tools pane (flex gap inside .pane-header-right-actions): status dot → ┐ */
+.pane-header-right-actions + .pane-terminal-title-corner {
+  margin-left: 6px;
+}
+
+.pane-terminal-footer-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.pane-terminal-footer-fill {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 1;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  letter-spacing: normal;
+}
+
+.pane-terminal-footer-corner {
+  flex: 0 0 auto;
+  line-height: 1;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  letter-spacing: normal;
 }

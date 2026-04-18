@@ -25,6 +25,25 @@
   color: var(--color-error);
 }
 
+.tablet-setup-page {
+  gap: var(--spacing-xl);
+  overflow-y: auto;
+}
+
+.tablet-setup-section-heading {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-md);
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.tablet-setup-section {
+  width: 100%;
+  max-width: 560px;
+  align-self: center;
+}
+
 /* Shell: header + scrollable pane + bottom nav */
 .tablet-machine-shell {
   flex: 1;
@@ -64,6 +83,25 @@
   white-space: nowrap;
 }
 
+button.tablet-machine-shell-title {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: inherit;
+  text-transform: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+button.tablet-machine-shell-title:hover {
+  color: var(--color-text-secondary);
+  text-shadow: var(--glow);
+}
+
 .tablet-machine-shell-meta {
   flex-shrink: 0;
   color: var(--color-text-dim);
@@ -73,8 +111,12 @@
 .tablet-machine-shell-body {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: var(--spacing-sm);
+  /* Scroll lives inside pane bodies (.terminal-box-content etc.), not here — avoids the
+     middle flex column collapsing short of the remaining viewport height. */
+  overflow: hidden;
+  /* Edge-to-edge pane region; inner panes (terminal-box) supply their own padding */
+  padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px)
+    env(safe-area-inset-left, 0px);
   display: flex;
   flex-direction: column;
 }
@@ -85,10 +127,56 @@
 }
 
 .tablet-machine-shell-body .tablet-pane-root {
-  flex: 1;
+  flex: 1 1 0%;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  align-self: stretch;
+  width: 100%;
+}
+
+.tablet-machine-shell-body .tablet-pane-root > .panel-pane {
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
+/* Panel detail: terminal body is full height, but the default CSS grid + align-content:start
+   leaves a dead band. Use a column flex stack and grow MODE & FUNCTIONS (2nd section) so that
+   block’s LED grid uses the spare vertical space; doors + overrides stay compact. */
+.tablet-machine-shell-body .panel-pane .terminal-box-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--spacing-sm);
+  /* override PanelPane.css grid */
+  grid-template-columns: none;
+  align-content: unset;
+}
+
+.tablet-machine-shell-body .panel-pane .terminal-box-content > .panel-section {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.tablet-machine-shell-body .panel-pane .terminal-box-content > .panel-section:nth-child(2) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tablet-machine-shell-body .panel-pane .terminal-box-content > .panel-section:nth-child(2) .led-group {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Spread row tracks across the expanded MODE section (not packed at the top) */
+  align-content: space-evenly;
+  /* auto-fit + minmax() puts every switch on one row when wide; cap at 4 cols → 8 switches = two rows */
+  grid-template-columns: repeat(4, minmax(48px, 1fr));
+}
+
+.tablet-machine-shell-body .panel-pane .terminal-box-content:has(> .panel-empty) {
+  justify-content: center;
+  align-items: center;
 }
 
 .tablet-bottom-nav {
@@ -164,6 +252,29 @@
 .tablet-setup-input:focus {
   outline: none;
   border-color: var(--color-text-primary);
+}
+
+/* ui/Select — same themed overlay as File Manager deployment picker */
+.tablet-setup-custom-select {
+  width: 100%;
+}
+
+.tablet-setup-custom-select .custom-select {
+  font-size: var(--font-md);
+  min-height: 42px;
+}
+
+.tablet-setup-custom-select .custom-select-dropdown {
+  max-height: min(45vh, 280px);
+  z-index: 3000;
+}
+
+.tablet-setup-list-hint {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--color-text-dim);
+  text-transform: none;
+  line-height: 1.35;
 }
 
 .tablet-setup-error {

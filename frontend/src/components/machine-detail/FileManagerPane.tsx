@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { TerminalBox } from '../ui/TerminalBox';
+import '../ui/TerminalBox.css';
 import { Select } from '../ui';
 import { API_BASE_URL, getApiErrorMessage } from '../../config/api';
+import { TERMINAL_RULE_FILL } from '../../utils/terminalAsciiRule';
+import { PollingStatusLight } from '../ui/PollingStatusLight';
+import { MachineCardAsciiDivider } from '../MachineCardAsciiDivider';
+import { PaneTerminalFooter, PaneTerminalFooterInner, PaneTerminalHeader } from './PaneTerminalChrome';
 import './FileManagerPane.css';
 
 interface Program {
@@ -148,6 +152,22 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [filesWithDeployments, setFilesWithDeployments] = useState<Set<string>>(new Set());
+  const [programsListFetchedAt, setProgramsListFetchedAt] = useState<string | null>(null);
+  const [deploymentsFetchedAt, setDeploymentsFetchedAt] = useState<string | null>(null);
+
+  /** Older of listing vs deployment-marker fetch — dot stays cautious if either is stale. */
+  const fileManagerDataFreshAt = useMemo(() => {
+    const a = programsListFetchedAt;
+    const b = deploymentsFetchedAt;
+    if (a == null && b == null) return null;
+    if (a == null) return b;
+    if (b == null) return a;
+    const ta = new Date(a).getTime();
+    const tb = new Date(b).getTime();
+    if (!Number.isFinite(ta)) return b;
+    if (!Number.isFinite(tb)) return a;
+    return ta <= tb ? a : b;
+  }, [programsListFetchedAt, deploymentsFetchedAt]);
 
   // Handle URL parameters for navigation from upload success screen
   useEffect(() => {
@@ -216,6 +236,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
           setLoading(false);
           setError(null);
           setSelectedProgram(null);
+          setProgramsListFetchedAt(new Date(cacheData.timestamp).toISOString());
           return;
         } else {
           sessionStorage.removeItem(cacheKey);
@@ -251,6 +272,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
         if (fetchPath === currentPath) {
           setPrograms(data.programs || []);
           setLoading(false);
+          setProgramsListFetchedAt(new Date().toISOString());
         }
       })
       .catch(err => {
@@ -289,6 +311,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
           }
         });
         setFilesWithDeployments(deployedFilenames);
+        setDeploymentsFetchedAt(new Date().toISOString());
       })
       .catch(err => {
         if (err.name !== 'AbortError') {
@@ -750,12 +773,26 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
 
   return (
     <div className="file-manager-pane">
-      <TerminalBox title="FILE MANAGER" className="file-manager-terminal-box">
+      <div className="terminal-box file-manager-terminal-box">
+        <PaneTerminalHeader label="FILE MANAGER">
+          <PollingStatusLight
+            lastUpdatedAt={fileManagerDataFreshAt}
+            expectedIntervalMs={180_000}
+            ariaLabel="File manager program listing and deployment markers freshness"
+          />
+        </PaneTerminalHeader>
+        <div className="terminal-box-content">
         <div className="file-manager-content">
           {/* Programs List */}
           <div className="file-manager-programs-panel">
-            <div className="file-manager-panel-header">
-              ┌─ NC PROGRAMS {currentPath ? `(${currentPath})` : ''} {'─'.repeat(30)}┐
+            <div className="file-manager-panel-header file-manager-pane-terminal-line">
+              <span className="pane-terminal-title-start">
+                ┌─ NC PROGRAMS{currentPath ? ` (${currentPath})` : ''}
+              </span>
+              <span className="pane-terminal-title-fill" aria-hidden>
+                {TERMINAL_RULE_FILL}
+              </span>
+              <span className="pane-terminal-title-corner">┐</span>
             </div>
 
             {loading && !pendingFileSelection && (
@@ -824,7 +861,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                   <div className="file-manager-col-actions">ACTIONS</div>
                 </div>
                 <div className="file-manager-table-divider">
-                  ├{'─'.repeat(60)}┤
+                  <MachineCardAsciiDivider />
                 </div>
                 <div className="file-manager-table-body">
                   {displayPrograms.map((program, idx) => (
@@ -881,7 +918,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                   ))}
                 </div>
                 <div className="file-manager-table-footer">
-                  └{'─'.repeat(60)}┘
+                  <PaneTerminalFooterInner />
                 </div>
                 <div className="file-manager-table-summary">
                   {programs.length} PROGRAMS │ TOTAL: {formatBytes(programs.reduce((sum, p) => sum + p.size, 0))}
@@ -914,8 +951,12 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
           {/* Program Details Panel */}
           {selectedProgram && (
             <div className="file-manager-details-panel">
-              <div className="file-manager-panel-header">
-                ┌─ SELECTED: {selectedProgram.name} {'─'.repeat(20)}┐
+              <div className="file-manager-panel-header file-manager-pane-terminal-line">
+                <span className="pane-terminal-title-start">┌─ SELECTED: {selectedProgram.name}</span>
+                <span className="pane-terminal-title-fill" aria-hidden>
+                  {TERMINAL_RULE_FILL}
+                </span>
+                <span className="pane-terminal-title-corner">┐</span>
               </div>
               <div className="file-manager-details-content">
                 {/* FILE INFO SECTION */}
@@ -1364,7 +1405,13 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                 {/* CODE PREVIEW SECTION */}
                 {previewLines.length > 0 && selectedProgram.name.toUpperCase().endsWith('.NC') && (
                   <div className="file-manager-code-preview">
-                    <div className="file-manager-preview-header">┌─ PREVIEW (First 50 Lines) ─────────────┐</div>
+                    <div className="file-manager-preview-header file-manager-pane-terminal-line">
+                      <span className="pane-terminal-title-start">┌─ PREVIEW (FIRST 50 LINES)</span>
+                      <span className="pane-terminal-title-fill" aria-hidden>
+                        {TERMINAL_RULE_FILL}
+                      </span>
+                      <span className="pane-terminal-title-corner">┐</span>
+                    </div>
                     <div className="file-manager-preview-content">
                       {previewLines.map((line, idx) => (
                         <div key={idx} className="file-manager-preview-line">
@@ -1373,17 +1420,21 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                         </div>
                       ))}
                     </div>
-                    <div className="file-manager-preview-footer">└─────────────────────────────────────┘</div>
+                    <div className="file-manager-preview-footer">
+                      <PaneTerminalFooterInner />
+                    </div>
                   </div>
                 )}
               </div>
               <div className="file-manager-panel-footer">
-                └{'─'.repeat(50)}┘
+                <PaneTerminalFooterInner />
               </div>
             </div>
           )}
         </div>
-      </TerminalBox>
+        </div>
+        <PaneTerminalFooter />
+      </div>
 
       {/* View Modal */}
       {viewModalOpen && (

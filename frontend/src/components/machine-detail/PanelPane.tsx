@@ -1,5 +1,6 @@
 import React from 'react';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
+import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
 import './PanelPane.css';
 
 interface PanelData {
@@ -303,29 +304,21 @@ export const PanelPane: React.FC<PanelPaneProps> = ({
 }) => {
   const pollMs = Math.max((pollIntervalSeconds ?? 5) * 1000, 1000);
 
-  const panelTitleRow = (
-    <div className="terminal-box-title-row panel-pane-title-row">
-      <span>┌─ PANEL STATUS {'─'.repeat(27)}</span>
-      <div className="pane-header-right-actions">
-        <PollingStatusLight
-          lastUpdatedAt={pollTimestamp}
-          expectedIntervalMs={pollMs}
-          ariaLabel="Panel status data freshness"
-        />
-        <span>┐</span>
-      </div>
-    </div>
+  const panelTitleHeader = (
+    <PaneTerminalHeader label="PANEL STATUS">
+      <PollingStatusLight
+        lastUpdatedAt={pollTimestamp}
+        expectedIntervalMs={pollMs}
+        ariaLabel="Panel status data freshness"
+      />
+    </PaneTerminalHeader>
   );
 
   if (!panelData) {
     return (
       <div className="panel-pane">
         <div className="terminal-box">
-          <div className="terminal-box-header">
-            <div className="terminal-box-top">
-              {panelTitleRow}
-            </div>
-          </div>
+          {panelTitleHeader}
           <div className="terminal-box-content">
             <div className="panel-empty">NO PANEL DATA AVAILABLE</div>
           </div>
@@ -368,11 +361,7 @@ export const PanelPane: React.FC<PanelPaneProps> = ({
   return (
     <div className="panel-pane">
       <div className="terminal-box">
-        <div className="terminal-box-header">
-          <div className="terminal-box-top">
-            {panelTitleRow}
-          </div>
-        </div>
+        {panelTitleHeader}
         <div className="terminal-box-content">
           {/* Doors & System Status Section (Combined) */}
           <div className="panel-section">
@@ -560,9 +549,7 @@ export const PanelPane: React.FC<PanelPaneProps> = ({
             </div>
           </div>
         </div>
-        <div className="terminal-box-footer">
-          └{'─'.repeat(42)}┘
-        </div>
+        <PaneTerminalFooter />
       </div>
     </div>
   );
