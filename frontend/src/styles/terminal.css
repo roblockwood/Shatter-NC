@@ -144,6 +144,20 @@ body {
 .text-warning { color: var(--color-warning); }
 .text-info { color: var(--color-info); }
 
+/*
+ * UTF-8 box-drawing / “SHATTER” block logo: body uses --letter-spacing; inherited tracking
+ * breaks column alignment. Keep tabs neutral and disable ligatures for monospace art.
+ */
+.ascii-art,
+.tablet-screensaver-art,
+.modal-ascii-art pre {
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
 /* Animations */
 @keyframes blink {
   0%, 49% { opacity: 1; }

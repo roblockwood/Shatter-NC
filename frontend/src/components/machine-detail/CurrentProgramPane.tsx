@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '../../config/api';
 import { earlierIsoTimestamp } from '../ui/pollingFreshness';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
+import '../ui/TerminalBox.css';
+import { TERMINAL_RULE_FILL } from '../../utils/terminalAsciiRule';
 import './CurrentProgramPane.css';
 
 interface ToolValidation {
@@ -888,21 +890,19 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
       className="current-program-pane terminal-box"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="terminal-box-header">
+      <div className="terminal-box-header pane-terminal-header">
         <div className="terminal-box-top">
-          <div className="terminal-box-title-row">
-            <span>┌─ CURRENT PROGRAM {'─'.repeat(25)}</span>
-            {isRefreshing && (
-              <span className="refresh-indicator" style={{ marginLeft: '8px', color: '#888', fontSize: '12px' }} title="Refreshing data...">
-                ⟳
-              </span>
-            )}
+          <div className="terminal-box-title-row pane-terminal-title-row">
+            <span className="pane-terminal-title-start">┌─ CURRENT PROGRAM</span>
+            <span className="pane-terminal-title-fill" aria-hidden>
+              {TERMINAL_RULE_FILL}
+            </span>
             <div className="pane-header-right-actions">
-              <PollingStatusLight
-                lastUpdatedAt={statusLightLastUpdatedAt}
-                expectedIntervalMs={300_000}
-                ariaLabel="Current program pane data freshness"
-              />
+              {isRefreshing && (
+                <span className="refresh-indicator" title="Refreshing data...">
+                  ⟳
+                </span>
+              )}
               <button 
                 className="expand-toggle"
                 onClick={(e) => {
@@ -926,8 +926,13 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                   [EXPAND]
                 </button>
               )}
-              <span>┐</span>
+              <PollingStatusLight
+                lastUpdatedAt={statusLightLastUpdatedAt}
+                expectedIntervalMs={300_000}
+                ariaLabel="Current program pane data freshness"
+              />
             </div>
+            <span className="pane-terminal-title-corner">┐</span>
           </div>
         </div>
       </div>
@@ -1035,8 +1040,14 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
           </>
         )}
       </div>
-      <div className="terminal-box-footer">
-        └{'─'.repeat(42)}┘
+      <div className="terminal-box-footer pane-terminal-footer">
+        <div className="pane-terminal-footer-row">
+          <span className="pane-terminal-footer-corner">└</span>
+          <span className="pane-terminal-footer-fill" aria-hidden>
+            {TERMINAL_RULE_FILL}
+          </span>
+          <span className="pane-terminal-footer-corner">┘</span>
+        </div>
       </div>
     </div>
   );

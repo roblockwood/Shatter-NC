@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../../config/api';
+import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
 import './CycleHistoryPane.css';
 
 interface CycleHistoryEntry {
@@ -66,13 +67,7 @@ export const CycleHistoryPane: React.FC<CycleHistoryPaneProps> = ({ machineId })
       className="cycle-history-pane terminal-box"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="terminal-box-header">
-        <div className="terminal-box-top">
-          <div className="terminal-box-title-row">
-            <span>┌─ CYCLE HISTORY {'─'.repeat(27)}┐</span>
-          </div>
-        </div>
-      </div>
+      <PaneTerminalHeader label="CYCLE HISTORY" />
       <div className="terminal-box-content">
         {loading ? (
           <div className="cycle-loading">LOADING...</div>
@@ -139,9 +134,7 @@ export const CycleHistoryPane: React.FC<CycleHistoryPaneProps> = ({ machineId })
           </>
         )}
       </div>
-      <div className="terminal-box-footer">
-        └{'─'.repeat(42)}┘
-      </div>
+      <PaneTerminalFooter />
     </div>
   );
 };

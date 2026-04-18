@@ -113,7 +113,7 @@
   max-width: 100%;
 }
 
-.terminal-box-title-row {
+.cycle-history-pane .terminal-box-title-row {
   display: flex;
   align-items: center;
   gap: 0;

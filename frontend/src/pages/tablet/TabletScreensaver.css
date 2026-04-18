@@ -1,0 +1,96 @@
+.tablet-screensaver {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: rgba(0, 0, 0, 0.92);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
+    calc(var(--spacing-md) + env(safe-area-inset-bottom, 0)) env(safe-area-inset-left, 0);
+}
+
+.tablet-screensaver-bounce {
+  position: fixed;
+  left: 0;
+  top: 0;
+  will-change: transform;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+}
+
+.tablet-screensaver-art {
+  font-family: var(--font-mono);
+  font-size: clamp(6px, 1.6vw, var(--font-sm));
+  line-height: 1.2;
+  color: var(--color-text-primary);
+  white-space: pre;
+  margin: 0;
+  display: inline-block;
+  animation: tablet-saver-glow 4s ease-in-out infinite;
+}
+
+@keyframes tablet-saver-glow {
+  0%,
+  100% {
+    text-shadow: 0 0 8px var(--color-text-primary);
+    color: var(--color-text-primary);
+  }
+  33% {
+    text-shadow: 0 0 12px var(--color-info);
+    color: var(--color-info);
+  }
+  66% {
+    text-shadow: 0 0 12px var(--color-warning);
+    color: var(--color-warning);
+  }
+}
+
+.tablet-screensaver-spinner {
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  color: var(--color-text-secondary);
+  letter-spacing: 0.08em;
+  animation: tablet-saver-pulse 2s ease-in-out infinite;
+}
+
+@keyframes tablet-saver-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.tablet-screensaver-hint {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  letter-spacing: 0.12em;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tablet-screensaver-art {
+    animation: none;
+    color: var(--color-text-primary);
+    text-shadow: 0 0 6px var(--color-text-primary);
+  }
+
+  .tablet-screensaver-spinner {
+    animation: none;
+    opacity: 0.85;
+  }
+}

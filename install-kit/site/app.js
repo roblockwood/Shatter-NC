@@ -17,13 +17,15 @@ function buildEnv(cfg) {
   lines.push("");
   lines.push(`POSTGRES_PASSWORD=${cfg.POSTGRES_PASSWORD}`);
   lines.push(`SECRET_KEY=${cfg.SECRET_KEY}`);
-  lines.push("");
-  lines.push("# Optional MQTT publishing (leave MQTT_PUBLISH_HOST empty to disable)");
-  lines.push(`MQTT_PUBLISH_HOST=${cfg.MQTT_PUBLISH_HOST || ""}`);
-  lines.push(`MQTT_PUBLISH_PORT=${cfg.MQTT_PUBLISH_PORT || "1883"}`);
-  lines.push(`MQTT_PUBLISH_TOPIC_PREFIX=${cfg.MQTT_PUBLISH_TOPIC_PREFIX || "shatter"}`);
-  lines.push(`MQTT_PUBLISH_USERNAME=${cfg.MQTT_PUBLISH_USERNAME || ""}`);
-  lines.push(`MQTT_PUBLISH_PASSWORD=${cfg.MQTT_PUBLISH_PASSWORD || ""}`);
+  if (cfg.MQTT_ENABLED) {
+    lines.push("");
+    lines.push("# Optional MQTT publishing (enabled)");
+    lines.push(`MQTT_PUBLISH_HOST=${cfg.MQTT_PUBLISH_HOST || ""}`);
+    lines.push(`MQTT_PUBLISH_PORT=${cfg.MQTT_PUBLISH_PORT || "1883"}`);
+    lines.push(`MQTT_PUBLISH_TOPIC_PREFIX=${cfg.MQTT_PUBLISH_TOPIC_PREFIX || "shatter"}`);
+    lines.push(`MQTT_PUBLISH_USERNAME=${cfg.MQTT_PUBLISH_USERNAME || ""}`);
+    lines.push(`MQTT_PUBLISH_PASSWORD=${cfg.MQTT_PUBLISH_PASSWORD || ""}`);
+  }
   lines.push("");
   return lines.join("\n");
 }
@@ -36,13 +38,15 @@ function buildEnvPreview(cfg) {
   // Keep preview style simple and consistent with production feel.
   lines.push(`POSTGRES_PASSWORD=${cfg.POSTGRES_PASSWORD || "CHANGEME_STRONG_PASSWORD"}`);
   lines.push(`SECRET_KEY=${cfg.SECRET_KEY || "CHANGEME_GENERATE_RANDOM"}`);
-  lines.push("");
-  lines.push("# Optional MQTT publishing (leave MQTT_PUBLISH_HOST empty to disable)");
-  lines.push(`MQTT_PUBLISH_HOST=${cfg.MQTT_PUBLISH_HOST || ""}`);
-  lines.push(`MQTT_PUBLISH_PORT=${cfg.MQTT_PUBLISH_PORT || "1883"}`);
-  lines.push(`MQTT_PUBLISH_TOPIC_PREFIX=${cfg.MQTT_PUBLISH_TOPIC_PREFIX || "shatter"}`);
-  lines.push(`MQTT_PUBLISH_USERNAME=${cfg.MQTT_PUBLISH_USERNAME || ""}`);
-  lines.push(`MQTT_PUBLISH_PASSWORD=${cfg.MQTT_PUBLISH_PASSWORD || ""}`);
+  if (cfg.MQTT_ENABLED) {
+    lines.push("");
+    lines.push("# Optional MQTT publishing (enabled)");
+    lines.push(`MQTT_PUBLISH_HOST=${cfg.MQTT_PUBLISH_HOST || ""}`);
+    lines.push(`MQTT_PUBLISH_PORT=${cfg.MQTT_PUBLISH_PORT || "1883"}`);
+    lines.push(`MQTT_PUBLISH_TOPIC_PREFIX=${cfg.MQTT_PUBLISH_TOPIC_PREFIX || "shatter"}`);
+    lines.push(`MQTT_PUBLISH_USERNAME=${cfg.MQTT_PUBLISH_USERNAME || ""}`);
+    lines.push(`MQTT_PUBLISH_PASSWORD=${cfg.MQTT_PUBLISH_PASSWORD || ""}`);
+  }
   lines.push("");
   return lines.join("\n");
 }
@@ -53,6 +57,14 @@ function buildCompose(cfg) {
   // - backend image includes /app/migrations and runs migrations on startup
   const backendImage = `ghcr.io/roblockwood/shatter-nc-install/backend:latest`;
   const frontendImage = `ghcr.io/roblockwood/shatter-nc-install/frontend:latest`;
+
+  const mqttBackendEnv = cfg.MQTT_ENABLED
+    ? `\n      MQTT_PUBLISH_HOST: \${MQTT_PUBLISH_HOST:-}\n      MQTT_PUBLISH_PORT: \${MQTT_PUBLISH_PORT:-1883}\n      MQTT_PUBLISH_TOPIC_PREFIX: \${MQTT_PUBLISH_TOPIC_PREFIX:-shatter}\n      MQTT_PUBLISH_USERNAME: \${MQTT_PUBLISH_USERNAME:-}\n      MQTT_PUBLISH_PASSWORD: \${MQTT_PUBLISH_PASSWORD:-}`
+    : "";
+
+  const mqttService = cfg.MQTT_ENABLED
+    ? `\n  # Optional MQTT broker for telemetry fanout (CNC + compressors).\n  mosquitto:\n    image: eclipse-mosquitto:2\n    container_name: shatter-mosquitto-prod\n    restart: unless-stopped\n    ports:\n      - \"1883:1883\"\n    networks:\n      - shatter-network\n`
+    : "";
 
   return `services:
   postgres:
@@ -90,12 +102,7 @@ function buildCompose(cfg) {
       COMPRESSOR_STATUS_SAMPLE_MIN_INTERVAL_SECONDS: \${COMPRESSOR_STATUS_SAMPLE_MIN_INTERVAL_SECONDS:-1}
       COMPRESSOR_STATUS_SAMPLES_RAW_DAYS: \${COMPRESSOR_STATUS_SAMPLES_RAW_DAYS:-14}
       SECRET_KEY: \${SECRET_KEY}
-      CORS_ORIGINS: '["*"]'
-      MQTT_PUBLISH_HOST: \${MQTT_PUBLISH_HOST:-}
-      MQTT_PUBLISH_PORT: \${MQTT_PUBLISH_PORT:-1883}
-      MQTT_PUBLISH_TOPIC_PREFIX: \${MQTT_PUBLISH_TOPIC_PREFIX:-shatter}
-      MQTT_PUBLISH_USERNAME: \${MQTT_PUBLISH_USERNAME:-}
-      MQTT_PUBLISH_PASSWORD: \${MQTT_PUBLISH_PASSWORD:-}
+      CORS_ORIGINS: '["*"]'${mqttBackendEnv}
     volumes:
       - generated_data:/docker/generated
     ports:
@@ -127,16 +134,7 @@ function buildCompose(cfg) {
       retries: 3
     networks:
       - shatter-network
-
-  # Optional MQTT broker (leave MQTT_PUBLISH_HOST empty to disable publishing).
-  mosquitto:
-    image: eclipse-mosquitto:2
-    container_name: shatter-mosquitto-prod
-    restart: unless-stopped
-    ports:
-      - "1883:1883"
-    networks:
-      - shatter-network
+${mqttService}
 
 volumes:
   postgres_data:
@@ -154,6 +152,7 @@ function readConfig() {
   const cfg = {
     POSTGRES_PASSWORD: qs("pgPassword").value,
     SECRET_KEY: qs("secretKey").value,
+    MQTT_ENABLED: Boolean(document.getElementById("mqttEnable")?.checked),
     MQTT_PUBLISH_HOST: qs("mqttHost").value,
     MQTT_PUBLISH_PORT: qs("mqttPort").value,
     MQTT_PUBLISH_TOPIC_PREFIX: qs("mqttPrefix").value,
@@ -183,14 +182,16 @@ function render() {
   const step4 = document.getElementById("step4");
   const step5 = document.getElementById("step5");
   const step6 = document.getElementById("step6");
-  const step7 = document.getElementById("step7");
-  const step8 = document.getElementById("step8");
+  const step7mqtt = document.getElementById("step7mqtt");
+  const step8compose = document.getElementById("step8compose");
+  const step9 = document.getElementById("step9");
   const state = window.__shatterInstallState || (window.__shatterInstallState = {
     step1Confirmed: false,
     step2Confirmed: false,
     step3Confirmed: false,
     pgConfirmed: false,
     envConfirmed: false,
+    mqttConfirmed: false,
     composeConfirmed: false,
     envEdited: false,
     composeEdited: false,
@@ -207,8 +208,16 @@ function render() {
   enablePanel(step4, state.step3Confirmed);
   enablePanel(step5, state.pgConfirmed);
   enablePanel(step6, keyOk);
-  enablePanel(step7, keyOk && state.envConfirmed);
-  enablePanel(step8, keyOk && state.composeConfirmed);
+  enablePanel(step7mqtt, keyOk && state.envConfirmed);
+  enablePanel(step8compose, keyOk && state.envConfirmed && state.mqttConfirmed);
+  enablePanel(step9, keyOk && state.composeConfirmed);
+
+  // MQTT step UI state
+  const mqttFields = document.getElementById("mqttFields");
+  if (mqttFields) mqttFields.classList.toggle("hidden", !cfg.MQTT_ENABLED);
+  const confirmMqtt = document.getElementById("confirmMqtt");
+  const mqttOk = !cfg.MQTT_ENABLED || Boolean((cfg.MQTT_PUBLISH_HOST || "").trim());
+  if (confirmMqtt) confirmMqtt.disabled = !mqttOk;
 
   // Next button enablement
   const toStep2 = document.getElementById("toStep2");
@@ -275,13 +284,19 @@ function bind() {
   const cfgInputs = [
     "pgPassword",
     "secretKey",
+    "mqttEnable",
     "mqttHost",
     "mqttPort",
     "mqttPrefix",
     "mqttUser",
     "mqttPass",
   ];
-  cfgInputs.forEach((id) => qs(id).addEventListener("input", render));
+  cfgInputs.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", render);
+    el.addEventListener("change", render);
+  });
 
   qs("envOut").addEventListener("input", () => {
     const state = window.__shatterInstallState || (window.__shatterInstallState = {});
@@ -320,15 +335,38 @@ function bind() {
     await copyText(qs("envOut").value);
     const state = window.__shatterInstallState || (window.__shatterInstallState = {});
     state.envConfirmed = true;
+    state.mqttConfirmed = false;
     render();
-    document.getElementById("step7")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("step7mqtt")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  // MQTT step confirm/skip
+  document.getElementById("skipMqtt")?.addEventListener("click", () => {
+    const state = window.__shatterInstallState || (window.__shatterInstallState = {});
+    state.mqttConfirmed = true;
+    const enable = document.getElementById("mqttEnable");
+    if (enable) enable.checked = false;
+    render();
+    document.getElementById("step8compose")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  document.getElementById("confirmMqtt")?.addEventListener("click", () => {
+    const { cfg } = readConfig();
+    const mqttOk = !cfg.MQTT_ENABLED || Boolean((cfg.MQTT_PUBLISH_HOST || "").trim());
+    if (!mqttOk) {
+      document.getElementById("mqttHost")?.focus();
+      return;
+    }
+    const state = window.__shatterInstallState || (window.__shatterInstallState = {});
+    state.mqttConfirmed = true;
+    render();
+    document.getElementById("step8compose")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
   qs("copyCompose").addEventListener("click", async () => {
     await copyText(qs("composeOut").value);
     const state = window.__shatterInstallState || (window.__shatterInstallState = {});
     state.composeConfirmed = true;
     render();
-    document.getElementById("step8")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("step9")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   const scrollTo = (id) => {
