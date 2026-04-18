@@ -9,7 +9,7 @@ import {
   readPressureLine,
   readSigmaPanel,
 } from '../../utils/compressorTelemetry';
-import { asciiFooterLine, asciiHeaderLeft } from '../../utils/terminalFrame';
+import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
 import './AlarmPane.css';
 import './CompressorPanelPane.css';
 
@@ -338,21 +338,13 @@ export const CompressorPanelPane: React.FC<CompressorPanelPaneProps> = ({ compre
       className="alarm-pane terminal-box compressor-terminal-pane compressor-panel-pane"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="terminal-box-header">
-        <div className="terminal-box-top">
-          <div className="terminal-box-title-row">
-            <span>{asciiHeaderLeft('Compressor panel')}</span>
-            <div className="pane-header-right-actions">
-              <PollingStatusLight
-                lastUpdatedAt={pollTs}
-                expectedIntervalMs={Math.max(intervalS, 10) * 1000}
-                ariaLabel="Compressor panel data freshness"
-              />
-              <span>┐</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PaneTerminalHeader label="COMPRESSOR PANEL">
+        <PollingStatusLight
+          lastUpdatedAt={pollTs}
+          expectedIntervalMs={Math.max(intervalS, 10) * 1000}
+          ariaLabel="Compressor panel data freshness"
+        />
+      </PaneTerminalHeader>
 
       <div className="terminal-box-content">
         <div className="compressor-panel-body">
@@ -465,7 +457,7 @@ export const CompressorPanelPane: React.FC<CompressorPanelPaneProps> = ({ compre
         )}
       </div>
 
-      <div className="terminal-box-footer">{asciiFooterLine(42)}</div>
+      <PaneTerminalFooter />
     </div>
   );
 };

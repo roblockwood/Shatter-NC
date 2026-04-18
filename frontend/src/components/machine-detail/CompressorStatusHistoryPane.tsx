@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { API_BASE_URL } from '../../config/api';
-import { asciiFooterLine, asciiHeaderLeft } from '../../utils/terminalFrame';
+import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import './AlarmPane.css';
 import './StatusHistoryPane.css';
@@ -109,22 +109,14 @@ export const CompressorStatusHistoryPane: React.FC<CompressorStatusHistoryPanePr
       className="alarm-pane terminal-box compressor-terminal-pane compressor-timeline-pane"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="terminal-box-header">
-        <div className="terminal-box-top">
-          <div className="terminal-box-title-row">
-            <span>{asciiHeaderLeft('Status history')}</span>
-            <div className="pane-header-right-actions">
-              <PollingStatusLight
-                lastUpdatedAt={lastFetchSuccessAt}
-                expectedIntervalMs={COMPRESSOR_HISTORY_REFETCH_MS}
-                ariaLabel="Compressor status history data freshness"
-                tooltipDetailLines={statusTooltipLines}
-              />
-              <span>┐</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PaneTerminalHeader label="STATUS HISTORY">
+        <PollingStatusLight
+          lastUpdatedAt={lastFetchSuccessAt}
+          expectedIntervalMs={COMPRESSOR_HISTORY_REFETCH_MS}
+          ariaLabel="Compressor status history data freshness"
+          tooltipDetailLines={statusTooltipLines}
+        />
+      </PaneTerminalHeader>
 
       <div className="terminal-box-content">
         <div className="compressor-timeline-pane-inner compressor-history-pane-inner">
@@ -178,7 +170,7 @@ export const CompressorStatusHistoryPane: React.FC<CompressorStatusHistoryPanePr
         </div>
       </div>
 
-      <div className="terminal-box-footer">{asciiFooterLine(42)}</div>
+      <PaneTerminalFooter />
     </div>
   );
 };

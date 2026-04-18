@@ -9,7 +9,7 @@ import {
   buildOscilloscopeAxisDivisionLabels,
   getOscilloscopeTicksForMode,
 } from '../../utils/chartTimeAxis';
-import { asciiFooterLine, asciiHeaderLeft } from '../../utils/terminalFrame';
+import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
 import { useLocalChartTimeAxisMode } from '../../hooks/useLocalChartTimeAxisMode';
 import { ChartTimeAxisToggle } from '../ui/ChartTimeAxisToggle';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
@@ -651,7 +651,7 @@ function SingleSeriesChart({
       <svg
         className="compressor-telemetry-svg"
         viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
+        preserveAspectRatio="xMidYMid meet"
         width="100%"
         height="100%"
         aria-label={ariaLabel}
@@ -874,22 +874,14 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
       className={`alarm-pane terminal-box compressor-terminal-pane compressor-timeline-pane compressor-timeline-pane--telemetry compressor-timeline-pane--telemetry-${series}`}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="terminal-box-header">
-        <div className="terminal-box-top">
-          <div className="terminal-box-title-row">
-            <span>{asciiHeaderLeft(headerTitle)}</span>
-            <div className="pane-header-right-actions">
-              <PollingStatusLight
-                lastUpdatedAt={lastFetchSuccessAt}
-                expectedIntervalMs={COMPRESSOR_CHART_REFETCH_MS}
-                ariaLabel={`Compressor ${headerTitle} chart data freshness`}
-                tooltipDetailLines={tooltipLines}
-              />
-              <span>┐</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PaneTerminalHeader label={headerTitle}>
+        <PollingStatusLight
+          lastUpdatedAt={lastFetchSuccessAt}
+          expectedIntervalMs={COMPRESSOR_CHART_REFETCH_MS}
+          ariaLabel={`Compressor ${headerTitle} chart data freshness`}
+          tooltipDetailLines={tooltipLines}
+        />
+      </PaneTerminalHeader>
 
       <div className="terminal-box-content">
         <div className="compressor-timeline-pane-inner">
@@ -975,7 +967,7 @@ export const CompressorTelemetrySeriesPane: React.FC<CompressorTelemetrySeriesPa
         </div>
       </div>
 
-      <div className="terminal-box-footer">{asciiFooterLine(42)}</div>
+      <PaneTerminalFooter />
     </div>
   );
 };
