@@ -1,6 +1,27 @@
 /* Terminal/Retro Theme - Global Styles */
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+/* Remote weights only (400 for both families is self-hosted below — avoids duplicate fetch). */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=Noto+Sans+Mono:wght@600&display=swap');
+
+/*
+ * Full font files (Google Fonts): box-drawing / block glyphs stay in-face with Latin letters.
+ * font-display: block avoids painting fallback monospace before these load (see ShatterAsciiLogo).
+ */
+@font-face {
+  font-family: 'Noto Sans Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('/fonts/noto-sans-mono-400.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('/fonts/ibm-plex-mono-400.ttf') format('truetype');
+}
 
 :root {
   /* Colors - CRT Phosphor Scheme */
@@ -52,6 +73,12 @@
 
   /* Typography */
   --font-mono: 'IBM Plex Mono', 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  /*
+   * Block/box-drawing Unicode (U+2588, U+2500+, letters): IBM Plex can substitute glyphs from
+   * other faces on Android → column drift. Prefer Noto Sans Mono for logo <pre> only.
+   */
+  --font-mono-ascii: 'Noto Sans Mono', 'IBM Plex Mono', 'Roboto Mono', 'Droid Sans Mono', ui-monospace,
+    monospace;
   --letter-spacing: 0.05em;
 }
 
@@ -146,7 +173,8 @@ body {
 
 /*
  * UTF-8 box-drawing / “SHATTER” block logo: body uses --letter-spacing; inherited tracking
- * breaks column alignment. Keep tabs neutral and disable ligatures for monospace art.
+ * breaks column alignment. Keep ligatures off; typography lives here so screensaver matches
+ * loading screen even when AsciiLoadingScreen.css is not loaded (e.g. tablet-only session).
  */
 .ascii-art,
 .tablet-screensaver-art,
@@ -156,6 +184,43 @@ body {
   font-feature-settings: "liga" 0, "calt" 0;
   word-break: normal;
   overflow-wrap: normal;
+}
+
+/* Font-based logo only (<pre>); touch/narrow routes use canvas (see ShatterAsciiLogo.tsx). */
+pre.ascii-art,
+pre.tablet-screensaver-art {
+  font-family: var(--font-mono-ascii);
+  font-weight: 400;
+  font-synthesis: none;
+  /*
+   * SHATTER logo lines are ~59 monospace cells wide; divisor includes margin for drawing chars.
+   * Tie font-size to viewport width so intrinsic <pre> width stays ≤ vw (fixes edge overlap on
+   * load and bounce math: screensaver uses offsetWidth vs innerWidth).
+   * Extra horizontal budget (−88px) covers padded loading shells + inset safe areas + wide glyphs.
+   */
+  /* Measured line width 59 cells; +1 for font / box-drawing width variance on mobile */
+  --shatter-logo-cols: 60;
+  font-size: min(
+    var(--font-sm),
+    max(
+      6px,
+      calc(
+        (
+            100vw - 88px - env(safe-area-inset-left, 0px) -
+              env(safe-area-inset-right, 0px)
+          ) / var(--shatter-logo-cols)
+      )
+    )
+  );
+  line-height: 1.2;
+  color: var(--color-text-primary);
+  white-space: pre;
+  margin: 0;
+  display: inline-block;
+  box-sizing: border-box;
+  text-rendering: geometricPrecision;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
 }
 
 /* Animations */
