@@ -129,6 +129,7 @@ button.tablet-machine-shell-title:hover {
 .tablet-machine-shell-body .tablet-pane-root {
   flex: 1 1 0%;
   min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-self: stretch;
@@ -141,14 +142,32 @@ button.tablet-machine-shell-title:hover {
 .tablet-machine-shell-body .tablet-pane-root > .panel-pane {
   flex: 1 1 0%;
   min-height: 0;
+  height: 100%;
 }
 
-/* Alarm-style terminal panes (overview, alarms, files, …): fill the pane region like PanelPane */
+/* Alarm-style terminal panes (overview, alarms, compressor routes, …): fill the pane region like PanelPane */
 .tablet-machine-shell-body .tablet-pane-root > .alarm-pane.terminal-box {
   flex: 1 1 0%;
   min-height: 0;
   min-width: 0;
   width: 100%;
+  height: 100%;
+}
+
+/* Panes that are not .alarm-pane / .panel-pane (status timeline, program, tools, runs, history, file manager) */
+.tablet-machine-shell-body .tablet-pane-root > .status-timeline,
+.tablet-machine-shell-body .tablet-pane-root > .current-program-pane.terminal-box,
+.tablet-machine-shell-body .tablet-pane-root > .tools-pane.terminal-box,
+.tablet-machine-shell-body .tablet-pane-root > .production-runs-pane.terminal-box,
+.tablet-machine-shell-body .tablet-pane-root > .status-history-pane.terminal-box,
+.tablet-machine-shell-body .tablet-pane-root > .terminal-box.file-manager-terminal-box {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* CNC overview pane: semantic <button> rows match machine-card row layout */
@@ -199,8 +218,9 @@ button.tablet-machine-shell-title:hover {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: clamp(4px, 1vmin, var(--spacing-sm));
-  align-content: start;
+  align-content: stretch;
   align-items: stretch;
+  grid-auto-rows: auto;
   flex: 1 1 0%;
   min-height: 0;
   min-width: 0;
@@ -210,25 +230,119 @@ button.tablet-machine-shell-title:hover {
   overscroll-behavior-y: contain;
 }
 
+/*
+ * CNC alarms route (two `.alarm-section` columns): same fill + wide fixed columns as overview/panel.
+ * Exclude overview + Kaeser compressor panes — those use flex column layouts from AlarmPane.css / pane components.
+ */
+.tablet-machine-shell-body
+  .tablet-pane-root
+  > .alarm-pane.terminal-box:not(.machine-overview-pane):not(.compressor-terminal-pane)
+  .terminal-box-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: clamp(4px, 1vmin, var(--spacing-sm));
+  align-content: stretch;
+  align-items: stretch;
+  grid-auto-rows: auto;
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/*
+ * Kaeser compressor panes use flex column bodies (AlarmPane.css). Reinforce tablet fill; overview
+ * stays on MachineOverviewPane.css via `.machine-overview-pane`.
+ */
+.tablet-machine-shell-body
+  .tablet-pane-root
+  > .compressor-terminal-pane.alarm-pane.terminal-box:not(.machine-overview-pane)
+  .terminal-box-content {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* CNC — program / tools / runs / history / files: scroll region consumes remaining shell height */
+.tablet-machine-shell-body .tablet-pane-root > .current-program-pane.terminal-box .terminal-box-content,
+.tablet-machine-shell-body .tablet-pane-root > .tools-pane.terminal-box .terminal-box-content,
+.tablet-machine-shell-body .tablet-pane-root > .production-runs-pane.terminal-box .terminal-box-content,
+.tablet-machine-shell-body .tablet-pane-root > .status-history-pane.terminal-box .terminal-box-content,
+.tablet-machine-shell-body .tablet-pane-root > .terminal-box.file-manager-terminal-box .terminal-box-content {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.tablet-machine-shell-body .tablet-pane-root > .status-timeline .status-timeline-content {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* First grid row grows with the pane; later rows stay content-sized (mirrors MachineOverviewPane). */
+@media (orientation: landscape) {
+  .tablet-machine-shell-body .tablet-pane-root > .panel-pane .terminal-box-content:has(.panel-section) {
+    grid-template-rows: minmax(min-content, 1fr);
+    grid-auto-rows: auto;
+    align-content: stretch;
+  }
+
+  .tablet-machine-shell-body
+    .tablet-pane-root
+    > .alarm-pane.terminal-box:not(.machine-overview-pane):not(.compressor-terminal-pane)
+    .terminal-box-content:has(.alarm-section) {
+    grid-template-rows: minmax(min-content, 1fr);
+    grid-auto-rows: auto;
+    align-content: stretch;
+  }
+
+  @media (min-width: 1100px) {
+    .tablet-machine-shell-body .tablet-pane-root > .panel-pane .terminal-box-content:has(.panel-section) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .tablet-machine-shell-body
+      .tablet-pane-root
+      > .alarm-pane.terminal-box:not(.machine-overview-pane):not(.compressor-terminal-pane)
+      .terminal-box-content:has(.alarm-section) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+}
+
 /* Narrow tile (split-screen, small window): single column even in landscape */
 @container tablet-pane (max-width: 700px) {
-  .tablet-machine-shell-body .panel-pane .terminal-box-content {
+  .tablet-machine-shell-body .panel-pane .terminal-box-content,
+  .tablet-machine-shell-body
+    .tablet-pane-root
+    > .alarm-pane.terminal-box:not(.machine-overview-pane):not(.compressor-terminal-pane)
+    .terminal-box-content {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
   }
 }
 
 /* Vertical aspect: always stack — auto-fit would still pack 2–3 columns at full tablet width */
 @media (orientation: portrait) {
-  .tablet-machine-shell-body .panel-pane .terminal-box-content {
+  .tablet-machine-shell-body .panel-pane .terminal-box-content,
+  .tablet-machine-shell-body
+    .tablet-pane-root
+    > .alarm-pane.terminal-box:not(.machine-overview-pane):not(.compressor-terminal-pane)
+    .terminal-box-content {
     grid-template-columns: 1fr;
-  }
-}
-
-/* CNC panel route only: vertically center DOORS/MODE/overrides columns when shorter than the terminal body.
-   Not applied to `.tablet-pane-root > *` globally — avoids shrinking/clipping status, charts, and history. */
-@media (orientation: landscape) {
-  .tablet-machine-shell-body .tablet-pane-root > .panel-pane .terminal-box-content {
-    align-content: safe center;
+    grid-template-rows: none;
   }
 }
 
