@@ -136,14 +136,42 @@ function invalidateCache(machineId: number, programName?: string): void {
   dataCache.delete(key);
 }
 
+/** CNC poll sometimes omits program_name briefly; avoid treating that as "no program". */
+function isValidProgramName(name?: string): name is string {
+  if (name == null || typeof name !== 'string') return false;
+  const t = name.trim();
+  return t !== '' && t !== '----' && t !== 'undefined' && t !== 'null';
+}
+
+/** Machine/controller says “no program” (not the same as a missing/blank poll field). */
+function isExplicitNoProgramName(name?: string): boolean {
+  if (name == null || typeof name !== 'string') return false;
+  const t = name.trim();
+  return t === '----' || t === 'undefined' || t === 'null';
+}
+
 export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
   machineId,
   programName,
   onExpand,
   machineLastSuccessfulPollAt,
 }) => {
+  const [heldProgramName, setHeldProgramName] = useState<{
+    machineId: number;
+    name: string | undefined;
+  }>(() => ({
+    machineId,
+    name: isValidProgramName(programName) ? programName.trim() : undefined,
+  }));
+
+  const effectiveProgramName = useMemo(() => {
+    if (isValidProgramName(programName)) return programName.trim();
+    if (heldProgramName.machineId !== machineId) return undefined;
+    return heldProgramName.name;
+  }, [machineId, programName, heldProgramName]);
+
   // Initialize state from cache if available (persists across unmounts)
-  const cachedData = getCachedData(machineId, programName);
+  const cachedData = getCachedData(machineId, effectiveProgramName);
   const [deployment, setDeployment] = useState<Deployment | null>(cachedData?.deployment || null);
   const [program, setProgram] = useState<Program | null>(cachedData?.program || null);
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(cachedData?.fileInfo || null);
@@ -166,10 +194,29 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
   const hasDataRef = useRef(false);
   const lastFetchedProgramNameRef = useRef<string | undefined>(undefined); // Track which O-number we've already fetched
 
+  /** Keep last known O-number across transient missing/blank polls; clear only on explicit “no program” or machine change. */
+  useEffect(() => {
+    setHeldProgramName((prev) => {
+      if (prev.machineId !== machineId) {
+        return {
+          machineId,
+          name: isValidProgramName(programName) ? programName.trim() : undefined,
+        };
+      }
+      if (isValidProgramName(programName)) {
+        return { machineId, name: programName.trim() };
+      }
+      if (isExplicitNoProgramName(programName)) {
+        return { machineId, name: undefined };
+      }
+      return prev;
+    });
+  }, [machineId, programName]);
+
   useEffect(() => {
     // Check module-level cache first (persists across unmounts)
     // Skip cache if refreshTrigger was incremented (manual refresh)
-    const cachedData = refreshTrigger > 0 ? null : getCachedData(machineId, programName);
+    const cachedData = refreshTrigger > 0 ? null : getCachedData(machineId, effectiveProgramName);
     if (cachedData) {
       // We have cached data - restore it to state if not already there
       if (!deployment && !fileInfo) {
@@ -180,10 +227,10 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
       setLoading(false);
       setIsRefreshing(false);
       previousMachineIdRef.current = machineId;
-      previousProgramNameRef.current = programName;
+      previousProgramNameRef.current = effectiveProgramName;
       hasDataRef.current = true;
-      lastFetchedProgramNameRef.current = programName;
-      const key = getCacheKey(machineId, programName);
+      lastFetchedProgramNameRef.current = effectiveProgramName;
+      const key = getCacheKey(machineId, effectiveProgramName);
       const entry = dataCache.get(key);
       if (entry) {
         setLastFetchSuccessAt(new Date(entry.timestamp).toISOString());
@@ -205,7 +252,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
     
     const fetchCurrentDeployment = async () => {
       const recordFetchSuccess = () => setLastFetchSuccessAt(new Date().toISOString());
-      const isNewProgramName = lastFetchedProgramNameRef.current !== programName;
+      const isNewProgramName = lastFetchedProgramNameRef.current !== effectiveProgramName;
       
       // Set loading/refreshing indicators
       if (isInitialLoadRef.current && !hasDataRef.current) {
@@ -216,16 +263,16 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
       
       // Update refs
       previousMachineIdRef.current = machineId;
-      previousProgramNameRef.current = programName;
+      previousProgramNameRef.current = effectiveProgramName;
       
       try {
         // Fetch - if programName is available, use it; otherwise fall back to most recent
         // If we have program_name from machine status, fetch deployment by O-number
         // This ensures we show validation info for the ACTIVE program, not just the most recent deployment
-        if (programName && programName !== '----' && programName !== 'undefined' && programName !== 'null' && programName.trim() !== '') {
+        if (effectiveProgramName) {
           try {
             const response = await fetch(
-              `${API_BASE_URL}/api/programs/machines/${machineId}/deployments/by-onumber/${encodeURIComponent(programName)}?include_program=true`
+              `${API_BASE_URL}/api/programs/machines/${machineId}/deployments/by-onumber/${encodeURIComponent(effectiveProgramName)}?include_program=true`
             );
             if (response.ok) {
               const data = await response.json();
@@ -235,9 +282,9 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                 setProgram(programData);
                 setFileInfo(null); // Clear fileInfo when we have deployment data
                 // Save to cache
-                setCachedData(machineId, programName, data.deployment, programData, null);
+                setCachedData(machineId, effectiveProgramName, data.deployment, programData, null);
                 hasDataRef.current = true;
-                lastFetchedProgramNameRef.current = programName; // Track that we've fetched this O-number
+                lastFetchedProgramNameRef.current = effectiveProgramName; // Track that we've fetched this O-number
                 if (isInitialLoadRef.current) {
                   isInitialLoadRef.current = false;
                   setLoading(false);
@@ -258,47 +305,56 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
               }
               
               // Try to fetch file info from machine (file size from file listing)
-              if (programName) {
+              if (effectiveProgramName) {
                 try {
                   // Construct filename (e.g., "O2045" -> "O2045.NC")
-                  const filename = programName.startsWith('O') ? `${programName}.NC` : `O${programName}.NC`;
-                  
+                  const filename = effectiveProgramName.startsWith('O')
+                    ? `${effectiveProgramName}.NC`
+                    : `O${effectiveProgramName}.NC`;
+
                   // List programs to find file size
                   const listResponse = await fetch(
                     `${API_BASE_URL}/api/machines/${machineId}/programs?path=/`
                   );
                   if (listResponse.ok) {
                     const listData = await listResponse.json();
-                    const file = listData.programs?.find((p: any) => 
-                      p.name === filename || p.name === programName || p.name === `${programName}.NC`
+                    const file = listData.programs?.find(
+                      (p: any) =>
+                        p.name === filename ||
+                        p.name === effectiveProgramName ||
+                        p.name === `${effectiveProgramName}.NC`
                     );
-                    const fileInfoData = file ? {
-                      name: file.name || filename,
-                      size: file.size,
-                      modified: file.modified,
-                    } : { name: filename };
-                    
+                    const fileInfoData = file
+                      ? {
+                          name: file.name || filename,
+                          size: file.size,
+                          modified: file.modified,
+                        }
+                      : { name: filename };
+
                     setFileInfo(fileInfoData);
                     // Save to cache
-                    setCachedData(machineId, programName, null, null, fileInfoData);
+                    setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
                   } else {
                     // If listing fails, at least we have the programName
                     const fileInfoData = { name: filename };
                     setFileInfo(fileInfoData);
                     // Save to cache
-                    setCachedData(machineId, programName, null, null, fileInfoData);
+                    setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
                   }
                 } catch (err) {
                   // Silently handle errors
                   console.error('Error fetching file info:', err);
-                  const filename = programName.startsWith('O') ? `${programName}.NC` : `O${programName}.NC`;
+                  const filename = effectiveProgramName.startsWith('O')
+                    ? `${effectiveProgramName}.NC`
+                    : `O${effectiveProgramName}.NC`;
                   const fileInfoData = { name: filename };
                   setFileInfo(fileInfoData);
                   // Save to cache even on error (at least we have the filename)
-                  setCachedData(machineId, programName, null, null, fileInfoData);
+                  setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
                 }
                 hasDataRef.current = true;
-                lastFetchedProgramNameRef.current = programName; // Track that we've fetched this O-number
+                lastFetchedProgramNameRef.current = effectiveProgramName; // Track that we've fetched this O-number
               }
               
               if (isInitialLoadRef.current) {
@@ -345,7 +401,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
             setProgram(programData);
             setFileInfo(null); // Clear fileInfo when we have deployment data
             // Save to cache
-            setCachedData(machineId, programName, deploymentData, programData, null);
+            setCachedData(machineId, effectiveProgramName, deploymentData, programData, null);
             hasDataRef.current = true;
             // Note: We don't set lastFetchedProgramNameRef here because this is a fallback
             // and we don't have a specific programName to track
@@ -361,48 +417,57 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
             setDeployment(null);
             setProgram(null);
             
-            if (programName && programName !== '----' && programName !== 'undefined' && programName !== 'null' && programName.trim() !== '') {
+            if (effectiveProgramName) {
               // Try to fetch file info from machine
               try {
-                const filename = programName.startsWith('O') ? `${programName}.NC` : `O${programName}.NC`;
+                const filename = effectiveProgramName.startsWith('O')
+                  ? `${effectiveProgramName}.NC`
+                  : `O${effectiveProgramName}.NC`;
                 const listResponse = await fetch(
                   `${API_BASE_URL}/api/machines/${machineId}/programs?path=/`
                 );
                 if (listResponse.ok) {
                   const listData = await listResponse.json();
-                  const file = listData.programs?.find((p: any) => 
-                    p.name === filename || p.name === programName || p.name === `${programName}.NC`
+                  const file = listData.programs?.find(
+                    (p: any) =>
+                      p.name === filename ||
+                      p.name === effectiveProgramName ||
+                      p.name === `${effectiveProgramName}.NC`
                   );
-                  const fileInfoData = file ? {
-                    name: file.name || filename,
-                    size: file.size,
-                    modified: file.modified,
-                  } : { name: filename };
-                  
+                  const fileInfoData = file
+                    ? {
+                        name: file.name || filename,
+                        size: file.size,
+                        modified: file.modified,
+                      }
+                    : { name: filename };
+
                   setFileInfo(fileInfoData);
                   // Save to cache
-                  setCachedData(machineId, programName, null, null, fileInfoData);
-                  lastFetchedProgramNameRef.current = programName; // Track that we've fetched this O-number
+                  setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
+                  lastFetchedProgramNameRef.current = effectiveProgramName; // Track that we've fetched this O-number
                 } else {
                   const fileInfoData = { name: filename };
                   setFileInfo(fileInfoData);
                   // Save to cache
-                  setCachedData(machineId, programName, null, null, fileInfoData);
+                  setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
                 }
                 hasDataRef.current = true;
                 if (!lastFetchedProgramNameRef.current) {
-                  lastFetchedProgramNameRef.current = programName; // Track that we've fetched this O-number
+                  lastFetchedProgramNameRef.current = effectiveProgramName; // Track that we've fetched this O-number
                 }
               } catch (err) {
                 console.error('Error fetching file info in fallback:', err);
-                const filename = programName.startsWith('O') ? `${programName}.NC` : `O${programName}.NC`;
+                const filename = effectiveProgramName.startsWith('O')
+                  ? `${effectiveProgramName}.NC`
+                  : `O${effectiveProgramName}.NC`;
                 const fileInfoData = { name: filename };
                 setFileInfo(fileInfoData);
                 // Save to cache even on error
-                setCachedData(machineId, programName, null, null, fileInfoData);
+                setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
                 hasDataRef.current = true;
                 if (!lastFetchedProgramNameRef.current) {
-                  lastFetchedProgramNameRef.current = programName; // Track that we've fetched this O-number
+                  lastFetchedProgramNameRef.current = effectiveProgramName; // Track that we've fetched this O-number
                 }
               }
             }
@@ -418,14 +483,16 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
           // API call failed - if we have programName, at least show that
           setDeployment(null);
           setProgram(null);
-          if (programName && programName !== '----' && programName !== 'undefined' && programName !== 'null' && programName.trim() !== '') {
-            const filename = programName.startsWith('O') ? `${programName}.NC` : `O${programName}.NC`;
+          if (effectiveProgramName) {
+            const filename = effectiveProgramName.startsWith('O')
+              ? `${effectiveProgramName}.NC`
+              : `O${effectiveProgramName}.NC`;
             const fileInfoData = { name: filename };
             setFileInfo(fileInfoData);
             // Save to cache
-            setCachedData(machineId, programName, null, null, fileInfoData);
+            setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
             hasDataRef.current = true;
-            lastFetchedProgramNameRef.current = programName; // Track that we've fetched this O-number
+            lastFetchedProgramNameRef.current = effectiveProgramName; // Track that we've fetched this O-number
           }
           if (isInitialLoadRef.current) {
             isInitialLoadRef.current = false;
@@ -454,7 +521,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
     };
 
       fetchCurrentDeployment();
-    }, [machineId, programName, refreshTrigger]);
+    }, [machineId, effectiveProgramName, refreshTrigger]);
 
   const formatRuntime = (seconds?: number): string => {
     if (!seconds || seconds === 0) return 'N/A';
@@ -476,7 +543,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
       setRefreshing(true);
       setIsRefreshing(true);
       // Invalidate cache to force fresh fetch
-      invalidateCache(machineId, programName);
+      invalidateCache(machineId, effectiveProgramName);
       
       // Clear state to ensure we show fresh data
       setDeployment(null);
@@ -491,7 +558,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
     } catch (error) {
       console.error('Error refreshing deployment data:', error);
       // On error, still invalidate cache and force refetch
-      invalidateCache(machineId, programName);
+      invalidateCache(machineId, effectiveProgramName);
       setRefreshTrigger(prev => prev + 1);
     }
     // Don't set refreshing to false here - let the fetch complete in useEffect
@@ -939,14 +1006,14 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
       <div className="terminal-box-content">
         {loading && !isRefreshing && !deployment && !fileInfo ? (
           <div className="program-loading">LOADING...</div>
-        ) : !deployment && !programName ? (
+        ) : !deployment && !effectiveProgramName ? (
           <div className="program-empty">NO PROGRAM DEPLOYED</div>
-        ) : !deployment && programName ? (
+        ) : !deployment && effectiveProgramName ? (
           // Show program info even when there's no deployment data
           <div className="program-info">
             <div className="program-row">
               <span className="program-label">O-NUMBER:</span>
-              <span className="program-value text-info">{programName}</span>
+              <span className="program-value text-info">{effectiveProgramName}</span>
             </div>
             {fileInfo && (
               <>

@@ -238,8 +238,10 @@
   line-height: 1.4;
 }
 
-/* Kaeser compressor panes: full terminal-box like AlarmPane (ASCII frame + surface) */
-.compressor-terminal-pane.alarm-pane.terminal-box .terminal-box-content {
+/* Kaeser compressor panes: full terminal-box like AlarmPane (ASCII frame + surface).
+   Compressor *overview* uses MachineOverviewPane.css for scroll + grid — exclude it here so that
+   stylesheet wins instead of this lower-specificity flex rule being merged oddly. */
+.compressor-terminal-pane.alarm-pane.terminal-box:not(.compressor-overview-pane) .terminal-box-content {
   display: flex;
   flex-direction: column;
   align-content: stretch;

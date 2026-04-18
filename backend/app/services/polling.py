@@ -21,6 +21,7 @@ from app.models.event import (
 from app.clients.http_client import CNCHttpClient
 from app.core.config import settings
 from app.db.base import SessionLocal
+from app.utils.montr_program_name import meaningful_montr_operation_program_no
 
 logger = logging.getLogger(__name__)
 
@@ -519,7 +520,6 @@ class MachinePoller:
                 "ip_address": self.machine.ip_address,
                 "timestamp": datetime.now().isoformat(),
                 "units": self.machine.units,
-                "program_name": program_info.get("operation_program_no", "----"),
                 "cycle_time": format_time(time_info.get("total_operation_time", "000000000")),
                 "cutting_time": format_time(time_info.get("operation_time", "000000000")),
                 "non_cutting_time": "000000:00.0",  # Not in MONTR
@@ -537,7 +537,11 @@ class MachinePoller:
                     for i, c in enumerate(counters)
                 ],
             }
-            
+
+            _pn = meaningful_montr_operation_program_no(program_info)
+            if _pn:
+                status_data["program_name"] = _pn
+
             # Get alarms from Telnet (Phase 5: Migrate to Telnet)
             try:
                 step_start = time.time()
@@ -635,8 +639,8 @@ class MachinePoller:
                 if "tool_response_time_ms" in ws_status:
                     status_data["tool_response_time_ms"] = ws_status["tool_response_time_ms"]
 
-            # Program name is already set from MONTR data (operation_program_no)
-            # No need to fetch from MEM separately - MONTR is more reliable
+            # program_name set above when MONTR returns a non-placeholder operation_program_no;
+            # otherwise omitted so WebSocket merge keeps last known good name.
 
             # Calculate response time
             total_time = time.time() - poll_start_time
@@ -656,10 +660,6 @@ class MachinePoller:
                 "response_time_ms": response_time_ms,
                 "part_display_mode": getattr(self.machine, "part_display_mode", "parts"),
             })
-            
-            # Ensure program_name is explicitly included (even if None)
-            if "program_name" not in status_data:
-                status_data["program_name"] = None
 
             was_offline = not self.is_online or self.logged_offline_status
             self.consecutive_failures = 0
