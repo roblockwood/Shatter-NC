@@ -650,6 +650,10 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
             </div>
           )}
           {editSuccess && <div className="form-success text-success">Compressor updated.</div>}
+          <div className="form-row asset-id-field">
+            <label>COMPRESSOR ID:</label>
+            <span className="asset-id-value">{compressor.compressor_id}</span>
+          </div>
           <div className="network-config-section">
             <div className="network-config-header">SIDECAR</div>
             <div className="form-row">
