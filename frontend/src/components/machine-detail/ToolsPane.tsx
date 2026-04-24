@@ -7,8 +7,6 @@ import './ToolsPane.css';
 import { API_BASE_URL } from '../../config/api';
 import { ColorSelect } from './ColorSelect';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
-import '../ui/TerminalBox.css';
-import { TERMINAL_RULE_FILL } from '../../utils/terminalAsciiRule';
 
 // Define type locally to avoid Vite import issues
 type ToolModificationOperationType = 
@@ -131,6 +129,32 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   }, [toolSource, toolsTimestamp, toolTableTimestamp, cacheTimestamps.atc, cacheTimestamps.table]);
 
   const toolExpectedIntervalMs = Math.max((toolPollIntervalSeconds ?? 30) * 1000, 5000);
+
+  const toolsAgeMs = useMemo(() => {
+    if (!toolsDataLastUpdatedAt) return null;
+    const parsed = typeof toolsDataLastUpdatedAt === 'number'
+      ? toolsDataLastUpdatedAt
+      : Date.parse(String(toolsDataLastUpdatedAt));
+    if (!Number.isFinite(parsed)) return null;
+    return Math.max(0, Date.now() - parsed);
+  }, [toolsDataLastUpdatedAt]);
+
+  const visibleToolsCount = toolsCache[toolSource]?.length ?? 0;
+
+  const isToolsSnapshotStale = useMemo(() => {
+    if (visibleToolsCount === 0) return false;
+    if (toolsAgeMs === null) return true;
+    return toolsAgeMs > toolExpectedIntervalMs * 2;
+  }, [visibleToolsCount, toolsAgeMs, toolExpectedIntervalMs]);
+
+  const formatToolsAge = useMemo(() => {
+    if (toolsAgeMs === null) return 'unknown age';
+    const secs = Math.floor(toolsAgeMs / 1000);
+    if (secs < 60) return `${secs}s old`;
+    const mins = Math.floor(secs / 60);
+    const rem = secs % 60;
+    return `${mins}m ${rem}s old`;
+  }, [toolsAgeMs]);
 
   const machineStateReason = useMemo(() => {
     if (!machineStatus && memMode === undefined) return undefined;
@@ -799,6 +823,8 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const toolsListTitleMid =
     toolSource === 'atc' ? `ATC (${tools.length})` : `TABLE (${tools.length})`;
   /** Long run clipped by flex so header rule length matches pane width for any label. */
+  const terminalRuleFill = '─'.repeat(320);
+
   const isHoverPreview = variant === 'hover';
 
   return (
@@ -807,15 +833,30 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       onClick={(e) => e.stopPropagation()}
     >
       <div 
-        className="terminal-box-header pane-terminal-header"
+        className="terminal-box-header"
       >
         <div className="terminal-box-top">
           <div className="terminal-box-title-row tools-pane-title-row">
             <span className="tools-pane-title-label">┌─ {toolsListTitleMid}</span>
             <span className="tools-pane-title-dash-fill" aria-hidden>
-              {TERMINAL_RULE_FILL}
+              {terminalRuleFill}
             </span>
             <div className="pane-header-right-actions tools-pane-header-actions">
+              {!isHoverPreview && (
+                <PollingStatusLight
+                  lastUpdatedAt={toolsDataLastUpdatedAt}
+                  expectedIntervalMs={toolExpectedIntervalMs}
+                  ariaLabel={`Tools (${toolSource.toUpperCase()}) data freshness`}
+                />
+              )}
+              {!isHoverPreview && isToolsSnapshotStale && (
+                <span
+                  className="tools-stale-chip"
+                  title={`Visible ${toolSource.toUpperCase()} tools are stale (${formatToolsAge}). Validation uses backend live data.`}
+                >
+                  STALE SNAPSHOT
+                </span>
+              )}
               {!isHoverPreview && isBetaMode && (
                 <button
                   type="button"
@@ -889,15 +930,8 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                   </button>
                 </div>
               )}
-              {!isHoverPreview && (
-                <PollingStatusLight
-                  lastUpdatedAt={toolsDataLastUpdatedAt}
-                  expectedIntervalMs={toolExpectedIntervalMs}
-                  ariaLabel={`Tools (${toolSource.toUpperCase()}) data freshness`}
-                />
-              )}
+              <span>┐</span>
             </div>
-            <span className="pane-terminal-title-corner">┐</span>
           </div>
         </div>
       </div>
@@ -910,6 +944,13 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
             {currentError && (
               <div className="tools-error-message" onClick={(e) => e.stopPropagation()}>
                 <span className="tools-error-text">⚠ {currentError}</span>
+              </div>
+            )}
+            {!isHoverPreview && isToolsSnapshotStale && !currentError && (
+              <div className="tools-stale-banner" onClick={(e) => e.stopPropagation()}>
+                <span className="tools-stale-text">
+                  STALE {toolSource.toUpperCase()} DATA ({formatToolsAge}) - DISPLAY MAY SHOW LAST KNOWN TOOLS
+                </span>
               </div>
             )}
             {/* Show subtle loading indicator while fetching, but keep previous data visible */}
@@ -1060,10 +1101,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           </div>
         )}
       </div>
-      <div className="terminal-box-footer pane-terminal-footer tools-pane-footer">
+      <div className="terminal-box-footer tools-pane-footer">
         <span className="tools-pane-footer-corner">└</span>
         <span className="tools-pane-footer-dash-fill" aria-hidden>
-          {TERMINAL_RULE_FILL}
+          {terminalRuleFill}
         </span>
         <span className="tools-pane-footer-corner">┘</span>
       </div>
