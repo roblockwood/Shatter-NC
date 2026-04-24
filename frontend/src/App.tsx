@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react
 import { Dashboard } from './pages/Dashboard';
 import { FileBrowser } from './pages/FileBrowser';
 import { ToolManagement } from './pages/ToolManagement';
+import { SyncConfig } from './pages/SyncConfig';
+import { NotificationSettings } from './pages/NotificationSettings';
 import { useBetaMode, useBetaModeActivator } from './hooks/useBetaMode';
 import { BetaRoute } from './components/BetaRoute';
 import { WebSocketProvider } from './contexts/WebSocketContext';
@@ -49,6 +51,18 @@ function Navigation() {
           >
             [ FILES ]
           </Link>
+          <Link
+            to="/sync"
+            className={`nav-link ${isActive('/sync') ? 'active' : ''}`}
+          >
+            [ SYNC ]
+          </Link>
+          <Link
+            to="/notifications"
+            className={`nav-link ${isActive('/notifications') ? 'active' : ''}`}
+          >
+            [ NOTIFY ]
+          </Link>
           {isBetaMode && (
             <Link
               to="/tools"
@@ -83,6 +97,8 @@ function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/files" element={<FileBrowser />} />
+                <Route path="/sync" element={<SyncConfig />} />
+                <Route path="/notifications" element={<NotificationSettings />} />
                 <Route
                   path="/tools"
                   element={
