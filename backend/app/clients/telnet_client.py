@@ -8,6 +8,7 @@ Brother CNC machines support Protocol Type 2 over TCP/IP port 10000, which provi
 """
 import asyncio
 import socket
+import os
 from typing import Optional, Dict, Any, Tuple
 from datetime import datetime
 import logging
@@ -202,6 +203,31 @@ class CNCTelnetClient:
         self._connected = False
         # Control version is cached in Redis (shared across all connections to same machine)
 
+        # Optional Telnet proxy override (useful on macOS Docker Desktop where containers
+        # can reach CNC HTTP/FTP but not Telnet port 10000 directly).
+        # If SHATTER_TELNET_PROXY_HOST is set, all Telnet traffic is routed to that host.
+        proxy_host = (os.getenv("SHATTER_TELNET_PROXY_HOST") or "").strip()
+        proxy_port_raw = (os.getenv("SHATTER_TELNET_PROXY_PORT") or "").strip()
+        if proxy_host:
+            try:
+                proxy_port = int(proxy_port_raw) if proxy_port_raw else port
+            except ValueError:
+                logger.warning(
+                    f"Invalid SHATTER_TELNET_PROXY_PORT='{proxy_port_raw}', falling back to {port}"
+                )
+                proxy_port = port
+
+            self.target_ip_address = ip_address
+            self.target_port = port
+            self.ip_address = proxy_host
+            self.port = proxy_port
+            logger.info(
+                f"Telnet proxy enabled: {self.target_ip_address}:{self.target_port} via {self.ip_address}:{self.port}"
+            )
+        else:
+            self.target_ip_address = ip_address
+            self.target_port = port
+
     @staticmethod
     def get_status_description(status_code: str) -> str:
         """Get human-readable description of a completion code."""
@@ -247,57 +273,30 @@ class CNCTelnetClient:
 
     def _build_command(self, command: str, arguments: str = "", verbose: bool = False) -> bytes:
         """
-        Build a Brother protocol command frame per schema 5.5.9.1.
-        
-        Header (19 bytes): % i1 c1-c3 f1-f4 s1-s8 r1-r2
-        - %: Start symbol (1 byte)
-        - i1: Identifier 'C' for command (1 byte)
-        - c1-c3: Command type (3 bytes) - first 3 chars of command
-        - f1-f4: Function (4 bytes) - next 4 chars of command (padded)
-        - s1-s8: Message/arguments (8 bytes) - padded
-        - r1-r2: Completion code "00" for command (2 bytes)
-        
-        Footer: LF + checksum (2 digits) + %
-        Checksum: calculated from % in header to character before LF in footer
+        Build a Brother protocol command frame.
+
+        Working format (validated against brother_cnc_export implementation):
+        %C[Command(7)][Arguments(8)]  \r\n[Checksum]%\r\n
         """
-        # Pad command to 7 chars, then split into c1-c3 (3) and f1-f4 (4)
-        # f1-f4 should be left-justified (e.g., "LOD " -> "LOD " with space, "MAGC" -> "MAGC")
-        # Special handling for CHGMAG: don't pad with space, use null or different padding
-        if command == "CHGMAG":
-            cmd_padded = command + "\x00\x00"  # Pad with null bytes instead of space
-        else:
-            cmd_padded = command.ljust(7)[:7]
-        cmd_type = cmd_padded[:3].ljust(3)[:3]  # c1-c3 (3 bytes), left-justified
-        function = cmd_padded[3:7].ljust(4)[:4]  # f1-f4 (4 bytes), left-justified
-        
-        # Pad arguments to 8 bytes (s1-s8)
+        # Pad command and arguments to fixed protocol widths.
+        cmd_padded = command.ljust(7)[:7]
         args_padded = arguments.ljust(8)[:8]
-        
-        # Build header: % + C + c1-c3 + f1-f4 + s1-s8 + r1-r2
-        # r1-r2 is completion code "00" for commands (not the checksum)
-        header = f"%C{cmd_type}{function}{args_padded}00"
-        
-        # Calculate checksum on header data (from % to before LF in footer)
-        # Per schema: "from % in the header to the character before LF in the footer"
-        # This means: calculate on the entire header (including the %)
-        checksum = self.calculate_checksum(header)  # Already returns formatted string "00"-"15"
-        
-        # Build footer: LF + checksum + %
-        # In ASCII, LF is CR+LF (\r\n), so footer is "\r\n{checksum}%"
-        footer = f"\r\n{checksum}%"
-        
-        # Complete frame: header + footer
-        frame = f"{header}{footer}"
+
+        # Command payload excludes the initial '%' and includes CRLF before checksum.
+        cmd_string = f"C{cmd_padded}{args_padded}  \r\n"
+        checksum = self.calculate_checksum(cmd_string)
+
+        # Complete frame: % + payload + checksum + % + CRLF
+        frame = f"%{cmd_string}{checksum}%\r\n"
         frame_bytes = frame.encode('ascii')
 
         if verbose:
             logger.error(f"=== BUILDING COMMAND ===")
             logger.error(f"Command: {command}, Arguments: '{arguments}'")
             logger.error(f"Command padded: '{cmd_padded}' (7 bytes)")
-            logger.error(f"Header breakdown: % + C + '{cmd_type}' (c1-c3) + '{function}' (f1-f4) + '{args_padded}' (s1-s8) + '00' (r1-r2, completion code)")
-            logger.error(f"Checksum: '{checksum}' (calculated from header, goes in footer)")
-            logger.error(f"Checksum calculated from: C + '{cmd_type}' + '{function}' + '{args_padded}'")
-            logger.error(f"Header: '{header}' (length: {len(header)} bytes, should be 19)")
+            logger.error(f"Arguments padded: '{args_padded}' (8 bytes)")
+            logger.error(f"Command string for checksum: {repr(cmd_string)}")
+            logger.error(f"Checksum: '{checksum}'")
             logger.error(f"Complete frame (ASCII): {repr(frame)}")
             logger.error(f"Complete frame (hex): {frame_bytes.hex(' ')}")
             logger.error(f"Complete frame (bytes length): {len(frame_bytes)}")
@@ -421,8 +420,9 @@ class CNCTelnetClient:
                     if not chunk:
                         break
                     response += chunk
-                    # Check if we have a complete frame (ends with %\n)
-                    if response.endswith(b'%\n'):
+                    # Check if we have a complete frame.
+                    # Brother responses typically end with checksum + '%' and may or may not include a trailing newline.
+                    if response.endswith(b'%') or response.endswith(b'%\n') or response.endswith(b'%\r\n'):
                         break
                 except asyncio.TimeoutError:
                     # Timeout on individual read, but we might have partial data
@@ -544,50 +544,64 @@ class CNCTelnetClient:
         Returns:
             Data content as string, or None on failure
         """
-        for attempt in range(max_retries + 1):
-            try:
-                # Ensure connection (will reconnect if needed)
-                if not self._connected:
-                    connected = await self.connect()
-                    if not connected:
-                        if attempt < max_retries:
-                            wait_time = 0.5 * (attempt + 1)  # 0.5s, 1s, 1.5s
-                            logger.warning(f"Telnet connection failed for '{data_name}', retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
+        # Serialize all LOD operations per machine across all client instances.
+        # Brother controls can reject or stall overlapping protocol sessions on the same port.
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+
+        async with machine_lock:
+            for attempt in range(max_retries + 1):
+                try:
+                    # Ensure connection (will reconnect if needed)
+                    if not self._connected:
+                        connected = await self.connect()
+                        if not connected:
+                            if attempt < max_retries:
+                                wait_time = 0.5 * (attempt + 1)  # 0.5s, 1s, 1.5s
+                                logger.warning(f"Telnet connection failed for '{data_name}', retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
+                                await asyncio.sleep(wait_time)
+                                continue
+                            return None
+
+                    # Increased timeout to 5 seconds for large data files (e.g., TOLNI1 tool table)
+                    # Large tool tables with many entries may take longer than 1 second to transmit
+                    success, status, data = await self._send_command("LOD", data_name, verbose=verbose, read_timeout=5.0)
+                    if success:
+                        return data
+                    else:
+                        # Check if it's a transient error that might benefit from retry.
+                        # status None means no valid response frame was received; reconnect and retry.
+                        # status "40" indicates communication conflict on another port/session.
+                        if status is None and attempt < max_retries:
+                            wait_time = 0.5 * (attempt + 1)
+                            logger.warning(f"Failed to load '{data_name}': no response status, reconnecting and retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
+                            self._connected = False
                             await asyncio.sleep(wait_time)
                             continue
-                        return None
-
-                success, status, data = await self._send_command("LOD", data_name, verbose=verbose)
-                if success:
-                    return data
-                else:
-                    # Check if it's a transient error that might benefit from retry
-                    # Status codes like "40" (conflict due to communication using other port) might be retryable
-                    if status == "40" and attempt < max_retries:
+                        if status == "40" and attempt < max_retries:
+                            wait_time = 0.5 * (attempt + 1)
+                            logger.warning(f"Failed to load '{data_name}': status {status} (communication conflict), retrying in {wait_time}s")
+                            await asyncio.sleep(wait_time)
+                            # Mark connection as bad to force reconnection on next attempt
+                            self._connected = False
+                            continue
+                        else:
+                            logger.warning(f"Failed to load data '{data_name}': status {status}")
+                            return None
+                except (ConnectionError, TimeoutError, asyncio.TimeoutError) as e:
+                    if attempt < max_retries:
                         wait_time = 0.5 * (attempt + 1)
-                        logger.warning(f"Failed to load '{data_name}': status {status} (communication conflict), retrying in {wait_time}s")
-                        await asyncio.sleep(wait_time)
+                        logger.warning(f"Connection error loading '{data_name}': {e}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
                         # Mark connection as bad to force reconnection on next attempt
                         self._connected = False
+                        await asyncio.sleep(wait_time)
                         continue
                     else:
-                        logger.warning(f"Failed to load data '{data_name}': status {status}")
+                        logger.error(f"Error loading data '{data_name}' after {max_retries + 1} attempts: {e}")
                         return None
-            except (ConnectionError, TimeoutError, asyncio.TimeoutError) as e:
-                if attempt < max_retries:
-                    wait_time = 0.5 * (attempt + 1)
-                    logger.warning(f"Connection error loading '{data_name}': {e}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
-                    # Mark connection as bad to force reconnection on next attempt
-                    self._connected = False
-                    await asyncio.sleep(wait_time)
-                    continue
-                else:
-                    logger.error(f"Error loading data '{data_name}' after {max_retries + 1} attempts: {e}")
+                except Exception as e:
+                    # Non-retryable errors (parsing, etc.) - fail immediately
+                    logger.error(f"Error loading data '{data_name}': {e}")
                     return None
-            except Exception as e:
-                # Non-retryable errors (parsing, etc.) - fail immediately
-                logger.error(f"Error loading data '{data_name}': {e}")
-                return None
         
         return None
 
