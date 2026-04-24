@@ -353,10 +353,21 @@ export const PanelPane: React.FC<PanelPaneProps> = ({
     return state === 1 ? '#00ff00' : '#333333'; // Green for ON
   };
 
+  const inferD00Control = () => {
+    if (panelData?.control_version === 'D00') return true;
+    return false;
+  };
+
+  const isEmergencyStopOn = (state?: number) => {
+    if (state === undefined) return false;
+    const isD00 = inferD00Control();
+    // C00: 0 = ON, 1 = OFF | D00: 0 = OFF, 1 = ON
+    return isD00 ? state === 1 : state === 0;
+  };
+
   const getEmergencyStopLEDColor = (state?: number) => {
     if (state === undefined) return '#666666';
-    // Emergency stop: 0 = ON (red), 1 = OFF (green)
-    return state === 0 ? '#ff0000' : '#00ff00';
+    return isEmergencyStopOn(state) ? '#ff0000' : '#00ff00';
   };
 
   return (
@@ -398,7 +409,7 @@ export const PanelPane: React.FC<PanelPaneProps> = ({
               <div className="panel-subsection-title">SYSTEM STATUS</div>
               <div className="led-group">
                 <LED 
-                  on={overrides.emergency_stop === 0} 
+                  on={isEmergencyStopOn(overrides.emergency_stop)} 
                   label="E-STOP" 
                   color={getEmergencyStopLEDColor(overrides.emergency_stop)}
                 />
