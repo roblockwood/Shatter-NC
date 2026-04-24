@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     DEFAULT_TOOL_POLL_INTERVAL: int = 30  # seconds (tool table/ATC polling, separate from fast status polling)
     HEARTBEAT_INTERVAL_MINUTES: int = 2  # minutes between status/heartbeat log events when status unchanged
 
+    # FTP folder sync
+    FTP_SYNC_ENABLED: bool = True
+    FTP_SYNC_LOCAL_WATCH_ENABLED: bool = False
+    FTP_SYNC_SCAN_INTERVAL_SECONDS: int = 5
+    FTP_SYNC_REMOTE_DIR_CREATE_RETRIES: int = 2
+    FTP_SYNC_REMOTE_DIR_CREATE_DELAY_SECONDS: float = 0.25
+    FTP_SYNC_LOCAL_BROWSE_ROOT: str = "/"
+
     # MQTT publish (optional) - publish full snapshots to Mosquitto.
     # Leave MQTT_PUBLISH_HOST unset/empty to disable publishing.
     MQTT_PUBLISH_HOST: Optional[str] = None
@@ -41,6 +49,19 @@ class Settings(BaseSettings):
     MQTT_PUBLISH_USERNAME: Optional[str] = None
     MQTT_PUBLISH_PASSWORD: Optional[str] = None
     MQTT_PUBLISH_TOPIC_PREFIX: str = "shatter"
+
+    # Notifications — SMTP global defaults (per-channel config JSONB overrides these)
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_START_TLS: bool = True   # True for port 587 (STARTTLS)
+    SMTP_USE_TLS: bool = False    # True for port 465 (implicit SSL)
+
+    # Notifications — Twilio SMS global defaults (per-channel config JSONB overrides these)
+    TWILIO_ACCOUNT_SID: Optional[str] = None
+    TWILIO_AUTH_TOKEN: Optional[str] = None
+    TWILIO_FROM_NUMBER: Optional[str] = None  # E.164 format, e.g. +15551234567
 
     # Security (optional)
     SECRET_KEY: Optional[str] = None
