@@ -35,9 +35,13 @@ class Machine(Base):
     # Tolerance override flags
     use_machine_tool_tolerances = Column(Boolean, default=False)  # Use machine tolerances vs G-code defaults
     use_machine_wcs_tolerances = Column(Boolean, default=False)    # Use machine tolerances vs G-code E parameter
+    validate_tool_diameter = Column(Boolean, default=True)          # Validate diameter in tool checks
+    validate_tool_length = Column(Boolean, default=True)            # Validate length in tool checks
 
     # Measurement units
     units = Column(String(2), default='in')  # 'in' for inches, 'mm' for millimeters
+    # Control platform version
+    control_version = Column(String(3), nullable=True)  # 'C00', 'D00', or NULL for auto-detect
 
     # UI layout configuration (JSON)
     layout_config = Column(JSON, nullable=True)  # Custom pane layout configuration
@@ -51,6 +55,7 @@ class Machine(Base):
 
     # Relationships
     program_deployments = relationship("ProgramDeployment", back_populates="machine", cascade="all, delete-orphan")
+    ftp_sync_configs = relationship("FtpSyncConfig", back_populates="machine", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Machine(id={self.id}, name='{self.name}', ip='{self.ip_address}')>"

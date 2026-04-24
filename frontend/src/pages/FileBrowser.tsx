@@ -158,6 +158,12 @@ export const FileBrowser: React.FC = () => {
   // Deployment tracking - set of filenames that have deployments
   const [filesWithDeployments, setFilesWithDeployments] = useState<Set<string>>(new Set());
 
+  // Keep URL params in primitive values so effects don't depend on mutable objects.
+  const deepLinkMachineParam = searchParams.get('machine');
+  const deepLinkFileParam = searchParams.get('file');
+  const deepLinkFilePathParam = searchParams.get('file_path');
+  const deepLinkPathParam = searchParams.get('path');
+
   // Fetch machines on mount and auto-select first one
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/machines`)
@@ -172,23 +178,38 @@ export const FileBrowser: React.FC = () => {
       .catch(err => console.error('Error fetching machines:', err));
   }, []);
 
-  // Handle URL parameters for navigation from upload success screen
+  // Handle URL parameters for navigation from Current Program and upload flows
   useEffect(() => {
-    const machineParam = searchParams.get('machine');
-    const fileParam = searchParams.get('file');
-
-    if (machineParam && fileParam && machines.length > 0) {
-      const machineId = parseInt(machineParam);
+    if (deepLinkMachineParam && (deepLinkFileParam || deepLinkFilePathParam) && machines.length > 0) {
+      const machineId = parseInt(deepLinkMachineParam);
+      const normalizePath = (raw: string): string => {
+        const normalized = `/${String(raw || '').replace(/\\/g, '/').split('/').filter(Boolean).join('/')}`;
+        return normalized === '/' ? '/' : normalized;
+      };
 
       // Set selected machine if different
       if (!isNaN(machineId) && selectedMachineId !== machineId) {
         setSelectedMachineId(machineId);
       }
 
-      // Store pending file selection - will be handled once programs load
-      setPendingFileSelection(fileParam);
+      // Prefer full file path links so we navigate to the containing directory.
+      if (deepLinkFilePathParam) {
+        const normalizedFilePath = normalizePath(deepLinkFilePathParam);
+        const parts = normalizedFilePath.split('/').filter(Boolean);
+        const fileNameFromPath = parts.length > 0 ? parts[parts.length - 1] : null;
+
+        if (fileNameFromPath) {
+          setPendingFileSelection(fileNameFromPath);
+        }
+        return;
+      }
+
+      // Fallback for filename-only links
+      if (deepLinkFileParam) {
+        setPendingFileSelection(deepLinkFileParam);
+      }
     }
-  }, [searchParams, machines.length, selectedMachineId]);
+  }, [deepLinkMachineParam, deepLinkFileParam, deepLinkFilePathParam, machines.length, selectedMachineId]);
 
   // Handle pending file selection once programs are loaded
   useEffect(() => {
@@ -224,6 +245,14 @@ export const FileBrowser: React.FC = () => {
   useEffect(() => {
     if (selectedMachineId === null) return;
 
+    const parsedLinkedMachine = deepLinkMachineParam ? parseInt(deepLinkMachineParam) : NaN;
+    const isLinkedMachine = !isNaN(parsedLinkedMachine) && parsedLinkedMachine === selectedMachineId;
+    const normalizePath = (raw: string): string => {
+      const normalized = `/${String(raw || '').replace(/\\/g, '/').split('/').filter(Boolean).join('/')}`;
+      return normalized === '/' ? '/' : normalized;
+    };
+    const linkedPath = deepLinkPathParam ? normalizePath(deepLinkPathParam) : null;
+
     // Immediately clear path and set loading before any async operations
     setPathLoading(true);
     setCurrentPath(null);
@@ -235,7 +264,8 @@ export const FileBrowser: React.FC = () => {
     })
       .then(res => res.json())
       .then(machineData => {
-        const newPath = machineData.path || '/';
+        const machineDefaultPath = machineData.path || '/';
+        const newPath = (isLinkedMachine && linkedPath) ? linkedPath : machineDefaultPath;
         setCurrentPath(newPath);
         setPathLoading(false);
       })
@@ -248,7 +278,7 @@ export const FileBrowser: React.FC = () => {
       });
 
     return () => controller.abort();
-  }, [selectedMachineId]);
+  }, [selectedMachineId, deepLinkMachineParam, deepLinkPathParam]);
 
   // Fetch programs when machine or path changes
   useEffect(() => {
@@ -344,9 +374,16 @@ export const FileBrowser: React.FC = () => {
         return res.json();
       })
       .then((deployments: any[]) => {
-        // Extract deployed filenames (case-insensitive)
+        // Build two lookup sets for path-aware badge matching.
+        // deployed_path values are stored as full remote paths (e.g. "/FOLDER_A/O0003.nc")
+        // and let us correctly distinguish same-named files in different directories.
+        // deployed_filename values (basename only) serve as a fallback for older records
+        // that were registered before path-aware tracking was introduced.
         const deployedFilenames = new Set<string>();
         deployments.forEach((deployment: any) => {
+          if (deployment.deployed_path) {
+            deployedFilenames.add(deployment.deployed_path.toUpperCase());
+          }
           if (deployment.deployed_filename) {
             deployedFilenames.add(deployment.deployed_filename.toUpperCase());
           }
@@ -1034,17 +1071,24 @@ export const FileBrowser: React.FC = () => {
                 ├{'─'.repeat(80)}┤
               </div>
               <div className="table-body">
-                {displayPrograms.map((program, idx) => (
+                {displayPrograms.map((program, idx) => {
+                  // Check for deployment badge: prefer path-aware match, fall back to basename.
+                  const filePath = ((currentPath || '/').replace(/\/$/, '') + '/' + program.name).replace('//', '/');
+                  const hasDeployment = !program.is_directory && (
+                    filesWithDeployments.has(filePath.toUpperCase()) ||
+                    filesWithDeployments.has(program.name.toUpperCase())
+                  );
+                  return (
                   <div
                     key={idx}
                     ref={selectedProgram?.name === program.name ? selectedProgramRef : null}
-                    className={`table-row ${selectedProgram?.name === program.name ? 'selected' : ''} ${!program.is_directory && filesWithDeployments.has(program.name.toUpperCase()) ? 'has-deployment' : ''}`}
+                    className={`table-row ${selectedProgram?.name === program.name ? 'selected' : ''} ${hasDeployment ? 'has-deployment' : ''}`}
                     onClick={() => handleItemClick(program)}
                   >
                     <div className="col-name">
                       {program.is_directory ? '/ ' : (selectedProgram?.name === program.name ? '► ' : '  ')}
                       {program.name}
-                      {!program.is_directory && filesWithDeployments.has(program.name.toUpperCase()) && (
+                      {hasDeployment && (
                         <span className="deployment-indicator" title="Has deployment data">●</span>
                       )}
                     </div>
@@ -1085,7 +1129,8 @@ export const FileBrowser: React.FC = () => {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="table-footer">
                 └{'─'.repeat(80)}┘
