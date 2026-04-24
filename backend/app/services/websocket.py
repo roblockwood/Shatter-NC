@@ -3,6 +3,7 @@ import json
 import logging
 from typing import List, Dict, Any
 from fastapi import WebSocket
+from fastapi.encoders import jsonable_encoder
 from datetime import datetime
 from app.db.base import SessionLocal
 from app.models.machine import Machine
@@ -99,12 +100,12 @@ class WebSocketManager:
                     compressors_data.append(cinfo)
 
                 # Send all machines to new client
-                await websocket.send_json({
+                await websocket.send_json(jsonable_encoder({
                     "type": "initial_status",
                     "timestamp": datetime.utcnow().isoformat(),
                     "machines": machines_data,
                     "compressors": compressors_data,
-                })
+                }))
             finally:
                 db.close()
         except Exception as e:
@@ -147,6 +148,11 @@ class WebSocketManager:
                 status_data["tool_table"] = cached["tool_table"]
             if "current_tool" in cached and "current_tool" not in status_data:
                 status_data["current_tool"] = cached["current_tool"]
+            # Preserve ATC tool list from cache when fast-poll updates omit it
+            if "tools" in cached and "tools" not in status_data:
+                status_data["tools"] = cached["tools"]
+            if "tools_timestamp" in cached and "tools_timestamp" not in status_data:
+                status_data["tools_timestamp"] = cached["tools_timestamp"]
             
             # Preserve macro variables from cache if new status doesn't have it
             if "macros" in cached and "macros" not in status_data:
@@ -172,7 +178,7 @@ class WebSocketManager:
         disconnected = []
         for connection in self.active_connections:
             try:
-                await connection.send_json(message)
+                await connection.send_json(jsonable_encoder(message))
             except Exception as e:
                 logger.error(f"Error sending to WebSocket: {e}")
                 disconnected.append(connection)
@@ -198,7 +204,7 @@ class WebSocketManager:
         disconnected = []
         for connection in self.active_connections:
             try:
-                await connection.send_json(message)
+                await connection.send_json(jsonable_encoder(message))
             except Exception as e:
                 logger.error(f"Error sending compressor status to WebSocket: {e}")
                 disconnected.append(connection)
