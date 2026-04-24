@@ -1,14 +1,10 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
 import { FileBrowser } from './pages/FileBrowser';
-import { TabletCompressorShell } from './pages/tablet/TabletCompressorShell';
-import { TabletCompressorRedirectToDefaultPane } from './pages/tablet/TabletCompressorRedirectToDefaultPane';
-import { TabletEntry } from './pages/tablet/TabletEntry';
-import { TabletMachineShell } from './pages/tablet/TabletMachineShell';
-import { TabletRedirectToDefaultPane } from './pages/tablet/TabletRedirectToDefaultPane';
-import { TabletSetupPage } from './pages/tablet/TabletSetupPage';
 import { ToolManagement } from './pages/ToolManagement';
+import { SyncConfig } from './pages/SyncConfig';
+import { NotificationSettings } from './pages/NotificationSettings';
 import { useBetaMode, useBetaModeActivator } from './hooks/useBetaMode';
 import { BetaRoute } from './components/BetaRoute';
 import { WebSocketProvider } from './contexts/WebSocketContext';
@@ -55,6 +51,18 @@ function Navigation() {
           >
             [ FILES ]
           </Link>
+          <Link
+            to="/sync"
+            className={`nav-link ${isActive('/sync') ? 'active' : ''}`}
+          >
+            [ SYNC ]
+          </Link>
+          <Link
+            to="/notifications"
+            className={`nav-link ${isActive('/notifications') ? 'active' : ''}`}
+          >
+            [ NOTIFY ]
+          </Link>
           {isBetaMode && (
             <Link
               to="/tools"
@@ -73,57 +81,35 @@ function Navigation() {
   );
 }
 
-function isTabletKioskPath(pathname: string): boolean {
-  return pathname === '/tablet' || pathname.startsWith('/tablet/');
-}
-
-function AppLayout() {
-  const location = useLocation();
-  const hideChrome = isTabletKioskPath(location.pathname);
-
-  return (
-    <div className="app">
-      {!hideChrome && <Navigation />}
-      <div className={`app-content${hideChrome ? ' app-content--tablet-kiosk' : ''}`}>
-        <Routes>
-          <Route path="/tablet/setup" element={<TabletSetupPage />} />
-          <Route path="/tablet/compressor/:compressorId/:paneSlug" element={<TabletCompressorShell />} />
-          <Route path="/tablet/compressor/:compressorId" element={<TabletCompressorRedirectToDefaultPane />} />
-          <Route path="/tablet/:machineId/:paneSlug" element={<TabletMachineShell />} />
-          <Route path="/tablet/:machineId" element={<TabletRedirectToDefaultPane />} />
-          <Route path="/tablet" element={<TabletEntry />} />
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/files" element={<FileBrowser />} />
-          <Route
-            path="/tools"
-            element={
-              <BetaRoute>
-                <ToolManagement />
-              </BetaRoute>
-            }
-          />
-        </Routes>
-      </div>
-    </div>
-  );
-}
-
 function App() {
   useEffect(() => {
     document.title = `Shatter v${APP_VERSION}`;
   }, []);
 
-  const routerBasename = useMemo(() => {
-    const raw = import.meta.env.BASE_URL || '/';
-    const trimmed = raw.replace(/\/$/, '');
-    return trimmed === '' ? '/' : trimmed;
-  }, []);
-
   return (
     <WebSocketProvider>
       <ExpandedMachineProvider>
-        <Router basename={routerBasename}>
-          <AppLayout />
+        <Router>
+          <div className="app">
+            <Navigation />
+
+            <div className="app-content">
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/files" element={<FileBrowser />} />
+                <Route path="/sync" element={<SyncConfig />} />
+                <Route path="/notifications" element={<NotificationSettings />} />
+                <Route
+                  path="/tools"
+                  element={
+                    <BetaRoute>
+                      <ToolManagement />
+                    </BetaRoute>
+                  }
+                />
+              </Routes>
+            </div>
+          </div>
         </Router>
       </ExpandedMachineProvider>
     </WebSocketProvider>
