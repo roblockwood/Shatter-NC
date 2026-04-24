@@ -130,6 +130,32 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
   const toolExpectedIntervalMs = Math.max((toolPollIntervalSeconds ?? 30) * 1000, 5000);
 
+  const toolsAgeMs = useMemo(() => {
+    if (!toolsDataLastUpdatedAt) return null;
+    const parsed = typeof toolsDataLastUpdatedAt === 'number'
+      ? toolsDataLastUpdatedAt
+      : Date.parse(String(toolsDataLastUpdatedAt));
+    if (!Number.isFinite(parsed)) return null;
+    return Math.max(0, Date.now() - parsed);
+  }, [toolsDataLastUpdatedAt]);
+
+  const visibleToolsCount = toolsCache[toolSource]?.length ?? 0;
+
+  const isToolsSnapshotStale = useMemo(() => {
+    if (visibleToolsCount === 0) return false;
+    if (toolsAgeMs === null) return true;
+    return toolsAgeMs > toolExpectedIntervalMs * 2;
+  }, [visibleToolsCount, toolsAgeMs, toolExpectedIntervalMs]);
+
+  const formatToolsAge = useMemo(() => {
+    if (toolsAgeMs === null) return 'unknown age';
+    const secs = Math.floor(toolsAgeMs / 1000);
+    if (secs < 60) return `${secs}s old`;
+    const mins = Math.floor(secs / 60);
+    const rem = secs % 60;
+    return `${mins}m ${rem}s old`;
+  }, [toolsAgeMs]);
+
   const machineStateReason = useMemo(() => {
     if (!machineStatus && memMode === undefined) return undefined;
     const status = machineStatus?.toLowerCase();
@@ -823,6 +849,14 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                   ariaLabel={`Tools (${toolSource.toUpperCase()}) data freshness`}
                 />
               )}
+              {!isHoverPreview && isToolsSnapshotStale && (
+                <span
+                  className="tools-stale-chip"
+                  title={`Visible ${toolSource.toUpperCase()} tools are stale (${formatToolsAge}). Validation uses backend live data.`}
+                >
+                  STALE SNAPSHOT
+                </span>
+              )}
               {!isHoverPreview && isBetaMode && (
                 <button
                   type="button"
@@ -910,6 +944,13 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
             {currentError && (
               <div className="tools-error-message" onClick={(e) => e.stopPropagation()}>
                 <span className="tools-error-text">⚠ {currentError}</span>
+              </div>
+            )}
+            {!isHoverPreview && isToolsSnapshotStale && !currentError && (
+              <div className="tools-stale-banner" onClick={(e) => e.stopPropagation()}>
+                <span className="tools-stale-text">
+                  STALE {toolSource.toUpperCase()} DATA ({formatToolsAge}) - DISPLAY MAY SHOW LAST KNOWN TOOLS
+                </span>
               </div>
             )}
             {/* Show subtle loading indicator while fetching, but keep previous data visible */}

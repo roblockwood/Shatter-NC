@@ -102,9 +102,12 @@ class GCodeParser:
             List of dicts with tool_number, diameter, corner_radius, length_used, length_total, description
         """
         tools = []
-        # Pattern: (T## D=diameter CR=corner_radius - ZMIN=... - description - L=used/total)
-        # Note: ZMIN can be negative
-        pattern = r'\(T(\d+)\s+D=([\d.]+)\s+CR=([\d.]+)\s+-\s+ZMIN=([-\d.]+)\s+-\s+([^-]+)\s+-\s+L=([\d.]+)/([\d.]+)\)'
+        # Pattern: (T## D=diameter CR=corner_radius [optional_token] - ZMIN=... - description - L=used/total)
+        # Notes:
+        # - Some posts emit an extra token after CR (e.g. "TAPER-150DEG").
+        # - ZMIN can be negative.
+        # - Description can include hyphens, so capture lazily up to " - L=...".
+        pattern = r'\(T(\d+)\s+D=([\d.]+)\s+CR=([\d.]+)(?:\s+[^\s-][^\s]*)?\s+-\s+ZMIN=([-\d.]+)\s+-\s+(.+?)\s+-\s+L=([\d.]+)/([\d.]+)\)'
 
         for line in self.lines:
             match = re.search(pattern, line)
@@ -123,7 +126,24 @@ class GCodeParser:
                     "corner_radius": corner_radius,
                     "description": description,
                     "length_total": length_total,  # Required tool length
+                    "from_tool_call": False,
                 })
+
+        # Fallback: if tool calls exist without CAM header metadata, still include those tools
+        # so availability validation can run and they appear in the UI.
+        operation_tools = self.extract_tool_operations()
+        existing_tool_numbers = {t["tool_number"] for t in tools}
+        for tool_num in sorted(operation_tools.keys()):
+            if tool_num in existing_tool_numbers:
+                continue
+            tools.append({
+                "tool_number": int(tool_num),
+                "diameter": 0.0,
+                "corner_radius": 0.0,
+                "description": "TOOL CALL DETECTED (NO HEADER TOOL DIMENSIONS)",
+                "length_total": 0.0,
+                "from_tool_call": True,
+            })
 
         return tools
 

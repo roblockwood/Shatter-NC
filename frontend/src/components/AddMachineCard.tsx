@@ -23,7 +23,10 @@ interface MachineData {
   tolerance_z?: number;
   use_machine_tool_tolerances?: boolean;
   use_machine_wcs_tolerances?: boolean;
+  validate_tool_diameter?: boolean;
+  validate_tool_length?: boolean;
   units?: string;
+  control_version?: 'AUTO' | 'C00' | 'D00';
 }
 
 interface AddMachineCardProps {
@@ -71,7 +74,10 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
     tolerance_z: 0.0394,
     use_machine_tool_tolerances: false,
     use_machine_wcs_tolerances: false,
+    validate_tool_diameter: true,
+    validate_tool_length: true,
     units: 'in',
+    control_version: 'AUTO',
   });
 
   const isFormValid = formData.name && formData.ip_address && formData.ftp_username && formData.ftp_password;
@@ -85,10 +91,14 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
     setIsSaving(true);
     setError(null);
     try {
+      const payload = {
+        ...formData,
+        control_version: formData.control_version === 'AUTO' ? null : formData.control_version,
+      };
       const response = await fetch(`${API_BASE}/machines/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       if (response.ok) {
@@ -103,6 +113,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
           http_port: 80,
           path: '/',
           poll_interval_seconds: 5,
+          tool_poll_interval_seconds: 30,
           enabled: true,
           model: 'Brother CNC',
           diameter_tolerance: 0.010,
@@ -113,7 +124,10 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
           tolerance_z: 0.0394,
           use_machine_tool_tolerances: false,
           use_machine_wcs_tolerances: false,
+          validate_tool_diameter: true,
+          validate_tool_length: true,
           units: 'in',
+          control_version: 'AUTO',
         });
         // Notify parent that machine was added
         if (onAdd) {
@@ -154,6 +168,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
       http_port: 80,
       path: '/',
       poll_interval_seconds: 5,
+      tool_poll_interval_seconds: 30,
       enabled: true,
       model: 'Brother CNC',
       diameter_tolerance: 0.010,
@@ -164,7 +179,10 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
       tolerance_z: 0.0394,
       use_machine_tool_tolerances: false,
       use_machine_wcs_tolerances: false,
+      validate_tool_diameter: true,
+      validate_tool_length: true,
       units: 'in',
+      control_version: 'AUTO',
     });
     setError(null);
     if (onCancelProp) {
@@ -257,6 +275,24 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
                 options={[
                   { value: 'in', label: 'INCHES (in)' },
                   { value: 'mm', label: 'MILLIMETERS (mm)' },
+                ]}
+              />
+            </div>
+            <div style={{ flex: '0 0 auto', minWidth: '220px' }}>
+              <label>CONTROL TYPE:</label>
+              <Select
+                value={formData.control_version || 'AUTO'}
+                onChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    control_version: value as 'AUTO' | 'C00' | 'D00',
+                  })
+                }
+                disabled={isSaving}
+                options={[
+                  { value: 'AUTO', label: 'AUTO DETECT' },
+                  { value: 'C00', label: 'C00' },
+                  { value: 'D00', label: 'D00' },
                 ]}
               />
             </div>
@@ -366,6 +402,32 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
           <div className="tolerance-group">
             <div className="tolerance-group-header">
               <div className="tolerance-group-label">TOOL TOLERANCES</div>
+              <div className="tolerance-override-toggle" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div>
+                  <input
+                    type="checkbox"
+                    id="validate-tool-diameter-new"
+                    checked={formData.validate_tool_diameter ?? true}
+                    onChange={(e) => setFormData({ ...formData, validate_tool_diameter: e.target.checked })}
+                    disabled={isSaving}
+                  />
+                  <label htmlFor="validate-tool-diameter-new">
+                    Validate diameter
+                  </label>
+                </div>
+                <div>
+                  <input
+                    type="checkbox"
+                    id="validate-tool-length-new"
+                    checked={formData.validate_tool_length ?? true}
+                    onChange={(e) => setFormData({ ...formData, validate_tool_length: e.target.checked })}
+                    disabled={isSaving}
+                  />
+                  <label htmlFor="validate-tool-length-new">
+                    Validate length
+                  </label>
+                </div>
+              </div>
               <div className="tolerance-override-toggle">
                 <input
                   type="checkbox"

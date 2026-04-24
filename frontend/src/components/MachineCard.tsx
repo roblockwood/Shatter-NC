@@ -68,6 +68,7 @@ interface MachineStatus {
   part_display_mode?: 'cycle' | 'parts';
   enabled?: boolean;
   units?: 'in' | 'mm';
+  control_version?: 'C00' | 'D00' | null;
 }
 
 /** Fast-poll freshness time for status/alarms/panel: last successful controller poll only (falls back to legacy poll_timestamp if field absent). */
@@ -345,7 +346,10 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     tolerance_z: (machine as any).tolerance_z || 0.0394,
     use_machine_tool_tolerances: (machine as any).use_machine_tool_tolerances || false,
     use_machine_wcs_tolerances: (machine as any).use_machine_wcs_tolerances || false,
+    validate_tool_diameter: (machine as any).validate_tool_diameter !== false,
+    validate_tool_length: (machine as any).validate_tool_length !== false,
     units: (machine as any).units || 'in',
+    control_version: ((machine as any).control_version || 'AUTO') as 'AUTO' | 'C00' | 'D00',
   });
   const [editMachineName, setEditMachineName] = useState(machine.machine_name || '');
   // Store the original form data when editing starts (from fetched API data)
@@ -380,7 +384,10 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             tolerance_z: fullMachineData.tolerance_z || 0.0394,
             use_machine_tool_tolerances: fullMachineData.use_machine_tool_tolerances || false,
             use_machine_wcs_tolerances: fullMachineData.use_machine_wcs_tolerances || false,
+            validate_tool_diameter: fullMachineData.validate_tool_diameter !== false,
+            validate_tool_length: fullMachineData.validate_tool_length !== false,
             units: fullMachineData.units || 'in',
+            control_version: (fullMachineData.control_version || 'AUTO') as 'AUTO' | 'C00' | 'D00',
           };
           setOriginalFormData(fetchedFormData);
           setOriginalMachineName(fullMachineData.name || '');
@@ -423,10 +430,14 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     setEditSuccess(false);
 
     try {
+      const payload = {
+        ...editFormData,
+        control_version: editFormData.control_version === 'AUTO' ? null : editFormData.control_version,
+      };
       const response = await fetch(`${API_BASE_URL}/api/machines/${machine.machine_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editFormData),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -477,7 +488,10 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         tolerance_z: (machine as any).tolerance_z || 0.0394,
         use_machine_tool_tolerances: (machine as any).use_machine_tool_tolerances || false,
         use_machine_wcs_tolerances: (machine as any).use_machine_wcs_tolerances || false,
+        validate_tool_diameter: (machine as any).validate_tool_diameter !== false,
+        validate_tool_length: (machine as any).validate_tool_length !== false,
         units: (machine as any).units || 'in',
+        control_version: ((machine as any).control_version || 'AUTO') as 'AUTO' | 'C00' | 'D00',
       });
     }
   };
@@ -934,6 +948,24 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               />
             </div>
             <div style={{ flex: '0 0 auto', minWidth: '260px' }}>
+              <label>CONTROL TYPE:</label>
+              <Select
+                value={editFormData.control_version}
+                onChange={(value) =>
+                  setEditFormData({
+                    ...editFormData,
+                    control_version: value as 'AUTO' | 'C00' | 'D00',
+                  })
+                }
+                disabled={isEditSaving}
+                options={[
+                  { value: 'AUTO', label: 'AUTO DETECT' },
+                  { value: 'C00', label: 'C00' },
+                  { value: 'D00', label: 'D00' },
+                ]}
+              />
+            </div>
+            <div style={{ flex: '0 0 auto', minWidth: '260px' }}>
               <label>PARTS DISPLAY:</label>
               <Select
                 value={editFormData.part_display_mode}
@@ -1072,6 +1104,32 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             <div className="tolerance-group">
               <div className="tolerance-group-header">
                 <div className="tolerance-group-label">TOOL TOLERANCES</div>
+                <div className="tolerance-override-toggle" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div>
+                    <input
+                      type="checkbox"
+                      id={`validate-tool-diameter-${machine.machine_id}`}
+                      checked={editFormData.validate_tool_diameter}
+                      onChange={(e) => setEditFormData({ ...editFormData, validate_tool_diameter: e.target.checked })}
+                      disabled={isEditSaving}
+                    />
+                    <label htmlFor={`validate-tool-diameter-${machine.machine_id}`}>
+                      Validate diameter
+                    </label>
+                  </div>
+                  <div>
+                    <input
+                      type="checkbox"
+                      id={`validate-tool-length-${machine.machine_id}`}
+                      checked={editFormData.validate_tool_length}
+                      onChange={(e) => setEditFormData({ ...editFormData, validate_tool_length: e.target.checked })}
+                      disabled={isEditSaving}
+                    />
+                    <label htmlFor={`validate-tool-length-${machine.machine_id}`}>
+                      Validate length
+                    </label>
+                  </div>
+                </div>
                 <div className="tolerance-override-toggle">
                   <input
                     type="checkbox"

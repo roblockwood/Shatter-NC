@@ -26,6 +26,7 @@ export interface MachineStatus {
     solution?: string;
   }>;
   units?: 'in' | 'mm';
+  control_version?: 'C00' | 'D00' | null;
   error?: string;
   poll_timestamp: string;
   last_successful_poll_at?: string | null;
