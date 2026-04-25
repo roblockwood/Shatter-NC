@@ -78,7 +78,7 @@ interface ChannelFormProps {
   onCancel: () => void;
 }
 
-function ChannelForm({ form, setForm, isEdit, onSubmit, onCancel }: ChannelFormProps) {
+function _ChannelForm({ form, setForm, isEdit, onSubmit, onCancel }: ChannelFormProps) {
   return (
     <form className="notify-form" onSubmit={onSubmit}>
       <div className="notify-form-title">{isEdit ? 'Edit Channel' : 'New Email Channel'}</div>
@@ -135,7 +135,7 @@ interface RuleFormProps {
   onToggleChannel: (id: number) => void;
 }
 
-function RuleForm({ form, setForm, isEdit, onSubmit, onCancel, channels, machines, onToggleChannel }: RuleFormProps) {
+function _RuleForm({ form, setForm, isEdit, onSubmit, onCancel, channels, machines, onToggleChannel }: RuleFormProps) {
   return (
     <form className="notify-form" onSubmit={onSubmit}>
       <div className="notify-form-title">{isEdit ? 'Edit Rule' : 'New Notification Rule'}</div>
@@ -219,7 +219,7 @@ export function NotificationSettings() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/machines`);
       if (res.ok) setMachines(await res.json());
-    } catch (_) {}
+    } catch (_) { /* no-op */ }
   }
 
   // --- Channel form helpers ---

@@ -11,7 +11,7 @@ export const SyncRunProgress: React.FC<SyncRunProgressProps> = ({ run }) => {
   const percentage = run.total_files > 0 ? Math.round((completed / run.total_files) * 100) : 0;
 
   // Determine if run is active
-  const isActive = run.status === 'queued' || run.status === 'in_progress' || run.status === 'processing';
+  const _isActive = run.status === 'queued' || run.status === 'in_progress' || run.status === 'processing';
   
   // Determine status badge color and text
   const getStatusDisplay = () => {

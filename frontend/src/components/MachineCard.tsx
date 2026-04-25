@@ -316,7 +316,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         if (!cancelled) {
           setLatestRun(runs[0] || null);
         }
-      } catch (e) {
+      } catch (_e) {
         if (!cancelled) {
           setLatestRun(null);
         }

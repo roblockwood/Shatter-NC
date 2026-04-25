@@ -49,22 +49,26 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
 
       try {
         switch (summaryType) {
-          case 'online':
+          case 'online': {
             const onlineResponse = await summaryApi.getOnline('8h');
             setOnlineData(onlineResponse);
             break;
-          case 'offline':
+          }
+          case 'offline': {
             const offlineResponse = await summaryApi.getOffline();
             setOfflineData(offlineResponse);
             break;
-          case 'running':
+          }
+          case 'running': {
             const runningResponse = await summaryApi.getRunning(runningTimeRange);
             setRunningData(runningResponse);
             break;
-          case 'machines':
+          }
+          case 'machines': {
             const machinesResponse = await summaryApi.getMachines(timeRange);
             setMachinesData(machinesResponse);
             break;
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch summary data');

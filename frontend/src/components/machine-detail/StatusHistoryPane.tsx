@@ -121,7 +121,7 @@ export const StatusHistoryPane: React.FC<StatusHistoryPaneProps> = ({
   const normalizedSearch = programSearch.trim().toLowerCase();
   const filteredIntervals = intervals.filter((interval) => {
     const statusKey = (interval.status || '').toLowerCase();
-    if (statusKey && statusFilters.hasOwnProperty(statusKey) && !statusFilters[statusKey]) {
+    if (statusKey && Object.hasOwn(statusFilters, statusKey) && !statusFilters[statusKey]) {
       return false;
     }
     if (normalizedSearch) {
