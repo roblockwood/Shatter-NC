@@ -1,3 +1,10 @@
+## [1.2.4](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.2.3...v1.2.4) (2026-04-25)
+
+
+### Bug Fixes
+
+* prevent CM7522 on ALL LOD commands, not just TOLNI1 ([ee39504](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/ee395041d9ed056596610d59ac0fa6931200ab83))
+
 ## [1.2.3](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.2.2...v1.2.3) (2026-04-25)
 
 
