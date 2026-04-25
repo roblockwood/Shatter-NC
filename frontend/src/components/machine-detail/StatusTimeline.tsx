@@ -278,7 +278,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
         if (cycleResponse.ok) {
           const cycleData = await cycleResponse.json();
           const arr = Array.isArray(cycleData) ? cycleData : [];
-          const minimalCycles: CycleHistoryEntryForTimeline[] = arr.map((c: any) => ({
+          const minimalCycles: CycleHistoryEntryForTimeline[] = arr.map((c: { start_time: string; end_time: string; part_count?: number }) => ({
             start_time: c.start_time,
             end_time: c.end_time,
             part_count: c.part_count ?? 0,

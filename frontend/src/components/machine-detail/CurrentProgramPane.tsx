@@ -274,7 +274,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                   );
                   if (listResponse.ok) {
                     const listData = await listResponse.json();
-                    const file = listData.programs?.find((p: any) => 
+                    const file = listData.programs?.find((p: { name: string; size?: number; modified?: string }) => 
                       p.name === filename || p.name === programName || p.name === `${programName}.NC`
                     );
                     const fileInfoData = file ? {
@@ -375,7 +375,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                 );
                 if (listResponse.ok) {
                   const listData = await listResponse.json();
-                  const file = listData.programs?.find((p: any) => 
+                  const file = listData.programs?.find((p: { name: string; size?: number; modified?: string }) => 
                     p.name === filename || p.name === programName || p.name === `${programName}.NC`
                   );
                   const fileInfoData = file ? {

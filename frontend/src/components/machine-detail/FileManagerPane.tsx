@@ -42,7 +42,11 @@ interface ToolValidation {
   available: boolean;
   diameter_match: boolean;
   length_sufficient: boolean;
-  machine_tool_data: any;
+  machine_tool_data: {
+    tool_name?: string;
+    diameter?: number;
+    length?: number;
+  };
   warnings: string[];
   diameter_tolerance?: number;
   length_tolerance_plus?: number;
@@ -101,8 +105,8 @@ interface DeploymentDetail {
     estimated_runtime_seconds: number;
     program_metadata: {
       tools: ToolDetail[];
-      wcs_offset?: any;
-      stock_size?: any;
+      wcs_offset?: WCSValidation;
+      stock_size?: Record<string, number>;
     };
     file_size_bytes: number;
     line_count: number;
@@ -281,9 +285,9 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
         if (!res.ok) return [];
         return res.json();
       })
-      .then((deployments: any[]) => {
+      .then((deployments: { deployed_filename?: string }[]) => {
         const deployedFilenames = new Set<string>();
-        deployments.forEach((deployment: any) => {
+        deployments.forEach((deployment) => {
           if (deployment.deployed_filename) {
             deployedFilenames.add(deployment.deployed_filename.toUpperCase());
           }
@@ -1080,7 +1084,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                           </tr>
                         </thead>
                         <tbody>
-                          {Object.entries((freshValidation?.validation?.tools || deploymentDetail?.deployment?.validation_results?.tools || {})).map(([toolKey, validation]: [string, any]) => {
+                          {Object.entries((freshValidation?.validation?.tools || deploymentDetail?.deployment?.validation_results?.tools || {})).map(([toolKey, validation]: [string, ToolValidation]) => {
                             const toolNumber = parseInt(toolKey, 10);
                             if (isNaN(toolNumber)) return null;
                             const isExpanded = expandedTools.has(toolNumber);
@@ -1239,7 +1243,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                                 <td className="text-warning">WARN</td>
                               </tr>
                               {expandedWCS && ['x', 'y', 'z'].map((axis) => {
-                                const actual = (wcs.actual as any)[axis];
+                                const actual = (wcs.actual as Record<string, number>)[axis];
                                 return (
                                   <tr key={axis} className="file-manager-wcs-detail-row">
                                     <td></td>
@@ -1299,9 +1303,9 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                               </td>
                             </tr>
                             {expandedWCS && ['x', 'y', 'z'].map((axis) => {
-                              const expected = (wcs.expected as any)[axis];
-                              const actual = (wcs.actual as any)[axis];
-                              const difference = (wcs.difference as any)[axis];
+                              const expected = (wcs.expected as Record<string, number>)[axis];
+                              const actual = (wcs.actual as Record<string, number>)[axis];
+                              const difference = (wcs.difference as Record<string, number>)[axis];
                               const diff = Math.abs(difference || 0);
                               const withinTol = diff <= (wcs.tolerance || 0.1);
 

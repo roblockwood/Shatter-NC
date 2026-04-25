@@ -48,7 +48,11 @@ interface ToolValidation {
   available: boolean;
   diameter_match: boolean;
   length_sufficient: boolean;
-  machine_tool_data: any;
+  machine_tool_data: {
+    tool_name?: string;
+    diameter?: number;
+    length?: number;
+  };
   warnings: string[];
   // Tolerance values from machine settings (not from NC file)
   diameter_tolerance?: number;
@@ -108,8 +112,8 @@ interface DeploymentDetail {
     estimated_runtime_seconds: number;
     program_metadata: {
       tools: ToolDetail[];
-      wcs_offset?: any;
-      stock_size?: any;
+      wcs_offset?: WCSValidation;
+      stock_size?: Record<string, number>;
     };
     file_size_bytes: number;
     line_count: number;
@@ -373,14 +377,14 @@ export const FileBrowser: React.FC = () => {
         if (!res.ok) return [];
         return res.json();
       })
-      .then((deployments: any[]) => {
+      .then((deployments: { deployed_filename?: string; deployed_path?: string }[]) => {
         // Build two lookup sets for path-aware badge matching.
         // deployed_path values are stored as full remote paths (e.g. "/FOLDER_A/O0003.nc")
         // and let us correctly distinguish same-named files in different directories.
         // deployed_filename values (basename only) serve as a fallback for older records
         // that were registered before path-aware tracking was introduced.
         const deployedFilenames = new Set<string>();
-        deployments.forEach((deployment: any) => {
+        deployments.forEach((deployment) => {
           if (deployment.deployed_path) {
             deployedFilenames.add(deployment.deployed_path.toUpperCase());
           }
@@ -1331,7 +1335,7 @@ export const FileBrowser: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {Object.entries((freshValidation?.validation?.tools || deploymentDetail?.deployment?.validation_results?.tools || {})).map(([toolKey, validation]: [string, any]) => {
+                        {Object.entries((freshValidation?.validation?.tools || deploymentDetail?.deployment?.validation_results?.tools || {})).map(([toolKey, validation]: [string, ToolValidation]) => {
                           const toolNumber = parseInt(toolKey, 10);
                           if (isNaN(toolNumber)) return null;
                           const isExpanded = expandedTools.has(toolNumber);
@@ -1505,7 +1509,7 @@ export const FileBrowser: React.FC = () => {
                             </tr>
 
                             {expandedWCS && ['x', 'y', 'z'].map((axis) => {
-                              const actual = (wcs.actual as any)[axis];
+                              const actual = (wcs.actual as Record<string, number>)[axis];
                               return (
                                 <tr key={axis} className="wcs-detail-row">
                                   <td></td>
@@ -1569,9 +1573,9 @@ export const FileBrowser: React.FC = () => {
 
                           {/* Detail Rows - X/Y/Z Axes */}
                           {expandedWCS && ['x', 'y', 'z'].map((axis) => {
-                            const expected = (wcs.expected as any)[axis];
-                            const actual = (wcs.actual as any)[axis];
-                            const difference = (wcs.difference as any)[axis];
+                            const expected = (wcs.expected as Record<string, number>)[axis];
+                            const actual = (wcs.actual as Record<string, number>)[axis];
+                            const difference = (wcs.difference as Record<string, number>)[axis];
                             const diff = Math.abs(difference || 0);
                             const withinTol = diff <= (wcs.tolerance || 0.1);
 

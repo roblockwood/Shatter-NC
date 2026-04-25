@@ -32,6 +32,34 @@ interface Alarm {
   stop_level?: string;
 }
 
+interface PanelData {
+  doors?: Record<string, unknown>;
+  mode?: unknown;
+  overrides?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface ValidationResult {
+  valid: boolean;
+  tools: Record<number, unknown>;
+  wcs_offset: unknown;
+  warnings: string[];
+  errors: string[];
+  metadata: {
+    posted_date?: string;
+    estimated_runtime_seconds?: number;
+    tool_count: number;
+    line_count: number;
+    file_size: number;
+  };
+}
+
+interface ConnectionTestResult {
+  overall_status: string;
+  telnet?: { success: boolean; error?: string };
+  ftp?: { success: boolean; error?: string };
+}
+
 interface MachineStatus {
   machine_id: number;
   machine_name: string;
@@ -47,7 +75,7 @@ interface MachineStatus {
   tool_table?: Tool[];  // TABLE data (TOLN)
   current_tool?: number;
   alarms?: Alarm[];
-  panel?: any;  // Panel data (doors, mode, overrides)
+  panel?: PanelData;  // Panel data (doors, mode, overrides)
   error?: string;
   poll_timestamp: string;
   /** When the last successful fast (status) poll completed; does not advance on failed attempts. */
@@ -69,6 +97,16 @@ interface MachineStatus {
   enabled?: boolean;
   units?: 'in' | 'mm';
   control_version?: 'C00' | 'D00' | null;
+  diameter_tolerance?: number;
+  length_tolerance_plus?: number;
+  length_tolerance_minus?: number;
+  tolerance_x?: number;
+  tolerance_y?: number;
+  tolerance_z?: number;
+  use_machine_tool_tolerances?: boolean;
+  use_machine_wcs_tolerances?: boolean;
+  validate_tool_diameter?: boolean;
+  validate_tool_length?: boolean;
 }
 
 /** Fast-poll freshness time for status/alarms/panel: last successful controller poll only (falls back to legacy poll_timestamp if field absent). */
@@ -125,7 +163,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const [showToolModal, setShowToolModal] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
-  const [validationResult, setValidationResult] = useState<any>(null);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [selectedFilename, setSelectedFilename] = useState('');
   const [fileContent, setFileContent] = useState('');
   const [isValidating, setIsValidating] = useState(false);
@@ -161,7 +199,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const [editSuccess, setEditSuccess] = useState(false);
   const [isEditSaving, setIsEditSaving] = useState(false);
   const [isEditTesting, setIsEditTesting] = useState(false);
-  const [editTestResult, setEditTestResult] = useState<any>(null);
+  const [editTestResult, setEditTestResult] = useState<ConnectionTestResult | null>(null);
   const { 
     setExpandedMachine,
     setExpandedAssetKind,
@@ -335,21 +373,21 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     // http_port removed - Telnet port is always 10000
     path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
     poll_interval_seconds: machine.poll_interval_seconds || 5,
-    tool_poll_interval_seconds: (machine as any).tool_poll_interval_seconds || 30,
+    tool_poll_interval_seconds: machine.tool_poll_interval_seconds || 30,
     enabled: machine.enabled !== false,
     part_display_mode: machine.part_display_mode || 'parts',
-    diameter_tolerance: (machine as any).diameter_tolerance || 0.010,
-    length_tolerance_plus: (machine as any).length_tolerance_plus || 0.02,
-    length_tolerance_minus: (machine as any).length_tolerance_minus || 0.0,
-    tolerance_x: (machine as any).tolerance_x || 0.0394,
-    tolerance_y: (machine as any).tolerance_y || 0.0394,
-    tolerance_z: (machine as any).tolerance_z || 0.0394,
-    use_machine_tool_tolerances: (machine as any).use_machine_tool_tolerances || false,
-    use_machine_wcs_tolerances: (machine as any).use_machine_wcs_tolerances || false,
-    validate_tool_diameter: (machine as any).validate_tool_diameter !== false,
-    validate_tool_length: (machine as any).validate_tool_length !== false,
-    units: (machine as any).units || 'in',
-    control_version: ((machine as any).control_version || 'AUTO') as 'AUTO' | 'C00' | 'D00',
+    diameter_tolerance: machine.diameter_tolerance || 0.010,
+    length_tolerance_plus: machine.length_tolerance_plus || 0.02,
+    length_tolerance_minus: machine.length_tolerance_minus || 0.0,
+    tolerance_x: machine.tolerance_x || 0.0394,
+    tolerance_y: machine.tolerance_y || 0.0394,
+    tolerance_z: machine.tolerance_z || 0.0394,
+    use_machine_tool_tolerances: machine.use_machine_tool_tolerances || false,
+    use_machine_wcs_tolerances: machine.use_machine_wcs_tolerances || false,
+    validate_tool_diameter: machine.validate_tool_diameter !== false,
+    validate_tool_length: machine.validate_tool_length !== false,
+    units: machine.units || 'in',
+    control_version: (machine.control_version ?? 'AUTO') as 'AUTO' | 'C00' | 'D00',
   });
   const [editMachineName, setEditMachineName] = useState(machine.machine_name || '');
   // Store the original form data when editing starts (from fetched API data)
@@ -477,21 +515,21 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         // http_port removed - Telnet port is always 10000
         path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
         poll_interval_seconds: machine.poll_interval_seconds || 5,
-        tool_poll_interval_seconds: (machine as any).tool_poll_interval_seconds || 30,
+        tool_poll_interval_seconds: machine.tool_poll_interval_seconds || 30,
         enabled: machine.enabled !== false,
         part_display_mode: machine.part_display_mode || 'parts',
-        diameter_tolerance: (machine as any).diameter_tolerance || 0.010,
-        length_tolerance_plus: (machine as any).length_tolerance_plus || 0.02,
-        length_tolerance_minus: (machine as any).length_tolerance_minus || 0.0,
-        tolerance_x: (machine as any).tolerance_x || 0.0394,
-        tolerance_y: (machine as any).tolerance_y || 0.0394,
-        tolerance_z: (machine as any).tolerance_z || 0.0394,
-        use_machine_tool_tolerances: (machine as any).use_machine_tool_tolerances || false,
-        use_machine_wcs_tolerances: (machine as any).use_machine_wcs_tolerances || false,
-        validate_tool_diameter: (machine as any).validate_tool_diameter !== false,
-        validate_tool_length: (machine as any).validate_tool_length !== false,
-        units: (machine as any).units || 'in',
-        control_version: ((machine as any).control_version || 'AUTO') as 'AUTO' | 'C00' | 'D00',
+        diameter_tolerance: machine.diameter_tolerance || 0.010,
+        length_tolerance_plus: machine.length_tolerance_plus || 0.02,
+        length_tolerance_minus: machine.length_tolerance_minus || 0.0,
+        tolerance_x: machine.tolerance_x || 0.0394,
+        tolerance_y: machine.tolerance_y || 0.0394,
+        tolerance_z: machine.tolerance_z || 0.0394,
+        use_machine_tool_tolerances: machine.use_machine_tool_tolerances || false,
+        use_machine_wcs_tolerances: machine.use_machine_wcs_tolerances || false,
+        validate_tool_diameter: machine.validate_tool_diameter !== false,
+        validate_tool_length: machine.validate_tool_length !== false,
+        units: machine.units || 'in',
+        control_version: (machine.control_version ?? 'AUTO') as 'AUTO' | 'C00' | 'D00',
       });
     }
   };
@@ -789,13 +827,14 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               toolTable={machine.tool_table || []}
               currentTool={machine.current_tool}
               machineId={machine.machine_id}
-              units={(machine as any).units || 'in'}
+              units={machine.units ?? 'in'}
               machineStatus={machine.status}
-              memMode={(machine as any).mem_mode}
-              memOperationStatus={(machine as any).mem_operation_status}
+              memMode={machine.mem_mode}
+              memOperationStatus={machine.mem_operation_status}
               toolsTimestamp={machine.tools_timestamp ?? undefined}
               toolTableTimestamp={machine.tool_table_timestamp ?? undefined}
               toolPollIntervalSeconds={machine.tool_poll_interval_seconds ?? 30}
+              programName={currentProgram ?? undefined}
             />
                   </div>
                 ),
@@ -850,9 +889,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         <ToolListModal
           isOpen={showToolModal}
           onClose={() => setShowToolModal(false)}
-          tools={(machine.tools || []) as any}
+          tools={machine.tools || []}
           machineName={machine.machine_name}
-          units={(machine as any).units || machine.units || 'in'}
+          units={(machine.units || 'in') as 'in' | 'mm'}
         />
 
         <UploadConfirmationModal
@@ -869,7 +908,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           machineName={machine.machine_name}
           machinePath={machine.path || '/'}
           fileContent={fileContent}
-          units={(machine as any).units || machine.units || 'in'}
+          units={(machine.units || 'in') as 'in' | 'mm'}
         />
 
         <input
@@ -1667,7 +1706,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     toolTable={machine.tool_table || []}
                     currentTool={machine.current_tool}
                     machineId={machine.machine_id}
-                    units={(machine as any).units || machine.units || 'in'}
+                    units={machine.units ?? 'in'}
                     machineStatus={machine.status}
                     toolsTimestamp={machine.tools_timestamp ?? undefined}
                     toolTableTimestamp={machine.tool_table_timestamp ?? undefined}
@@ -1823,9 +1862,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       <ToolListModal
         isOpen={showToolModal}
         onClose={() => setShowToolModal(false)}
-        tools={(machine.tools || []) as any}
+        tools={machine.tools || []}
         machineName={machine.machine_name}
-        units={(machine as any).units || machine.units || 'in'}
+        units={(machine.units || 'in') as 'in' | 'mm'}
       />
 
       <UploadConfirmationModal
@@ -1842,7 +1881,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         machineName={machine.machine_name}
         machinePath={machine.path || '/'}
         fileContent={fileContent}
-        units={(machine as any).units || machine.units || 'in'}
+        units={(machine.units || 'in') as 'in' | 'mm'}
       />
 
       <SaveConfirmModal

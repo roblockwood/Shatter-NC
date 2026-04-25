@@ -31,7 +31,7 @@ interface MachineData {
 
 interface AddMachineCardProps {
   onCancel?: () => void;
-  onAdd?: (machine: any) => void;
+  onAdd?: (machine: Record<string, unknown>) => void;
   fullWidth?: boolean;
   onActiveChange?: (active: boolean) => void;
 }
