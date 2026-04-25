@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.0.1...v1.0.2) (2026-04-25)
+
+
+### Bug Fixes
+
+* eliminate no-explicit-any violations in frontend (68 fixed) ([a11f3b0](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/a11f3b06308e0f3172f9a8452f99128ad104b789))
+
 ## [1.0.1](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.0.0...v1.0.1) (2026-04-25)
 
 
