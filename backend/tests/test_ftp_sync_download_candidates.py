@@ -11,7 +11,11 @@ from app.services.ftp_sync_service import FtpSyncService
 async def test_collect_remote_candidates_filters_and_maps(tmp_path):
     service = FtpSyncService(websocket_manager=None)
 
-    async def fake_list(_ftp_client, _remote_folder):
+    async def fake_list(_ftp_client, remote_folder):
+        # Only return entries for the root folder; subdirectories must be empty
+        # to prevent _list_remote_files_recursive from double-counting root files.
+        if remote_folder != "/PROGRAM":
+            return []
         return [
             {"name": "O2000.NC", "path": "/PROGRAM/O2000.NC", "is_directory": False},
             {"name": "README.TXT", "path": "/PROGRAM/README.TXT", "is_directory": False},
