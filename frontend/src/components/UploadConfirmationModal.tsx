@@ -124,6 +124,7 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
     if (isOpen && machineId && result) {
       fetchNextONumber();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, machineId, result]);
 
   // Auto-close success screen after 5 seconds with countdown

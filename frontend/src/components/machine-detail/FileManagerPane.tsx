@@ -175,6 +175,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
         }, 100);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, programs.length, loading]);
 
   // Set path when component mounts - fetch machine data to get default path
@@ -328,6 +329,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
       setDeploymentError(null);
       setSelectedDeploymentId(null);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProgram, machineId, currentPath]);
 
   // Handle deployment selection change from history dropdown
@@ -340,6 +342,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
         fetchSelectedDeploymentDetails(currentEntry.id);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDeploymentId, deploymentDetail?.history]);
 
   const toggleToolExpanded = (toolNumber: number) => {
