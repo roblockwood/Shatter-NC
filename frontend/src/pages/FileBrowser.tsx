@@ -243,6 +243,7 @@ export const FileBrowser: React.FC = () => {
         }, 100);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingFileSelection, programs.length, loading]);
 
   // Set path when machine changes - fetch fresh machine data to ensure we have latest config
@@ -430,6 +431,7 @@ export const FileBrowser: React.FC = () => {
       setDeploymentError(null);
       setSelectedDeploymentId(null);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProgram]);
 
   // Handle deployment selection change from history dropdown
@@ -445,6 +447,7 @@ export const FileBrowser: React.FC = () => {
         fetchSelectedDeploymentDetails(currentEntry.id);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDeploymentId, deploymentDetail?.history]);
 
   const selectedMachine = machines.find(m => m.id === selectedMachineId);
