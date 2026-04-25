@@ -5,7 +5,6 @@ This module provides PollingService (multi-machine coordinator) and
 re-exports MachinePoller so existing imports continue to work.
 """
 import asyncio
-from app.clients.telnet_client import create_fresh_connection
 import logging
 import time
 from datetime import datetime
@@ -37,10 +36,6 @@ class PollingService:
             return
 
         self.is_running = True
-        
-        # Pre-populate control version cache for all enabled machines (non-blocking)
-        # This avoids detecting control version on every poll
-        asyncio.create_task(self._prepopulate_control_versions())
         
         self.polling_task = asyncio.create_task(self._poll_loop())
         self.tool_polling_task = asyncio.create_task(self._tool_poll_loop())  # Start slow polling loop
@@ -364,58 +359,6 @@ class PollingService:
             await self.websocket_manager.broadcast_status(merged_status)
         
         return tool_data
-
-    async def _prepopulate_control_versions(self):
-        """
-        Pre-populate control version cache for all enabled machines on startup.
-        This avoids detecting control version on every poll (saves ~1200ms per poll).
-        """
-        db = SessionLocal()
-        try:
-            machines = db.query(Machine).filter(Machine.enabled).all()
-            if not machines:
-                logger.debug("No enabled machines to pre-populate control versions for")
-                return
-            
-            logger.info(f"Pre-populating control version cache for {len(machines)} enabled machine(s)...")
-            
-
-            # Detect control version for each machine (concurrently)
-            async def detect_for_machine(m):
-                telnet_client = None
-                try:
-                    telnet_client = await create_fresh_connection(
-                        ip_address=m.ip_address,
-                        port=10000,
-                        timeout=10
-                    )
-                    # This will detect and cache the control version
-                    control_version = await telnet_client.detect_control_type(verbose=False)
-                    if control_version:
-                        logger.info(f"Pre-populated control version for machine {m.id} ({m.name}): {control_version}")
-                    else:
-                        logger.warning(f"Failed to detect control version for machine {m.id} ({m.name})")
-                except Exception as e:
-                    logger.warning(f"Failed to pre-populate control version for machine {m.id} ({m.name}): {e}")
-                finally:
-                    if telnet_client:
-                        await telnet_client.disconnect()
-            
-            # Create tasks with proper closure (use default argument to capture machine)
-            tasks = []
-            for machine in machines:
-                async def detect(m=machine):  # Default argument captures current value
-                    await detect_for_machine(m)
-                tasks.append(detect())
-            
-            # Run all detections concurrently (each will use its own lock)
-            await asyncio.gather(*tasks, return_exceptions=True)
-            
-            logger.info("Control version cache pre-population complete")
-        except Exception as e:
-            logger.error(f"Error during control version cache pre-population: {e}")
-        finally:
-            db.close()
 
     def get_all_status(self) -> Dict[int, Dict[str, Any]]:
         """Get status for all machines."""

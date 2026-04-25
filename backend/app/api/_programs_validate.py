@@ -34,6 +34,10 @@ router = APIRouter()
 class ProgramValidateRequest(BaseModel):
     """Request to validate a G-code program before upload."""
     gcode_content: str
+    # Pre-fetched tool data from the machine (e.g. provided by the sync service so it
+    # only pays the Telnet cost once per run rather than once per file).  External HTTP
+    # callers simply omit this field.
+    prefetched_tool_data: Optional[Dict[str, Any]] = None
 
 
 class ToolValidationResult(BaseModel):
@@ -123,7 +127,7 @@ def _validate_tool(
     """
     tool_number = program_tool["tool_number"]
     required_diameter = program_tool.get("diameter", 0.0)
-    required_length = program_tool.get("length", 0.0)
+    required_length = float(program_tool.get("length_total", 0.0) or 0.0)
 
     # Determine tolerance source
     if use_machine_tolerances:
@@ -150,18 +154,30 @@ def _validate_tool(
             final_length_tolerance_plus = length_tolerance_plus
             final_length_tolerance_minus = length_tolerance_minus
 
-    # Check if requirements are complete (have actual values to validate)
-    requirements_complete = required_diameter > 0 or required_length > 0
+    # Requirements are complete when the tool came from a CAM header comment with real dims.
+    # Tools detected only from a T-call (no header) have from_tool_call=True and are only
+    # availability-checked, not dimension-checked.
+    requirements_complete = not bool(program_tool.get("from_tool_call", False))
 
     # Find tool in machine data
+    # Use int-safe comparison: tool numbers may be str in some telnet responses.
     machine_tools = machine_tool_data.get("tools", [])
     machine_tool = None
     for t in machine_tools:
-        if t.get("tool_number") == tool_number:
-            machine_tool = t
-            break
+        machine_tool_num = t.get("tool_number")
+        if machine_tool_num is not None:
+            try:
+                if int(machine_tool_num) == int(tool_number):
+                    machine_tool = t
+                    break
+            except (ValueError, TypeError):
+                continue
 
     if not machine_tool:
+        logger.warning(
+            f"Tool T{tool_number:02d} not found in machine tool table. "
+            f"Available tools: {[int(t.get('tool_number', 0)) for t in machine_tools if t.get('tool_number') is not None]}"
+        )
         return ToolValidationResult(
             tool_number=tool_number,
             required_diameter=required_diameter,
@@ -201,12 +217,15 @@ def _validate_tool(
     length_sufficient = True
     if validate_length and required_length > 0:
         length_diff = machine_length - required_length
-        # Length must be within tolerance: machine_length >= required - tolerance_minus AND
-        # machine_length <= required + tolerance_plus
-        length_sufficient = (
-            length_diff >= -final_length_tolerance_minus and
-            length_diff <= final_length_tolerance_plus
-        )
+        if use_machine_tolerances:
+            # Machine-tolerance mode: machine must be within a window around the required length.
+            length_sufficient = (
+                length_diff >= -final_length_tolerance_minus and
+                length_diff <= final_length_tolerance_plus
+            )
+        else:
+            # Gcode-defaults mode: machine only needs to be at least as long as required.
+            length_sufficient = machine_length >= required_length
         if not length_sufficient:
             warnings.append(
                 f"Tool T{tool_number:02d} length issue: "
@@ -399,7 +418,16 @@ async def validate_program(
     machine_tool_fetch_failed = False
     cached_status = None
 
-    if websocket_api.websocket_manager:
+    # Fast path: the caller (e.g. sync service) already fetched tool data for this run.
+    if request.prefetched_tool_data is not None:
+        machine_tool_data = request.prefetched_tool_data
+        if machine_tool_data.get("tools"):
+            logger.info(f"Machine {machine.id} - VALIDATE: Using {len(machine_tool_data['tools'])} pre-fetched tools (sync run fast path)")
+        else:
+            machine_tool_fetch_failed = True
+            logger.info(f"Machine {machine.id} - VALIDATE: Pre-fetched tool data had no tools (machine offline during run)")
+
+    if not machine_tool_data.get("tools") and request.prefetched_tool_data is None and websocket_api.websocket_manager:
         try:
             cached_status = websocket_api.websocket_manager.get_machine_status(machine.id)
             if cached_status and "tools" in cached_status and cached_status["tools"]:
@@ -411,11 +439,13 @@ async def validate_program(
             machine_tool_fetch_failed = True
             logger.warning(f"Machine {machine.id} - Error accessing WebSocket cache: {e}")
 
-    if not machine_tool_data.get("tools"):
+    polling_service_attempted = False
+    if not machine_tool_data.get("tools") and request.prefetched_tool_data is None:
         logger.warning(f"Machine {machine.id} - No cached tool data available; attempting polling-service tool refresh for validation")
         try:
 
             if status_api.polling_service:
+                polling_service_attempted = True
                 for attempt in range(2):
                     refreshed_tool_data = await status_api.polling_service.refresh_tool_data(machine.id)
                     refreshed_tools = (refreshed_tool_data or {}).get("tools", [])
@@ -428,7 +458,11 @@ async def validate_program(
         except Exception as e:
             logger.warning(f"Machine {machine.id} - Polling-service refresh for validation failed: {e}")
 
-    if not machine_tool_data.get("tools"):
+    # Only attempt direct Telnet fallback if the polling service was unavailable and
+    # no pre-fetched data was supplied.  When the polling service IS available but
+    # returned no tools, the direct Telnet path makes the identical calls and will fail
+    # for the same reason, adding unnecessary load on the machine.
+    if not machine_tool_data.get("tools") and not polling_service_attempted and request.prefetched_tool_data is None:
         logger.warning(f"Machine {machine.id} - Polling-service refresh had no tools, fetching directly via Telnet for validation")
         try:
 
@@ -535,33 +569,35 @@ async def validate_program(
         else:
             warnings.append("No tool data found in NC program")
 
-    # Fetch machine work offsets via Telnet
+    # Fetch machine work offsets via Telnet — only worth attempting when the NC
+    # program actually contains a work-offset reference.  Skipping this avoids one
+    # Telnet round-trip per file during sync runs when the NC has no G54/G55/etc.
     position_data = None
     wcs_fetch_failed = False
-    telnet_client = None
-    try:
+    if parsed.get("wcs_offset"):
+        telnet_client = None
+        try:
+            telnet_client = await create_fresh_connection(
+                ip_address=machine.ip_address,
+                port=10000,
+                timeout=10
+            )
 
-        telnet_client = await create_fresh_connection(
-            ip_address=machine.ip_address,
-            port=10000,
-            timeout=10
-        )
+            position_data = await telnet_client.get_position_data(units=machine.units, verbose=False)
 
-        position_data = await telnet_client.get_position_data(units=machine.units, verbose=False)
+            if not position_data:
+                raise Exception("Could not retrieve POSNI1.NC/POSNM1.NC from machine via Telnet (file may not exist or Telnet connection failed)")
 
-        if not position_data:
-            raise Exception("Could not retrieve POSNI1.NC/POSNM1.NC from machine via Telnet (file may not exist or Telnet connection failed)")
-
-    except Exception as e:
-        wcs_fetch_failed = True
-        import traceback
-        error_msg = f"Could not fetch machine WCS data via Telnet: {str(e)}"
-        warnings.append(error_msg)
-        print(f"WCS Fetch Error: {error_msg}")
-        print(traceback.format_exc())
-    finally:
-        if telnet_client:
-            await telnet_client.disconnect()
+        except Exception as e:
+            wcs_fetch_failed = True
+            import traceback
+            error_msg = f"Could not fetch machine WCS data via Telnet: {str(e)}"
+            warnings.append(error_msg)
+            print(f"WCS Fetch Error: {error_msg}")
+            print(traceback.format_exc())
+        finally:
+            if telnet_client:
+                await telnet_client.disconnect()
 
     # Validate WCS offset
     if parsed["wcs_offset"] and position_data:

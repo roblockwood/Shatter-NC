@@ -80,7 +80,7 @@ class MachineStateValidator:
                 timeout=10
             )
             
-            control_version = await telnet_client.detect_control_type()
+            control_version = db_machine.control_version
             
             # Get MEM data to check mode and operation_status
             mem_data = await telnet_client.get_memory_data(verbose=False)

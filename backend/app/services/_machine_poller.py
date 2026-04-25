@@ -59,6 +59,9 @@ class MachinePoller:
         self.cached_program_name: Optional[str] = None
         self.program_name_fetched = False  # Track if we've fetched program_name at least once
 
+        # NC header comments cached when a production run starts (via background FTP fetch)
+        self._active_run_nc_header: Optional[dict] = None
+
         # Extended history state tracking (Log-on-Change + Heartbeat)
         self.last_macros: Optional[Dict[str, Any]] = None
         self.last_tool_table: Optional[List[Dict[str, Any]]] = None
@@ -246,6 +249,29 @@ class MachinePoller:
 
         return None
 
+    async def _fetch_and_cache_nc_header(self, program_path: str) -> None:
+        """Fetch an NC program's header comments via FTP and cache them for cycle-complete notifications."""
+        try:
+            from app.clients.ftp_client import CNCFtpClient
+            from app.services.notification_service import extract_nc_program_header
+            ftp = CNCFtpClient(
+                ip_address=self.machine.ip_address,
+                username=self.machine.ftp_username or "anonymous",
+                password=self.machine.ftp_password or "anonymous",
+                port=self.machine.ftp_port or 21,
+            )
+            content = await ftp.download_file(program_path)
+            if content:
+                text = content.decode('utf-8', errors='replace')
+                self._active_run_nc_header = extract_nc_program_header(text)
+                logger.debug(
+                    f"Machine {self.machine.id}: cached NC header for {program_path}: {self._active_run_nc_header}"
+                )
+        except Exception as e:
+            logger.debug(
+                f"Machine {self.machine.id}: could not fetch NC header for {program_path}: {e}"
+            )
+
     async def poll_tool_data(self) -> Dict[str, Any]:
         """
         Poll tool table and ATC magazine data (slow polling operation).
@@ -277,11 +303,6 @@ class MachinePoller:
             )
             step_times['get_connection'] = time.time() - step_start
             
-            # Detect control version (uses Redis cache)
-            step_start = time.time()
-            _control_version = await telnet_client.detect_control_type()
-            step_times['detect_control'] = time.time() - step_start
-            
             # Get tool table data first (needed for both ATC merge and TABLE display)
             step_start = time.time()
             tool_table_content = await telnet_client.get_tool_table_data(units=self.machine.units, verbose=False)
@@ -292,13 +313,13 @@ class MachinePoller:
                 tool_table_parsed = parse_tolni_v2(
                     tool_table_content.encode('utf-8'),
                     units=self.machine.units,
-                    control_version=None  # Auto-detect
+                    control_version=self.machine.control_version
                 )
                 step_times['parse_tool_table'] = time.time() - step_start
                 
                 # Get ATC magazine data (pot/tool mappings) for merging
                 step_start = time.time()
-                atc_data = await telnet_client.get_atc_magazine_data(control_version=None, verbose=False)
+                atc_data = await telnet_client.get_atc_magazine_data(control_version=self.machine.control_version, verbose=False)
                 step_times['get_atc'] = time.time() - step_start
                 
                 # Start with pure TOLN (table) data
@@ -306,7 +327,7 @@ class MachinePoller:
                 
                 if atc_data:
                     step_start = time.time()
-                    atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=None)
+                    atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=self.machine.control_version)
                     step_times['parse_atc'] = time.time() - step_start
                     
                     step_start = time.time()
@@ -390,6 +411,11 @@ class MachinePoller:
                     logger.debug(f"Machine {self.machine.id} - Fetched {len(tools)} ATC tools and {len(tool_table_tools)} table tools via Telnet (slow poll)")
                 else:
                     logger.warning(f"Machine {self.machine.id} - No ATC data available via Telnet")
+                    # ATC magazine file absent (status 07) — leave tools empty so the
+                    # frontend can show a proper "ATC unavailable" message rather than
+                    # displaying tool table data in the ATC pot view.
+                    tool_data["tools"] = []
+                    tool_data["tools_timestamp"] = poll_timestamp.isoformat()
                 
                 # Store TABLE data with pot numbers merged (if ATC data was available)
                 tool_data["tool_table"] = tool_table_tools
@@ -444,11 +470,8 @@ class MachinePoller:
             )
             step_times['get_connection'] = time.time() - step_start
             
-            # Detect control version once (cached in telnet_client)
-            step_start = time.time()
-            control_version = await telnet_client.detect_control_type()
-            step_times['detect_control'] = time.time() - step_start
-            
+            control_version = self.machine.control_version
+
             # Get MONTR data (replaces HTTP /running_log and /work_counter)
             step_start = time.time()
             montr_data = await telnet_client.get_monitor_data(verbose=False)
@@ -530,11 +553,18 @@ class MachinePoller:
 
             # is_online for clients is set after last_successful_fast_poll_at (debounced display_online)
             
+            # Prefer MONTR's operation_program_no (actively running program).
+            # When MONTR has no active program (machine idle/standby), fall back
+            # to MEM's program_name (currently selected program in memory mode).
+            _montr_program = program_info.get("operation_program_no")
+            _mem_program = mem_parsed.get("program_name") if mem_parsed else None
+            _resolved_program_name = _montr_program or _mem_program or "----"
+
             status_data = {
                 "ip_address": self.machine.ip_address,
                 "timestamp": datetime.now().isoformat(),
                 "units": self.machine.units,
-                "program_name": program_info.get("operation_program_no", "----"),
+                "program_name": _resolved_program_name,
                 "cycle_time": format_cnc_time(time_info.get("total_operation_time", "000000000")),
                 "cutting_time": format_cnc_time(time_info.get("operation_time", "000000000")),
                 "non_cutting_time": "000000:00.0",  # Not in MONTR
@@ -1146,6 +1176,9 @@ class MachinePoller:
                     )
                     db.add(run)
                     logger.debug(f"Started production run for machine {self.machine.id}: {program_name}")
+                    # Reset header cache and schedule background FTP fetch for notifications
+                    self._active_run_nc_header = None
+                    asyncio.create_task(self._fetch_and_cache_nc_header(program_name))
 
             # End active production run
             elif current_status in ["stopped", "standby", "error"] and active_run:
@@ -1156,6 +1189,7 @@ class MachinePoller:
                 active_run.completion_status = "completed" if current_status in ["stopped", "standby"] else current_status
                 logger.debug(f"Ended production run for machine {self.machine.id}: {active_run.program_name}")
                 if active_run.completion_status == "completed" and self.notification_service:
+                    _header = self._active_run_nc_header or {}
                     asyncio.create_task(
                         self.notification_service.notify_cycle_complete(
                             machine_id=self.machine.id,
@@ -1166,6 +1200,8 @@ class MachinePoller:
                             started_at=active_run.started_at,
                             ended_at=active_run.ended_at,
                             new_status=current_status,
+                            program_title=_header.get("title"),
+                            file_label=_header.get("file_label"),
                         )
                     )
 
@@ -1179,6 +1215,7 @@ class MachinePoller:
                 fallback_duration = status_data.get("cycle_time_seconds")
                 if not isinstance(fallback_duration, int):
                     fallback_duration = None
+                _header = self._active_run_nc_header or {}
                 asyncio.create_task(
                     self.notification_service.notify_cycle_complete(
                         machine_id=self.machine.id,
@@ -1188,6 +1225,8 @@ class MachinePoller:
                         o_number=status_data.get("o_number"),
                         ended_at=datetime.now(timezone.utc),
                         new_status=current_status,
+                        program_title=_header.get("title"),
+                        file_label=_header.get("file_label"),
                     )
                 )
 

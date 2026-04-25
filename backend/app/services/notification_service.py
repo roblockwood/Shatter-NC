@@ -51,6 +51,44 @@ def _format_pacific_time(value: Optional[datetime]) -> str:
     return pacific_dt.strftime("%d-%b-%y %H:%M %Z").upper()
 
 
+def extract_nc_program_header(content: str) -> dict:
+    """Extract program title and file label from an NC file's header comments.
+
+    Scans the top of the file for parenthesised comments, stopping at the
+    first non-comment, non-empty G-code line.  Returns:
+      - 'title':      text of the first non-empty comment (e.g. '0004 COMBINED OPERATIONS')
+      - 'file_label': text after 'FILE:' in a comment that starts with that prefix
+                      (e.g. '250X250 HD FIXTURE PLATE MACHINING V4')
+    Both values may be None if not found.
+    """
+    title: Optional[str] = None
+    file_label: Optional[str] = None
+    comment_re = re.compile(r'^\(([^)]*)\)\s*$')
+
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Skip program-start delimiter and O-number declaration lines
+        if stripped == '%' or re.match(r'^O\d+\b', stripped, re.IGNORECASE):
+            continue
+        m = comment_re.match(stripped)
+        if not m:
+            # First non-comment, non-empty line means we've left the header block
+            break
+        text = m.group(1).strip()
+        if not text:
+            continue
+        if title is None:
+            title = text
+        if file_label is None and text.upper().startswith('FILE:'):
+            file_label = text[5:].strip()
+        if title is not None and file_label is not None:
+            break
+
+    return {"title": title, "file_label": file_label}
+
+
 class NotificationService:
     """Delivers notifications via configured channels when machine status rules match."""
 
@@ -116,24 +154,29 @@ class NotificationService:
         started_at: Optional[datetime] = None,
         ended_at: Optional[datetime] = None,
         new_status: str = "stopped",
+        program_title: Optional[str] = None,
+        file_label: Optional[str] = None,
     ) -> None:
         duration_hms = _format_runtime_hms(duration_seconds)
         start_time_local = _format_pacific_time(started_at)
         stop_time_local = _format_pacific_time(ended_at)
 
         subject = f"[CYCLE COMPLETE] {machine_name}"
-        lines = [
-            f"[CYCLE COMPLETE] {machine_name}",
-            f"Program: {program_name or '(unknown)'}",
-        ]
-        if stop_time_local:
-            lines.append(f"Stop Time: {stop_time_local}")
-        if duration_hms:
-            lines.append(f"Total Runtime: {duration_hms}")
+        lines = [f"[CYCLE COMPLETE] {machine_name}"]
+        if program_name:
+            lines.append(program_name)
+        if program_title:
+            lines.append(f"Program: {program_title}")
+        if file_label:
+            lines.append(f"File: {file_label}")
         if start_time_local:
             lines.append(f"Start Time: {start_time_local}")
-        if ended_at and not stop_time_local:
+        if stop_time_local:
+            lines.append(f"Stop Time: {stop_time_local}")
+        elif ended_at:
             lines.append(f"Ended: {ended_at.isoformat()}")
+        if duration_hms:
+            lines.append(f"Total Runtime: {duration_hms}")
 
         body = "\n".join(lines)
         await self._dispatch_to_matching_rules(
@@ -145,6 +188,8 @@ class NotificationService:
             event_type="cycle_complete",
             event_data={
                 "program_name": program_name,
+                "program_title": program_title,
+                "file_label": file_label,
                 "o_number": o_number,
                 "duration_seconds": duration_seconds,
                 "duration_hms": duration_hms,
@@ -174,7 +219,7 @@ class NotificationService:
                     NotificationRule.trigger_type == "status_change",
                     (
                         (NotificationRule.machine_id == machine_id)
-                        | (NotificationRule.machine_id is None)
+                        | NotificationRule.machine_id.is_(None)
                     ),
                 )
                 .all()

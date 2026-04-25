@@ -360,6 +360,16 @@
   box-sizing: border-box;
 }
 
+.tools-empty-sub {
+  margin-top: 6px;
+  font-size: var(--font-xs, 0.7rem);
+  color: var(--color-text-dim, #555);
+  max-width: 340px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.4;
+}
+
 .tools-table {
   width: 100%;
   table-layout: fixed;

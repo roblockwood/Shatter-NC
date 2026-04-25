@@ -11,9 +11,10 @@ Routes:
 import logging
 import re
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_
-from typing import Optional, List
+from typing import Any, Optional, List
 
 from app.db.base import get_db
 from app.models.machine import Machine
@@ -268,6 +269,36 @@ async def get_deployment_by_id(
         }
 
     return response
+
+
+class ValidationPatchRequest(BaseModel):
+    validation_results: dict[str, Any]
+    validation_passed: bool
+
+
+@router.patch("/deployments/{deployment_id}/validation")
+async def update_deployment_validation(
+    deployment_id: int,
+    body: ValidationPatchRequest,
+    db: Session = Depends(get_db),
+):
+    """Overwrite stored validation results for a deployment.
+
+    Called after a live re-validate so that subsequent loads of the current-program
+    card show current-machine-config tolerances instead of upload-time tolerances.
+    """
+    deployment = db.query(ProgramDeployment).filter(
+        ProgramDeployment.id == deployment_id
+    ).first()
+
+    if not deployment:
+        raise HTTPException(status_code=404, detail=f"Deployment {deployment_id} not found")
+
+    deployment.validation_results = body.validation_results
+    deployment.validation_passed = body.validation_passed
+    db.commit()
+
+    return {"id": deployment_id, "validation_passed": deployment.validation_passed}
 
 
 @router.get("/machines/{machine_id}/next-onumber")

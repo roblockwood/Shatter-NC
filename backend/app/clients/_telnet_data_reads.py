@@ -37,7 +37,7 @@ class CNCDataReadsMixin:
     # Core LOD loader with retry
     # ------------------------------------------------------------------
 
-    async def load_data(self, data_name: str, verbose: bool = False, max_retries: int = 2) -> Optional[str]:
+    async def load_data(self, data_name: str, verbose: bool = False, max_retries: int = 2, read_timeout: float = 5.0) -> Optional[str]:
         """
         Load arbitrary data by name using LOD command.
 
@@ -47,6 +47,7 @@ class CNCDataReadsMixin:
             data_name: Name of data to load (e.g., "MEM", "TOLNI1", "POSNI1", "ATCTL", "DIR")
             verbose: If True, log command details
             max_retries: Maximum number of retry attempts (default: 2, so 3 total attempts)
+            read_timeout: Seconds to wait for the machine to stream back data (default 5.0)
 
         Returns:
             Data content as string, or None on failure
@@ -69,8 +70,7 @@ class CNCDataReadsMixin:
                                 continue
                             return None
 
-                    # Increased timeout to 5 seconds for large data files (e.g., TOLNI1 tool table)
-                    success, status, data = await self._send_command("LOD", data_name, verbose=verbose, read_timeout=5.0)
+                    success, status, data = await self._send_command("LOD", data_name, verbose=verbose, read_timeout=read_timeout)
                     if success:
                         return data
                     else:
@@ -125,7 +125,11 @@ class CNCDataReadsMixin:
             Tool table data as string, or None on failure
         """
         data_name = "TOLNI1" if units == 'in' else "TOLNM1"
-        return await self.load_data(data_name, verbose=verbose)
+        # max_retries=0, read_timeout=30s: TOLNI1 is a large transfer that can take
+        # 10-20s on a busy machine.  If we timeout mid-stream and reconnect-then-retry,
+        # the machine sees an aborted LOD transaction and raises CM7522 ("Receive command
+        # abnormal end") on D00 controls.  Give it 30s and bail without retrying.
+        return await self.load_data(data_name, verbose=verbose, max_retries=0, read_timeout=30.0)
 
     async def get_position_data(self, units: str = 'in', verbose: bool = False) -> Optional[str]:
         """
@@ -200,7 +204,7 @@ class CNCDataReadsMixin:
 
     async def get_atc_magazine_data(self, control_version: Optional[str] = None, verbose: bool = False) -> Optional[str]:
         """
-        Get ATC magazine data (ATCTL for C00, ATDTL for D00).
+        Get ATC magazine data (ATCTL for C00, ATCTLD for D00).
 
         Args:
             control_version: Control version ('C00' or 'D00'). If None, auto-detects.
@@ -212,12 +216,22 @@ class CNCDataReadsMixin:
         if control_version is None:
             control_version = await self.detect_control_type()
 
-        data_name = "ATDTL" if control_version == "D00" else "ATCTL"
+        if control_version == "D00":
+            data_name = "ATCTLD"
+        elif control_version == "C00":
+            data_name = "ATCTL"
+        else:
+            # Detection failed — try ATCTLD (D00) first, then ATCTL (C00)
+            data = await self.load_data("ATCTLD", verbose=verbose)
+            if data is not None:
+                return data
+            return await self.load_data("ATCTL", verbose=verbose)
+
         data = await self.load_data(data_name, verbose=verbose)
         if data is not None:
             return data
         # Try alternate format name if primary fails
-        alt_name = "ATCTL" if data_name == "ATDTL" else "ATDTL"
+        alt_name = "ATCTL" if data_name == "ATCTLD" else "ATCTLD"
         return await self.load_data(alt_name, verbose=verbose)
 
     # ------------------------------------------------------------------

@@ -81,7 +81,12 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     table: { column: 'tool_number', direction: 'asc' }  // TABLE defaults to T# ascending
   });
   const [searchQuery, setSearchQuery] = useState('');
-  const [toolSource, setToolSource] = useState<'atc' | 'table'>(initialSource);
+  const [toolSource, setToolSource] = useState<'atc' | 'table'>(() => {
+    if (initialSource === 'atc' && (!initialTools || initialTools.length === 0) && initialToolTable && initialToolTable.length > 0) {
+      return 'table';
+    }
+    return initialSource;
+  });
   
   // Get current sort settings based on active source
   const sortColumn = sortSettings[toolSource].column;
@@ -89,7 +94,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   // Cache tools separately for each source (ATC and TABLE)
   const [toolsCache, setToolsCache] = useState<{ atc: Tool[]; table: Tool[] }>({
     atc: initialSource === 'atc' ? initialTools : [],
-    table: initialSource === 'table' ? (initialToolTable || []) : []
+    table: initialSource === 'table' ? (initialToolTable || []) : (initialToolTable || [])
   });
   // Track timestamps for cache entries to determine if data is stale
   const [cacheTimestamps, setCacheTimestamps] = useState<{
@@ -112,7 +117,13 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const [pushComplete, setPushComplete] = useState(false);
 
   // ──────────────────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<'atc' | 'table' | 'optimizer'>('atc');
+  const [activeTab, setActiveTab] = useState<'atc' | 'table' | 'optimizer'>(() => {
+    // If no ATC data but table data exists on mount, default to TABLE tab
+    if (initialSource === 'atc' && (!initialTools || initialTools.length === 0) && initialToolTable && initialToolTable.length > 0) {
+      return 'table';
+    }
+    return initialSource === 'table' ? 'table' : 'atc';
+  });
 
   // Track recently pushed items to prevent stale WebSocket data from overwriting confirmed values
   const recentlyPushedRef = useRef<Map<string, { potNumber: number; toolNumber: number; color: number; timestamp: number }>>(new Map());
@@ -990,7 +1001,11 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
             />
           </div>
         ) : tools.length === 0 && !isLoadingTools && !currentError ? (
-          <div className="tools-empty">NO TOOLS LOADED</div>
+          <div className="tools-empty">
+            {activeTab === 'atc' && toolsCache.table.length > 0
+              ? <><div>ATC MAGAZINE DATA UNAVAILABLE</div><div className="tools-empty-sub">This machine does not expose an ATC pot file (ATCTL/ATDTL). Switch to the TABLE tab to view tool data.</div></>
+              : 'NO TOOLS LOADED'}
+          </div>
         ) : (
           <div className="tools-pane-content-inner">
             {/* Show error message if present */}

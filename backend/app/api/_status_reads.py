@@ -57,7 +57,7 @@ async def get_machine_status(
             timeout=10
         )
 
-        control_version = await telnet_client.detect_control_type()
+        control_version = db_machine.control_version
         is_online = True
 
         montr_data = await telnet_client.get_monitor_data(verbose=False)
@@ -177,7 +177,7 @@ async def get_running_log(machine_id: int, db: Session = Depends(get_db)):
             timeout=10
         )
 
-        control_version = await telnet_client.detect_control_type()
+        control_version = db_machine.control_version
         montr_data = await telnet_client.get_monitor_data(verbose=False)
 
         if not montr_data:
@@ -226,7 +226,7 @@ async def get_work_counters(machine_id: int, db: Session = Depends(get_db)):
             timeout=10
         )
 
-        control_version = await telnet_client.detect_control_type()
+        control_version = db_machine.control_version
         montr_data = await telnet_client.get_monitor_data(verbose=False)
 
         if not montr_data:

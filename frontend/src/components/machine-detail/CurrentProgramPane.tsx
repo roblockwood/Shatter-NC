@@ -324,9 +324,28 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
             console.error('Error fetching deployment by O-number:', err);
             // Fall through to fallback
           }
+        } else {
+          // No valid programName — machine is idle or program is unknown.
+          // Do NOT show the most recently deployed program; that would be misleading.
+          setDeployment(null);
+          setProgram(null);
+          setFileInfo(null);
+          hasDataRef.current = true;
+          if (isInitialLoadRef.current) {
+            isInitialLoadRef.current = false;
+            setLoading(false);
+          }
+          setIsRefreshing(false);
+          setRefreshing(false);
+          if (refreshTrigger > 0) {
+            setRefreshTrigger(0);
+          }
+          recordFetchSuccess();
+          return;
         }
         
-        // Fallback: Fetch most recent deployment if no program_name or fetch by O-number failed
+        // Fallback: programName was valid but the by-onumber fetch threw an exception.
+        // Show the most recent deployment as a last resort so the pane is not empty.
         const response = await fetch(`${API_BASE_URL}/api/programs/machines/${machineId}/deployments?current_only=true`);
         if (response.ok) {
           const data = await response.json();
@@ -520,16 +539,47 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
     setIsRevalidating(true);
     try {
       const res = await fetch(
-        `${API_BASE_URL}/api/programs/machines/${machineId}/programs/validate-file?file_path=${encodeURIComponent(filePath)}`
-        , { method: 'POST' }
+        `${API_BASE_URL}/api/programs/machines/${machineId}/programs/validate-file?file_path=${encodeURIComponent(filePath)}`,
+        { method: 'POST' }
       );
       if (res.ok) {
         const data = await res.json();
-        setLiveValidation({
+        const freshValidation = {
           tools: data.validation?.tools ?? data.tools,
           wcs_offset: data.validation?.wcs_offset ?? data.wcs_offset ?? null,
           valid: data.validation?.valid ?? data.valid,
-        });
+        };
+        setLiveValidation(freshValidation);
+
+        // Persist the fresh results back to the deployment record so that the
+        // next page load shows current-machine-config tolerances, not the stale
+        // upload-time results.
+        if (dep.id) {
+          try {
+            await fetch(
+              `${API_BASE_URL}/api/programs/deployments/${dep.id}/validation`,
+              {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  validation_results: freshValidation,
+                  validation_passed: freshValidation.valid ?? true,
+                }),
+              }
+            );
+            // Update the module-level cache so a cache-hit also shows fresh data
+            if (programName) {
+              const cached = dataCache.get(getCacheKey(machineId, programName));
+              if (cached?.deployment) {
+                cached.deployment.validation_results = freshValidation;
+                cached.deployment.validation_passed = freshValidation.valid ?? true;
+              }
+            }
+          } catch (patchErr) {
+            // Persistence failure is non-fatal — live result is already shown
+            console.warn('Could not persist re-validation results:', patchErr);
+          }
+        }
       }
     } catch (err) {
       console.error('Re-validate error:', err);
@@ -577,11 +627,24 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deployment]);
 
-  // Reset live validation and auto-revalidate guard when deployment identity changes
+  // Reset live validation only when the *program* actually changes, not on every render.
+  // Using a ref to track the previous key avoids clearing liveValidation during the
+  // periodic parent re-renders that pass the same machineId + programName, or during
+  // brief poll cycles where programName momentarily becomes '----' then returns.
+  const liveValidationKeyRef = useRef<string | null>(null);
+  const currentKey = `${machineId}:${programName ?? ''}`;
+  const isRealProgramName = programName && programName !== '----' && programName !== 'undefined' && programName !== 'null' && programName.trim() !== '';
+
   useEffect(() => {
+    // Only treat this as a genuine program-change if the incoming name is a real O-number.
+    // Ignore transient blank/placeholder values so a brief polling gap doesn't wipe the live result.
+    if (!isRealProgramName) return;
+    if (liveValidationKeyRef.current === currentKey) return;
+    liveValidationKeyRef.current = currentKey;
     setLiveValidation(null);
     hasAutoRevalidatedRef.current = false;
-  }, [machineId, programName]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentKey, isRealProgramName]);
 
   const extractONumber = (filename: string): string => {
     const match = filename.match(/O(\d{4})/i);
@@ -627,10 +690,10 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
           <button
             onClick={() => handleRevalidate()}
             disabled={isRevalidating}
-            style={{ fontSize: '0.7rem', padding: '1px 6px', cursor: isRevalidating ? 'wait' : 'pointer' }}
+            className="revalidate-btn"
             title="Re-run tool validation against current machine state"
           >
-            {isRevalidating ? '[...]' : '[RE-VALIDATE]'}
+            {isRevalidating ? '[CHECKING...]' : '[RE-VALIDATE]'}
           </button>
         </div>
         {hasStaleFail && (

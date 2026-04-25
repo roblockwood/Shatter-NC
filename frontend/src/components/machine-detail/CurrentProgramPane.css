@@ -57,6 +57,34 @@
   cursor: not-allowed;
 }
 
+.revalidate-btn {
+  background: transparent;
+  border: 1px solid var(--color-text-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  cursor: pointer;
+  padding: 1px 6px;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.revalidate-btn:hover:not(:disabled) {
+  background: rgba(0, 255, 0, 0.12);
+  border-color: var(--color-text-primary);
+  box-shadow: var(--glow);
+}
+
+.revalidate-btn:active:not(:disabled) {
+  background: rgba(0, 255, 0, 0.22);
+}
+
+.revalidate-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
 .program-loading,
 .program-empty {
   text-align: center;

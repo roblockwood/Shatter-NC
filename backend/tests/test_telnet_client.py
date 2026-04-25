@@ -301,3 +301,117 @@ async def test_load_data_unit_selector_chooses_tolnm1_for_mm():
     await client.get_tool_table_data(units="mm")
     sent_frame = writer.written[0].decode("ascii")
     assert "TOLNM1" in sent_frame
+
+
+# ---------------------------------------------------------------------------
+# Multi-response helper for fallback tests
+# ---------------------------------------------------------------------------
+
+class _MultiResponseReader:
+    """Yields responses in sequence; returns EOF bytes once exhausted."""
+
+    def __init__(self, responses: list[bytes]) -> None:
+        self._responses = list(responses)
+
+    async def read(self, n: int) -> bytes:
+        if self._responses:
+            return self._responses.pop(0)
+        return b""
+
+
+def _make_multi_response_client(responses: list[bytes]) -> tuple[CNCTelnetClient, _FakeWriter]:
+    """Return a client with a multi-response fake reader, already marked connected."""
+    client = CNCTelnetClient("10.0.0.1", port=10000, timeout=5, command_delay=0.0)
+    writer = _FakeWriter()
+    client.reader = _MultiResponseReader(responses)  # type: ignore[assignment]
+    client.writer = writer  # type: ignore[assignment]
+    client._connected = True
+    return client, writer
+
+
+# ---------------------------------------------------------------------------
+# get_atc_magazine_data — file name selection by control version
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_atc_magazine_d00_requests_atctld():
+    """D00 control must load ATCTLD, not ATDTL or ATCTL."""
+    response = _make_response("LOD", "ATCTLD", status="00", data="A01,,atc_data")
+    client, writer = _make_connected_client(response)
+    result = await client.get_atc_magazine_data(control_version="D00")
+    sent_frame = writer.written[0].decode("ascii")
+    assert "ATCTLD" in sent_frame
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_atc_magazine_c00_requests_atctl():
+    """C00 control must load ATCTL."""
+    response = _make_response("LOD", "ATCTL", status="00", data="A01,,atc_data")
+    client, writer = _make_connected_client(response)
+    result = await client.get_atc_magazine_data(control_version="C00")
+    sent_frame = writer.written[0].decode("ascii")
+    assert "ATCTL" in sent_frame
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_atc_magazine_d00_falls_back_to_atctl_on_status_07():
+    """If ATCTLD returns status 07 (not found), fall back to ATCTL."""
+    primary_fail = _make_response("LOD", "ATCTLD", status="07")
+    fallback_ok = _make_response("LOD", "ATCTL", status="00", data="A01,,fallback")
+    client, writer = _make_multi_response_client([primary_fail, fallback_ok])
+    result = await client.get_atc_magazine_data(control_version="D00")
+    frames = [f.decode("ascii") for f in writer.written]
+    assert any("ATCTLD" in f for f in frames), "Should try ATCTLD first"
+    assert any("ATCTL" in f for f in frames), "Should fall back to ATCTL"
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_atc_magazine_returns_none_when_both_files_absent():
+    """Returns None if both ATCTLD and ATCTL return status 07."""
+    fail1 = _make_response("LOD", "ATCTLD", status="07")
+    fail2 = _make_response("LOD", "ATCTL", status="07")
+    client, _ = _make_multi_response_client([fail1, fail2])
+    result = await client.get_atc_magazine_data(control_version="D00")
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# get_prd3_data — file name selection by control version
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_prd3_d00_requests_prdd3():
+    """D00 control must load PRDD3."""
+    response = _make_response("LOD", "PRDD3", status="00", data="A01,,prd_data")
+    client, writer = _make_connected_client(response)
+    result = await client.get_prd3_data(control_version="D00")
+    sent_frame = writer.written[0].decode("ascii")
+    assert "PRDD3" in sent_frame
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_prd3_c00_requests_prd3():
+    """C00 control must load PRD3."""
+    response = _make_response("LOD", "PRD3", status="00", data="A01,,prd_data")
+    client, writer = _make_connected_client(response)
+    result = await client.get_prd3_data(control_version="C00")
+    sent_frame = writer.written[0].decode("ascii")
+    assert "PRD3" in sent_frame
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_prd3_d00_falls_back_to_prd3_on_failure():
+    """If PRDD3 is unavailable, falls back to PRD3."""
+    primary_fail = _make_response("LOD", "PRDD3", status="07")
+    fallback_ok = _make_response("LOD", "PRD3", status="00", data="A01,,fallback")
+    client, writer = _make_multi_response_client([primary_fail, fallback_ok])
+    result = await client.get_prd3_data(control_version="D00")
+    frames = [f.decode("ascii") for f in writer.written]
+    assert any("PRDD3" in f for f in frames)
+    assert any("PRD3" in f for f in frames)
+    assert result is not None

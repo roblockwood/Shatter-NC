@@ -26,7 +26,10 @@
       "Bash(nc -zv -w2 192.168.1.135 10000)",
       "Bash(docker version:*)",
       "Bash(docker info:*)",
-      "Bash(defaults read:*)"
+      "Bash(defaults read:*)",
+      "Bash(npx tsc *)",
+      "Skill(check-project-status)",
+      "Skill(check-project-status:*)"
     ]
   }
 }
