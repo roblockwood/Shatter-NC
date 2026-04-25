@@ -619,9 +619,18 @@ class MachinePoller:
                 status_data["macros"] = {}
                 status_data["macros_timestamp"] = None
             
-            # Override status to 'error' only when there are hard alarms (type == "alarm"); ignore operator_message and loading_system
-            hard_alarms = [a for a in status_data.get("alarms", []) if a.get("type") == "alarm"]
-            if hard_alarms and machine_status != "off":
+            # Override status to 'error' only for machine-halting alarms (stop_level >= 4).
+            # stop_level 1-3 are informational/soft (e.g., CM7522 = stop_level 1, machine keeps running).
+            # stop_level 4-5 are feed-hold/E-stop events that actually halt the machine.
+            # Also: never override 'operating' — if PRD3 reports code 3, the machine IS running.
+            def _is_halting_alarm(alarm: Dict[str, Any]) -> bool:
+                try:
+                    return int(alarm.get("stop_level") or 0) >= 4
+                except (ValueError, TypeError):
+                    return False
+
+            halting_alarms = [a for a in status_data.get("alarms", []) if _is_halting_alarm(a)]
+            if halting_alarms and machine_status not in ("off", "operating"):
                 machine_status = "error"
                 status_data["status"] = "error"
             
