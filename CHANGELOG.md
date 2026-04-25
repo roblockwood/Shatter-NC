@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.2.0...v1.2.1) (2026-04-25)
+
+
+### Bug Fixes
+
+* lowercase owner in GHCR image tags to satisfy Docker registry requirement ([531714c](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/531714ce13741d460dc84f74c27989e297d2a430))
+
 # [1.2.0](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.1.5...v1.2.0) (2026-04-25)
 
 
