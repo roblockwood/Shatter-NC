@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.1.0...v1.1.1) (2026-04-25)
+
+
+### Bug Fixes
+
+* eliminate remaining 9 no-explicit-any violations in ToolsPane.tsx ([61bb151](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/61bb15190b222155d32aa34dce34c6ccc254c4c1))
+
 # [1.1.0](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.0.2...v1.1.0) (2026-04-25)
 
 
