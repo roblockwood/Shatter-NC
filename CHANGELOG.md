@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.0.2...v1.1.0) (2026-04-25)
+
+
+### Features
+
+* add ATC pot optimizer and NC tool sequence parser ([d0c97ce](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/d0c97ce6264fd56f8595b89cdf667ca51b80ecad))
+
 ## [1.0.2](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.0.1...v1.0.2) (2026-04-25)
 
 
