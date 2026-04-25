@@ -1,3 +1,10 @@
+## [1.2.3](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.2.2...v1.2.3) (2026-04-25)
+
+
+### Bug Fixes
+
+* prevent CM7522 alarm caused by TOLNI1 retry after timeout ([27c302b](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/27c302b1793f103c5bd0204ad06c3b8127b05efd))
+
 ## [1.2.2](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.2.1...v1.2.2) (2026-04-25)
 
 
