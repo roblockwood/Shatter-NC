@@ -106,7 +106,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const [toolsSummary, setToolsSummary] = useState<Array<{ tool_number: number; description: string }>>([]);
 
   // Track pending changes (changes not yet pushed to server)
-  const [pendingChanges, setPendingChanges] = useState<Map<string, { tool: Tool; field: string; oldValue: any; newValue: any; operationType: ToolModificationOperationType }>>(new Map());
+  const [pendingChanges, setPendingChanges] = useState<Map<string, { tool: Tool; field: string; oldValue: string | number; newValue: string | number; operationType: ToolModificationOperationType }>>(new Map());
   const [isPushingChanges, setIsPushingChanges] = useState(false);
   const [pushComplete, setPushComplete] = useState(false);
 
@@ -573,8 +573,15 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       const colorChanges = changeArray.filter(c => c.operationType === 'color');
       const otherChanges = changeArray.filter(c => c.operationType !== 'color');
       
+      interface ColorChangeResult {
+        pot_number: number;
+        tool_number: number;
+        color: number;
+        success: boolean;
+        message?: string;
+      }
       // Process color changes in batch (more efficient)
-      let colorResults: any[] = [];
+      let colorResults: ColorChangeResult[] = [];
       if (colorChanges.length > 0) {
         const batchRequest = {
           changes: colorChanges.map(change => {
@@ -610,9 +617,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         colorResults = batchData.results || [];
         
         // Check for failures in batch
-        const batchFailures = colorResults.filter((r: any) => !r.success);
+        const batchFailures = colorResults.filter((r) => !r.success);
         if (batchFailures.length > 0) {
-          const errorMessages = batchFailures.map((f: any) => 
+          const errorMessages = batchFailures.map((f) => 
             `Pot ${f.pot_number}: ${f.message || 'Unknown error'}`
           ).join('; ');
           throw new Error(`Some color changes failed: ${errorMessages}`);
@@ -623,7 +630,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           const updated = {
             ...prev,
             atc: prev.atc.map(tool => {
-              const result = colorResults.find((r: any) => 
+              const result = colorResults.find((r) => 
                 r.pot_number === tool.pot_number && 
                 r.tool_number === tool.tool_number &&
                 r.success
@@ -652,7 +659,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           // Clear pending changes after success animation
           setPendingChanges(prev => {
             const next = new Map(prev);
-            colorResults.forEach((result: any) => {
+            colorResults.forEach((result) => {
               if (result.success) {
                 const changeKey = `${result.pot_number}-${result.tool_number}-color`;
                 next.delete(changeKey);
@@ -855,8 +862,8 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
     // Apply sorting
     const sorted = [...filtered].sort((a, b) => {
-      let aVal: any;
-      let bVal: any;
+      let aVal: string | number;
+      let bVal: string | number;
 
       switch (sortColumn) {
         case 'pot_number':
