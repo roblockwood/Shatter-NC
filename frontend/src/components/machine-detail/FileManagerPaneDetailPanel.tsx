@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Select } from '../ui';
-import {
+import type {
   Program,
   DeploymentDetail,
   FreshValidationState,
@@ -37,7 +37,7 @@ export interface FileManagerPaneDetailPanelProps {
   validationLoading: boolean;
   previewLines: string[];
   metadataLoading: boolean;
-  deploymentSectionRef: React.RefObject<HTMLDivElement>;
+  deploymentSectionRef: React.RefObject<HTMLDivElement | null>;
   setExpandedWCS: (expanded: boolean) => void;
   setSelectedDeploymentId: (id: number | null) => void;
   setValidationError: (error: string | null) => void;
