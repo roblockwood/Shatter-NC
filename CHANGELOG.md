@@ -1,3 +1,10 @@
+## [1.1.5](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.1.4...v1.1.5) (2026-04-25)
+
+
+### Bug Fixes
+
+* resolve all ESLint warnings — 0 problems remaining ([19ee180](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/19ee1804d0ab6241b4e9e2c210486efeeaa50b5f))
+
 ## [1.1.4](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.1.3...v1.1.4) (2026-04-25)
 
 
