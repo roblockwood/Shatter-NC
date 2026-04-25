@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.0.0...v1.0.1) (2026-04-25)
+
+
+### Bug Fixes
+
+* correct fake_list in download candidates test to scope by folder ([05a5c1c](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/05a5c1c99c3bc90774782b5db6402442411ba0cf))
+
 # 1.0.0 (2026-04-25)
 
 
