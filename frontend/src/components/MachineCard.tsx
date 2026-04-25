@@ -1,9 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ToolListModal } from './ToolListModal';
 import { UploadConfirmationModal } from './UploadConfirmationModal';
-import { MachineCardAsciiDivider } from './MachineCardAsciiDivider';
-import { SaveConfirmModal } from './SaveConfirmModal';
-import { Select } from './ui/Select';
+
 import { AlarmPane } from './machine-detail/AlarmPane';
 import { StatusTimeline } from './machine-detail/StatusTimeline';
 import { ToolsPane } from './machine-detail/ToolsPane';
@@ -13,86 +11,19 @@ import { StatusHistoryPane } from './machine-detail/StatusHistoryPane';
 import { PanelPane } from './machine-detail/PanelPane';
 import { FileManagerPane } from './machine-detail/FileManagerPane';
 import { LayoutManager } from './machine-detail/LayoutManager';
+import { MachineEditPanel } from './machine-detail/MachineEditPanel';
 import { PANE_IDS } from '../types/layout';
 import { useExpandedMachine } from '../contexts/ExpandedMachineContext';
 import './MachineCard.css';
 import { API_BASE_URL } from '../config/api';
-import { useLatestMachineProductionRun } from '../hooks/useLatestMachineProductionRun';
-import { alarmStopLevel } from '../utils/alarmStopLevel';
-import { fastPollLastSuccessAt } from '../utils/machinePollFreshness';
-import { ProductionRunCompactSummary } from './machine-detail/ProductionRunCompactSummary';
+import type { Alarm, ValidationResult, MachineStatus, MachineCardProps } from './MachineCardTypes';
 
-interface Tool {
-  tool_number: number;
-  tool_name?: string;
-  diameter?: number;
-  length?: number;
-}
-
-interface Alarm {
-  code: string;
-  message: string;
-  severity?: string;
-  level_class?: string;
-  stop_level?: string;
-}
-
-interface MachineStatus {
-  machine_id: number;
-  machine_name: string;
-  is_online: boolean;
-  status?: string;
-  program_name?: string;  // Active program O-number from machine (e.g., "O2045")
-  mem_mode?: number;  // MEM mode: 0=Manual, 1=MDI, 2=Memory, 3=Edit, 4=MDI manual, 5=Memory edit
-  mem_operation_status?: number;  // MEM operation_status: 0=Reset, 1=Operation, 2=Temporary stop, 3=Block stop
-  cycle_time?: string;
-  power_on_hours?: string;
-  counters?: Array<{ counter_number: number; count: number }>;
-  tools?: Tool[];  // ATC data
-  tool_table?: Tool[];  // TABLE data (TOLN)
-  current_tool?: number;
-  alarms?: Alarm[];
-  panel?: any;  // Panel data (doors, mode, overrides)
-  error?: string;
-  poll_timestamp: string;
-  /** When the last successful fast (status) poll completed; does not advance on failed attempts. */
-  last_successful_poll_at?: string | null;
-  tools_timestamp?: string | null;
-  tool_table_timestamp?: string | null;
-  macros_timestamp?: string | null;
-  response_time_ms?: number;
-  tool_response_time_ms?: number;
-  ip_address?: string;
-  ftp_username?: string;
-  ftp_password?: string;
-  ftp_port?: number;
-  http_port?: number;
-  path?: string;
-  poll_interval_seconds?: number;
-  tool_poll_interval_seconds?: number;
-  part_display_mode?: 'cycle' | 'parts';
-  enabled?: boolean;
-  units?: 'in' | 'mm';
-}
-
-interface MachineCardProps {
-  machine: MachineStatus;
-  editMode?: boolean;
-  isExpanded?: boolean;
-  isEditing?: boolean; // Controlled from parent to track which machine is being edited
-  canEdit?: boolean; // Whether this machine can be edited (only one at a time)
-  pendingEditSwitch?: boolean; // Whether a switch to another machine is pending
-  onExpand?: () => void;
-  onCollapse?: () => void;
-  onEditStart?: () => void; // Called when editing starts
-  onEditEnd?: () => void; // Called when editing ends
-  onRequestEditSwitch?: () => void; // Called when trying to edit while another machine is being edited
-  onCancelEditSwitch?: () => void; // Called when user cancels the edit switch
-  pendingCollapse?: boolean; // Whether a collapse is pending (will check for unsaved changes)
-  onCancelCollapse?: () => void; // Called when user cancels the collapse
-  onDelete?: (machine: MachineStatus) => void;
-  scrollToStatus?: boolean; // Flag to trigger scroll to status timeline
-  isAnyMachineEditing?: boolean; // Whether any machine is currently being edited
+/** Fast-poll freshness time for status/alarms/panel: last successful controller poll only (falls back to legacy poll_timestamp if field absent). */
+function fastPollLastSuccessAt(machine: MachineStatus): string | null | undefined {
+  if (machine.last_successful_poll_at !== undefined) {
+    return machine.last_successful_poll_at;
+  }
+  return machine.poll_timestamp;
 }
 
 export const MachineCard: React.FC<MachineCardProps> = ({
@@ -120,8 +51,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
 
   const [showToolModal, setShowToolModal] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
-  const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
-  const [validationResult, setValidationResult] = useState<any>(null);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [selectedFilename, setSelectedFilename] = useState('');
   const [fileContent, setFileContent] = useState('');
   const [isValidating, setIsValidating] = useState(false);
@@ -153,11 +83,6 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       setIsEditingLocal(false);
     }
   };
-  const [editError, setEditError] = useState<string | null>(null);
-  const [editSuccess, setEditSuccess] = useState(false);
-  const [isEditSaving, setIsEditSaving] = useState(false);
-  const [isEditTesting, setIsEditTesting] = useState(false);
-  const [editTestResult, setEditTestResult] = useState<any>(null);
   const { 
     setExpandedMachine,
     setExpandedAssetKind,
@@ -200,7 +125,15 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const fileManagerPaneRef = useRef<HTMLDivElement>(null);
   const expandedContentRef = useRef<HTMLDivElement>(null);
   const [currentProgram, setCurrentProgram] = useState<string | null>(null);
-  const { latestRun, latestRunLoading } = useLatestMachineProductionRun(machine.machine_id);
+  const [latestRun, setLatestRun] = useState<{
+    program_no: string | null;
+    run_start: string;
+    run_end: string;
+    cycles: number;
+    part_count: number;
+    segments: { status: string | null; start_time: string; end_time: string }[];
+  } | null>(null);
+  const [latestRunLoading, setLatestRunLoading] = useState(false);
   
   // Cache alarms from machine prop to avoid refetching
   useEffect(() => {
@@ -208,6 +141,19 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       setCachedAlarms(machine.alarms);
     }
   }, [machine.alarms]);
+
+  const getAlarmSeverityLevel = (alarm: Alarm): number => {
+    // Mirror AlarmPane: stop_level 5..1 (5 highest). Default to 3 if missing/invalid.
+    const raw = alarm.stop_level;
+    if (raw !== undefined && raw !== null && String(raw) !== '') {
+      const level = parseInt(String(raw), 10);
+      if (!isNaN(level) && level >= 1 && level <= 5) {
+        return level;
+      }
+    }
+    return 3;
+  };
+
 
   // Use program_name from machine status (active program from polling)
   // This shows the actual program running on the machine, not just the most recent deployment
@@ -228,6 +174,47 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       setCurrentProgram(null);
     }
   }, [machine.program_name, machine.machine_name]);
+
+  // Fetch most recent production run for compact card summary
+  useEffect(() => {
+    let cancelled = false;
+    const fetchLatestRun = async () => {
+      try {
+        setLatestRunLoading(true);
+        const endTime = new Date();
+        const startTime = new Date(endTime);
+        startTime.setDate(startTime.getDate() - 7);
+
+        const resp = await fetch(
+          `${API_BASE_URL}/api/machines/${machine.machine_id}/production-runs-timeline?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&limit=1&offset=0`
+        );
+        if (!resp.ok) {
+          if (!cancelled) {
+            setLatestRun(null);
+          }
+          return;
+        }
+        const data = await resp.json();
+        const runs = Array.isArray(data) ? data : [];
+        if (!cancelled) {
+          setLatestRun(runs[0] || null);
+        }
+      } catch (_e) {
+        if (!cancelled) {
+          setLatestRun(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLatestRunLoading(false);
+        }
+      }
+    };
+
+    fetchLatestRun();
+    return () => {
+      cancelled = true;
+    };
+  }, [machine.machine_id]);
 
   // Helper function to find pane element within current card
   const findPaneElement = (paneId: string): HTMLElement | null => {
@@ -261,230 +248,17 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     }
   }, [scrollToStatus, isExpanded]);
 
-  const [editFormData, setEditFormData] = useState({
-    ip_address: machine.ip_address || '',
-    ftp_username: machine.ftp_username || '',
-    ftp_password: machine.ftp_password || '',
-    ftp_port: machine.ftp_port || 21,
-    // http_port removed - Telnet port is always 10000
-    path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
-    poll_interval_seconds: machine.poll_interval_seconds || 5,
-    tool_poll_interval_seconds: (machine as any).tool_poll_interval_seconds || 30,
-    enabled: machine.enabled !== false,
-    part_display_mode: machine.part_display_mode || 'parts',
-    diameter_tolerance: (machine as any).diameter_tolerance || 0.010,
-    length_tolerance_plus: (machine as any).length_tolerance_plus || 0.02,
-    length_tolerance_minus: (machine as any).length_tolerance_minus || 0.0,
-    tolerance_x: (machine as any).tolerance_x || 0.0394,
-    tolerance_y: (machine as any).tolerance_y || 0.0394,
-    tolerance_z: (machine as any).tolerance_z || 0.0394,
-    use_machine_tool_tolerances: (machine as any).use_machine_tool_tolerances || false,
-    use_machine_wcs_tolerances: (machine as any).use_machine_wcs_tolerances || false,
-    units: (machine as any).units || 'in',
-  });
-  const [editMachineName, setEditMachineName] = useState(machine.machine_name || '');
-  // Store the original form data when editing starts (from fetched API data)
-  const [originalFormData, setOriginalFormData] = useState<typeof editFormData | null>(null);
-  const [originalMachineName, setOriginalMachineName] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Fetch full machine configuration data on mount
+  // Handle Escape key to collapse expanded card
   useEffect(() => {
-    const fetchMachineConfig = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/machines/${machine.machine_id}`);
-        if (response.ok) {
-          const fullMachineData = await response.json();
-          // Store the fetched data as the original baseline
-          const fetchedFormData = {
-            ip_address: fullMachineData.ip_address || '',
-            ftp_username: fullMachineData.ftp_username || '',
-            ftp_password: fullMachineData.ftp_password || '',
-            ftp_port: fullMachineData.ftp_port || 21,
-            // http_port removed - Telnet port is always 10000
-            path: fullMachineData.path !== undefined && fullMachineData.path !== null ? fullMachineData.path : '/',
-            poll_interval_seconds: fullMachineData.poll_interval_seconds || 5,
-            tool_poll_interval_seconds: fullMachineData.tool_poll_interval_seconds || 30,
-            enabled: fullMachineData.enabled !== false,
-            part_display_mode: fullMachineData.part_display_mode || 'parts',
-            diameter_tolerance: fullMachineData.diameter_tolerance || 0.010,
-            length_tolerance_plus: fullMachineData.length_tolerance_plus || 0.02,
-            length_tolerance_minus: fullMachineData.length_tolerance_minus || 0.0,
-            tolerance_x: fullMachineData.tolerance_x || 0.0394,
-            tolerance_y: fullMachineData.tolerance_y || 0.0394,
-            tolerance_z: fullMachineData.tolerance_z || 0.0394,
-            use_machine_tool_tolerances: fullMachineData.use_machine_tool_tolerances || false,
-            use_machine_wcs_tolerances: fullMachineData.use_machine_wcs_tolerances || false,
-            units: fullMachineData.units || 'in',
-          };
-          setOriginalFormData(fetchedFormData);
-          setOriginalMachineName(fullMachineData.name || '');
-          // Update form data with fetched configuration
-          setEditMachineName(fullMachineData.name || '');
-          setEditFormData(fetchedFormData);
-        }
-      } catch (error) {
-        console.error('Error fetching machine configuration:', error);
+    if (!isExpanded || editMode) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCollapse?.();
       }
     };
-
-    fetchMachineConfig();
-  }, [machine.machine_id]);
-
-  const editFormValid = editMachineName && editFormData.ip_address && editFormData.ftp_username && editFormData.ftp_password;
-
-  // Check if there are unsaved changes
-  const hasUnsavedChanges = () => {
-    if (!isEditing) return false;
-    
-    // If we don't have original data yet (still loading), assume no changes
-    if (!originalFormData || originalMachineName === null) return false;
-    
-    // Compare machine name against original
-    if (editMachineName !== originalMachineName) return true;
-    
-    // Compare all form fields against original (from fetched API data)
-    return JSON.stringify(editFormData) !== JSON.stringify(originalFormData);
-  };
-
-  const handleEditSave = async () => {
-    if (!editFormValid) {
-      setEditError('Please fill in all required fields');
-      return;
-    }
-
-    setIsEditSaving(true);
-    setEditError(null);
-    setEditSuccess(false);
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/machines/${machine.machine_id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editFormData),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Update failed: ${response.statusText}`);
-      }
-
-      setEditSuccess(true);
-      setTimeout(() => {
-        stopEditing();
-        setEditSuccess(false);
-      }, 1500);
-    } catch (error) {
-      console.error('Edit error:', error);
-      setEditError(`Save failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsEditSaving(false);
-    }
-  };
-
-  const performEditCancel = () => {
-    stopEditing();
-    setEditError(null);
-    setEditSuccess(false);
-    setEditTestResult(null);
-    // Reset to original values (from fetched API data, not machine prop)
-    if (originalFormData && originalMachineName !== null) {
-      setEditMachineName(originalMachineName);
-      setEditFormData(originalFormData);
-    } else {
-      // Fallback to machine prop if original not loaded yet
-      setEditMachineName(machine.machine_name || '');
-      setEditFormData({
-        ip_address: machine.ip_address || '',
-        ftp_username: machine.ftp_username || '',
-        ftp_password: machine.ftp_password || '',
-        ftp_port: machine.ftp_port || 21,
-        // http_port removed - Telnet port is always 10000
-        path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
-        poll_interval_seconds: machine.poll_interval_seconds || 5,
-        tool_poll_interval_seconds: (machine as any).tool_poll_interval_seconds || 30,
-        enabled: machine.enabled !== false,
-        part_display_mode: machine.part_display_mode || 'parts',
-        diameter_tolerance: (machine as any).diameter_tolerance || 0.010,
-        length_tolerance_plus: (machine as any).length_tolerance_plus || 0.02,
-        length_tolerance_minus: (machine as any).length_tolerance_minus || 0.0,
-        tolerance_x: (machine as any).tolerance_x || 0.0394,
-        tolerance_y: (machine as any).tolerance_y || 0.0394,
-        tolerance_z: (machine as any).tolerance_z || 0.0394,
-        use_machine_tool_tolerances: (machine as any).use_machine_tool_tolerances || false,
-        use_machine_wcs_tolerances: (machine as any).use_machine_wcs_tolerances || false,
-        units: (machine as any).units || 'in',
-      });
-    }
-  };
-
-  const handleEditCancel = () => {
-    if (hasUnsavedChanges()) {
-      setShowSaveConfirmModal(true);
-      return;
-    }
-    
-    // No unsaved changes, proceed with cancel
-    performEditCancel();
-  };
-
-  // Trigger save confirmation when edit switch is pending
-  useEffect(() => {
-    if (!pendingEditSwitch || !isEditing) {
-      return;
-    }
-
-    // Check for unsaved changes - only show dialog if there are changes
-    if (hasUnsavedChanges()) {
-      setShowSaveConfirmModal(true);
-    } else {
-      // No unsaved changes, just switch directly without confirmation
-      performEditCancel();
-    }
-  }, [pendingEditSwitch, isEditing, editMachineName, editFormData, machine]);
-
-  // Trigger save confirmation when collapse is pending
-  useEffect(() => {
-    if (!pendingCollapse || !isEditing) {
-      return;
-    }
-
-    // Check for unsaved changes - only show dialog if there are changes
-    if (hasUnsavedChanges()) {
-      setShowSaveConfirmModal(true);
-    } else {
-      // No unsaved changes, proceed with collapse
-      performEditCancel();
-    }
-  }, [pendingCollapse, isEditing, editMachineName, editFormData, machine]);
-
-  // Handle Escape key to collapse expanded card or exit edit mode
-  useEffect(() => {
-    if (isEditing) {
-      // In edit mode, Escape should trigger cancel (with confirmation if unsaved)
-      const handleEscape = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          handleEditCancel();
-        }
-      };
-
-      document.addEventListener('keydown', handleEscape);
-      return () => {
-        document.removeEventListener('keydown', handleEscape);
-      };
-    } else if (isExpanded && !editMode) {
-      // In expanded view, Escape should collapse
-      const handleEscape = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          onCollapse?.();
-        }
-      };
-
-      document.addEventListener('keydown', handleEscape);
-      return () => {
-        document.removeEventListener('keydown', handleEscape);
-      };
-    }
-  }, [isExpanded, isEditing, editMode, onCollapse, handleEditCancel]);
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isExpanded, editMode, onCollapse]);
 
   // Dismiss all hover panes when card is collapsed
   useEffect(() => {
@@ -497,47 +271,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     }
   }, [isExpanded]);
 
-  const handleEditTestConnection = async () => {
-    if (!editFormData.ip_address) {
-      setEditError('IP address required for connection test');
-      return;
-    }
-
-    setIsEditTesting(true);
-    setEditError(null);
-    setEditTestResult(null);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/machines/${machine.machine_id}/test`, {
-        method: 'POST',
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-
-        // Check if connection actually succeeded
-        if (result.overall_status === 'online') {
-          setEditTestResult(result);
-        } else {
-          // Build error message from failed services
-          const errors = [];
-          if (!result.telnet?.success) {
-            errors.push(`Telnet: ${result.telnet?.error || 'Connection failed'}`);
-          }
-          if (!result.ftp?.success) {
-            errors.push(`FTP: ${result.ftp?.error || 'Connection failed'}`);
-          }
-          setEditError(`Connection test failed: ${errors.join(', ')}`);
-        }
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        setEditError(errorData.detail || 'Connection test failed');
-      }
-    } catch (err) {
-      setEditError(`Test failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    } finally {
-      setIsEditTesting(false);
-    }
-  };
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getStatusType = () => {
     if (!machine.is_online) return 'offline';
@@ -647,8 +381,23 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     hasRegisteredExpandedContextRef.current = true;
   }, [isExpanded, machine.machine_id, machine.machine_name, onCollapse, setExpandedAssetKind, setExpandedMachine]);
 
+  // Render edit panel
+  if (isEditing) {
+    return (
+      <MachineEditPanel
+        machine={machine}
+        pendingEditSwitch={pendingEditSwitch}
+        pendingCollapse={pendingCollapse}
+        onEditEnd={stopEditing}
+        onCancelEditSwitch={onCancelEditSwitch}
+        onCancelCollapse={onCancelCollapse}
+        onDelete={onDelete}
+      />
+    );
+  }
+
   // Render expanded view
-  if (isExpanded && !isEditing && !editMode) {
+  if (isExpanded && !editMode) {
     return (
       <div className={`machine-card expanded`} onClick={handleCardClick}>
 
@@ -710,13 +459,14 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               toolTable={machine.tool_table || []}
               currentTool={machine.current_tool}
               machineId={machine.machine_id}
-              units={(machine as any).units || 'in'}
+              units={machine.units ?? 'in'}
               machineStatus={machine.status}
-              memMode={(machine as any).mem_mode}
-              memOperationStatus={(machine as any).mem_operation_status}
+              memMode={machine.mem_mode}
+              memOperationStatus={machine.mem_operation_status}
               toolsTimestamp={machine.tools_timestamp ?? undefined}
               toolTableTimestamp={machine.tool_table_timestamp ?? undefined}
               toolPollIntervalSeconds={machine.tool_poll_interval_seconds ?? 30}
+              programName={currentProgram ?? undefined}
             />
                   </div>
                 ),
@@ -771,9 +521,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         <ToolListModal
           isOpen={showToolModal}
           onClose={() => setShowToolModal(false)}
-          tools={(machine.tools || []) as any}
+          tools={machine.tools || []}
           machineName={machine.machine_name}
-          units={(machine as any).units || machine.units || 'in'}
+          units={(machine.units || 'in') as 'in' | 'mm'}
         />
 
         <UploadConfirmationModal
@@ -790,7 +540,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           machineName={machine.machine_name}
           machinePath={machine.path || '/'}
           fileContent={fileContent}
-          units={(machine as any).units || machine.units || 'in'}
+          units={(machine.units || 'in') as 'in' | 'mm'}
         />
 
         <input
@@ -806,374 +556,18 @@ export const MachineCard: React.FC<MachineCardProps> = ({
 
   // Render compact view
   return (
-    <div className={`machine-card ${isExpanded ? 'expanded' : ''} ${isEditing ? 'edit-mode' : ''} ${isAnyMachineEditing && !isEditing ? 'hidden-when-editing' : ''}`} onClick={handleCardClick}>
+    <div className={`machine-card ${isExpanded ? 'expanded' : ''} ${isAnyMachineEditing ? 'hidden-when-editing' : ''}`} onClick={handleCardClick}>
       <div className="machine-card-header">
-        {isEditing ? (
-          <div className="machine-header-edit-row">
-            <input
-              type="text"
-              value={editMachineName}
-              onChange={(e) => setEditMachineName(e.target.value)}
-              className="machine-name-edit"
-              disabled={isEditSaving}
-              placeholder="MACHINE NAME"
-            />
-            <div className="form-checkbox machine-header-checkbox">
-              <input
-                type="checkbox"
-                id={`enabled-${machine.machine_id}`}
-                checked={editFormData.enabled}
-                onChange={(e) => setEditFormData({ ...editFormData, enabled: e.target.checked })}
-                disabled={isEditSaving}
-              />
-              <label htmlFor={`enabled-${machine.machine_id}`}>ENABLED</label>
-            </div>
-          </div>
-        ) : (
-          <span className={`machine-name ${!machine.is_online ? 'text-error' : (machine.status?.toLowerCase() === 'operating' || machine.status?.toLowerCase().includes('running') ? 'text-glow' : 'text-muted')}`}>{machine.machine_name}</span>
-        )}
+        <span className={`machine-name ${!machine.is_online ? 'text-error' : (machine.status?.toLowerCase() === 'operating' || machine.status?.toLowerCase().includes('running') ? 'text-glow' : 'text-muted')}`}>{machine.machine_name}</span>
         <div className="machine-header-actions">
         </div>
       </div>
 
-      <MachineCardAsciiDivider />
+      <div className="machine-card-divider">
+        ├{'─'.repeat(30)}┤
+      </div>
 
-      {isEditing ? (
-        <div className="machine-edit-form">
-          {editError && (
-            <div className="form-error text-error">
-              {editError}
-            </div>
-          )}
-
-          {editSuccess && (
-            <div className="form-success text-success">
-              Machine updated successfully!
-            </div>
-          )}
-
-          <div className="form-row asset-id-field">
-            <label>MACHINE ID:</label>
-            <span className="asset-id-value">{machine.machine_id}</span>
-          </div>
-
-          {/* Basic Settings */}
-          <div className="form-row-inline">
-            <div style={{ flex: '0 0 auto', minWidth: '200px' }}>
-              <label>UNITS:</label>
-              <Select
-                value={editFormData.units}
-                onChange={(value) => setEditFormData({ ...editFormData, units: value })}
-                disabled={isEditSaving}
-                options={[
-                  { value: 'in', label: 'INCHES (in)' },
-                  { value: 'mm', label: 'MILLIMETERS (mm)' },
-                ]}
-              />
-            </div>
-            <div style={{ flex: '0 0 auto', minWidth: '260px' }}>
-              <label>PARTS DISPLAY:</label>
-              <Select
-                value={editFormData.part_display_mode}
-                onChange={(value) =>
-                  setEditFormData({
-                    ...editFormData,
-                    part_display_mode: value as 'cycle' | 'parts',
-                  })
-                }
-                disabled={isEditSaving}
-                options={[
-                  { value: 'parts', label: 'PARTS COUNTER' },
-                  { value: 'cycle', label: 'CYCLE COUNT' },
-                ]}
-              />
-            </div>
-          </div>
-
-          {/* Horizontal Form Sections */}
-          <div className="form-sections-horizontal">
-            {/* Network Configuration Section */}
-            <div className="network-config-section">
-              <div className="network-config-header">NETWORK CONFIGURATION</div>
-
-              <div className="form-row">
-                <label>IP:</label>
-              <input
-                type="text"
-                value={editFormData.ip_address}
-                onChange={(e) => setEditFormData({ ...editFormData, ip_address: e.target.value })}
-                placeholder="192.168.1.100"
-                disabled={isEditSaving}
-              />
-            </div>
-
-            <div className="form-row">
-              <label>FTP USER:</label>
-              <input
-                type="text"
-                value={editFormData.ftp_username}
-                onChange={(e) => setEditFormData({ ...editFormData, ftp_username: e.target.value })}
-                placeholder="anonymous"
-                disabled={isEditSaving}
-              />
-            </div>
-
-            <div className="form-row">
-              <label>FTP PASS:</label>
-              <input
-                type="password"
-                value={editFormData.ftp_password}
-                onChange={(e) => setEditFormData({ ...editFormData, ftp_password: e.target.value })}
-                placeholder="anonymous"
-                disabled={isEditSaving}
-              />
-            </div>
-
-            <div className="form-row">
-              <label>FTP PATH:</label>
-              <input
-                type="text"
-                value={editFormData.path}
-                onChange={(e) => setEditFormData({ ...editFormData, path: e.target.value })}
-                placeholder="/"
-                disabled={isEditSaving}
-              />
-            </div>
-
-            <div className="form-row-inline">
-              <div>
-                <label>FTP PORT:</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="65535"
-                  value={editFormData.ftp_port}
-                  onChange={(e) => setEditFormData({ ...editFormData, ftp_port: parseInt(e.target.value) })}
-                  disabled={isEditSaving}
-                />
-              </div>
-              <div>
-                <label>COM PORT:</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="65535"
-                  value={10000}
-                  disabled={true}
-                  title="Telnet communication port (fixed at 10000)"
-                />
-              </div>
-            </div>
-
-            {/* Polling Intervals - Network Settings */}
-            <div className="form-row-inline">
-              <div>
-                <label>POLL INTERVAL (s):</label>
-                <div className="input-with-metric">
-                  <input
-                    type="number"
-                    min="1"
-                    max="300"
-                    value={editFormData.poll_interval_seconds}
-                    onChange={(e) => setEditFormData({ ...editFormData, poll_interval_seconds: parseInt(e.target.value) })}
-                    disabled={isEditSaving}
-                  />
-                  {machine.response_time_ms !== undefined && (
-                    <span className="input-metric">{(machine.response_time_ms / 1000).toFixed(1)}s</span>
-                  )}
-                </div>
-              </div>
-              <div>
-                <label>TOOL POLL INTERVAL (s):</label>
-                <div className="input-with-metric">
-                  <input
-                    type="number"
-                    min="1"
-                    max="600"
-                    value={editFormData.tool_poll_interval_seconds}
-                    onChange={(e) => setEditFormData({ ...editFormData, tool_poll_interval_seconds: parseInt(e.target.value) })}
-                    disabled={isEditSaving}
-                  />
-                  {machine.tool_response_time_ms !== undefined && (
-                    <span className="input-metric">{(machine.tool_response_time_ms / 1000).toFixed(1)}s</span>
-                  )}
-                </div>
-              </div>
-            </div>
-            </div>
-
-            {/* Tolerances Section */}
-            <div className="tolerances-section">
-            <div className="tolerances-header">VALIDATION TOLERANCES ({editFormData.units === 'mm' ? 'mm' : 'inches'})</div>
-
-            {/* Tool Tolerances Group */}
-            <div className="tolerance-group">
-              <div className="tolerance-group-header">
-                <div className="tolerance-group-label">TOOL TOLERANCES</div>
-                <div className="tolerance-override-toggle">
-                  <input
-                    type="checkbox"
-                    id={`use-machine-tool-tolerances-${machine.machine_id}`}
-                    checked={editFormData.use_machine_tool_tolerances}
-                    onChange={(e) => setEditFormData({ ...editFormData, use_machine_tool_tolerances: e.target.checked })}
-                    disabled={isEditSaving}
-                  />
-                  <label htmlFor={`use-machine-tool-tolerances-${machine.machine_id}`}>
-                    Use machine settings
-                  </label>
-                </div>
-              </div>
-              
-              <div className={`tolerance-group-content ${!editFormData.use_machine_tool_tolerances ? 'disabled' : ''}`}>
-                {/* Tool Diameter Group */}
-                <div className="tolerance-subgroup">
-                  <div className="tolerance-group-label">TOOL DIAMETER</div>
-                  <div className="tolerance-field tolerance-field-inline">
-                    <label>(±):</label>
-                    <input
-                      type="number"
-                      step="0.00001"
-                      value={editFormData.diameter_tolerance}
-                      onChange={(e) => setEditFormData({ ...editFormData, diameter_tolerance: parseFloat(e.target.value) })}
-                      disabled={isEditSaving || !editFormData.use_machine_tool_tolerances}
-                    />
-                  </div>
-                </div>
-
-                {/* Tool Length Group */}
-                <div className="tolerance-subgroup">
-                  <div className="tolerance-group-label">TOOL LENGTH</div>
-                  <div className="tolerance-group-row">
-                    <div className="tolerance-field tolerance-field-inline">
-                      <label>(+):</label>
-                      <input
-                        type="number"
-                        step="0.0001"
-                        value={editFormData.length_tolerance_plus}
-                        onChange={(e) => setEditFormData({ ...editFormData, length_tolerance_plus: parseFloat(e.target.value) })}
-                        disabled={isEditSaving || !editFormData.use_machine_tool_tolerances}
-                      />
-                    </div>
-                    <div className="tolerance-field tolerance-field-inline">
-                      <label>(-):</label>
-                      <input
-                        type="number"
-                        step="0.0001"
-                        value={editFormData.length_tolerance_minus}
-                        onChange={(e) => setEditFormData({ ...editFormData, length_tolerance_minus: parseFloat(e.target.value) })}
-                        disabled={isEditSaving || !editFormData.use_machine_tool_tolerances}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {!editFormData.use_machine_tool_tolerances && (
-                <div className="tolerance-hint">
-                  Using G-code defaults: diameter must match exactly, length must be ≥ required
-                </div>
-              )}
-            </div>
-
-            {/* WCS Offset Group */}
-            <div className="tolerance-group">
-              <div className="tolerance-group-header">
-                <div className="tolerance-group-label">WCS OFFSET</div>
-                <div className="tolerance-override-toggle">
-                  <input
-                    type="checkbox"
-                    id={`use-machine-wcs-tolerances-${machine.machine_id}`}
-                    checked={editFormData.use_machine_wcs_tolerances}
-                    onChange={(e) => setEditFormData({ ...editFormData, use_machine_wcs_tolerances: e.target.checked })}
-                    disabled={isEditSaving}
-                  />
-                  <label htmlFor={`use-machine-wcs-tolerances-${machine.machine_id}`}>
-                    Use machine settings
-                  </label>
-                </div>
-              </div>
-              
-              <div className={`tolerance-group-content ${!editFormData.use_machine_wcs_tolerances ? 'disabled' : ''}`}>
-                <div className="tolerance-group-row">
-                  <div className="tolerance-field tolerance-field-inline">
-                    <label>X (±):</label>
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={editFormData.tolerance_x}
-                      onChange={(e) => setEditFormData({ ...editFormData, tolerance_x: parseFloat(e.target.value) })}
-                      disabled={isEditSaving || !editFormData.use_machine_wcs_tolerances}
-                    />
-                  </div>
-                  <div className="tolerance-field tolerance-field-inline">
-                    <label>Y (±):</label>
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={editFormData.tolerance_y}
-                      onChange={(e) => setEditFormData({ ...editFormData, tolerance_y: parseFloat(e.target.value) })}
-                      disabled={isEditSaving || !editFormData.use_machine_wcs_tolerances}
-                    />
-                  </div>
-                  <div className="tolerance-field tolerance-field-inline">
-                    <label>Z (±):</label>
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={editFormData.tolerance_z}
-                      onChange={(e) => setEditFormData({ ...editFormData, tolerance_z: parseFloat(e.target.value) })}
-                      disabled={isEditSaving || !editFormData.use_machine_wcs_tolerances}
-                    />
-                  </div>
-                </div>
-              </div>
-              {!editFormData.use_machine_wcs_tolerances && (
-                <div className="tolerance-hint">
-                  Using G-code E parameter if present in WCS validation macro
-                </div>
-              )}
-            </div>
-          </div>
-          </div>
-
-          {editTestResult && (
-            <div className="form-success text-success">
-              Connection successful!
-            </div>
-          )}
-
-          <div className="form-actions">
-            <button
-              className="form-button test"
-              onClick={handleEditTestConnection}
-              disabled={!editFormData.ip_address || isEditSaving || isEditTesting}
-            >
-              {isEditTesting ? '[ TESTING... ]' : '[ TEST CONNECTION ]'}
-            </button>
-            <button
-              className="form-button delete"
-              onClick={() => onDelete?.(machine)}
-              disabled={isEditSaving}
-            >
-              [ DELETE ]
-            </button>
-            <button
-              className="form-button cancel"
-              onClick={handleEditCancel}
-              disabled={isEditSaving}
-            >
-              [ CANCEL ]
-            </button>
-            <button
-              className="form-button save"
-              onClick={handleEditSave}
-              disabled={!editFormValid || isEditSaving}
-            >
-              {isEditSaving ? '[ SAVING... ]' : '[ SAVE ]'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="machine-card-content">
+      <div className="machine-card-content">
           <div 
             ref={statusIndicatorRef}
             className="machine-row machine-row-hoverable"
@@ -1389,11 +783,69 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           >
             <span className="label">PRODUCTION RUN:</span>
             <span className="value production-run-summary">
-              <ProductionRunCompactSummary
-                latestRun={latestRun}
-                latestRunLoading={latestRunLoading}
-                partDisplayMode={machine.part_display_mode || 'parts'}
-              />
+              {latestRunLoading && !latestRun && 'LOADING...'}
+              {!latestRunLoading && !latestRun && 'NO RECENT RUNS'}
+              {latestRun && (
+                <>
+                  <span className="production-run-meta">
+                    {latestRun.program_no || 'UNKNOWN'} ·{' '}
+                    {(machine.part_display_mode || 'parts') === 'cycle'
+                      ? `cycles: ${latestRun.cycles}`
+                      : `parts: ${latestRun.part_count}`}
+                  </span>
+                  {(() => {
+                    const runStartMs = new Date(latestRun.run_start).getTime();
+                    const runEndMs = new Date(latestRun.run_end).getTime();
+                    const totalMs = Math.max(1, runEndMs - runStartMs);
+                    let activeMs = 0;
+                    for (const seg of latestRun.segments || []) {
+                      if ((seg.status || '').toLowerCase() !== 'operating') continue;
+                      const s0 = new Date(seg.start_time).getTime();
+                      const s1 = new Date(seg.end_time).getTime();
+                      if (!isNaN(s0) && !isNaN(s1) && s1 >= s0) activeMs += s1 - s0;
+                    }
+                    const utilPct = Math.min(100, Math.max(0, Math.round((activeMs / totalMs) * 100)));
+                    const runStartMs2 = new Date(latestRun.run_start).getTime();
+                    const runEndMs2 = new Date(latestRun.run_end).getTime();
+                    const span = Math.max(1, runEndMs2 - runStartMs2);
+                    return (
+                      <span className="production-run-util-row">
+                        <span className="production-run-util text-dim" title="Operating time / total run time">
+                          util: {utilPct}%
+                        </span>
+                        <span className="production-run-bar-track">
+                          {latestRun.segments.map((seg, idx) => {
+                        const sStartMs = new Date(seg.start_time).getTime();
+                        const sEndMs = new Date(seg.end_time).getTime();
+                        const left = ((sStartMs - runStartMs2) / span) * 100;
+                        const width = Math.max(2, ((sEndMs - sStartMs) / span) * 100);
+                        const status = (seg.status || '').toLowerCase();
+                        const statusClass =
+                          status === 'operating'
+                            ? 'mini-segment-operating'
+                            : status === 'standby'
+                            ? 'mini-segment-standby'
+                            : status === 'stopped'
+                            ? 'mini-segment-stopped'
+                            : status === 'error'
+                            ? 'mini-segment-error'
+                            : status === 'off'
+                            ? 'mini-segment-off'
+                            : 'mini-segment-standby';
+                        return (
+                          <span
+                            key={idx}
+                            className={`production-run-segment ${statusClass}`}
+                            style={{ left: `${left}%`, width: `${width}%` }}
+                          />
+                        );
+                          })}
+                        </span>
+                      </span>
+                    );
+                  })()}
+                </>
+              )}
             </span>
             {showProductionRunsHover && productionRunsHoverPosition && (
               <div
@@ -1489,7 +941,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     toolTable={machine.tool_table || []}
                     currentTool={machine.current_tool}
                     machineId={machine.machine_id}
-                    units={(machine as any).units || machine.units || 'in'}
+                    units={machine.units ?? 'in'}
                     machineStatus={machine.status}
                     toolsTimestamp={machine.tools_timestamp ?? undefined}
                     toolTableTimestamp={machine.tool_table_timestamp ?? undefined}
@@ -1507,10 +959,10 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             </div>
           )}
 
-          {!isEditing && (() => {
+          {(() => {
             const allAlarms = machine.alarms || [];
-            const criticalAlarms = allAlarms.filter((a) => alarmStopLevel(a) >= 4);
-            const warningAlarms = allAlarms.filter((a) => alarmStopLevel(a) < 4);
+            const criticalAlarms = allAlarms.filter((a) => getAlarmSeverityLevel(a) >= 4);
+            const warningAlarms = allAlarms.filter((a) => getAlarmSeverityLevel(a) < 4);
 
             const showHoverAt = (el: HTMLElement | null) => {
               if (!el || allAlarms.length === 0) return;
@@ -1607,7 +1059,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             );
           })()}
 
-          <MachineCardAsciiDivider variant="thin" />
+          <div className="machine-card-divider-thin">
+            {'─'.repeat(32)}
+          </div>
 
           <div className="machine-actions">
             <button
@@ -1619,31 +1073,30 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             </button>
           </div>
 
-          <MachineCardAsciiDivider variant="thin" />
+          <div className="machine-card-divider-thin">
+            {'─'.repeat(32)}
+          </div>
 
           <div className="machine-footer">
-            {!isEditing && (
-              <button
-                className="machine-edit-footer-btn"
-                onClick={startEditing}
-                title={canEdit ? "Edit machine" : "Switch to edit this machine (will prompt to save current)"}
-              >
-                [edit]
-              </button>
-            )}
+            <button
+              className="machine-edit-footer-btn"
+              onClick={startEditing}
+              title={canEdit ? "Edit machine" : "Switch to edit this machine (will prompt to save current)"}
+            >
+              [edit]
+            </button>
             <div className="machine-timestamp">
               {machine.is_online ? 'LAST UPDATE' : 'LAST SEEN'}: {new Date(machine.poll_timestamp).toLocaleTimeString()}
             </div>
           </div>
         </div>
-      )}
 
       <ToolListModal
         isOpen={showToolModal}
         onClose={() => setShowToolModal(false)}
-        tools={(machine.tools || []) as any}
+        tools={machine.tools || []}
         machineName={machine.machine_name}
-        units={(machine as any).units || machine.units || 'in'}
+        units={(machine.units || 'in') as 'in' | 'mm'}
       />
 
       <UploadConfirmationModal
@@ -1660,34 +1113,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         machineName={machine.machine_name}
         machinePath={machine.path || '/'}
         fileContent={fileContent}
-        units={(machine as any).units || machine.units || 'in'}
-      />
-
-      <SaveConfirmModal
-        isOpen={showSaveConfirmModal}
-        onClose={() => {
-          setShowSaveConfirmModal(false);
-          // If this was triggered by a pending switch, cancel the switch
-          if (pendingEditSwitch) {
-            onCancelEditSwitch?.();
-          }
-          // If this was triggered by a pending collapse, cancel the collapse
-          if (pendingCollapse) {
-            onCancelCollapse?.();
-          }
-        }}
-        onConfirm={() => {
-          setShowSaveConfirmModal(false);
-          performEditCancel();
-          // Switch will happen via onEditEnd callback if pendingEditSwitch
-          // Collapse will happen via onEditEnd callback if pendingCollapse
-        }}
-        onSave={() => {
-          setShowSaveConfirmModal(false);
-          // Save will trigger onEditEnd which handles the switch or collapse
-          handleEditSave();
-        }}
-        machineName={machine.machine_name || 'Unknown'}
+        units={(machine.units || 'in') as 'in' | 'mm'}
       />
 
       <input
