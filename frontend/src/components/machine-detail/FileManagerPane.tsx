@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TerminalBox } from '../ui/TerminalBox';
 import { API_BASE_URL, getApiErrorMessage } from '../../config/api';
-import {
+import type {
   Program,
   ViewData,
   FileMetadata,

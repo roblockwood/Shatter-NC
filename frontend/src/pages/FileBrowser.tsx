@@ -355,31 +355,6 @@ export const FileBrowser: React.FC = () => {
     setExpandedTools(newExpanded);
   };
 
-  // Get the currently displayed deployment (either selected from history or current)
-  // reserved for future use
-  const _getCurrentDisplayedDeployment = () => {
-    if (!deploymentDetail) return null;
-
-    // If a specific deployment is selected from history, find and return it
-    if (selectedDeploymentId && deploymentDetail.history) {
-      const selected = deploymentDetail.history.find(h => h.id === selectedDeploymentId);
-      if (selected) {
-        // Return a combined object with the selected history entry merged with full details
-        // For now, we'll reconstruct from the history entry
-        return {
-          deployment: selected,
-          isHistorical: true
-        };
-      }
-    }
-
-    // Otherwise return current deployment
-    return {
-      deployment: deploymentDetail.deployment,
-      isHistorical: false
-    };
-  };
-
   const handleItemClick = (program: Program) => {
     if (program.is_directory) {
       // Navigate into directory
@@ -658,11 +633,6 @@ export const FileBrowser: React.FC = () => {
     } finally {
       setValidationLoading(false);
     }
-  };
-
-  // reserved for future use
-  const _handleUploadClick = () => {
-    fileInputRef.current?.click();
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
