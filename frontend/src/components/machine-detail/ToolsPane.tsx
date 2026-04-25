@@ -155,7 +155,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     if (wsAt) return wsAt;
     const ct = cacheTimestamps[toolSource];
     return ct != null ? ct : null;
-  }, [toolSource, toolsTimestamp, toolTableTimestamp, cacheTimestamps.atc, cacheTimestamps.table]);
+  }, [toolSource, toolsTimestamp, toolTableTimestamp, cacheTimestamps]);
 
   const toolExpectedIntervalMs = Math.max((toolPollIntervalSeconds ?? 30) * 1000, 5000);
 

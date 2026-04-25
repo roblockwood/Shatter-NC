@@ -379,7 +379,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
 
     setOnToggleLayoutEdit(() => toggleLayoutEdit);
     hasRegisteredExpandedContextRef.current = true;
-  }, [isExpanded, machine.machine_id, machine.machine_name, onCollapse, setExpandedAssetKind, setExpandedMachine]);
+  }, [isExpanded, machine.machine_id, machine.machine_name, onCollapse, setExpandedAssetKind, setExpandedMachine, setOnCollapse, setOnToggleLayoutEdit, toggleLayoutEdit]);
 
   // Render edit panel
   if (isEditing) {
