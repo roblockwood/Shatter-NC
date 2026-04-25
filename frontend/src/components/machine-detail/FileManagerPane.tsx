@@ -224,7 +224,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
         } else {
           sessionStorage.removeItem(cacheKey);
         }
-      } catch (e) {
+      } catch (_e) {
         sessionStorage.removeItem(cacheKey);
       }
     }
