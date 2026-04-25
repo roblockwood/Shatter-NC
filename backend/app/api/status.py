@@ -10,6 +10,7 @@ from app.models.machine import Machine
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
 from app.parsers.gcode_parser import parse_gcode
+from app.utils.time_utils import format_cnc_time
 import logging
 import io
 
@@ -152,15 +153,6 @@ async def get_machine_status(
             machine_status = "standby"
             logger.warning(f"PRD3 data not available for machine {machine_id}, defaulting to 'standby'")
         
-        # Format time strings
-        def format_time(time_str: str) -> str:
-            if not time_str or len(time_str) != 9:
-                return time_str
-            try:
-                return f"{time_str[0:2]}{time_str[2:4]}:{time_str[4:6]}.{time_str[6:9]}"
-            except (ValueError, IndexError):
-                return time_str
-        
         # is_online is already set to True after successful Telnet connection
         # PRD3 failure doesn't mean machine is offline - it just means we can't get status
         # Status will use fallback when PRD3 is unavailable
@@ -170,11 +162,11 @@ async def get_machine_status(
             "timestamp": datetime.now().isoformat(),
             "units": db_machine.units,
             "program_name": program_info.get("operation_program_no", "----"),
-            "cycle_time": format_time(time_info.get("total_operation_time", "000000000")),
-            "cutting_time": format_time(time_info.get("operation_time", "000000000")),
+            "cycle_time": format_cnc_time(time_info.get("total_operation_time", "000000000")),
+            "cutting_time": format_cnc_time(time_info.get("operation_time", "000000000")),
             "non_cutting_time": "000000:00.0",
-            "power_on_hours": format_time(time_info.get("power_on_time", "000000000")),
-            "operation_time": format_time(time_info.get("operation_time", "000000000")),
+            "power_on_hours": format_cnc_time(time_info.get("power_on_time", "000000000")),
+            "operation_time": format_cnc_time(time_info.get("operation_time", "000000000")),
             "status": machine_status,
             "is_online": is_online,  # True when any Telnet operation succeeds (machine is reachable)
             "response_time_ms": int((time.time() - start_time) * 1000),
@@ -268,21 +260,13 @@ async def get_running_log(machine_id: int, db: Session = Depends(get_db)):
         parsed = parse_montr_v2(montr_data.encode('utf-8'), control_version=control_version)
         time_info = parsed.get("time_info", {})
         
-        def format_time(time_str: str) -> str:
-            if not time_str or len(time_str) != 9:
-                return time_str
-            try:
-                return f"{time_str[0:2]}{time_str[2:4]}:{time_str[4:6]}.{time_str[6:9]}"
-            except (ValueError, IndexError):
-                return time_str
-        
         data = {
             "machine_id": machine_id,
-            "cycle_time": format_time(time_info.get("total_operation_time", "000000000")),
-            "cutting_time": format_time(time_info.get("operation_time", "000000000")),
+            "cycle_time": format_cnc_time(time_info.get("total_operation_time", "000000000")),
+            "cutting_time": format_cnc_time(time_info.get("operation_time", "000000000")),
             "non_cutting_time": "000000:00.0",
-            "power_on_hours": format_time(time_info.get("power_on_time", "000000000")),
-            "operation_time": format_time(time_info.get("operation_time", "000000000")),
+            "power_on_hours": format_cnc_time(time_info.get("power_on_time", "000000000")),
+            "operation_time": format_cnc_time(time_info.get("operation_time", "000000000")),
             "timestamp": datetime.now().isoformat(),
         }
         return data

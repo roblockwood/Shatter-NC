@@ -60,3 +60,6 @@ temp/
 
 # OS
 Thumbs.db
+
+# Local scratch notes (not for commit)
+scratch/

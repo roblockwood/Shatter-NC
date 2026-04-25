@@ -62,6 +62,33 @@ class MachinePoller:
         self.last_panel_log_time: Optional[datetime] = None
         self.last_counter_log_time: Optional[datetime] = None
 
+    def seed_last_status_from_db(self) -> None:
+        """Populate last_status from the most recent status event in the DB.
+
+        Called once after the poller is created so that operating→standby/stopped
+        transitions are not missed when the backend restarts mid-run.
+        Only sets last_status if it is still None (i.e., never overwritten by a live poll).
+        """
+        if self.last_status is not None:
+            return
+        db = SessionLocal()
+        try:
+            latest = (
+                db.query(MachineStatusEvent.status)
+                .filter(MachineStatusEvent.machine_id == self.machine.id)
+                .order_by(MachineStatusEvent.time.desc())
+                .first()
+            )
+            if latest:
+                self.last_status = latest.status
+                logger.info(
+                    f"Machine {self.machine.id}: seeded last_status='{self.last_status}' from DB"
+                )
+        except Exception as e:
+            logger.warning(f"Machine {self.machine.id}: could not seed last_status from DB: {e}")
+        finally:
+            db.close()
+
     def display_online(self) -> bool:
         """
         Debounced online flag for UI / websocket (matches offline_threshold semantics).
@@ -245,55 +272,29 @@ class MachinePoller:
                 timeout=10
             )
             step_times['get_connection'] = time.time() - step_start
-
-            configured_control_version = getattr(self.machine, "control_version", None)
-            if configured_control_version in ("C00", "D00"):
-                control_version = configured_control_version
-            else:
-                step_start = time.time()
-                control_version = await telnet_client.detect_control_type(verbose=False)
-                step_times['detect_control'] = time.time() - step_start
-
+            
+            # Detect control version (uses Redis cache)
+            step_start = time.time()
+            control_version = await telnet_client.detect_control_type()
+            step_times['detect_control'] = time.time() - step_start
+            
             # Get tool table data first (needed for both ATC merge and TABLE display)
             step_start = time.time()
             tool_table_content = await telnet_client.get_tool_table_data(units=self.machine.units, verbose=False)
             step_times['get_tool_table'] = time.time() - step_start
-
-            # If first read fails, force a brand-new connection and retry once.
-            # This helps recover from transient/stale telnet sessions during concurrent polling load.
-            if not tool_table_content:
-                logger.warning(
-                    f"Machine {self.machine.id} - Initial TOLN read returned no data, retrying with fresh Telnet connection"
-                )
-                try:
-                    await telnet_client.disconnect()
-                except Exception:
-                    pass
-
-                step_start = time.time()
-                telnet_client = await create_fresh_connection(
-                    ip_address=self.machine.ip_address,
-                    port=10000,
-                    timeout=10,
-                )
-                step_times['get_connection_retry'] = time.time() - step_start
-
-                step_start = time.time()
-                tool_table_content = await telnet_client.get_tool_table_data(units=self.machine.units, verbose=False)
-                step_times['get_tool_table_retry'] = time.time() - step_start
             
             if tool_table_content:
                 step_start = time.time()
                 tool_table_parsed = parse_tolni_v2(
                     tool_table_content.encode('utf-8'),
                     units=self.machine.units,
-                    control_version=control_version
+                    control_version=None  # Auto-detect
                 )
                 step_times['parse_tool_table'] = time.time() - step_start
                 
                 # Get ATC magazine data (pot/tool mappings) for merging
                 step_start = time.time()
-                atc_data = await telnet_client.get_atc_magazine_data(control_version=control_version, verbose=False)
+                atc_data = await telnet_client.get_atc_magazine_data(control_version=None, verbose=False)
                 step_times['get_atc'] = time.time() - step_start
                 
                 # Start with pure TOLN (table) data
@@ -301,7 +302,7 @@ class MachinePoller:
                 
                 if atc_data:
                     step_start = time.time()
-                    atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=control_version)
+                    atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=None)
                     step_times['parse_atc'] = time.time() - step_start
                     
                     step_start = time.time()
@@ -443,13 +444,9 @@ class MachinePoller:
             )
             step_times['get_connection'] = time.time() - step_start
             
-            # Prefer configured control version from machine settings; fall back to auto-detection
+            # Detect control version once (cached in telnet_client)
             step_start = time.time()
-            configured_control_version = getattr(self.machine, "control_version", None)
-            if configured_control_version in ("C00", "D00"):
-                control_version = configured_control_version
-            else:
-                control_version = await telnet_client.detect_control_type()
+            control_version = await telnet_client.detect_control_type()
             step_times['detect_control'] = time.time() - step_start
             
             # Get MONTR data (replaces HTTP /running_log and /work_counter)
@@ -531,32 +528,20 @@ class MachinePoller:
                     logger.warning(f"Machine {self.machine.id} - PRD3 data not available and no last status, defaulting to: {machine_status}")
             
             # Format time strings (MONTR format: HHMMSSMMM, HTTP format: HHMM:SS.MMM)
-            def format_time(time_str: str) -> str:
-                """Convert HHMMSSMMM to HHMM:SS.MMM format."""
-                if not time_str or len(time_str) != 9:
-                    return time_str
-                try:
-                    hours = time_str[0:2]
-                    minutes = time_str[2:4]
-                    seconds = time_str[4:6]
-                    milliseconds = time_str[6:9]
-                    return f"{hours}{minutes}:{seconds}.{milliseconds}"
-                except (ValueError, IndexError):
-                    return time_str
-            
+            from app.utils.time_utils import format_cnc_time
+
             # is_online for clients is set after last_successful_fast_poll_at (debounced display_online)
             
             status_data = {
                 "ip_address": self.machine.ip_address,
                 "timestamp": datetime.now().isoformat(),
                 "units": self.machine.units,
-                "control_version": control_version,
                 "program_name": program_info.get("operation_program_no", "----"),
-                "cycle_time": format_time(time_info.get("total_operation_time", "000000000")),
-                "cutting_time": format_time(time_info.get("operation_time", "000000000")),
+                "cycle_time": format_cnc_time(time_info.get("total_operation_time", "000000000")),
+                "cutting_time": format_cnc_time(time_info.get("operation_time", "000000000")),
                 "non_cutting_time": "000000:00.0",  # Not in MONTR
-                "power_on_hours": format_time(time_info.get("power_on_time", "000000000")),
-                "operation_time": format_time(time_info.get("operation_time", "000000000")),
+                "power_on_hours": format_cnc_time(time_info.get("power_on_time", "000000000")),
+                "operation_time": format_cnc_time(time_info.get("operation_time", "000000000")),
                 "status": machine_status,  # From PRD3: off, standby, operating, stopped, error
                 "counters": [
                     {
@@ -891,6 +876,7 @@ class MachinePoller:
                         db.add(machine)
 
                 current_status = status_data.get("status")
+                previous_status_for_run = self.last_status
 
                 # Log status transition (Option A: in-memory tracking)
                 if self.last_status != current_status:
@@ -936,7 +922,7 @@ class MachinePoller:
                     await self._log_alarms(db, status_data)
 
                 # Log production run start/end (Q4)
-                await self._log_production_run(db, status_data)
+                await self._log_production_run(db, status_data, previous_status_for_run)
 
                 # Log extended history (macros, tool table, panel, counters)
                 if success:
@@ -1136,7 +1122,7 @@ class MachinePoller:
             logger.error(f"Failed to log alarms for machine {self.machine.id}: {e}")
             # Don't raise - alarm logging shouldn't block production run tracking
 
-    async def _log_production_run(self, db: Session, status_data: Dict[str, Any]):
+    async def _log_production_run(self, db: Session, status_data: Dict[str, Any], previous_status: Optional[str] = None):
         """
         Track production run start/end.
 
@@ -1160,14 +1146,14 @@ class MachinePoller:
                         machine_id=self.machine.id,
                         program_name=program_name,
                         o_number=status_data.get("o_number"),
-                        started_at=datetime.utcnow(),
+                        started_at=datetime.now(timezone.utc),
                     )
                     db.add(run)
                     logger.debug(f"Started production run for machine {self.machine.id}: {program_name}")
 
             # End active production run
             elif current_status in ["stopped", "standby", "error"] and active_run:
-                active_run.ended_at = datetime.utcnow()
+                active_run.ended_at = datetime.now(timezone.utc)
                 active_run.duration_seconds = int(
                     (active_run.ended_at - active_run.started_at).total_seconds()
                 )
@@ -1183,8 +1169,31 @@ class MachinePoller:
                             o_number=active_run.o_number,
                             started_at=active_run.started_at,
                             ended_at=active_run.ended_at,
+                            new_status=current_status,
                         )
                     )
+
+            # Fallback: still emit cycle-complete notification when we detect
+            # operating -> standby/stopped but no active run row is present.
+            elif (
+                current_status in ["stopped", "standby"]
+                and previous_status == "operating"
+                and self.notification_service
+            ):
+                fallback_duration = status_data.get("cycle_time_seconds")
+                if not isinstance(fallback_duration, int):
+                    fallback_duration = None
+                asyncio.create_task(
+                    self.notification_service.notify_cycle_complete(
+                        machine_id=self.machine.id,
+                        machine_name=self.machine.name,
+                        program_name=program_name,
+                        duration_seconds=fallback_duration,
+                        o_number=status_data.get("o_number"),
+                        ended_at=datetime.now(timezone.utc),
+                        new_status=current_status,
+                    )
+                )
 
         except Exception as e:
             logger.error(f"Failed to log production run for machine {self.machine.id}: {e}")
@@ -1310,9 +1319,11 @@ class PollingService:
             # Add pollers for new machines
             for machine in machines:
                 if machine.id not in self.pollers:
-                    self.pollers[machine.id] = MachinePoller(
+                    poller = MachinePoller(
                         machine, self.websocket_manager, notification_service=self.notification_service
                     )
+                    poller.seed_last_status_from_db()
+                    self.pollers[machine.id] = poller
                     logger.info(f"Added poller for machine {machine.id} ({machine.name})")
                 else:
                     # Always update machine reference with fresh DB data to catch config changes
@@ -1436,7 +1447,9 @@ class PollingService:
             # Add pollers for new machines
             for machine in machines:
                 if machine.id not in self.pollers:
-                    self.pollers[machine.id] = MachinePoller(machine, self.websocket_manager)
+                    poller = MachinePoller(machine, self.websocket_manager)
+                    poller.seed_last_status_from_db()
+                    self.pollers[machine.id] = poller
                 else:
                     # Always update machine reference with fresh DB data to catch config changes
                     self.pollers[machine.id].machine = machine
@@ -1573,10 +1586,6 @@ class PollingService:
             async def detect_for_machine(m):
                 telnet_client = None
                 try:
-                    if getattr(m, "control_version", None) in ("C00", "D00"):
-                        logger.info(f"Skipping control version auto-detect for machine {m.id} ({m.name}); using configured value: {m.control_version}")
-                        return
-
                     telnet_client = await create_fresh_connection(
                         ip_address=m.ip_address,
                         port=10000,
