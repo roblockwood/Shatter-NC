@@ -28,14 +28,16 @@ export const CompressorStatusHistoryPane: React.FC<CompressorStatusHistoryPanePr
   isOnline,
 }) => {
   const [page, setPage] = useState(0);
+  const [trackedCompressorId, setTrackedCompressorId] = useState(compressorId);
   const [events, setEvents] = useState<StatusEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastFetchSuccessAt, setLastFetchSuccessAt] = useState<string | null>(null);
 
-  useEffect(() => {
+  if (trackedCompressorId !== compressorId) {
+    setTrackedCompressorId(compressorId);
     setPage(0);
-  }, [compressorId]);
+  }
 
   const statusTooltipLines = useMemo(() => {
     const lines: string[] = [

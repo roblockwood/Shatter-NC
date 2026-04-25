@@ -211,10 +211,7 @@ function StatusTile({
   };
 
   useLayoutEffect(() => {
-    if (!hoverOpen) {
-      setTipPos(null);
-      return;
-    }
+    if (!hoverOpen) return;
     const update = () => {
       const el = anchorRef.current;
       if (!el) return;
@@ -256,17 +253,19 @@ function StatusTile({
     setHoverOpen(false);
   };
 
+  const displayTipPos = hoverOpen ? tipPos : null;
+
   const tooltipEl =
-    hoverOpen && tipPos != null ? (
+    hoverOpen && displayTipPos != null ? (
       <div
         id={tipId}
         role="tooltip"
         className="cp-tile-tooltip"
         style={{
           position: 'fixed',
-          top: tipPos.top,
-          left: tipPos.left,
-          transform: tipPos.flip
+          top: displayTipPos.top,
+          left: displayTipPos.left,
+          transform: displayTipPos.flip
             ? 'translate(-50%, 8px)'
             : 'translate(-50%, calc(-100% - 8px))',
         }}
