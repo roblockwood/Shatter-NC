@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.1.5...v1.2.0) (2026-04-25)
+
+
+### Features
+
+* add Vitest frontend test framework with initial tests ([f68c928](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/f68c9289c5d1296f8b25929f82dba34b7863749f))
+
 ## [1.1.5](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.1.4...v1.1.5) (2026-04-25)
 
 
