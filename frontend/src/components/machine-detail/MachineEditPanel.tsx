@@ -253,6 +253,7 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
     } else {
       performEditCancel();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingEditSwitch]);
 
   // Trigger save confirmation when collapse is pending
@@ -263,6 +264,7 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
     } else {
       performEditCancel();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCollapse]);
 
   return (
