@@ -1,3 +1,10 @@
+## [1.2.5](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.2.4...v1.2.5) (2026-04-25)
+
+
+### Bug Fixes
+
+* treat background alarms correctly — use stop_level >= 4 to determine machine-halting alarms ([c644fdb](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/c644fdb396990a2e0b4c01f95346dce608911266))
+
 ## [1.2.4](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.2.3...v1.2.4) (2026-04-25)
 
 
