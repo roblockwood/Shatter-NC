@@ -199,6 +199,7 @@
 .notify-log-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: var(--font-sm);
 }
 
@@ -207,18 +208,36 @@
   color: var(--color-text-secondary);
   border-bottom: 1px solid var(--color-border);
   padding: var(--spacing-xs) var(--spacing-sm);
+  overflow: hidden;
 }
 
 .notify-log-table td {
   padding: var(--spacing-xs) var(--spacing-sm);
   border-bottom: 1px solid var(--color-border);
-  vertical-align: top;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+/* Column widths: Time | Machine | Rule | Channel | Message | Status */
+.notify-log-table th:nth-child(1),
+.notify-log-table td:nth-child(1) { width: 11%; }
+.notify-log-table th:nth-child(2),
+.notify-log-table td:nth-child(2) { width: 7%; }
+.notify-log-table th:nth-child(3),
+.notify-log-table td:nth-child(3) { width: 12%; }
+.notify-log-table th:nth-child(4),
+.notify-log-table td:nth-child(4) { width: 12%; }
+.notify-log-table th:nth-child(5),
+.notify-log-table td:nth-child(5) { width: auto; }
+.notify-log-table th:nth-child(6),
+.notify-log-table td:nth-child(6) { width: 6%; }
+
 .notify-log-message {
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-width: 42ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .notify-log-sent {

@@ -802,3 +802,275 @@
   border-left: 2px solid rgba(255, 255, 255, 0.65);
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   ATC POT OPTIMIZER TAB
+   ═══════════════════════════════════════════════════════════════════ */
+
+.optimizer-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--color-text-primary);
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Loading / error / empty states */
+.optimizer-loading,
+.optimizer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  color: var(--color-text-muted);
+  flex: 1;
+}
+
+.optimizer-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  color: var(--color-error);
+}
+
+.optimizer-error-msg {
+  color: var(--color-error);
+}
+
+.optimizer-empty-label {
+  color: var(--color-text-muted);
+}
+
+/* Summary row */
+.optimizer-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  align-items: center;
+  padding: var(--spacing-xs) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-sm);
+}
+
+.optimizer-sep {
+  color: var(--color-text-dim);
+}
+
+.optimizer-savings-highlight {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+/* Progress bar */
+.optimizer-progress-row {
+  display: flex;
+  align-items: center;
+  font-size: var(--font-sm);
+  color: var(--color-success);
+  letter-spacing: 0;
+}
+
+.optimizer-progress-bar {
+  font-family: var(--font-mono);
+  letter-spacing: -0.05em;
+}
+
+.optimizer-progress-label {
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+}
+
+/* Section label */
+.optimizer-section-label {
+  color: var(--color-text-dim);
+  font-size: var(--font-xs);
+  margin-top: var(--spacing-xs);
+  letter-spacing: 0.08em;
+}
+
+/* Assignment table */
+.optimizer-table {
+  width: auto;
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+  font-family: var(--font-mono);
+}
+
+.optimizer-table th {
+  color: var(--color-text-dim);
+  font-weight: 400;
+  text-align: left;
+  padding: 2px 12px 2px 0;
+  font-size: var(--font-xs);
+  white-space: nowrap;
+}
+
+.optimizer-table td {
+  padding: 2px 12px 2px 0;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+}
+
+.optimizer-moved {
+  color: var(--color-success);
+}
+
+.optimizer-nomove {
+  color: var(--color-text-dim);
+}
+
+/* Transitions */
+.optimizer-transitions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.optimizer-transition-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-sm);
+}
+
+.optimizer-transition-pair {
+  color: var(--color-text-muted);
+  min-width: 80px;
+  font-size: var(--font-xs);
+}
+
+.optimizer-transition-bar {
+  color: var(--color-success);
+  letter-spacing: -0.05em;
+  font-family: var(--font-mono);
+}
+
+.optimizer-transition-count {
+  color: var(--color-text-dim);
+  font-size: var(--font-xs);
+}
+
+/* Carousel strip */
+.optimizer-carousel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+}
+
+.optimizer-pocket {
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.optimizer-pocket-filled {
+  color: var(--color-success);
+}
+
+.optimizer-pocket-empty {
+  color: var(--color-text-dim);
+}
+
+/* Controls row */
+.optimizer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.optimizer-pockets-select {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-light);
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.optimizer-pockets-select:focus {
+  outline: 1px solid var(--color-text-primary);
+}
+
+.optimizer-action-btn {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  background: transparent;
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-light);
+  padding: 2px 8px;
+  cursor: pointer;
+  letter-spacing: var(--letter-spacing);
+  white-space: nowrap;
+}
+
+.optimizer-action-btn:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-text-primary);
+}
+
+/* Pins-changed warning banner */
+.optimizer-pins-changed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-xs);
+  color: #ffcc00;
+  border: 1px solid #ffcc00;
+  padding: 4px 8px;
+  margin-bottom: 8px;
+  letter-spacing: var(--letter-spacing);
+}
+
+.optimizer-recalc-btn {
+  color: #ffcc00;
+  border-color: #ffcc00;
+}
+
+/* Pinned row highlight */
+.optimizer-pinned-row {
+  opacity: 0.65;
+}
+
+.optimizer-pinned-row td {
+  color: var(--color-text-dim);
+}
+
+/* LOCK button */
+.optimizer-pin-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: transparent;
+  color: var(--color-text-dim);
+  border: 1px solid var(--color-border-dim, #333);
+  padding: 1px 6px;
+  cursor: pointer;
+  letter-spacing: var(--letter-spacing);
+  white-space: nowrap;
+}
+
+.optimizer-pin-btn:hover {
+  border-color: var(--color-text-dim);
+  color: var(--color-text-muted);
+}
+
+.optimizer-pin-btn--active {
+  color: #ffcc00;
+  border-color: #ffcc00;
+}
+
+.optimizer-pin-btn--active:hover {
+  background: rgba(255, 204, 0, 0.1);
+}
+

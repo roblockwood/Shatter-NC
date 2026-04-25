@@ -34,7 +34,10 @@ const TRIGGER_OPTIONS = [
 ];
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString();
+  const d = new Date(iso);
+  const date = d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' });
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `${date} ${time}`;
 }
 
 function stableStringify(value: unknown): string {
@@ -367,7 +370,7 @@ export function NotificationSettings() {
 
   function machineName_(id: number | null): string {
     if (id == null) return 'All machines';
-    return machines.find((m) => m.id === id)?.name ?? `Machine #${id}`;
+    return (machines.find((m) => m.id === id)?.name ?? `Machine #${id}`).toUpperCase();
   }
 
   function triggerLabel(trigger_config: Record<string, unknown>): string {
@@ -667,7 +670,11 @@ export function NotificationSettings() {
                 <td>{machineName_(entry.machine_id)}</td>
                 <td>{entry.rule_name || entry.event_type}</td>
                 <td>{channelName_(entry.channel_id)}</td>
-                <td className="notify-log-message">{entry.message || '—'}</td>
+                <td className="notify-log-message">
+                  {entry.message
+                    ? entry.message.split('\n')[0].replace(/^Subject:\s*/i, '')
+                    : '—'}
+                </td>
                 <td>
                   <span className={entry.status === 'sent' ? 'notify-log-sent' : 'notify-log-failed'}>
                     {entry.status}
