@@ -81,6 +81,7 @@ export const SyncConfig: React.FC = () => {
       return;
     }
     refreshMachineData(selectedMachineId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMachineId]);
 
   // Auto-refresh active runs every 3 seconds

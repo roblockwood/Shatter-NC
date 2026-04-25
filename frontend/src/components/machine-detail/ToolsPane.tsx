@@ -321,6 +321,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         }));
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTools, initialToolTable, machineId, isPushingChanges]);
   const navigate = useNavigate();
   const { isBetaMode } = useBetaMode();
