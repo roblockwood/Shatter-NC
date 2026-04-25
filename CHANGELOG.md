@@ -1,3 +1,10 @@
+## [1.1.4](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.1.3...v1.1.4) (2026-04-25)
+
+
+### Bug Fixes
+
+* address exhaustive-deps warnings (partial) ([b742dc0](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/b742dc086b056b441d7db0945f4546f75ee2fae5))
+
 ## [1.1.3](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.1.2...v1.1.3) (2026-04-25)
 
 

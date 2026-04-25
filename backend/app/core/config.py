@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     # Application
     APP_NAME: str = "Shatter"
-    APP_VERSION: str = "1.1.3"
+    APP_VERSION: str = "1.1.4"
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
 
