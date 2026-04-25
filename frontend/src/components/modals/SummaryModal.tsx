@@ -57,18 +57,21 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
 
       try {
         switch (summaryType) {
-          case 'running':
+          case 'running': {
             const runningResponse = await summaryApi.getRunning(timeRange);
             setRunningData(runningResponse);
             break;
-          case 'online':
+          }
+          case 'online': {
             const onlineResponse = await summaryApi.getOnline(currentTimeRange);
             setOnlineData(onlineResponse);
             break;
-          case 'offline':
+          }
+          case 'offline': {
             const offlineResponse = await summaryApi.getOffline();
             setOfflineData(offlineResponse);
             break;
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch summary data');
