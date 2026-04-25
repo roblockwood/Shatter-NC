@@ -103,7 +103,7 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
 
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      handleToggle(e as any);
+      handleToggle(e as unknown as React.MouseEvent);
     } else if (e.key === 'Escape') {
       setIsOpen(false);
     } else if (e.key === 'ArrowDown') {

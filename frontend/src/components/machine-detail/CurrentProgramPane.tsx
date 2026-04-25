@@ -3,8 +3,6 @@ import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '../../config/api';
 import { earlierIsoTimestamp } from '../ui/pollingFreshness';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
-import '../ui/TerminalBox.css';
-import { TERMINAL_RULE_FILL } from '../../utils/terminalAsciiRule';
 import './CurrentProgramPane.css';
 
 interface ToolValidation {
@@ -20,6 +18,10 @@ interface ToolValidation {
     length?: number;
   };
   warnings: string[];
+  validate_diameter?: boolean;
+  validate_length?: boolean;
+  requirements_complete?: boolean;
+  tolerance_source?: 'machine_settings' | 'gcode_defaults';
   diameter_tolerance?: number;
   length_tolerance_plus?: number;
   length_tolerance_minus?: number;
@@ -136,42 +138,14 @@ function invalidateCache(machineId: number, programName?: string): void {
   dataCache.delete(key);
 }
 
-/** CNC poll sometimes omits program_name briefly; avoid treating that as "no program". */
-function isValidProgramName(name?: string): name is string {
-  if (name == null || typeof name !== 'string') return false;
-  const t = name.trim();
-  return t !== '' && t !== '----' && t !== 'undefined' && t !== 'null';
-}
-
-/** Machine/controller says “no program” (not the same as a missing/blank poll field). */
-function isExplicitNoProgramName(name?: string): boolean {
-  if (name == null || typeof name !== 'string') return false;
-  const t = name.trim();
-  return t === '----' || t === 'undefined' || t === 'null';
-}
-
 export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
   machineId,
   programName,
   onExpand,
   machineLastSuccessfulPollAt,
 }) => {
-  const [heldProgramName, setHeldProgramName] = useState<{
-    machineId: number;
-    name: string | undefined;
-  }>(() => ({
-    machineId,
-    name: isValidProgramName(programName) ? programName.trim() : undefined,
-  }));
-
-  const effectiveProgramName = useMemo(() => {
-    if (isValidProgramName(programName)) return programName.trim();
-    if (heldProgramName.machineId !== machineId) return undefined;
-    return heldProgramName.name;
-  }, [machineId, programName, heldProgramName]);
-
   // Initialize state from cache if available (persists across unmounts)
-  const cachedData = getCachedData(machineId, effectiveProgramName);
+  const cachedData = getCachedData(machineId, programName);
   const [deployment, setDeployment] = useState<Deployment | null>(cachedData?.deployment || null);
   const [program, setProgram] = useState<Program | null>(cachedData?.program || null);
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(cachedData?.fileInfo || null);
@@ -188,35 +162,19 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
   );
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
   const [expandedWCS, setExpandedWCS] = useState<boolean>(false);
+  const [liveValidation, setLiveValidation] = useState<Deployment['validation_results'] | null>(null);
+  const [isRevalidating, setIsRevalidating] = useState(false);
+  const hasAutoRevalidatedRef = useRef(false);
   const isInitialLoadRef = useRef(true);
   const previousMachineIdRef = useRef<number | null>(null);
   const previousProgramNameRef = useRef<string | undefined>(undefined);
   const hasDataRef = useRef(false);
   const lastFetchedProgramNameRef = useRef<string | undefined>(undefined); // Track which O-number we've already fetched
 
-  /** Keep last known O-number across transient missing/blank polls; clear only on explicit “no program” or machine change. */
-  useEffect(() => {
-    setHeldProgramName((prev) => {
-      if (prev.machineId !== machineId) {
-        return {
-          machineId,
-          name: isValidProgramName(programName) ? programName.trim() : undefined,
-        };
-      }
-      if (isValidProgramName(programName)) {
-        return { machineId, name: programName.trim() };
-      }
-      if (isExplicitNoProgramName(programName)) {
-        return { machineId, name: undefined };
-      }
-      return prev;
-    });
-  }, [machineId, programName]);
-
   useEffect(() => {
     // Check module-level cache first (persists across unmounts)
     // Skip cache if refreshTrigger was incremented (manual refresh)
-    const cachedData = refreshTrigger > 0 ? null : getCachedData(machineId, effectiveProgramName);
+    const cachedData = refreshTrigger > 0 ? null : getCachedData(machineId, programName);
     if (cachedData) {
       // We have cached data - restore it to state if not already there
       if (!deployment && !fileInfo) {
@@ -227,10 +185,10 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
       setLoading(false);
       setIsRefreshing(false);
       previousMachineIdRef.current = machineId;
-      previousProgramNameRef.current = effectiveProgramName;
+      previousProgramNameRef.current = programName;
       hasDataRef.current = true;
-      lastFetchedProgramNameRef.current = effectiveProgramName;
-      const key = getCacheKey(machineId, effectiveProgramName);
+      lastFetchedProgramNameRef.current = programName;
+      const key = getCacheKey(machineId, programName);
       const entry = dataCache.get(key);
       if (entry) {
         setLastFetchSuccessAt(new Date(entry.timestamp).toISOString());
@@ -252,7 +210,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
     
     const fetchCurrentDeployment = async () => {
       const recordFetchSuccess = () => setLastFetchSuccessAt(new Date().toISOString());
-      const isNewProgramName = lastFetchedProgramNameRef.current !== effectiveProgramName;
+      const isNewProgramName = lastFetchedProgramNameRef.current !== programName;
       
       // Set loading/refreshing indicators
       if (isInitialLoadRef.current && !hasDataRef.current) {
@@ -263,16 +221,16 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
       
       // Update refs
       previousMachineIdRef.current = machineId;
-      previousProgramNameRef.current = effectiveProgramName;
+      previousProgramNameRef.current = programName;
       
       try {
         // Fetch - if programName is available, use it; otherwise fall back to most recent
         // If we have program_name from machine status, fetch deployment by O-number
         // This ensures we show validation info for the ACTIVE program, not just the most recent deployment
-        if (effectiveProgramName) {
+        if (programName && programName !== '----' && programName !== 'undefined' && programName !== 'null' && programName.trim() !== '') {
           try {
             const response = await fetch(
-              `${API_BASE_URL}/api/programs/machines/${machineId}/deployments/by-onumber/${encodeURIComponent(effectiveProgramName)}?include_program=true`
+              `${API_BASE_URL}/api/programs/machines/${machineId}/deployments/by-onumber/${encodeURIComponent(programName)}?include_program=true`
             );
             if (response.ok) {
               const data = await response.json();
@@ -282,9 +240,9 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                 setProgram(programData);
                 setFileInfo(null); // Clear fileInfo when we have deployment data
                 // Save to cache
-                setCachedData(machineId, effectiveProgramName, data.deployment, programData, null);
+                setCachedData(machineId, programName, data.deployment, programData, null);
                 hasDataRef.current = true;
-                lastFetchedProgramNameRef.current = effectiveProgramName; // Track that we've fetched this O-number
+                lastFetchedProgramNameRef.current = programName; // Track that we've fetched this O-number
                 if (isInitialLoadRef.current) {
                   isInitialLoadRef.current = false;
                   setLoading(false);
@@ -305,56 +263,47 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
               }
               
               // Try to fetch file info from machine (file size from file listing)
-              if (effectiveProgramName) {
+              if (programName) {
                 try {
                   // Construct filename (e.g., "O2045" -> "O2045.NC")
-                  const filename = effectiveProgramName.startsWith('O')
-                    ? `${effectiveProgramName}.NC`
-                    : `O${effectiveProgramName}.NC`;
-
+                  const filename = programName.startsWith('O') ? `${programName}.NC` : `O${programName}.NC`;
+                  
                   // List programs to find file size
                   const listResponse = await fetch(
                     `${API_BASE_URL}/api/machines/${machineId}/programs?path=/`
                   );
                   if (listResponse.ok) {
                     const listData = await listResponse.json();
-                    const file = listData.programs?.find(
-                      (p: any) =>
-                        p.name === filename ||
-                        p.name === effectiveProgramName ||
-                        p.name === `${effectiveProgramName}.NC`
+                    const file = listData.programs?.find((p: { name: string; size?: number; modified?: string }) => 
+                      p.name === filename || p.name === programName || p.name === `${programName}.NC`
                     );
-                    const fileInfoData = file
-                      ? {
-                          name: file.name || filename,
-                          size: file.size,
-                          modified: file.modified,
-                        }
-                      : { name: filename };
-
+                    const fileInfoData = file ? {
+                      name: file.name || filename,
+                      size: file.size,
+                      modified: file.modified,
+                    } : { name: filename };
+                    
                     setFileInfo(fileInfoData);
                     // Save to cache
-                    setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
+                    setCachedData(machineId, programName, null, null, fileInfoData);
                   } else {
                     // If listing fails, at least we have the programName
                     const fileInfoData = { name: filename };
                     setFileInfo(fileInfoData);
                     // Save to cache
-                    setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
+                    setCachedData(machineId, programName, null, null, fileInfoData);
                   }
                 } catch (err) {
                   // Silently handle errors
                   console.error('Error fetching file info:', err);
-                  const filename = effectiveProgramName.startsWith('O')
-                    ? `${effectiveProgramName}.NC`
-                    : `O${effectiveProgramName}.NC`;
+                  const filename = programName.startsWith('O') ? `${programName}.NC` : `O${programName}.NC`;
                   const fileInfoData = { name: filename };
                   setFileInfo(fileInfoData);
                   // Save to cache even on error (at least we have the filename)
-                  setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
+                  setCachedData(machineId, programName, null, null, fileInfoData);
                 }
                 hasDataRef.current = true;
-                lastFetchedProgramNameRef.current = effectiveProgramName; // Track that we've fetched this O-number
+                lastFetchedProgramNameRef.current = programName; // Track that we've fetched this O-number
               }
               
               if (isInitialLoadRef.current) {
@@ -401,7 +350,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
             setProgram(programData);
             setFileInfo(null); // Clear fileInfo when we have deployment data
             // Save to cache
-            setCachedData(machineId, effectiveProgramName, deploymentData, programData, null);
+            setCachedData(machineId, programName, deploymentData, programData, null);
             hasDataRef.current = true;
             // Note: We don't set lastFetchedProgramNameRef here because this is a fallback
             // and we don't have a specific programName to track
@@ -417,57 +366,48 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
             setDeployment(null);
             setProgram(null);
             
-            if (effectiveProgramName) {
+            if (programName && programName !== '----' && programName !== 'undefined' && programName !== 'null' && programName.trim() !== '') {
               // Try to fetch file info from machine
               try {
-                const filename = effectiveProgramName.startsWith('O')
-                  ? `${effectiveProgramName}.NC`
-                  : `O${effectiveProgramName}.NC`;
+                const filename = programName.startsWith('O') ? `${programName}.NC` : `O${programName}.NC`;
                 const listResponse = await fetch(
                   `${API_BASE_URL}/api/machines/${machineId}/programs?path=/`
                 );
                 if (listResponse.ok) {
                   const listData = await listResponse.json();
-                  const file = listData.programs?.find(
-                    (p: any) =>
-                      p.name === filename ||
-                      p.name === effectiveProgramName ||
-                      p.name === `${effectiveProgramName}.NC`
+                  const file = listData.programs?.find((p: { name: string; size?: number; modified?: string }) => 
+                    p.name === filename || p.name === programName || p.name === `${programName}.NC`
                   );
-                  const fileInfoData = file
-                    ? {
-                        name: file.name || filename,
-                        size: file.size,
-                        modified: file.modified,
-                      }
-                    : { name: filename };
-
+                  const fileInfoData = file ? {
+                    name: file.name || filename,
+                    size: file.size,
+                    modified: file.modified,
+                  } : { name: filename };
+                  
                   setFileInfo(fileInfoData);
                   // Save to cache
-                  setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
-                  lastFetchedProgramNameRef.current = effectiveProgramName; // Track that we've fetched this O-number
+                  setCachedData(machineId, programName, null, null, fileInfoData);
+                  lastFetchedProgramNameRef.current = programName; // Track that we've fetched this O-number
                 } else {
                   const fileInfoData = { name: filename };
                   setFileInfo(fileInfoData);
                   // Save to cache
-                  setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
+                  setCachedData(machineId, programName, null, null, fileInfoData);
                 }
                 hasDataRef.current = true;
                 if (!lastFetchedProgramNameRef.current) {
-                  lastFetchedProgramNameRef.current = effectiveProgramName; // Track that we've fetched this O-number
+                  lastFetchedProgramNameRef.current = programName; // Track that we've fetched this O-number
                 }
               } catch (err) {
                 console.error('Error fetching file info in fallback:', err);
-                const filename = effectiveProgramName.startsWith('O')
-                  ? `${effectiveProgramName}.NC`
-                  : `O${effectiveProgramName}.NC`;
+                const filename = programName.startsWith('O') ? `${programName}.NC` : `O${programName}.NC`;
                 const fileInfoData = { name: filename };
                 setFileInfo(fileInfoData);
                 // Save to cache even on error
-                setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
+                setCachedData(machineId, programName, null, null, fileInfoData);
                 hasDataRef.current = true;
                 if (!lastFetchedProgramNameRef.current) {
-                  lastFetchedProgramNameRef.current = effectiveProgramName; // Track that we've fetched this O-number
+                  lastFetchedProgramNameRef.current = programName; // Track that we've fetched this O-number
                 }
               }
             }
@@ -483,16 +423,14 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
           // API call failed - if we have programName, at least show that
           setDeployment(null);
           setProgram(null);
-          if (effectiveProgramName) {
-            const filename = effectiveProgramName.startsWith('O')
-              ? `${effectiveProgramName}.NC`
-              : `O${effectiveProgramName}.NC`;
+          if (programName && programName !== '----' && programName !== 'undefined' && programName !== 'null' && programName.trim() !== '') {
+            const filename = programName.startsWith('O') ? `${programName}.NC` : `O${programName}.NC`;
             const fileInfoData = { name: filename };
             setFileInfo(fileInfoData);
             // Save to cache
-            setCachedData(machineId, effectiveProgramName, null, null, fileInfoData);
+            setCachedData(machineId, programName, null, null, fileInfoData);
             hasDataRef.current = true;
-            lastFetchedProgramNameRef.current = effectiveProgramName; // Track that we've fetched this O-number
+            lastFetchedProgramNameRef.current = programName; // Track that we've fetched this O-number
           }
           if (isInitialLoadRef.current) {
             isInitialLoadRef.current = false;
@@ -521,7 +459,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
     };
 
       fetchCurrentDeployment();
-    }, [machineId, effectiveProgramName, refreshTrigger]);
+    }, [machineId, programName, refreshTrigger]);
 
   const formatRuntime = (seconds?: number): string => {
     if (!seconds || seconds === 0) return 'N/A';
@@ -538,12 +476,73 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const normalizeRemotePath = (rawPath?: string | null): string => {
+    const normalized = `/${String(rawPath ?? '').replace(/\\/g, '/').split('/').filter(Boolean).join('/')}`;
+    return normalized === '/' ? '/' : normalized;
+  };
+
+  const buildDeploymentFilePath = (dep: Deployment): string => {
+    const filename = (dep.deployed_filename || '').trim();
+    const rawPath = (dep.deployed_path || '').trim();
+
+    if (!rawPath) {
+      return normalizeRemotePath(filename ? `/${filename}` : '/');
+    }
+
+    const normalizedPath = normalizeRemotePath(rawPath);
+    if (!filename) {
+      return normalizedPath;
+    }
+
+    const pathLower = normalizedPath.toLowerCase();
+    const fileLower = `/${filename.toLowerCase()}`;
+    if (pathLower.endsWith(fileLower)) {
+      return normalizedPath;
+    }
+
+    return normalizeRemotePath(`${normalizedPath}/${filename}`);
+  };
+
+  const buildFileBrowserLink = (fullFilePath: string): string => {
+    const normalized = normalizeRemotePath(fullFilePath);
+    const segments = normalized.split('/').filter(Boolean);
+    const fileName = segments.length > 0 ? segments[segments.length - 1] : '';
+    const directoryPath = segments.length > 1 ? `/${segments.slice(0, -1).join('/')}` : '/';
+
+    return `/files?machine=${machineId}&file=${encodeURIComponent(fileName)}&file_path=${encodeURIComponent(normalized)}&path=${encodeURIComponent(directoryPath)}`;
+  };
+
+  const handleRevalidate = async (deploymentArg?: Deployment) => {
+    const dep = deploymentArg || deployment;
+    if (!dep) return;
+    const filePath = buildDeploymentFilePath(dep);
+    setIsRevalidating(true);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/programs/machines/${machineId}/programs/validate-file?file_path=${encodeURIComponent(filePath)}`
+        , { method: 'POST' }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setLiveValidation({
+          tools: data.validation?.tools ?? data.tools,
+          wcs_offset: data.validation?.wcs_offset ?? data.wcs_offset ?? null,
+          valid: data.validation?.valid ?? data.valid,
+        });
+      }
+    } catch (err) {
+      console.error('Re-validate error:', err);
+    } finally {
+      setIsRevalidating(false);
+    }
+  };
+
   const handleRefresh = async () => {
     try {
       setRefreshing(true);
       setIsRefreshing(true);
       // Invalidate cache to force fresh fetch
-      invalidateCache(machineId, effectiveProgramName);
+      invalidateCache(machineId, programName);
       
       // Clear state to ensure we show fresh data
       setDeployment(null);
@@ -558,11 +557,30 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
     } catch (error) {
       console.error('Error refreshing deployment data:', error);
       // On error, still invalidate cache and force refetch
-      invalidateCache(machineId, effectiveProgramName);
+      invalidateCache(machineId, programName);
       setRefreshTrigger(prev => prev + 1);
     }
     // Don't set refreshing to false here - let the fetch complete in useEffect
   };
+
+  // Auto-revalidate when a deployment with failed tools is loaded for the first time
+  useEffect(() => {
+    if (!deployment || hasAutoRevalidatedRef.current) return;
+    const tools = deployment.validation_results?.tools;
+    if (!tools) return;
+    const hasFailedTools = Object.values(tools).some(t => !t.available);
+    if (hasFailedTools) {
+      hasAutoRevalidatedRef.current = true;
+      handleRevalidate(deployment);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deployment]);
+
+  // Reset live validation and auto-revalidate guard when deployment identity changes
+  useEffect(() => {
+    setLiveValidation(null);
+    hasAutoRevalidatedRef.current = false;
+  }, [machineId, programName]);
 
   const extractONumber = (filename: string): string => {
     const match = filename.match(/O(\d{4})/i);
@@ -582,11 +600,20 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
   };
 
   const renderToolsValidationTable = () => {
-    if (!deployment?.validation_results?.tools) {
+    // Prefer live re-validation results; fall back to stored deployment results
+    const validationResults = liveValidation ?? deployment?.validation_results;
+    const isLiveResult = liveValidation !== null;
+    // A "stale fail" is a stored result where a required tool (non-zero specs) shows not available
+    const hasStaleFail = !isLiveResult && Object.values(deployment?.validation_results?.tools ?? {}).some(
+      t => !t.available && (t.required_diameter !== 0 || t.required_length !== 0)
+    );
+
+    if (!validationResults?.tools) {
       return null;
     }
 
-    const toolsArray = Object.values(deployment.validation_results.tools);
+    const toolsArray = Object.values(validationResults.tools);
+    const toleranceSource = toolsArray.find(t => t.tolerance_source)?.tolerance_source;
 
     if (toolsArray.length === 0) {
       return null;
@@ -594,7 +621,27 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
 
     return (
       <div className="validation-section">
-        <div className="section-header">TOOLS & VALIDATION</div>
+        <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>TOOLS &amp; VALIDATION{hasStaleFail ? ' ⚠' : ''}</span>
+          <button
+            onClick={() => handleRevalidate()}
+            disabled={isRevalidating}
+            style={{ fontSize: '0.7rem', padding: '1px 6px', cursor: isRevalidating ? 'wait' : 'pointer' }}
+            title="Re-run tool validation against current machine state"
+          >
+            {isRevalidating ? '[...]' : '[RE-VALIDATE]'}
+          </button>
+        </div>
+        {hasStaleFail && (
+          <div style={{ fontSize: '0.7rem', color: '#ffcc80', padding: '2px 4px', marginBottom: '4px' }}>
+            ⚠ Stored results may be stale — tool data was unavailable when deployed. Click RE-VALIDATE.
+          </div>
+        )}
+        {toleranceSource && (
+          <div style={{ fontSize: '0.7rem', color: '#9fb2c8', padding: '2px 4px', marginBottom: '4px' }}>
+            Tolerance source: {toleranceSource === 'machine_settings' ? 'MACHINE SETTINGS' : 'PROGRAM DEFAULTS'}
+          </div>
+        )}
         <table className="validation-table">
           <thead>
             <tr className="validation-table-header">
@@ -628,8 +675,10 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                 );
               }
               
+              const requirementsMissing = tool.requirements_complete === false;
+
               // Check if tool is not referenced in NC (required values are 0)
-              const notInNC = tool.required_diameter === 0 && tool.required_length === 0;
+              const notInNC = !requirementsMissing && tool.required_diameter === 0 && tool.required_length === 0;
               
               if (notInNC) {
                 // Tool is available on machine but not referenced in NC program
@@ -638,7 +687,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                     <td className="text-muted">─</td>
                     <td>T{String(tool.tool_number).padStart(2, '0')}</td>
                     <td>
-                      Ø{(tool.machine_tool_data.diameter || 0).toFixed(3)}" L{(tool.machine_tool_data.length || 0).toFixed(2)}"
+                      Ø{(tool.machine_tool_data.diameter || 0).toFixed(3)}" L{(tool.machine_tool_data.length || 0).toFixed(4)}"
                       {tool.machine_tool_data.tool_name && (
                         <span className="text-muted"> ({tool.machine_tool_data.tool_name})</span>
                       )}
@@ -653,8 +702,8 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
 
               // Determine overall status
               const toolPassed = tool.available && tool.diameter_match && tool.length_sufficient;
-              const hasError = !tool.available || !tool.length_sufficient;
-              const hasWarning = tool.available && !tool.diameter_match;
+              const hasError = !tool.available || ((tool.validate_length ?? true) && !tool.length_sufficient);
+              const hasWarning = requirementsMissing || (tool.available && (tool.validate_diameter ?? true) && !tool.diameter_match);
               const statusClass = hasError ? 'text-error' : hasWarning ? 'text-warning' : 'text-success';
               const statusIcon = hasError ? '✕' : hasWarning ? '⚠' : '✓';
               const expandIcon = isExpanded ? '▼' : '▶';
@@ -686,6 +735,8 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                     <td colSpan={4}>
                       {!tool.available ? (
                         <span className="text-error">NOT AVAILABLE</span>
+                      ) : requirementsMissing ? (
+                        <span className="text-warning">TOOL CALL FOUND - HEADER DIAMETER/LENGTH NOT PROVIDED</span>
                       ) : (
                         <>
                           {tool.machine_tool_data.tool_name && (
@@ -704,18 +755,18 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                     <tr className="validation-table-row tool-detail-row">
                       <td></td>
                       <td className="detail-label">Length</td>
-                      <td>{actualLength.toFixed(2)}"</td>
-                      <td>{requiredLength.toFixed(2)}"</td>
+                      <td>{actualLength.toFixed(4)}"</td>
+                      <td>{requiredLength.toFixed(4)}"</td>
                       <td className={lengthPassed ? 'text-success' : 'text-error'}>
-                        {lengthDiff.toFixed(2)}"
+                        {lengthDiff.toFixed(4)}"
                       </td>
                       <td>
                         {tool.length_tolerance_plus != null && tool.length_tolerance_minus != null
                           ? `+${tool.length_tolerance_plus.toFixed(4)}"/-${tool.length_tolerance_minus.toFixed(4)}"`
-                          : '≥ required'}
+                          : ((tool.validate_length ?? true) ? '≥ required' : 'SKIPPED')}
                       </td>
                       <td className={lengthPassed ? 'text-success' : 'text-error'}>
-                        {lengthPassed ? '✓' : '✕'}
+                        {(tool.validate_length ?? true) ? (lengthPassed ? '✓' : '✕') : '─'}
                       </td>
                     </tr>
                   )}
@@ -733,10 +784,10 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                       <td>
                         {tool.diameter_tolerance != null
                           ? `±${tool.diameter_tolerance.toFixed(4)}"`
-                          : 'exact match'}
+                          : ((tool.validate_diameter ?? true) ? 'exact match' : 'SKIPPED')}
                       </td>
                       <td className={diameterPassed ? 'text-success' : 'text-error'}>
-                        {diameterPassed ? '✓' : '✕'}
+                        {(tool.validate_diameter ?? true) ? (diameterPassed ? '✓' : '✕') : '─'}
                       </td>
                     </tr>
                   )}
@@ -957,19 +1008,21 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
       className="current-program-pane terminal-box"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="terminal-box-header pane-terminal-header">
+      <div className="terminal-box-header">
         <div className="terminal-box-top">
-          <div className="terminal-box-title-row pane-terminal-title-row">
-            <span className="pane-terminal-title-start">┌─ CURRENT PROGRAM</span>
-            <span className="pane-terminal-title-fill" aria-hidden>
-              {TERMINAL_RULE_FILL}
-            </span>
+          <div className="terminal-box-title-row">
+            <span>┌─ CURRENT PROGRAM {'─'.repeat(25)}</span>
+            {isRefreshing && (
+              <span className="refresh-indicator" style={{ marginLeft: '8px', color: '#888', fontSize: '12px' }} title="Refreshing data...">
+                ⟳
+              </span>
+            )}
             <div className="pane-header-right-actions">
-              {isRefreshing && (
-                <span className="refresh-indicator" title="Refreshing data...">
-                  ⟳
-                </span>
-              )}
+              <PollingStatusLight
+                lastUpdatedAt={statusLightLastUpdatedAt}
+                expectedIntervalMs={300_000}
+                ariaLabel="Current program pane data freshness"
+              />
               <button 
                 className="expand-toggle"
                 onClick={(e) => {
@@ -993,27 +1046,22 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                   [EXPAND]
                 </button>
               )}
-              <PollingStatusLight
-                lastUpdatedAt={statusLightLastUpdatedAt}
-                expectedIntervalMs={300_000}
-                ariaLabel="Current program pane data freshness"
-              />
+              <span>┐</span>
             </div>
-            <span className="pane-terminal-title-corner">┐</span>
           </div>
         </div>
       </div>
       <div className="terminal-box-content">
         {loading && !isRefreshing && !deployment && !fileInfo ? (
           <div className="program-loading">LOADING...</div>
-        ) : !deployment && !effectiveProgramName ? (
+        ) : !deployment && !programName ? (
           <div className="program-empty">NO PROGRAM DEPLOYED</div>
-        ) : !deployment && effectiveProgramName ? (
+        ) : !deployment && programName ? (
           // Show program info even when there's no deployment data
           <div className="program-info">
             <div className="program-row">
               <span className="program-label">O-NUMBER:</span>
-              <span className="program-value text-info">{effectiveProgramName}</span>
+              <span className="program-value text-info">{programName}</span>
             </div>
             {fileInfo && (
               <>
@@ -1059,13 +1107,18 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
               <div className="program-row">
                 <span className="program-label">FILENAME:</span>
                 <span className="program-value">
-                  <Link 
-                    to={`/files?machine=${machineId}&file=${encodeURIComponent(deployment!.deployed_filename)}`}
+                  <Link
+                    to={buildFileBrowserLink(buildDeploymentFilePath(deployment!))}
                     className="program-filename-link"
+                    title={`Open in File Browser: ${buildDeploymentFilePath(deployment!)}`}
                   >
                     {deployment!.deployed_filename}
                   </Link>
                 </span>
+              </div>
+              <div className="program-row">
+                <span className="program-label">FILE PATH:</span>
+                <span className="program-value">{buildDeploymentFilePath(deployment!)}</span>
               </div>
               {program && (
                 <>
@@ -1107,14 +1160,8 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
           </>
         )}
       </div>
-      <div className="terminal-box-footer pane-terminal-footer">
-        <div className="pane-terminal-footer-row">
-          <span className="pane-terminal-footer-corner">└</span>
-          <span className="pane-terminal-footer-fill" aria-hidden>
-            {TERMINAL_RULE_FILL}
-          </span>
-          <span className="pane-terminal-footer-corner">┘</span>
-        </div>
+      <div className="terminal-box-footer">
+        └{'─'.repeat(42)}┘
       </div>
     </div>
   );

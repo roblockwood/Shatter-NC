@@ -3,16 +3,123 @@ import { useSearchParams } from 'react-router-dom';
 import { StatusIndicator, Select } from '../components/ui';
 import './FileBrowser.css';
 import { API_BASE_URL, getApiErrorMessage } from '../config/api';
-import type {
-  Program,
-  Machine,
-  ViewData,
-  FileMetadata,
-  FreshValidationState,
-  DeploymentDetail,
-} from './FileBrowserTypes';
-import { formatBytes, formatDate, isONumberFile, extractONumber } from './FileBrowserUtils';
-import { FileBrowserDetailPanel } from './FileBrowserDetailPanel';
+
+interface Program {
+  name: string;
+  size: number;
+  modified: string;
+  is_directory: boolean;
+  path: string;
+}
+
+interface Machine {
+  id: number;
+  name: string;
+  ip_address: string;
+  path?: string;
+}
+
+interface ViewData {
+  file_path: string;
+  content: string;
+  size: number;
+  lines: number;
+}
+
+interface FileMetadata {
+  file_path: string;
+  tools: number[];
+  runtime_seconds: number;
+  has_errors: boolean;
+}
+
+interface ToolDetail {
+  tool_number: number;
+  diameter: number;
+  corner_radius: number;
+  description: string;
+  length_total: number;
+}
+
+interface ToolValidation {
+  tool_number: number;
+  required_diameter: number;
+  required_length: number;
+  available: boolean;
+  diameter_match: boolean;
+  length_sufficient: boolean;
+  machine_tool_data: {
+    tool_name?: string;
+    diameter?: number;
+    length?: number;
+  };
+  warnings: string[];
+  // Tolerance values from machine settings (not from NC file)
+  diameter_tolerance?: number;
+  length_tolerance_plus?: number;
+  length_tolerance_minus?: number;
+}
+
+interface WCSValidation {
+  valid: boolean;
+  work_offset: number;
+  expected: { x: number; y: number; z: number };
+  actual: { x: number; y: number; z: number };
+  difference: { x: number; y: number; z: number };
+  tolerance: number;
+  within_tolerance: boolean;
+  warnings: string[];
+}
+
+interface ValidationResults {
+  valid: boolean;
+  tools: { [key: number]: ToolValidation };
+  wcs_offset?: WCSValidation;
+  warnings: string[];
+  errors: string[];
+}
+
+interface FreshValidationState {
+  validation: ValidationResults;
+  gcode_content: string;
+  timestamp: number;
+}
+
+interface DeploymentHistoryEntry {
+  id: number;
+  deployed_at: string;
+  validation_passed: boolean | null;
+  replaced_at: string | null;
+  is_current: boolean;
+  program_version: number | null;
+  original_filename: string | null;
+}
+
+interface DeploymentDetail {
+  deployment: {
+    id: number;
+    deployed_filename: string;
+    deployed_path: string;
+    deployed_at: string;
+    validation_passed: boolean | null;
+    validation_results: ValidationResults | null;
+  };
+  program: {
+    id: number;
+    original_filename: string;
+    version_number: number;
+    posted_date: string | null;
+    estimated_runtime_seconds: number;
+    program_metadata: {
+      tools: ToolDetail[];
+      wcs_offset?: WCSValidation;
+      stock_size?: Record<string, number>;
+    };
+    file_size_bytes: number;
+    line_count: number;
+  } | null;
+  history?: DeploymentHistoryEntry[];
+}
 
 export const FileBrowser: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -31,8 +138,8 @@ export const FileBrowser: React.FC = () => {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewModalContent, setViewModalContent] = useState<ViewData | null>(null);
   const [viewModalLoading, setViewModalLoading] = useState(false);
-  // reserved for future use
-  const [_fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
+  // @ts-ignore - reserved for future use
+  const [fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [deploymentDetail, setDeploymentDetail] = useState<DeploymentDetail | null>(null);
   const [deploymentLoading, setDeploymentLoading] = useState(false);
@@ -42,8 +149,8 @@ export const FileBrowser: React.FC = () => {
   const [validationLoading, setValidationLoading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ fileName: string; percent: number } | null>(null);
-  // reserved for future use
-  const [_highlightedFile, setHighlightedFile] = useState<string | null>(null);
+  // @ts-ignore - reserved for future use
+  const [highlightedFile, setHighlightedFile] = useState<string | null>(null);
   const [pendingFileSelection, setPendingFileSelection] = useState<string | null>(null);
   // Expand/collapse state for validation tables
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
@@ -136,7 +243,6 @@ export const FileBrowser: React.FC = () => {
         }, 100);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingFileSelection, programs.length, loading]);
 
   // Set path when machine changes - fetch fresh machine data to ensure we have latest config
@@ -202,7 +308,7 @@ export const FileBrowser: React.FC = () => {
         } else {
           sessionStorage.removeItem(cacheKey);
         }
-      } catch (_e) {
+      } catch (e) {
         sessionStorage.removeItem(cacheKey);
       }
     }
@@ -324,7 +430,6 @@ export const FileBrowser: React.FC = () => {
       setDeploymentError(null);
       setSelectedDeploymentId(null);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProgram]);
 
   // Handle deployment selection change from history dropdown
@@ -340,7 +445,6 @@ export const FileBrowser: React.FC = () => {
         fetchSelectedDeploymentDetails(currentEntry.id);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDeploymentId, deploymentDetail?.history]);
 
   const selectedMachine = machines.find(m => m.id === selectedMachineId);
@@ -355,9 +459,49 @@ export const FileBrowser: React.FC = () => {
     setExpandedTools(newExpanded);
   };
 
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 10) / 10 + ' ' + sizes[i];
+  };
+
+  const formatDate = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatRuntime = (seconds: number) => {
+    if (!seconds) return '─ unknown ─';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const extractONumber = (filename: string): string | null => {
+    const match = filename.match(/^O(\d{4})\.nc$/i);
+    return match ? match[1] : null;
+  };
+
+  const isONumberFile = (filename: string): boolean => {
+    return extractONumber(filename) !== null;
+  };
+
   // Get the currently displayed deployment (either selected from history or current)
-  // reserved for future use
-  const _getCurrentDisplayedDeployment = () => {
+  // @ts-ignore - reserved for future use
+  const getCurrentDisplayedDeployment = () => {
     if (!deploymentDetail) return null;
 
     // If a specific deployment is selected from history, find and return it
@@ -378,6 +522,33 @@ export const FileBrowser: React.FC = () => {
       deployment: deploymentDetail.deployment,
       isHistorical: false
     };
+  };
+
+  // Animated ASCII progress bar during metadata parsing
+  const [progressState, setProgressState] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!metadataLoading) return;
+
+    const interval = setInterval(() => {
+      setProgressState(prev => (prev + 1) % 8);
+    }, 900);
+
+    return () => clearInterval(interval);
+  }, [metadataLoading]);
+
+  const renderProgressBar = () => {
+    const stages = [
+      '[████░░░░░]',
+      '[██████░░░]',
+      '[████████░]',
+      '[██████████]',
+      '[██████████]',
+      '[████████░░]',
+      '[██████░░░░]',
+      '[████░░░░░░]',
+    ];
+    return <span className="ascii-progress-container">{stages[progressState]} PARSING...</span>;
   };
 
   const handleItemClick = (program: Program) => {
@@ -660,8 +831,8 @@ export const FileBrowser: React.FC = () => {
     }
   };
 
-  // reserved for future use
-  const _handleUploadClick = () => {
+  // @ts-ignore - reserved for future use
+  const handleUploadClick = () => {
     fileInputRef.current?.click();
   };
 
@@ -977,28 +1148,513 @@ export const FileBrowser: React.FC = () => {
 
         {/* Program Details Panel */}
         {selectedProgram && (
-          <FileBrowserDetailPanel
-            selectedProgram={selectedProgram}
-            deploymentDetail={deploymentDetail}
-            deploymentLoading={deploymentLoading}
-            deploymentError={deploymentError}
-            freshValidation={freshValidation}
-            expandedTools={expandedTools}
-            expandedWCS={expandedWCS}
-            selectedDeploymentId={selectedDeploymentId}
-            validationError={validationError}
-            validationLoading={validationLoading}
-            previewLines={previewLines}
-            metadataLoading={metadataLoading}
-            deploymentSectionRef={deploymentSectionRef}
-            setExpandedWCS={setExpandedWCS}
-            setSelectedDeploymentId={setSelectedDeploymentId}
-            setValidationError={setValidationError}
-            toggleToolExpanded={toggleToolExpanded}
-            onDownload={handleDownload}
-            onValidate={handleValidate}
-            onViewCode={handleViewCode}
-          />
+          <div className="details-panel">
+            <div className="panel-header">
+              ┌─ SELECTED: {selectedProgram.name} {'─'.repeat(30)}┐
+            </div>
+            <div className="details-content" style={{ overflow: 'auto' }}>
+              {/* FILE INFO SECTION */}
+              <div className="detail-section">
+                <div className="section-title">FILE INFO</div>
+                <div className="detail-row">
+                  <span className="label">SIZE:</span>
+                  <span className="value">{formatBytes(selectedProgram.size)}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="label">MODIFIED:</span>
+                  <span className="value">{formatDate(selectedProgram.modified)}</span>
+                </div>
+              </div>
+
+              {/* DEPLOYMENT INFO SECTION (O-number files only) */}
+              {isONumberFile(selectedProgram.name) && (
+                <div className="detail-section" ref={deploymentSectionRef}>
+                  <div className="deployment-info-header">
+                    <div className="section-title">
+                      {freshValidation ? (
+                        <span style={{ color: '#4ade80' }}>*FRESH* VALIDATION RESULTS</span>
+                      ) : (
+                        'DEPLOYMENT INFO'
+                      )}
+                    </div>
+                    {freshValidation && (
+                      <span className="validation-timestamp text-muted">
+                        Validated: {new Date(freshValidation.timestamp).toLocaleTimeString()}
+                      </span>
+                    )}
+                    {!freshValidation && deploymentDetail?.history && deploymentDetail.history.length > 1 && (
+                      <Select
+                        value={selectedDeploymentId?.toString() || ''}
+                        onChange={(value) => setSelectedDeploymentId(value ? parseInt(value) : null)}
+                        options={[
+                          {
+                            value: '',
+                            label: `${deploymentDetail.program?.original_filename} (${formatDate(deploymentDetail.deployment.deployed_at)}) - CURRENT`
+                          },
+                          ...deploymentDetail.history.slice(1).map((entry) => ({
+                            value: entry.id.toString(),
+                            label: `${entry.original_filename} (${formatDate(entry.deployed_at)})`
+                          }))
+                        ]}
+                        className="deployment-selector"
+                      />
+                    )}
+                  </div>
+
+                  {validationError && (
+                    <div className="validation-error">
+                      <div className="detail-row">
+                        <span className="value text-error">X {validationError}</span>
+                      </div>
+                      <div className="error-actions">
+                        <button
+                          className="terminal-button-sm"
+                          onClick={() => handleValidate(selectedProgram)}
+                        >
+                          [ RETRY ]
+                        </button>
+                        <button
+                          className="terminal-button-sm"
+                          onClick={() => setValidationError(null)}
+                        >
+                          [ DISMISS ]
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {freshValidation ? (
+                    <>
+                      <div className="detail-row">
+                        <span className="label">STATUS:</span>
+                        <span className={`value ${freshValidation.validation.valid ? 'text-success' : 'text-error'}`}>
+                          {freshValidation.validation.valid ? '✓ PASSED' : '✕ FAILED'}
+                        </span>
+                      </div>
+
+                      {(() => {
+                        const age = Date.now() - freshValidation.timestamp;
+                        const STALE_MS = 5 * 60 * 1000;
+                        return age > STALE_MS && (
+                          <div className="detail-row">
+                            <span className="value text-warning">
+                              ! Validation is {Math.floor(age / 60000)} minutes old. Machine state may have changed.
+                            </span>
+                          </div>
+                        );
+                      })()}
+
+                      {freshValidation.validation.errors && freshValidation.validation.errors.length > 0 && (
+                        <div className="detail-row">
+                          <span className="label">ERRORS:</span>
+                          <div className="value text-error">
+                            {freshValidation.validation.errors.map((err, i) => (
+                              <div key={i}>- {err}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {freshValidation.validation.warnings && freshValidation.validation.warnings.length > 0 && (
+                        <div className="detail-row">
+                          <span className="label">WARNINGS:</span>
+                          <div className="value text-warning">
+                            {freshValidation.validation.warnings.map((warn, i) => (
+                              <div key={i}>- {warn}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {deploymentLoading && (
+                        <div className="detail-row">
+                          <span className="value">{renderProgressBar()}</span>
+                        </div>
+                      )}
+                      {deploymentError && (
+                        <div className="detail-row">
+                          <span className="value text-error">{deploymentError}</span>
+                        </div>
+                      )}
+                      {deploymentDetail && (
+                        <>
+                          <div className="detail-row">
+                            <span className="label">DEPLOYED:</span>
+                            <span className="value">
+                              {formatDate(deploymentDetail.deployment.deployed_at)}
+                            </span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="label">POSTED DATE:</span>
+                            <span className="value">
+                              {deploymentDetail.program?.posted_date ? formatDate(deploymentDetail.program.posted_date) : 'N/A'}
+                            </span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="label">RUNTIME:</span>
+                            <span className="value">
+                              {formatRuntime(deploymentDetail.program?.estimated_runtime_seconds || 0)}
+                            </span>
+                          </div>
+                          <div className="detail-row">
+                            <span className="label">VALIDATION:</span>
+                            <span className={`value ${
+                              deploymentDetail.deployment.validation_passed === null ? 'text-muted' :
+                              deploymentDetail.deployment.validation_passed ? 'text-success' : 'text-error'
+                            }`}>
+                              {deploymentDetail.deployment.validation_passed === null ? '─ not validated ─' :
+                               deploymentDetail.deployment.validation_passed ? '✓ PASSED' : '✕ FAILED'}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+
+              {/* TOOL DETAILS TABLE (O-number files with deployment) */}
+              {((deploymentDetail?.deployment?.validation_results?.tools && !freshValidation) ||
+                (freshValidation?.validation?.tools)) && (
+                <div className="detail-section">
+                  <div className="section-title">TOOLS</div>
+                  <div className="tools-table">
+                    <table className="detail-table">
+                      <thead>
+                        <tr>
+                          <th>ST</th>
+                          <th>TOOL#</th>
+                          <th>ACTUAL</th>
+                          <th>EXPECTED</th>
+                          <th>DIFF</th>
+                          <th>TOL</th>
+                          <th>RESULT</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries((freshValidation?.validation?.tools || deploymentDetail?.deployment?.validation_results?.tools || {})).map(([toolKey, validation]: [string, ToolValidation]) => {
+                          const toolNumber = parseInt(toolKey, 10);
+                          if (isNaN(toolNumber)) return null;
+                          const isExpanded = expandedTools.has(toolNumber);
+
+                          // Check if tool is not referenced in NC (required values are 0)
+                          const notInNC = validation.required_diameter === 0 && validation.required_length === 0;
+
+                          if (notInNC) {
+                            // Tool is available on machine but not referenced in NC program
+                            return (
+                              <tr key={toolNumber} className="tool-summary-row">
+                                <td className="text-muted">─</td>
+                                <td>T{String(toolNumber).padStart(2, '0')}</td>
+                                <td>
+                                  Ø{(validation.machine_tool_data?.diameter || 0).toFixed(3)}" L{(validation.machine_tool_data?.length || 0).toFixed(2)}"
+                                  {validation.machine_tool_data?.tool_name && (
+                                    <span className="text-muted"> ({validation.machine_tool_data.tool_name})</span>
+                                  )}
+                                </td>
+                                <td className="text-muted">────</td>
+                                <td className="text-muted">────</td>
+                                <td className="text-muted">─</td>
+                                <td className="text-muted">N/A</td>
+                              </tr>
+                            );
+                          }
+
+                          // Determine overall status
+                          const toolPassed = validation.available && validation.diameter_match && validation.length_sufficient;
+                          const hasError = !validation.available || !validation.length_sufficient;
+                          const hasWarning = validation.available && !validation.diameter_match;
+                          const statusClass = hasError ? 'text-error' : hasWarning ? 'text-warning' : 'text-success';
+                          const statusIcon = hasError ? '✕' : hasWarning ? '⚠' : '✓';
+                          const expandIcon = isExpanded ? '▼' : '▶';
+
+                          // Calculate values
+                          const actualLength = validation.machine_tool_data?.length || 0;
+                          const requiredLength = validation.required_length || 0;
+                          const lengthDiff = actualLength - requiredLength;
+
+                          const actualDiameter = validation.machine_tool_data?.diameter || 0;
+                          const requiredDiameter = validation.required_diameter || 0;
+                          const diameterDiff = actualDiameter - requiredDiameter;
+
+                          return (
+                            <React.Fragment key={toolNumber}>
+                              {/* Summary Row */}
+                              <tr
+                                className="tool-summary-row clickable"
+                                onClick={() => validation.available && toggleToolExpanded(toolNumber)}
+                                style={{ cursor: validation.available ? 'pointer' : 'default' }}
+                              >
+                                <td className={statusClass}>{statusIcon}</td>
+                                <td>
+                                  {validation.available && <span className="expand-icon">{expandIcon}</span>}
+                                  T{String(toolNumber).padStart(2, '0')}
+                                </td>
+                                <td colSpan={4}>
+                                  {!validation.available ? (
+                                    <span className="text-error">NOT AVAILABLE</span>
+                                  ) : (
+                                    <>
+                                      {validation.machine_tool_data?.tool_name && (
+                                        <span className="text-muted">{validation.machine_tool_data.tool_name}</span>
+                                      )}
+                                    </>
+                                  )}
+                                </td>
+                                <td className={statusClass}>
+                                  {toolPassed ? 'PASS' : 'FAIL'}
+                                </td>
+                              </tr>
+
+                              {/* Detail Rows - Length */}
+                              {isExpanded && validation.available && (
+                                <tr className="tool-detail-row">
+                                  <td></td>
+                                  <td className="detail-label">Length</td>
+                                  <td>{actualLength.toFixed(2)}"</td>
+                                  <td>{requiredLength.toFixed(2)}"</td>
+                                  <td className={validation.length_sufficient ? 'text-success' : 'text-error'}>
+                                    {lengthDiff.toFixed(2)}"
+                                  </td>
+                                  <td>
+                                    {validation.length_tolerance_plus !== undefined && validation.length_tolerance_minus !== undefined
+                                      ? `+${validation.length_tolerance_plus.toFixed(4)}"/-${validation.length_tolerance_minus.toFixed(4)}"`
+                                      : '-'}
+                                  </td>
+                                  <td className={validation.length_sufficient ? 'text-success' : 'text-error'}>
+                                    {validation.length_sufficient ? '✓' : '✕'}
+                                  </td>
+                                </tr>
+                              )}
+
+                              {/* Detail Rows - Diameter */}
+                              {isExpanded && validation.available && (
+                                <tr className="tool-detail-row">
+                                  <td></td>
+                                  <td className="detail-label">Diameter</td>
+                                  <td>{actualDiameter.toFixed(3)}"</td>
+                                  <td>{requiredDiameter.toFixed(3)}"</td>
+                                  <td className={validation.diameter_match ? 'text-success' : 'text-error'}>
+                                    {diameterDiff.toFixed(3)}"
+                                  </td>
+                                  <td>
+                                    {validation.diameter_tolerance !== undefined
+                                      ? `±${validation.diameter_tolerance.toFixed(4)}"`
+                                      : '-'}
+                                  </td>
+                                  <td className={validation.diameter_match ? 'text-success' : 'text-error'}>
+                                    {validation.diameter_match ? '✓' : '✕'}
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* WCS VALIDATION TABLE */}
+              {((deploymentDetail?.deployment?.validation_results?.wcs_offset && !freshValidation) ||
+                (freshValidation?.validation?.wcs_offset)) && (() => {
+                const wcs = freshValidation?.validation?.wcs_offset || deploymentDetail?.deployment?.validation_results?.wcs_offset;
+                if (!wcs) return null;
+
+                // Check if WCS was not specified in NC (expected values are all 0)
+                const notInNC = wcs.expected.x === 0 && 
+                                wcs.expected.y === 0 && 
+                                wcs.expected.z === 0 &&
+                                wcs.warnings?.some((w: string) => w.includes("not specified in NC"));
+
+                if (notInNC) {
+                  // WCS not specified in NC - show collapsed summary with machine data
+                  const expandIcon = expandedWCS ? '▼' : '▶';
+                  
+                  return (
+                    <div className="detail-section">
+                      <div className="section-title">WCS OFFSET</div>
+                      <div className="wcs-validation">
+                        <table className="detail-table">
+                          <thead>
+                            <tr>
+                              <th>ST</th>
+                              <th>OFFSET</th>
+                              <th>ACTUAL</th>
+                              <th>EXPECTED</th>
+                              <th>DIFF</th>
+                              <th>TOL</th>
+                              <th>RESULT</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr 
+                              className="wcs-summary-row clickable"
+                              onClick={() => setExpandedWCS(!expandedWCS)}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <td className="text-warning">⚠</td>
+                              <td>
+                                <span className="expand-icon">{expandIcon}</span>
+                                G{wcs.work_offset}
+                              </td>
+                              <td colSpan={4} className="text-muted">
+                                XYZ NOT PARSED
+                              </td>
+                              <td className="text-warning">WARN</td>
+                            </tr>
+
+                            {expandedWCS && ['x', 'y', 'z'].map((axis) => {
+                              const actual = (wcs.actual as Record<string, number>)[axis];
+                              return (
+                                <tr key={axis} className="wcs-detail-row">
+                                  <td></td>
+                                  <td className="detail-label">{axis.toUpperCase()}</td>
+                                  <td>{(actual || 0).toFixed(4)}"</td>
+                                  <td className="text-muted">────</td>
+                                  <td className="text-muted">────</td>
+                                  <td className="text-muted">─</td>
+                                  <td className="text-muted">N/A</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // WCS found in NC - show validation results
+                const withinTolerance = wcs.within_tolerance;
+                const statusClass = withinTolerance ? 'text-success' : 'text-error';
+                const statusIcon = withinTolerance ? '✓' : '✕';
+                const expandIcon = expandedWCS ? '▼' : '▶';
+
+                return (
+                  <div className="detail-section">
+                    <div className="section-title">WCS OFFSET</div>
+                    <div className="wcs-validation">
+                      <table className="detail-table">
+                        <thead>
+                          <tr>
+                            <th>ST</th>
+                            <th>OFFSET</th>
+                            <th>ACTUAL</th>
+                            <th>EXPECTED</th>
+                            <th>DIFF</th>
+                            <th>TOL</th>
+                            <th>RESULT</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* Summary Row */}
+                          <tr
+                            className="wcs-summary-row clickable"
+                            onClick={() => setExpandedWCS(!expandedWCS)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <td className={statusClass}>{statusIcon}</td>
+                            <td>
+                              <span className="expand-icon">{expandIcon}</span>
+                              G{wcs.work_offset}
+                            </td>
+                            <td colSpan={4}>
+                              <span className="text-muted">X/Y/Z Coordinates</span>
+                            </td>
+                            <td className={statusClass}>
+                              {withinTolerance ? 'PASS' : 'FAIL'}
+                            </td>
+                          </tr>
+
+                          {/* Detail Rows - X/Y/Z Axes */}
+                          {expandedWCS && ['x', 'y', 'z'].map((axis) => {
+                            const expected = (wcs.expected as Record<string, number>)[axis];
+                            const actual = (wcs.actual as Record<string, number>)[axis];
+                            const difference = (wcs.difference as Record<string, number>)[axis];
+                            const diff = Math.abs(difference || 0);
+                            const withinTol = diff <= (wcs.tolerance || 0.1);
+
+                            return (
+                              <tr key={axis} className="wcs-detail-row">
+                                <td></td>
+                                <td className="detail-label">{axis.toUpperCase()}</td>
+                                <td>{(actual || 0).toFixed(4)}"</td>
+                                <td>{(expected || 0).toFixed(4)}"</td>
+                                <td className={withinTol ? 'text-success' : 'text-error'}>
+                                  {diff.toFixed(4)}"
+                                </td>
+                                <td>±{(wcs.tolerance || 0.1).toFixed(4)}</td>
+                                <td className={withinTol ? 'text-success' : 'text-error'}>
+                                  {withinTol ? '✓' : '✕'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ACTIONS SECTION */}
+              <div className="detail-actions">
+                <button
+                  className="terminal-button"
+                  onClick={() => handleDownload(selectedProgram)}
+                >
+                  [ DOWNLOAD ]
+                </button>
+                {selectedProgram.name.toUpperCase().endsWith('.NC') && (
+                  <button
+                    className="terminal-button"
+                    onClick={() => handleViewCode(selectedProgram)}
+                  >
+                    [ VIEW CODE ]
+                  </button>
+                )}
+                {selectedProgram.name.match(/^O\d{4}\.NC$/i) && (
+                  validationLoading ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>{renderProgressBar()}</span>
+                      <span className="text-muted">Downloading and validating...</span>
+                    </div>
+                  ) : (
+                    <button
+                      className="terminal-button"
+                      onClick={() => handleValidate(selectedProgram)}
+                    >
+                      [ VALIDATE ]
+                    </button>
+                  )
+                )}
+              </div>
+
+              {/* CODE PREVIEW SECTION */}
+              {previewLines.length > 0 && selectedProgram.name.toUpperCase().endsWith('.NC') && (
+                <div className="code-preview">
+                  <div className="preview-header">┌─ PREVIEW (First 50 Lines) ─────────────┐</div>
+                  <div className="preview-content">
+                    {previewLines.map((line, idx) => (
+                      <div key={idx} className="preview-line">
+                        <span className="line-number">{idx + 1}</span>
+                        <span className="line-text">{line || ' '}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="preview-footer">└─────────────────────────────────────┘</div>
+                </div>
+              )}
+            </div>
+            <div className="panel-footer">
+              └{'─'.repeat(50)}┘
+            </div>
+          </div>
         )}
       </div>
 
