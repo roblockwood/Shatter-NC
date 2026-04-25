@@ -70,13 +70,15 @@ export const Dashboard = () => {
     setLayoutEditMode(false);
   }, [setExpandedAssetKind, setExpandedMachine, setLayoutEditMode]);
 
-  useEffect(() => {
+  const [prevShowCompressorUi, setPrevShowCompressorUi] = useState(showCompressorUi);
+  if (prevShowCompressorUi !== showCompressorUi) {
+    setPrevShowCompressorUi(showCompressorUi);
     if (!showCompressorUi) {
       setExpandedCompressorId(null);
       setEditingCompressorId(null);
       setPendingCollapseCompressorId(null);
     }
-  }, [showCompressorUi]);
+  }
 
   const fleetCompressors = showCompressorUi ? compressors : [];
 
