@@ -459,6 +459,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
     };
 
       fetchCurrentDeployment();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [machineId, programName, refreshTrigger]);
 
   const formatRuntime = (seconds?: number): string => {
