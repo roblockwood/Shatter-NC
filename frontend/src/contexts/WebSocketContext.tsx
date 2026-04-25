@@ -43,6 +43,7 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useWebSocketContext = () => {
   const context = useContext(WebSocketContext);
   if (context === undefined) {
