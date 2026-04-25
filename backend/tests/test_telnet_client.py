@@ -262,6 +262,81 @@ async def test_send_command_short_response_returns_failure():
     assert success is False
 
 
+@pytest.mark.asyncio
+async def test_send_command_short_response_returns_timeout_sentinel():
+    """Short responses return the TIMEOUT sentinel (command reached machine)."""
+    client, _ = _make_connected_client(b"%RSHORT00%\r\n")  # only 12 bytes
+    _, status, _ = await client._send_command("LOD", "MEM")
+    assert status == "TIMEOUT"
+
+
+@pytest.mark.asyncio
+async def test_send_command_no_data_timeout_returns_timeout_sentinel(monkeypatch):
+    """When drain() succeeds but reader times out with no data, status is 'TIMEOUT'.
+
+    This is the key CM7522 prevention test: the machine received the LOD command
+    (drain completed), so the caller must NOT retry.  If it retries, the machine
+    sees a second LOD while still processing the first and raises CM7522.
+    """
+    original_wait_for = asyncio.wait_for
+
+    drain_called = False
+
+    class _SlowReader:
+        """Simulates a machine that received the command but never responds."""
+        async def read(self, n: int) -> bytes:
+            raise asyncio.TimeoutError()
+
+    # We need wait_for to propagate TimeoutError from the reader, not from connect.
+    # Only replace wait_for after drain has been called.
+    class _TrackingWriter(_FakeWriter):
+        async def drain(self) -> None:
+            nonlocal drain_called
+            drain_called = True
+
+    client = CNCTelnetClient("10.0.0.1", port=10000, timeout=5, command_delay=0.0)
+    client.reader = _SlowReader()  # type: ignore[assignment]
+    client.writer = _TrackingWriter()  # type: ignore[assignment]
+    client._connected = True
+
+    success, status, data = await client._send_command("LOD", "MEM", read_timeout=0.001)
+    assert drain_called, "drain() must have been called (command was sent)"
+    assert success is False
+    assert status == "TIMEOUT", (
+        "A timeout AFTER drain() must return 'TIMEOUT', not None, so load_data "
+        "knows not to retry (which would cause CM7522 on D00 machines)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_load_data_does_not_retry_after_command_sent_timeout(monkeypatch):
+    """load_data must NOT retry when _send_command returns TIMEOUT.
+
+    If the command reached the machine (drain completed) and we got no response,
+    retrying sends a second LOD command while the machine processes the first,
+    which causes CM7522 ('Receive command abnormal end') on D00 controls.
+    """
+    call_count = 0
+
+    original_send = CNCTelnetClient._send_command
+
+    async def _mock_send(self, command, arguments="", verbose=False, read_timeout=1.0):
+        nonlocal call_count
+        call_count += 1
+        return False, "TIMEOUT", None  # simulate: command sent, no response
+
+    monkeypatch.setattr(CNCTelnetClient, "_send_command", _mock_send)
+
+    client, _ = _make_connected_client()
+    result = await client.load_data("MEM", max_retries=2)  # retries allowed in principle
+
+    assert result is None, "Should return None when command timed out"
+    assert call_count == 1, (
+        f"load_data must attempt exactly ONE send on TIMEOUT (got {call_count}). "
+        "Retrying after TIMEOUT sends a second LOD to the machine and causes CM7522."
+    )
+
+
 # ---------------------------------------------------------------------------
 # load_data — injected fake transport (exercises retry wrapper)
 # ---------------------------------------------------------------------------

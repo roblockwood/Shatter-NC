@@ -258,6 +258,11 @@ class CNCTelnetClient(CNCDataReadsMixin, CNCWriteOpsMixin):
             logger.error("Not connected")
             return False, None, None
 
+        # Track whether writer.drain() completed so we know if the machine received the
+        # command.  If it did, we must NOT retry on timeout -- the machine is processing
+        # the command and a second LOD for the same operation will cause CM7522
+        # ("Receive command abnormal end") on D00 controls.
+        command_sent = False
         try:
             current_time = asyncio.get_event_loop().time()
             elapsed = current_time - self.last_command_time
@@ -269,7 +274,8 @@ class CNCTelnetClient(CNCDataReadsMixin, CNCWriteOpsMixin):
             if verbose:
                 logger.debug(f"[TELNET] Sending {command} to {self.ip_address}: args={repr(arguments)}")
             self.writer.write(frame)
-            await self.writer.drain()
+            await self.writer.drain()   # <-- machine has the command from this point on
+            command_sent = True
             self.last_command_time = asyncio.get_event_loop().time()
 
             response = b""
@@ -292,11 +298,14 @@ class CNCTelnetClient(CNCDataReadsMixin, CNCWriteOpsMixin):
                         logger.warning(f"Socket timeout - no data received for command {command}")
                         if verbose:
                             logger.error(f"Command was: {command}, Arguments: '{arguments}'")
-                        return False, None, None
+                        # Return a sentinel that tells load_data the command reached the
+                        # machine.  Retrying would send a second LOD while the machine
+                        # is still processing the first one -- that triggers CM7522.
+                        return False, "TIMEOUT", None
 
             if not response:
                 logger.error("No response received")
-                return False, None, None
+                return False, "TIMEOUT", None
 
             response_str = response.decode("ascii", errors="replace")
 
@@ -304,7 +313,7 @@ class CNCTelnetClient(CNCDataReadsMixin, CNCWriteOpsMixin):
                 logger.error(
                     f"Response too short: {len(response_str)} bytes, expected at least 19. Response: {repr(response_str[:50])}"
                 )
-                return False, None, None
+                return False, "TIMEOUT", None
 
             status_code = response_str[17:19]
             success = status_code == "00"
@@ -338,9 +347,18 @@ class CNCTelnetClient(CNCDataReadsMixin, CNCWriteOpsMixin):
             return success, status_code, data
 
         except Exception as e:
-            logger.error(f"Error sending command: {e}")
-            self._connected = False
-            return False, None, None
+            if command_sent:
+                # Exception occurred after the command reached the machine (e.g. broken
+                # pipe while reading the response).  Treat the same as TIMEOUT so the
+                # caller knows not to retry.
+                logger.error(f"Error reading response for {command}: {e}")
+                self._connected = False
+                return False, "TIMEOUT", None
+            else:
+                # Exception before drain() -- machine never received the command.
+                logger.error(f"Error sending command {command}: {e}")
+                self._connected = False
+                return False, None, None
 
     async def _send_multipart_command(
         self,

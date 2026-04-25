@@ -74,13 +74,27 @@ class CNCDataReadsMixin:
                     if success:
                         return data
                     else:
-                        if status is None and attempt < max_retries:
+                        if status == "TIMEOUT":
+                            # The command reached the machine but got no response within
+                            # the timeout.  Retrying would send a second LOD while the
+                            # machine is still processing the first -- that triggers CM7522
+                            # ("Receive command abnormal end") on D00 controls.
+                            logger.warning(
+                                f"Failed to load '{data_name}': command sent but no response "
+                                f"(possible CM7522 risk) — not retrying"
+                            )
+                            return None
+                        elif status is None and attempt < max_retries:
+                            # Connection-level failure BEFORE the command was sent.
+                            # Safe to reconnect and retry.
                             wait_time = 0.5 * (attempt + 1)
                             logger.warning(f"Failed to load '{data_name}': no response status, reconnecting and retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
                             self._connected = False
                             await asyncio.sleep(wait_time)
                             continue
-                        if status == "40" and attempt < max_retries:
+                        elif status == "40" and attempt < max_retries:
+                            # Communication conflict: machine rejected the command
+                            # without executing it, so retrying is safe.
                             wait_time = 0.5 * (attempt + 1)
                             logger.warning(f"Failed to load '{data_name}': status {status} (communication conflict), retrying in {wait_time}s")
                             await asyncio.sleep(wait_time)
