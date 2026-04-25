@@ -21,7 +21,7 @@ export interface FileBrowserDetailPanelProps {
   validationLoading: boolean;
   previewLines: string[];
   metadataLoading: boolean;
-  deploymentSectionRef: React.RefObject<HTMLDivElement>;
+  deploymentSectionRef: React.RefObject<HTMLDivElement | null>;
   setExpandedWCS: (v: boolean) => void;
   setSelectedDeploymentId: (id: number | null) => void;
   setValidationError: (err: string | null) => void;

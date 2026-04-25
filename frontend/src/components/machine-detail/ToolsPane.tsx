@@ -239,7 +239,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     return cachedTool; // Use cached (confirmed) value
                   }
                   // Fallback to recently pushed value
-                  return { ...serverTool, color: recentlyPushed.color };
+                  return { ...serverTool, color: recentlyPushed.color as number };
                 }
               }
               
@@ -248,7 +248,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               const change = pendingChanges.get(changeKey);
               if (change) {
                 // Has pending change - apply the optimistic newValue to the server tool
-                return { ...serverTool, color: change.newValue };
+                return { ...serverTool, color: change.newValue as number };
               }
               return serverTool; // No pending change - use fresh WebSocket data
             });
@@ -677,7 +677,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         const changeKey = `${tool.pot_number}-${tool.tool_number}-color`;
         const change = pendingChanges.get(changeKey);
         if (change) {
-          return { ...tool, color: change.oldValue };
+          return { ...tool, color: change.oldValue as number };
         }
         return tool;
       });

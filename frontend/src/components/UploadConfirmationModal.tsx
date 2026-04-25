@@ -821,6 +821,7 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
         ) : (
           <>
             {/* Success Screen */}
+            {deployedInfo && (
             <div className="success-section">
               <div className="success-details">
                 <div className="detail-row">
@@ -843,6 +844,7 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
                 )}
               </div>
             </div>
+            )}
           </>
         )}
       </div>
