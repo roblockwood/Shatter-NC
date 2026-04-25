@@ -15,8 +15,6 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_
 from typing import Optional, List
 
-logger = logging.getLogger(__name__)
-
 from app.db.base import get_db
 from app.models.machine import Machine
 from app.models.program import Program, ProgramDeployment
@@ -26,6 +24,7 @@ from app.schemas.program import (
 )
 from app.services.program_service import ProgramService
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -75,7 +74,7 @@ async def list_machine_deployments(
     )
 
     if current_only:
-        query = query.filter(ProgramDeployment.is_current == True)
+        query = query.filter(ProgramDeployment.is_current)
 
     query = query.order_by(ProgramDeployment.deployed_at.desc())
     deployments = query.offset(skip).limit(limit).all()
@@ -135,7 +134,7 @@ async def get_deployment_by_onumber(
             ProgramDeployment.deployed_filename.ilike(deployed_filename_padded),
             ProgramDeployment.deployed_filename.ilike(deployed_filename_unpadded),
         ),
-        ProgramDeployment.is_current == True
+        ProgramDeployment.is_current
     ).order_by(ProgramDeployment.deployed_at.desc())
 
     if include_program:
@@ -346,7 +345,7 @@ async def get_next_onumber_fifo(
     # Get all current deployments, ordered by deployed_at (oldest first)
     deployments = db.query(ProgramDeployment).filter(
         ProgramDeployment.machine_id == machine_id,
-        ProgramDeployment.is_current == True
+        ProgramDeployment.is_current
     ).order_by(ProgramDeployment.deployed_at.asc()).all()
 
     # Parse existing O-numbers in range

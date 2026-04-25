@@ -14,7 +14,7 @@ Import graph:
 import asyncio
 import re
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 
 from app.clients._telnet_state import _get_machine_lock, _control_version_cache
 

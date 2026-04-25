@@ -4,7 +4,6 @@ Detects available communication protocols including FOCAS and other
 control protocols that may be available on the machine.
 """
 import socket
-import asyncio
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import logging

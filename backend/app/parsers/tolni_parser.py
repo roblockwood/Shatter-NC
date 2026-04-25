@@ -8,8 +8,7 @@ Format is typically CSV-like with tool data per line.
 Example format (may vary):
 T01,TOOL_NAME,DIA,LENGTH,...
 """
-from typing import Dict, Any, List, Optional
-import re
+from typing import Dict, Any, Optional
 
 
 class TOLNIParser:

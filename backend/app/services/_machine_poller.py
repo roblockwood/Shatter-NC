@@ -1,6 +1,15 @@
 """Single-machine poller extracted from polling.py."""
-"""Background polling service for CNC machines."""
 import asyncio
+from app.clients.telnet_client import create_fresh_connection
+from app.parsers.prd3_parser_v2 import parse_prd3_v2
+from app.parsers.alarm_parser_v2 import parse_alarm_v2
+from app.parsers.tolni_parser_v2 import parse_tolni_v2
+from app.parsers.mem_parser_v2 import parse_mem_v2
+from app.utils.time_utils import format_cnc_time
+from app.parsers.atctl_parser_v2 import parse_atctl_v2
+from app.parsers.panel_parser_v2 import parse_panel_v2
+from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
+from app.parsers.montr_parser_v2 import parse_montr_v2
 import logging
 import time
 from datetime import datetime, timedelta, timezone
@@ -19,7 +28,6 @@ from app.models.event import (
     CounterHistory,
     PRD3StatusHistory,
 )
-from app.clients.http_client import CNCHttpClient
 from app.core.config import settings
 from app.db.base import SessionLocal
 
@@ -206,8 +214,6 @@ class MachinePoller:
         Returns:
             program_name if successfully fetched, None otherwise
         """
-        from app.clients.telnet_client import create_fresh_connection
-        from app.parsers.mem_parser_v2 import parse_mem_v2
 
         telnet_client = None
         try:
@@ -261,9 +267,6 @@ class MachinePoller:
         try:
             logger.debug(f"[TOOL_POLL] Machine {self.machine.id} ({self.machine.name}) - Starting tool data poll")
 
-            from app.clients.telnet_client import create_fresh_connection
-            from app.parsers.atctl_parser_v2 import parse_atctl_v2
-            from app.parsers.tolni_parser_v2 import parse_tolni_v2
 
             # Create fresh connection
             step_start = time.time()
@@ -276,7 +279,7 @@ class MachinePoller:
             
             # Detect control version (uses Redis cache)
             step_start = time.time()
-            control_version = await telnet_client.detect_control_type()
+            _control_version = await telnet_client.detect_control_type()
             step_times['detect_control'] = time.time() - step_start
             
             # Get tool table data first (needed for both ATC merge and TABLE display)
@@ -431,10 +434,6 @@ class MachinePoller:
             logger.debug(f"[POLL] Machine {self.machine.id} ({self.machine.name}) - Starting fast poll")
 
             # Phase 5: Migrate to Telnet for MONTR and PRD3 data (replaces HTTP get_status_overview)
-            from app.clients.telnet_client import create_fresh_connection
-            from app.parsers.montr_parser_v2 import parse_montr_v2
-            from app.parsers.alarm_parser_v2 import parse_alarm_v2
-            from app.parsers.prd3_parser_v2 import parse_prd3_v2
 
             # Create fresh connection
             step_start = time.time()
@@ -480,7 +479,6 @@ class MachinePoller:
             mem_parsed = None
             try:
                 step_start = time.time()
-                from app.parsers.mem_parser_v2 import parse_mem_v2
                 mem_data = await telnet_client.get_memory_data(verbose=False)
                 step_times['get_mem'] = time.time() - step_start
                 if mem_data:
@@ -529,7 +527,6 @@ class MachinePoller:
                     logger.warning(f"Machine {self.machine.id} - PRD3 data not available and no last status, defaulting to: {machine_status}")
             
             # Format time strings (MONTR format: HHMMSSMMM, HTTP format: HHMM:SS.MMM)
-            from app.utils.time_utils import format_cnc_time
 
             # is_online for clients is set after last_successful_fast_poll_at (debounced display_online)
             
@@ -559,7 +556,6 @@ class MachinePoller:
             # Get alarms from Telnet (Phase 5: Migrate to Telnet)
             try:
                 step_start = time.time()
-                from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
                 
                 alarm_data_raw = await telnet_client.get_alarm_data(verbose=False)
                 step_times['get_alarms'] = time.time() - step_start
@@ -581,7 +577,6 @@ class MachinePoller:
             # Get panel data from Telnet
             try:
                 step_start = time.time()
-                from app.parsers.panel_parser_v2 import parse_panel_v2
                 
                 panel_data_raw = await telnet_client.get_panel_data(verbose=False)
                 step_times['get_panel'] = time.time() - step_start

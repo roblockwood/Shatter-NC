@@ -1,7 +1,7 @@
 """API endpoints for event history and analytics."""
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
+from sqlalchemy import desc
 from typing import List, Optional
 from datetime import datetime, timedelta
 

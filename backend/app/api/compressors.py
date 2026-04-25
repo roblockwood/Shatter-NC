@@ -35,7 +35,7 @@ async def list_compressors(
 ):
     q = db.query(Compressor)
     if enabled_only:
-        q = q.filter(Compressor.enabled == True)
+        q = q.filter(Compressor.enabled)
     rows = q.offset(skip).limit(limit).all()
     return [CompressorResponse.from_compressor(r) for r in rows]
 

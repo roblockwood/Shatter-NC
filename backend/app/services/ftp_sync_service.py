@@ -353,7 +353,7 @@ class FtpSyncService:
             try:
                 configs = (
                     db.query(FtpSyncConfig)
-                    .filter(FtpSyncConfig.enabled == True)
+                    .filter(FtpSyncConfig.enabled)
                     .all()
                 )
             finally:

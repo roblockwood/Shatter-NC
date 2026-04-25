@@ -72,7 +72,7 @@ class CNCFtpClient:
                     return self._ensure_connection(retry_count=retry_count + 1, max_retries=max_retries)
                 else:
                     raise
-            except Exception as e:
+            except Exception:
                 # For non-421 errors, don't retry - fail immediately
                 self._connected = False
                 self.ftp = None
@@ -350,7 +350,7 @@ class CNCFtpClient:
                 # Restore original directory
                 try:
                     self.ftp.cwd(original_dir)
-                except:
+                except Exception:
                     # If restore fails, log but don't fail the operation
                     logger.warning(f"Failed to restore directory to {original_dir}")
 
@@ -360,7 +360,7 @@ class CNCFtpClient:
                 # Try to restore directory on error
                 try:
                     self.ftp.cwd(original_dir)
-                except:
+                except Exception:
                     pass
                 self._connected = False
                 raise e
@@ -634,7 +634,7 @@ class CNCFtpClient:
             if self.ftp and self._connected:
                 try:
                     self.ftp.quit()
-                except:
+                except Exception:
                     pass
                 finally:
                     self._connected = False
@@ -653,7 +653,7 @@ class CNCFtpClient:
         if self.ftp and self._connected:
             try:
                 self.ftp.quit()
-            except:
+            except Exception:
                 pass
 
 
@@ -661,7 +661,7 @@ class CNCFtpClient:
 def run_async(coro):
     """Helper to run async function in sync context."""
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
         # Already in async context
         return coro
     except RuntimeError:

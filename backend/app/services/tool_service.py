@@ -1,6 +1,6 @@
 """Tool management service - core business logic for tool analysis."""
 from sqlalchemy.orm import Session
-from sqlalchemy import text, func
+from sqlalchemy import text
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from collections import defaultdict

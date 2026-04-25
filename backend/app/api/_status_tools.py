@@ -15,7 +15,9 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
 from sqlalchemy.orm import Session
 from app.db.base import get_db
-from app.models.machine import Machine
+from app.clients.telnet_client import CNCTelnetClient, create_fresh_connection
+from app.services.audit_logger import AuditLogger
+from app.services.machine_state_validator import MachineStateValidator
 from app.api._status_state import (
     BatchColorChangeRequest,
     BatchColorChangeResponse,
@@ -23,6 +25,7 @@ from app.api._status_state import (
 )
 import app.api._status_state as _state
 import logging
+from app.api.deps import get_machine_or_404
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +44,7 @@ async def refresh_tool_data(
     This endpoint allows manual refresh of tool data without waiting for the slow polling cycle.
     Useful when tool data may have changed (e.g., after tool changes on the machine).
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     if not _state.polling_service:
         raise HTTPException(
@@ -93,12 +91,7 @@ async def change_tool_color(
         tool_number: Tool number in the pot (for verification)
         color: Color value (0=None, 1=Blue, 2=Red, 3=Purple, 4=Green, 5=Light Blue, 6=Yellow, 7=White)
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     if not 1 <= pot_number <= 99:
         raise HTTPException(
@@ -113,7 +106,6 @@ async def change_tool_color(
         )
 
     try:
-        from app.services.machine_state_validator import MachineStateValidator
         validator = MachineStateValidator()
         is_safe, error_message, status_data = await validator.validate_safe_for_write(
             machine_id=machine_id,
@@ -127,7 +119,6 @@ async def change_tool_color(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import CNCTelnetClient, create_fresh_connection
 
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
@@ -145,7 +136,6 @@ async def change_tool_color(
 
         logger.info(f"Color change result: success={success}, status_code={status_code}")
 
-        from app.services.audit_logger import AuditLogger
         color_names = {0: "None", 1: "Blue", 2: "Red", 3: "Purple", 4: "Green", 5: "Light Blue", 6: "Yellow", 7: "White"}
         status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
         AuditLogger.log_tool_modification(
@@ -218,12 +208,7 @@ async def batch_change_tool_colors(
         machine_id: Machine ID
         request: Batch request containing list of color changes
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     if not request.changes:
         raise HTTPException(
@@ -245,7 +230,6 @@ async def batch_change_tool_colors(
 
     telnet_client = None
     try:
-        from app.services.machine_state_validator import MachineStateValidator
         validator = MachineStateValidator()
         is_safe, error_message, status_data = await validator.validate_safe_for_write(
             machine_id=machine_id,
@@ -259,8 +243,6 @@ async def batch_change_tool_colors(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import CNCTelnetClient, create_fresh_connection
-        from app.services.audit_logger import AuditLogger
 
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
@@ -375,12 +357,7 @@ async def change_tool_assignment(
         pot_number: Pot number (1-99)
         tool_number: Tool number to assign (1-999)
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     if not 1 <= pot_number <= 99:
         raise HTTPException(
@@ -395,7 +372,6 @@ async def change_tool_assignment(
         )
 
     try:
-        from app.services.machine_state_validator import MachineStateValidator
         validator = MachineStateValidator()
         is_safe, error_message, status_data = await validator.validate_safe_for_write(
             machine_id=machine_id,
@@ -409,7 +385,6 @@ async def change_tool_assignment(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import create_fresh_connection
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
@@ -422,8 +397,6 @@ async def change_tool_assignment(
             verbose=True
         )
 
-        from app.services.audit_logger import AuditLogger
-        from app.clients.telnet_client import CNCTelnetClient
         status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
         AuditLogger.log_tool_modification(
             machine_id=machine_id,
@@ -489,12 +462,7 @@ async def change_tool_type(
         pot_number: Pot number (1-99)
         tool_type: Tool type (1=Standard, 2=Large, 3=Medium)
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     if not 1 <= pot_number <= 99:
         raise HTTPException(
@@ -509,7 +477,6 @@ async def change_tool_type(
         )
 
     try:
-        from app.services.machine_state_validator import MachineStateValidator
         validator = MachineStateValidator()
         is_safe, error_message, status_data = await validator.validate_safe_for_write(
             machine_id=machine_id,
@@ -523,7 +490,6 @@ async def change_tool_type(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import create_fresh_connection
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
@@ -536,8 +502,6 @@ async def change_tool_type(
             verbose=True
         )
 
-        from app.services.audit_logger import AuditLogger
-        from app.clients.telnet_client import CNCTelnetClient
         status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
         type_names = {1: "Standard", 2: "Large", 3: "Medium"}
         AuditLogger.log_tool_modification(
@@ -606,12 +570,7 @@ async def delete_tool_from_pot(
         pot_number: Pot number (0-99, 0=spindle)
         tool_number: Tool number for verification (optional)
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     if not 0 <= pot_number <= 99:
         raise HTTPException(
@@ -620,7 +579,6 @@ async def delete_tool_from_pot(
         )
 
     try:
-        from app.services.machine_state_validator import MachineStateValidator
         validator = MachineStateValidator()
         is_safe, error_message, status_data = await validator.validate_safe_for_write(
             machine_id=machine_id,
@@ -634,7 +592,6 @@ async def delete_tool_from_pot(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import create_fresh_connection
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
@@ -647,8 +604,6 @@ async def delete_tool_from_pot(
             verbose=True
         )
 
-        from app.services.audit_logger import AuditLogger
-        from app.clients.telnet_client import CNCTelnetClient
         status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
         AuditLogger.log_tool_modification(
             machine_id=machine_id,
@@ -711,12 +666,7 @@ async def change_spindle_tool(
         machine_id: Machine ID
         tool_number: Tool number for spindle (0-999, 0=no tool)
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     if not 0 <= tool_number <= 999:
         raise HTTPException(
@@ -725,7 +675,6 @@ async def change_spindle_tool(
         )
 
     try:
-        from app.services.machine_state_validator import MachineStateValidator
         validator = MachineStateValidator()
         is_safe, error_message, status_data = await validator.validate_safe_for_write(
             machine_id=machine_id,
@@ -739,7 +688,6 @@ async def change_spindle_tool(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import create_fresh_connection
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
@@ -751,8 +699,6 @@ async def change_spindle_tool(
             verbose=True
         )
 
-        from app.services.audit_logger import AuditLogger
-        from app.clients.telnet_client import CNCTelnetClient
         status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
         AuditLogger.log_tool_modification(
             machine_id=machine_id,
@@ -811,12 +757,7 @@ async def set_tool_life(
         life_value: Life value (0-999999)
         life_type: Life type ('TIME' or 'COUNT')
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     if not 1 <= tool_number <= 99:
         raise HTTPException(
@@ -837,7 +778,6 @@ async def set_tool_life(
         )
 
     try:
-        from app.services.machine_state_validator import MachineStateValidator
         validator = MachineStateValidator()
         is_safe, error_message, status_data = await validator.validate_safe_for_write(
             machine_id=machine_id,
@@ -851,7 +791,6 @@ async def set_tool_life(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import create_fresh_connection
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
@@ -865,8 +804,6 @@ async def set_tool_life(
             verbose=True
         )
 
-        from app.services.audit_logger import AuditLogger
-        from app.clients.telnet_client import CNCTelnetClient
         status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
         AuditLogger.log_tool_modification(
             machine_id=machine_id,
@@ -929,12 +866,7 @@ async def set_tool_offset(
         offset_type: Offset type ('H'=Length, 'D'=Diameter, 'W'=Wear)
         value: Offset value in mm (or inches depending on machine units)
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     if not 1 <= tool_number <= 99:
         raise HTTPException(
@@ -949,7 +881,6 @@ async def set_tool_offset(
         )
 
     try:
-        from app.services.machine_state_validator import MachineStateValidator
         validator = MachineStateValidator()
         is_safe, error_message, status_data = await validator.validate_safe_for_write(
             machine_id=machine_id,
@@ -963,7 +894,6 @@ async def set_tool_offset(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import create_fresh_connection
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
@@ -977,8 +907,6 @@ async def set_tool_offset(
             verbose=True
         )
 
-        from app.services.audit_logger import AuditLogger
-        from app.clients.telnet_client import CNCTelnetClient
         status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
         offset_names = {"H": "Length", "D": "Diameter", "W": "Wear"}
         AuditLogger.log_tool_modification(

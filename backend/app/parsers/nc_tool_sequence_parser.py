@@ -10,7 +10,7 @@ Block-skip (/) and inline comments (parentheses, semicolons) are stripped
 before pattern matching so commented-out tool calls are ignored.
 """
 import re
-from typing import List, Tuple
+from typing import List
 
 # T word: 1-4 digits, word-boundary anchored so H02/D02 are not matched
 _T_WORD = re.compile(r'\bT(\d{1,4})\b')

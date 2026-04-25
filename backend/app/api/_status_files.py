@@ -8,13 +8,15 @@ Routes:
     GET  /{machine_id}/view       — view file content as text
     POST /{machine_id}/upload     — upload file via FTP
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status as http_status, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.db.base import get_db
-from app.models.machine import Machine
+from app.clients.telnet_client import create_fresh_connection
+from app.parsers.posni_parser_v2 import parse_posni_v2
 from app.clients.ftp_client import CNCFtpClient
 from app.parsers.gcode_parser import parse_gcode
+from app.api.deps import get_machine_or_404
 import logging
 
 logger = logging.getLogger(__name__)
@@ -35,12 +37,7 @@ async def list_programs(
         machine_id: Machine ID
         path: Directory path to list (default: /)
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     try:
         ftp_client = CNCFtpClient(
@@ -73,16 +70,9 @@ async def get_position(machine_id: int, db: Session = Depends(get_db)):
 
     Returns parsed work offsets (G54-G59) and extended offsets (X01-X48).
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     try:
-        from app.clients.telnet_client import create_fresh_connection
-        from app.parsers.posni_parser_v2 import parse_posni_v2
 
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
@@ -137,12 +127,7 @@ async def download_file(
         machine_id: Machine ID
         file_path: Path to file on machine (e.g., /O2000.NC)
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     try:
         ftp_client = CNCFtpClient(
@@ -190,12 +175,7 @@ async def get_file_metadata(
         machine_id: Machine ID
         file_path: Path to file on machine
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     try:
         ftp_client = CNCFtpClient(
@@ -253,12 +233,7 @@ async def view_file(
         file_path: Path to file on machine
         max_size: Maximum file size in bytes (default 8MB)
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     try:
         ftp_client = CNCFtpClient(
@@ -319,12 +294,7 @@ async def upload_file(
         file_path: Destination path on machine (e.g., /O2000.NC)
         file: File to upload
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     try:
         file_content = await file.read()

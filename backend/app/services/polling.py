@@ -5,12 +5,12 @@ This module provides PollingService (multi-machine coordinator) and
 re-exports MachinePoller so existing imports continue to work.
 """
 import asyncio
+from app.clients.telnet_client import create_fresh_connection
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, Tuple
-from sqlalchemy.orm import Session
+import time
+from datetime import datetime
+from typing import Dict, Any, Optional
 from app.models.machine import Machine
-from app.clients.http_client import CNCHttpClient
 from app.core.config import settings
 from app.db.base import SessionLocal
 from app.services._machine_poller import MachinePoller  # noqa: F401 (re-export)
@@ -78,7 +78,7 @@ class PollingService:
                 # Use this for loop sleep to check machines frequently enough
                 db = SessionLocal()
                 try:
-                    machines = db.query(Machine).filter(Machine.enabled == True).all()
+                    machines = db.query(Machine).filter(Machine.enabled).all()
                     if machines:
                         min_interval = min(m.poll_interval_seconds for m in machines)
                     else:
@@ -100,7 +100,7 @@ class PollingService:
         db = SessionLocal()
         try:
             # Get all enabled machines
-            machines = db.query(Machine).filter(Machine.enabled == True).all()
+            machines = db.query(Machine).filter(Machine.enabled).all()
 
             if not machines:
                 logger.debug("No enabled machines to poll")
@@ -151,7 +151,7 @@ class PollingService:
                         machines_to_poll.append(machine)
             
             if not machines_to_poll:
-                logger.debug(f"No machines ready for polling (intervals not elapsed)")
+                logger.debug("No machines ready for polling (intervals not elapsed)")
                 return
             
             # Poll machines whose intervals have elapsed (concurrently)
@@ -207,7 +207,7 @@ class PollingService:
                 # Use this for loop sleep to check machines frequently enough
                 db = SessionLocal()
                 try:
-                    machines = db.query(Machine).filter(Machine.enabled == True).all()
+                    machines = db.query(Machine).filter(Machine.enabled).all()
                     if machines:
                         min_interval = min(m.tool_poll_interval_seconds for m in machines)
                     else:
@@ -229,7 +229,7 @@ class PollingService:
         db = SessionLocal()
         try:
             # Get all enabled machines
-            machines = db.query(Machine).filter(Machine.enabled == True).all()
+            machines = db.query(Machine).filter(Machine.enabled).all()
 
             if not machines:
                 logger.debug("No enabled machines for tool data polling")
@@ -272,7 +272,7 @@ class PollingService:
                         machines_to_poll.append(machine)
             
             if not machines_to_poll:
-                logger.debug(f"No machines ready for tool data polling (intervals not elapsed)")
+                logger.debug("No machines ready for tool data polling (intervals not elapsed)")
                 return
             
             # Poll tool data for machines whose intervals have elapsed (concurrently)
@@ -372,14 +372,13 @@ class PollingService:
         """
         db = SessionLocal()
         try:
-            machines = db.query(Machine).filter(Machine.enabled == True).all()
+            machines = db.query(Machine).filter(Machine.enabled).all()
             if not machines:
                 logger.debug("No enabled machines to pre-populate control versions for")
                 return
             
             logger.info(f"Pre-populating control version cache for {len(machines)} enabled machine(s)...")
             
-            from app.clients.telnet_client import create_fresh_connection
 
             # Detect control version for each machine (concurrently)
             async def detect_for_machine(m):
@@ -412,7 +411,7 @@ class PollingService:
             # Run all detections concurrently (each will use its own lock)
             await asyncio.gather(*tasks, return_exceptions=True)
             
-            logger.info(f"Control version cache pre-population complete")
+            logger.info("Control version cache pre-population complete")
         except Exception as e:
             logger.error(f"Error during control version cache pre-population: {e}")
         finally:

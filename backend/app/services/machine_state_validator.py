@@ -6,10 +6,14 @@ Ensures machine is in a safe state to prevent operations during active machining
 """
 from typing import Tuple, Optional, Dict, Any
 import logging
+from app.clients.telnet_client import create_fresh_connection
+from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
+from app.parsers.alarm_parser_v2 import parse_alarm_v2
+from app.parsers.prd3_parser_v2 import parse_prd3_v2
+from app.parsers.mem_parser_v2 import parse_mem_v2
 from sqlalchemy.orm import Session
 
 from app.models.machine import Machine
-from app.api.status import get_machine_status
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +73,6 @@ class MachineStateValidator:
         try:
             # Get current machine status (includes PRD3, alarms)
             # We need to extend this to also fetch MEM data for mode and operation_status
-            from app.clients.telnet_client import create_fresh_connection
-            from app.parsers.mem_parser_v2 import parse_mem_v2
 
             telnet_client = await create_fresh_connection(
                 ip_address=db_machine.ip_address,
@@ -88,9 +90,6 @@ class MachineStateValidator:
             
             # Get machine status (PRD3, alarms)
             # We'll use the internal logic from get_machine_status but directly here
-            from app.parsers.prd3_parser_v2 import parse_prd3_v2
-            from app.parsers.alarm_parser_v2 import parse_alarm_v2
-            from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
             
             prd3_data = await telnet_client.get_prd3_data(control_version=control_version, verbose=False)
             prd3_parsed = None
@@ -101,9 +100,9 @@ class MachineStateValidator:
             alarm_data_raw = await telnet_client.get_alarm_data(verbose=False)
             alarms = []
             if alarm_data_raw:
-                alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=None)
+                alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=control_version)
                 all_alarms = alarm_parsed.get("alarms", []) + alarm_parsed.get("loading_alarms", [])
-                alarms = [enrich_alarm_with_lookup(alarm) for alarm in all_alarms]
+                alarms = [enrich_alarm_with_lookup(alarm, control_version) for alarm in all_alarms]
             
             # Build status data for return
             status_data = {

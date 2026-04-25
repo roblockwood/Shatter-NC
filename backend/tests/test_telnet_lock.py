@@ -1,7 +1,7 @@
 """Tests for per-machine asyncio lock (replaces Redis distributed lock)."""
 import asyncio
 import pytest
-from app.clients.telnet_client import _get_machine_lock
+from app.clients._telnet_state import _get_machine_lock
 
 
 @pytest.mark.anyio

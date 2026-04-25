@@ -11,9 +11,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status as http_sta
 from sqlalchemy.orm import Session
 from datetime import datetime
 from app.db.base import get_db
-from app.models.machine import Machine
+import time
+from app.clients.telnet_client import create_fresh_connection
+from app.parsers.tolni_parser_v2 import parse_tolni_v2
+from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
+from app.parsers.atctl_parser_v2 import parse_atctl_v2
+from app.parsers.mem_parser_v2 import parse_mem_v2
+from app.parsers.prd3_parser_v2 import parse_prd3_v2
+from app.parsers.alarm_parser_v2 import parse_alarm_v2
+from app.parsers.montr_parser_v2 import parse_montr_v2
 from app.clients.http_client import CNCHttpClient
 from app.utils.time_utils import format_cnc_time
+from app.api.deps import get_machine_or_404
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,23 +45,11 @@ async def get_machine_status(
     - ALARM: Current alarms
     - MEM: Mode and operation status (if include_mem=True)
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     telnet_client = None
     try:
-        import time
         start_time = time.time()
-        from app.clients.telnet_client import create_fresh_connection
-        from app.parsers.montr_parser_v2 import parse_montr_v2
-        from app.parsers.alarm_parser_v2 import parse_alarm_v2
-        from app.parsers.prd3_parser_v2 import parse_prd3_v2
-        from app.parsers.mem_parser_v2 import parse_mem_v2
-        from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
 
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
@@ -89,7 +86,7 @@ async def get_machine_status(
 
         if prd3_parsed and prd3_parsed.get("current_status"):
             current_status_data = prd3_parsed["current_status"]
-            status_code = current_status_data.get("current_status")
+            _status_code = current_status_data.get("current_status")
             machine_status = current_status_data.get("status")
 
             if machine_status == "off":
@@ -129,9 +126,9 @@ async def get_machine_status(
         try:
             alarm_data_raw = await telnet_client.get_alarm_data(verbose=False)
             if alarm_data_raw:
-                alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=None)
+                alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=control_version)
                 all_alarms = alarm_parsed.get("alarms", []) + alarm_parsed.get("loading_alarms", [])
-                enriched_alarms = [enrich_alarm_with_lookup(alarm) for alarm in all_alarms]
+                enriched_alarms = [enrich_alarm_with_lookup(alarm, control_version) for alarm in all_alarms]
                 status_data["alarms"] = enriched_alarms
             else:
                 status_data["alarms"] = []
@@ -169,17 +166,10 @@ async def get_machine_status(
 @router.get("/{machine_id}/running-log")
 async def get_running_log(machine_id: int, db: Session = Depends(get_db)):
     """Get running log data (time display) from MONTR via Telnet."""
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     telnet_client = None
     try:
-        from app.clients.telnet_client import create_fresh_connection
-        from app.parsers.montr_parser_v2 import parse_montr_v2
 
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
@@ -225,17 +215,10 @@ async def get_running_log(machine_id: int, db: Session = Depends(get_db)):
 @router.get("/{machine_id}/counters")
 async def get_work_counters(machine_id: int, db: Session = Depends(get_db)):
     """Get workpiece counter data from MONTR via Telnet."""
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     telnet_client = None
     try:
-        from app.clients.telnet_client import create_fresh_connection
-        from app.parsers.montr_parser_v2 import parse_montr_v2
 
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
@@ -286,18 +269,10 @@ async def get_work_counters(machine_id: int, db: Session = Depends(get_db)):
 @router.get("/{machine_id}/alarms")
 async def get_alarms(machine_id: int, db: Session = Depends(get_db)):
     """Get alarm log data from ALARM via Telnet."""
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     telnet_client = None
     try:
-        from app.clients.telnet_client import create_fresh_connection
-        from app.parsers.alarm_parser_v2 import parse_alarm_v2
-        from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
 
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
@@ -316,9 +291,10 @@ async def get_alarms(machine_id: int, db: Session = Depends(get_db)):
             }
 
         alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=None)
+        parsed_control_version = alarm_parsed.get("control_version", "C00")
 
-        alarms = [enrich_alarm_with_lookup(alarm) for alarm in alarm_parsed.get("alarms", [])]
-        loading_alarms = [enrich_alarm_with_lookup(alarm) for alarm in alarm_parsed.get("loading_alarms", [])]
+        alarms = [enrich_alarm_with_lookup(alarm, parsed_control_version) for alarm in alarm_parsed.get("alarms", [])]
+        loading_alarms = [enrich_alarm_with_lookup(alarm, parsed_control_version) for alarm in alarm_parsed.get("loading_alarms", [])]
 
         return {
             "machine_id": machine_id,
@@ -355,20 +331,12 @@ async def get_tools(
         source: 'atc' for ATC (Automatic Tool Changer) table, 'table' for TOLNI1.NC tool table file
         raw_html: If True, return raw HTML for debugging (ATC source only)
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     telnet_client = None
     try:
-        import time
         start_time = time.time()
         if source == "table":
-            from app.clients.telnet_client import create_fresh_connection
-            from app.parsers.tolni_parser_v2 import parse_tolni_v2
 
             telnet_client = await create_fresh_connection(
                 ip_address=db_machine.ip_address,
@@ -398,7 +366,6 @@ async def get_tools(
             )
 
             try:
-                from app.parsers.atctl_parser_v2 import parse_atctl_v2
 
                 atc_data = await telnet_client.get_atc_magazine_data(control_version=None)
 
@@ -455,10 +422,6 @@ async def get_tools(
 
             return parsed
         else:
-            from app.clients.telnet_client import create_fresh_connection
-            from app.parsers.atctl_parser_v2 import parse_atctl_v2
-            from app.parsers.tolni_parser_v2 import parse_tolni_v2
-
             if raw_html:
                 http_client = CNCHttpClient(db_machine.ip_address, port=db_machine.http_port)
                 html = http_client._send_request("/tool")
@@ -482,7 +445,7 @@ async def get_tools(
                 )
 
             if atc_data.strip().startswith('T'):
-                logger.error(f"Received TOLN data instead of ATCTL data - possible connection/data mix-up")
+                logger.error("Received TOLN data instead of ATCTL data - possible connection/data mix-up")
                 raise HTTPException(
                     status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Data type mismatch: received TOLN data instead of ATCTL. Please try again.",
@@ -525,7 +488,7 @@ async def get_tools(
                         tool_lookup[tool_num] = tool
                         logger.debug(f"Added tool {tool_num} to lookup: name={tool.get('tool_name')}, diameter={tool.get('diameter')}, length={tool.get('length')}")
             else:
-                logger.warning(f"No TOLN data available for ATC merge - ATC tools will have no diameter/length/name")
+                logger.warning("No TOLN data available for ATC merge - ATC tools will have no diameter/length/name")
 
             for atc_tool in atc_parsed.get("tools", []):
                 tool_num = atc_tool.get("tool_number")

@@ -150,7 +150,7 @@ class KaeserSc2Client:
             }
             try:
                 r = await client.get(f"{self.base_url}/login.html", headers=headers)
-            except Exception as e:
+            except Exception:
                 self._session = KaeserSession(active=False)
                 raise
 

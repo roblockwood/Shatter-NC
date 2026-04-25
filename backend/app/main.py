@@ -28,11 +28,11 @@ def _compressor_status_samples_table_ok() -> bool:
 
 
 # Import routers
-from app.api import machines, status, programs, websocket, history, summary, tools, compressors, ftp_sync, notifications
-from app.api import settings as settings_api
+from app.api import machines, status, programs, websocket, history, summary, tools, compressors, ftp_sync, notifications  # noqa: E402
+from app.api import settings as settings_api  # noqa: E402
 
 # Import services
-from app.services import WebSocketManager, PollingService, CompressorPollingService, MqttPublisher, FtpSyncService, NotificationService
+from app.services import WebSocketManager, PollingService, CompressorPollingService, MqttPublisher, FtpSyncService, NotificationService  # noqa: E402
 
 # Global service instances
 websocket_manager = WebSocketManager()
@@ -87,7 +87,7 @@ app.add_middleware(
 )
 
 # Add rate limiting middleware
-from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.rate_limit import RateLimitMiddleware  # noqa: E402
 app.add_middleware(RateLimitMiddleware)
 
 

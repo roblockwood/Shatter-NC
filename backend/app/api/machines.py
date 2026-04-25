@@ -3,11 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 from app.db.base import get_db
+from app.clients.telnet_client import CNCTelnetClient, create_fresh_connection
 from app.models.machine import Machine
 from app.schemas.machine import MachineCreate, MachineUpdate, MachineResponse
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
+from app.parsers.mem_parser_v2 import parse_mem_v2
 from app.utils.protocol_detector import detect_protocols
+from app.api.deps import get_machine_or_404
 import logging
 
 logger = logging.getLogger(__name__)
@@ -33,7 +36,7 @@ async def list_machines(
     """List all configured machines."""
     query = db.query(Machine)
     if enabled_only:
-        query = query.filter(Machine.enabled == True)
+        query = query.filter(Machine.enabled)
     machines = query.offset(skip).limit(limit).all()
     return machines
 
@@ -41,12 +44,7 @@ async def list_machines(
 @router.get("/{machine_id}", response_model=MachineResponse)
 async def get_machine(machine_id: int, db: Session = Depends(get_db)):
     """Get a specific machine by ID."""
-    machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not machine:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    machine = get_machine_or_404(machine_id, db)
     return machine
 
 
@@ -74,12 +72,7 @@ async def update_machine(
     machine_id: int, machine_update: MachineUpdate, db: Session = Depends(get_db)
 ):
     """Update a machine configuration."""
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     # Update fields
     update_data = machine_update.model_dump(exclude_unset=True)
@@ -122,12 +115,7 @@ async def update_machine(
 @router.delete("/{machine_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_machine(machine_id: int, db: Session = Depends(get_db)):
     """Delete a machine configuration."""
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     db.delete(db_machine)
     db.commit()
@@ -137,12 +125,7 @@ async def delete_machine(machine_id: int, db: Session = Depends(get_db)):
 @router.post("/{machine_id}/test")
 async def test_connection(machine_id: int, db: Session = Depends(get_db)):
     """Test connection to a machine (Telnet and FTP)."""
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     results = {
         "machine_id": machine_id,
@@ -153,7 +136,6 @@ async def test_connection(machine_id: int, db: Session = Depends(get_db)):
     # Test Telnet connection (primary communication protocol)
     try:
         from datetime import datetime
-        from app.clients.telnet_client import CNCTelnetClient
         telnet_client = CNCTelnetClient(
             db_machine.ip_address,
             port=10000,  # Telnet port is always 10000
@@ -225,12 +207,7 @@ async def detect_machine_protocols(machine_id: int, db: Session = Depends(get_db
     Scans for FOCAS and other control protocols that may be available.
     This can help identify additional functionality beyond HTTP/FTP.
     """
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     try:
         # Initialize clients for protocol detection
@@ -282,12 +259,7 @@ async def detect_machine_protocols(machine_id: int, db: Session = Depends(get_db
 @router.post("/{machine_id}/disconnect")
 async def disconnect_machine(machine_id: int, db: Session = Depends(get_db)):
     """Disconnect FTP connection for a machine."""
-    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not db_machine:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    db_machine = get_machine_or_404(machine_id, db)
 
     try:
         ftp_client = CNCFtpClient(
@@ -305,14 +277,14 @@ async def disconnect_machine(machine_id: int, db: Session = Depends(get_db)):
         logger.error(f"Error disconnecting machine {machine_id}: {e}")
         return {
             "status": "success",
-            "message": f"Closed FTP connection attempt (may not have been connected)",
+            "message": "Closed FTP connection attempt (may not have been connected)",
         }
 
 
 @router.get("/overview")
 async def get_machines_overview(db: Session = Depends(get_db)):
     """Get overview status of all machines."""
-    machines = db.query(Machine).filter(Machine.enabled == True).all()
+    machines = db.query(Machine).filter(Machine.enabled).all()
 
     # TODO: Fetch real-time status for each machine
     # For now, return basic info
@@ -334,12 +306,7 @@ async def get_machines_overview(db: Session = Depends(get_db)):
 @router.get("/{machine_id}/layout")
 async def get_machine_layout(machine_id: int, db: Session = Depends(get_db)):
     """Get layout configuration for a specific machine."""
-    machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not machine:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    machine = get_machine_or_404(machine_id, db)
     
     # Return layout_config if it exists, otherwise return None (frontend will use default)
     return {"layout_config": machine.layout_config}
@@ -352,12 +319,7 @@ async def update_machine_layout(
     db: Session = Depends(get_db)
 ):
     """Update layout configuration for a specific machine."""
-    machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not machine:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    machine = get_machine_or_404(machine_id, db)
     
     # Store the entire layout_config dict (which contains panes and optionally gridCols)
     machine.layout_config = layout_config
@@ -376,17 +338,10 @@ async def refresh_program_name(machine_id: int, db: Session = Depends(get_db)):
     This fetches the program_name from the machine via Telnet (MEM file)
     and updates the cached value, which will be included in the next status update.
     """
-    machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not machine:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Machine with id {machine_id} not found",
-        )
+    machine = get_machine_or_404(machine_id, db)
     
     telnet_client = None
     try:
-        from app.clients.telnet_client import create_fresh_connection
-        from app.parsers.mem_parser_v2 import parse_mem_v2
 
         # Create fresh connection
         telnet_client = await create_fresh_connection(

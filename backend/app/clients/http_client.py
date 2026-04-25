@@ -5,7 +5,7 @@ due to non-standard HTTP/1.1 implementation.
 """
 import socket
 import re
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from datetime import datetime
 import logging
 
@@ -616,7 +616,7 @@ class CNCHttpClient:
                 else:
                     logger.debug(f"MEM parsed but no program_name found. Content: {repr(mem_data)}")
             else:
-                logger.debug(f"MEM file not found or empty")
+                logger.debug("MEM file not found or empty")
         except Exception as e:
             logger.debug(f"Failed to fetch program_name from MEM via Telnet: {e}")
             # Continue without program_name - not critical

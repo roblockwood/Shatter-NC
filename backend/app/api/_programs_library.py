@@ -12,16 +12,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
-logger = logging.getLogger(__name__)
-
 from app.db.base import get_db
 from app.models.program import Program
 from app.schemas.program import (
     ProgramUploadRequest,
     ProgramUploadResponse,
     ProgramResponse,
-    ProgramDeploymentCreate,
-    ProgramDeploymentResponse,
 )
 from app.services.program_service import ProgramService
 from app.api._programs_validate import (
@@ -30,6 +26,7 @@ from app.api._programs_validate import (
     validate_program,
 )
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

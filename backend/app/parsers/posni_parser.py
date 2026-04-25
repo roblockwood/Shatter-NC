@@ -9,7 +9,6 @@ G55,-13.9774,-7.4936,0.0000,0.000,0.000,0.000
 X01,0.0000,0.0000,0.0000,0.000,0.000,0.000
 """
 from typing import Dict, Any, Optional
-import re
 
 
 class POSNIParser:

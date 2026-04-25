@@ -29,8 +29,6 @@ Status Codes:
 - 5: Error
 """
 
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass
 
 from app.schemas.cnc_data.tolni_schema import FieldDefinition, SchemaDefinition
 

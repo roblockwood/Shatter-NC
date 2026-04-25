@@ -20,8 +20,6 @@ Format:
   - C01-C04: Workpiece counters (count, current, end, end warning)
 """
 
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass
 
 from app.schemas.cnc_data.tolni_schema import FieldDefinition, SchemaDefinition
 

@@ -30,6 +30,10 @@ from app.api._programs_validate import (  # noqa: F401
     DeployValidatedRequest,
     _validate_tool,
     _validate_wcs_offset,
+    validate_program,
+)
+from app.api._programs_library import (  # noqa: F401
+    upload_program,
 )
 from app.api._programs_atc import (  # noqa: F401
     ATCOptimizeRequest,
@@ -62,7 +66,7 @@ async def list_programs(
     query = db.query(Program)
 
     if active_only:
-        query = query.filter(Program.is_active == True)
+        query = query.filter(Program.is_active)
 
     if filename_filter:
         query = query.filter(Program.original_filename.ilike(f"%{filename_filter}%"))

@@ -42,7 +42,7 @@ class AuditLogger:
         """
         timestamp = datetime.utcnow().isoformat()
         
-        log_entry = {
+        _log_entry = {
             "timestamp": timestamp,
             "machine_id": machine_id,
             "operation_type": operation_type,

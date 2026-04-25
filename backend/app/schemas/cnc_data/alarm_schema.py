@@ -19,8 +19,6 @@ Format:
   - L01-L18: Loading system alarm messages (18 total)
 """
 
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass
 
 from app.schemas.cnc_data.tolni_schema import FieldDefinition, SchemaDefinition
 

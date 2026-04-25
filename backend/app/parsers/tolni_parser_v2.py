@@ -11,11 +11,10 @@ Features:
 - Comprehensive field mapping from documentation
 """
 
-from typing import Dict, Any, List, Optional
-import re
+from typing import Dict, Any, Optional
 import logging
 
-from app.schemas.cnc_data.tolni_schema import SCHEMA_REGISTRY, C00_SCHEMA, D00_SCHEMA
+from app.schemas.cnc_data.tolni_schema import SCHEMA_REGISTRY, C00_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -196,11 +195,11 @@ class TOLNIParserV2:
             
             # Parse based on data type
             try:
-                if field_def.data_type == int:
+                if field_def.data_type is int:
                     tool[field_def.name] = int(field_value)
-                elif field_def.data_type == float:
+                elif field_def.data_type is float:
                     tool[field_def.name] = float(field_value)
-                elif field_def.data_type == str:
+                elif field_def.data_type is str:
                     # Remove single quotes from tool name if present
                     if field_def.name == "tool_name" and field_value.startswith("'") and field_value.endswith("'"):
                         # Preserve internal spacing (tool tables often use fixed-width names)

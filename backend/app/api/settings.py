@@ -1,8 +1,6 @@
 """API endpoints for global settings and preferences."""
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter
 from typing import Dict, Any
-from app.db.base import get_db
 import logging
 
 logger = logging.getLogger(__name__)

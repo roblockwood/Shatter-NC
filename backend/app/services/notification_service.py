@@ -170,11 +170,11 @@ class NotificationService:
             rules = (
                 db.query(NotificationRule)
                 .filter(
-                    NotificationRule.enabled == True,
+                    NotificationRule.enabled,
                     NotificationRule.trigger_type == "status_change",
                     (
                         (NotificationRule.machine_id == machine_id)
-                        | (NotificationRule.machine_id == None)
+                        | (NotificationRule.machine_id is None)
                     ),
                 )
                 .all()
@@ -189,7 +189,7 @@ class NotificationService:
                 for channel_id in (rule.channel_ids or []):
                     channel = db.query(NotificationChannel).filter(
                         NotificationChannel.id == channel_id,
-                        NotificationChannel.enabled == True,
+                        NotificationChannel.enabled,
                     ).first()
                     if not channel:
                         continue

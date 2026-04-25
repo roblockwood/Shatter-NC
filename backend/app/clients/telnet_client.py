@@ -23,7 +23,6 @@ from app.clients._telnet_state import (
     _active_clients,
     _active_clients_lock,
     COMPLETION_CODES,
-    _get_machine_lock,
 )
 from app.clients._telnet_data_reads import CNCDataReadsMixin
 from app.clients._telnet_write_ops import CNCWriteOpsMixin

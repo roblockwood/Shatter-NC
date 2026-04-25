@@ -40,7 +40,7 @@ function getVersion(): string {
     }
     
     return cleanVersion
-  } catch (error) {
+  } catch (_error) {
     // Fallback to VERSION file (updated by semantic-release)
     try {
       return readFileSync(resolve(__dirname, '../VERSION'), 'utf-8').trim()

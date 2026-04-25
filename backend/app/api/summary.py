@@ -9,11 +9,9 @@ from app.db.base import get_db
 from app.models.machine import Machine
 from app.models.event import ProductionRun, MachineStatusEvent
 
-router = APIRouter()
-
-# Polling service and WebSocket manager will be injected from main.py
-# These are initialized in main.py and accessed as globals
 from app.api import websocket as websocket_api
+
+router = APIRouter()
 polling_service = None
 
 def set_polling_service(service):
@@ -202,7 +200,7 @@ def is_backend_healthy() -> bool:
                 return False
         
         return True
-    except Exception as e:
+    except Exception:
         # If we can't check, assume backend is healthy to avoid false negatives
         return True
     finally:
@@ -394,7 +392,7 @@ def get_online_summary(
     }
     hours = hours_map.get(time_range, 8)
     # Get all enabled machines
-    machines_query = db.query(Machine).filter(Machine.enabled == True).all()
+    machines_query = db.query(Machine).filter(Machine.enabled).all()
 
     online_machines = []
     
@@ -468,7 +466,7 @@ def get_offline_summary(db: Session = Depends(get_db)):
     Uses the polling service as the source of truth for online status.
     """
     # Get all enabled machines
-    machines_query = db.query(Machine).filter(Machine.enabled == True).all()
+    machines_query = db.query(Machine).filter(Machine.enabled).all()
 
     offline_machines = []
 
@@ -557,7 +555,7 @@ def get_machines_summary(
     }
     hours = hours_map.get(time_range, 8)
     # Get all enabled machines
-    machines_query = db.query(Machine).filter(Machine.enabled == True).all()
+    machines_query = db.query(Machine).filter(Machine.enabled).all()
 
     machines_list = []
     online_count = 0

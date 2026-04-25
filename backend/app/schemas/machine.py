@@ -1,5 +1,5 @@
 """Pydantic schemas for Machine API endpoints."""
-from pydantic import BaseModel, Field, IPvAnyAddress
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 

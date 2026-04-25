@@ -5,18 +5,23 @@ Routes:
     POST /machines/{machine_id}/programs/validate-file   — download + validate file on machine
 """
 import logging
+from app.clients.telnet_client import create_fresh_connection
+from app.api import status as status_api
+from app.parsers.posni_parser_v2 import parse_posni_v2
+from app.parsers.tolni_parser_v2 import parse_tolni_v2
+from app.parsers.atctl_parser_v2 import parse_atctl_v2
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
-
 from app.db.base import get_db
-from app.models.machine import Machine
 from app.parsers.gcode_parser import parse_gcode
 from app.clients.ftp_client import CNCFtpClient
 from app.api import websocket as websocket_api
+from app.api.deps import get_machine_or_404
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
@@ -292,7 +297,6 @@ def _validate_wcs_offset(
     tolerance = max(final_tolerance_x, final_tolerance_y, final_tolerance_z)
 
     # Parse POSNI1/POSNM1 to get actual machine offset using schema-based parser v2
-    from app.parsers.posni_parser_v2 import parse_posni_v2
     parsed_posni = parse_posni_v2(machine_position_data.encode('utf-8'), units=units, control_version=None)
     work_offsets = parsed_posni.get("work_offsets", {})
     actual_offset = work_offsets.get(work_offset)
@@ -368,17 +372,12 @@ async def validate_program(
     - WCS offset matches (if specified in program)
     """
     # Get machine from database
-    machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not machine:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Machine {machine_id} not found"
-        )
+    machine = get_machine_or_404(machine_id, db)
 
     # Parse G-code (gracefully handle macro files and other non-standard formats)
     try:
         parsed = parse_gcode(request.gcode_content)
-    except Exception as e:
+    except Exception:
         parsed = {
             "tools": [],
             "posted_date": None,
@@ -407,7 +406,7 @@ async def validate_program(
                 machine_tool_data = {"tools": cached_status["tools"]}
                 logger.info(f"Machine {machine.id} - VALIDATE: Using {len(cached_status['tools'])} cached tools from WebSocket cache")
             else:
-                logger.warning(f"Machine {machine.id} - VALIDATE: WebSocket cache empty/missing tools (ws_manager={'set' if websocket_api.websocket_manager else 'None'}, cached_status_keys={list((cached_status or {}).keys())}, tools_count={len((cached_status or {}).get('tools', []))})")
+                logger.warning(f"Machine {machine.id} - VALIDATE: WebSocket cache empty/missing tools (ws_manager={'set' if websocket_api.websocket_manager else 'None'}, cached_status_keys={list((cached_status or {}).keys())}, tools_count={len((cached_status or {}).get('tools') or [])})")
         except Exception as e:
             machine_tool_fetch_failed = True
             logger.warning(f"Machine {machine.id} - Error accessing WebSocket cache: {e}")
@@ -415,7 +414,6 @@ async def validate_program(
     if not machine_tool_data.get("tools"):
         logger.warning(f"Machine {machine.id} - No cached tool data available; attempting polling-service tool refresh for validation")
         try:
-            from app.api import status as status_api
 
             if status_api.polling_service:
                 for attempt in range(2):
@@ -433,9 +431,6 @@ async def validate_program(
     if not machine_tool_data.get("tools"):
         logger.warning(f"Machine {machine.id} - Polling-service refresh had no tools, fetching directly via Telnet for validation")
         try:
-            from app.clients.telnet_client import create_fresh_connection
-            from app.parsers.atctl_parser_v2 import parse_atctl_v2
-            from app.parsers.tolni_parser_v2 import parse_tolni_v2
 
             tool_telnet_client = None
             try:
@@ -545,8 +540,6 @@ async def validate_program(
     wcs_fetch_failed = False
     telnet_client = None
     try:
-        from app.clients.telnet_client import create_fresh_connection
-        from app.parsers.posni_parser_v2 import parse_posni_v2
 
         telnet_client = await create_fresh_connection(
             ip_address=machine.ip_address,
@@ -598,7 +591,6 @@ async def validate_program(
     elif not parsed["wcs_offset"]:
         if position_data and not wcs_fetch_failed:
             warnings.append("No WCS offset found in NC program")
-            from app.parsers.posni_parser_v2 import parse_posni_v2
 
             parsed_posni = parse_posni_v2(position_data.encode('utf-8'), units=machine.units, control_version=None)
             work_offsets = parsed_posni.get("work_offsets", {})
@@ -648,12 +640,7 @@ async def validate_file_on_machine(
     Validate a file already on the machine by downloading and validating it.
     Returns both validation results AND file content for subsequent deployment.
     """
-    machine = db.query(Machine).filter(Machine.id == machine_id).first()
-    if not machine:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Machine {machine_id} not found"
-        )
+    machine = get_machine_or_404(machine_id, db)
 
     # Normalize remote file path to avoid malformed values like "//O0003.NC"
     normalized_file_path = "/" + "/".join(

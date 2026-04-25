@@ -234,13 +234,13 @@ class ProgramService:
             existing_deployment = self.db.query(ProgramDeployment).filter(
                 ProgramDeployment.machine_id == machine_id,
                 ProgramDeployment.deployed_path == deployed_path,
-                ProgramDeployment.is_current == True
+                ProgramDeployment.is_current
             ).first()
         else:
             existing_deployment = self.db.query(ProgramDeployment).filter(
                 ProgramDeployment.machine_id == machine_id,
                 ProgramDeployment.deployed_filename == deployed_filename,
-                ProgramDeployment.is_current == True
+                ProgramDeployment.is_current
             ).first()
 
         if existing_deployment:
@@ -292,7 +292,7 @@ class ProgramService:
         return self.db.query(ProgramDeployment).filter(
             ProgramDeployment.machine_id == machine_id,
             ProgramDeployment.deployed_filename == deployed_filename,
-            ProgramDeployment.is_current == True
+            ProgramDeployment.is_current
         ).first()
 
     def get_deployment_history(
