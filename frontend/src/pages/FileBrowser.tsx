@@ -3,119 +3,14 @@ import { useSearchParams } from 'react-router-dom';
 import { StatusIndicator, Select } from '../components/ui';
 import './FileBrowser.css';
 import { API_BASE_URL, getApiErrorMessage } from '../config/api';
-
-interface Program {
-  name: string;
-  size: number;
-  modified: string;
-  is_directory: boolean;
-  path: string;
-}
-
-interface Machine {
-  id: number;
-  name: string;
-  ip_address: string;
-  path?: string;
-}
-
-interface ViewData {
-  file_path: string;
-  content: string;
-  size: number;
-  lines: number;
-}
-
-interface FileMetadata {
-  file_path: string;
-  tools: number[];
-  runtime_seconds: number;
-  has_errors: boolean;
-}
-
-interface ToolDetail {
-  tool_number: number;
-  diameter: number;
-  corner_radius: number;
-  description: string;
-  length_total: number;
-}
-
-interface ToolValidation {
-  tool_number: number;
-  required_diameter: number;
-  required_length: number;
-  available: boolean;
-  diameter_match: boolean;
-  length_sufficient: boolean;
-  machine_tool_data: any;
-  warnings: string[];
-  // Tolerance values from machine settings (not from NC file)
-  diameter_tolerance?: number;
-  length_tolerance_plus?: number;
-  length_tolerance_minus?: number;
-}
-
-interface WCSValidation {
-  valid: boolean;
-  work_offset: number;
-  expected: { x: number; y: number; z: number };
-  actual: { x: number; y: number; z: number };
-  difference: { x: number; y: number; z: number };
-  tolerance: number;
-  within_tolerance: boolean;
-  warnings: string[];
-}
-
-interface ValidationResults {
-  valid: boolean;
-  tools: { [key: number]: ToolValidation };
-  wcs_offset?: WCSValidation;
-  warnings: string[];
-  errors: string[];
-}
-
-interface FreshValidationState {
-  validation: ValidationResults;
-  gcode_content: string;
-  timestamp: number;
-}
-
-interface DeploymentHistoryEntry {
-  id: number;
-  deployed_at: string;
-  validation_passed: boolean | null;
-  replaced_at: string | null;
-  is_current: boolean;
-  program_version: number | null;
-  original_filename: string | null;
-}
-
-interface DeploymentDetail {
-  deployment: {
-    id: number;
-    deployed_filename: string;
-    deployed_path: string;
-    deployed_at: string;
-    validation_passed: boolean | null;
-    validation_results: ValidationResults | null;
-  };
-  program: {
-    id: number;
-    original_filename: string;
-    version_number: number;
-    posted_date: string | null;
-    estimated_runtime_seconds: number;
-    program_metadata: {
-      tools: ToolDetail[];
-      wcs_offset?: any;
-      stock_size?: any;
-    };
-    file_size_bytes: number;
-    line_count: number;
-  } | null;
-  history?: DeploymentHistoryEntry[];
-}
+import type {
+  Program,
+  Machine,
+  ViewData,
+  FileMetadata,
+  FreshValidationState,
+  DeploymentDetail,
+} from './FileBrowserTypes';
 
 export const FileBrowser: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -134,8 +29,8 @@ export const FileBrowser: React.FC = () => {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewModalContent, setViewModalContent] = useState<ViewData | null>(null);
   const [viewModalLoading, setViewModalLoading] = useState(false);
-  // @ts-ignore - reserved for future use
-  const [fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
+  // reserved for future use
+  const [_fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [deploymentDetail, setDeploymentDetail] = useState<DeploymentDetail | null>(null);
   const [deploymentLoading, setDeploymentLoading] = useState(false);
@@ -145,8 +40,8 @@ export const FileBrowser: React.FC = () => {
   const [validationLoading, setValidationLoading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ fileName: string; percent: number } | null>(null);
-  // @ts-ignore - reserved for future use
-  const [highlightedFile, setHighlightedFile] = useState<string | null>(null);
+  // reserved for future use
+  const [_highlightedFile, setHighlightedFile] = useState<string | null>(null);
   const [pendingFileSelection, setPendingFileSelection] = useState<string | null>(null);
   // Expand/collapse state for validation tables
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
@@ -157,6 +52,12 @@ export const FileBrowser: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   // Deployment tracking - set of filenames that have deployments
   const [filesWithDeployments, setFilesWithDeployments] = useState<Set<string>>(new Set());
+
+  // Keep URL params in primitive values so effects don't depend on mutable objects.
+  const deepLinkMachineParam = searchParams.get('machine');
+  const deepLinkFileParam = searchParams.get('file');
+  const deepLinkFilePathParam = searchParams.get('file_path');
+  const deepLinkPathParam = searchParams.get('path');
 
   // Fetch machines on mount and auto-select first one
   useEffect(() => {
@@ -172,23 +73,38 @@ export const FileBrowser: React.FC = () => {
       .catch(err => console.error('Error fetching machines:', err));
   }, []);
 
-  // Handle URL parameters for navigation from upload success screen
+  // Handle URL parameters for navigation from Current Program and upload flows
   useEffect(() => {
-    const machineParam = searchParams.get('machine');
-    const fileParam = searchParams.get('file');
-
-    if (machineParam && fileParam && machines.length > 0) {
-      const machineId = parseInt(machineParam);
+    if (deepLinkMachineParam && (deepLinkFileParam || deepLinkFilePathParam) && machines.length > 0) {
+      const machineId = parseInt(deepLinkMachineParam);
+      const normalizePath = (raw: string): string => {
+        const normalized = `/${String(raw || '').replace(/\\/g, '/').split('/').filter(Boolean).join('/')}`;
+        return normalized === '/' ? '/' : normalized;
+      };
 
       // Set selected machine if different
       if (!isNaN(machineId) && selectedMachineId !== machineId) {
         setSelectedMachineId(machineId);
       }
 
-      // Store pending file selection - will be handled once programs load
-      setPendingFileSelection(fileParam);
+      // Prefer full file path links so we navigate to the containing directory.
+      if (deepLinkFilePathParam) {
+        const normalizedFilePath = normalizePath(deepLinkFilePathParam);
+        const parts = normalizedFilePath.split('/').filter(Boolean);
+        const fileNameFromPath = parts.length > 0 ? parts[parts.length - 1] : null;
+
+        if (fileNameFromPath) {
+          setPendingFileSelection(fileNameFromPath);
+        }
+        return;
+      }
+
+      // Fallback for filename-only links
+      if (deepLinkFileParam) {
+        setPendingFileSelection(deepLinkFileParam);
+      }
     }
-  }, [searchParams, machines.length, selectedMachineId]);
+  }, [deepLinkMachineParam, deepLinkFileParam, deepLinkFilePathParam, machines.length, selectedMachineId]);
 
   // Handle pending file selection once programs are loaded
   useEffect(() => {
@@ -218,11 +134,20 @@ export const FileBrowser: React.FC = () => {
         }, 100);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingFileSelection, programs.length, loading]);
 
   // Set path when machine changes - fetch fresh machine data to ensure we have latest config
   useEffect(() => {
     if (selectedMachineId === null) return;
+
+    const parsedLinkedMachine = deepLinkMachineParam ? parseInt(deepLinkMachineParam) : NaN;
+    const isLinkedMachine = !isNaN(parsedLinkedMachine) && parsedLinkedMachine === selectedMachineId;
+    const normalizePath = (raw: string): string => {
+      const normalized = `/${String(raw || '').replace(/\\/g, '/').split('/').filter(Boolean).join('/')}`;
+      return normalized === '/' ? '/' : normalized;
+    };
+    const linkedPath = deepLinkPathParam ? normalizePath(deepLinkPathParam) : null;
 
     // Immediately clear path and set loading before any async operations
     setPathLoading(true);
@@ -235,7 +160,8 @@ export const FileBrowser: React.FC = () => {
     })
       .then(res => res.json())
       .then(machineData => {
-        const newPath = machineData.path || '/';
+        const machineDefaultPath = machineData.path || '/';
+        const newPath = (isLinkedMachine && linkedPath) ? linkedPath : machineDefaultPath;
         setCurrentPath(newPath);
         setPathLoading(false);
       })
@@ -248,7 +174,7 @@ export const FileBrowser: React.FC = () => {
       });
 
     return () => controller.abort();
-  }, [selectedMachineId]);
+  }, [selectedMachineId, deepLinkMachineParam, deepLinkPathParam]);
 
   // Fetch programs when machine or path changes
   useEffect(() => {
@@ -274,7 +200,7 @@ export const FileBrowser: React.FC = () => {
         } else {
           sessionStorage.removeItem(cacheKey);
         }
-      } catch (e) {
+      } catch (_e) {
         sessionStorage.removeItem(cacheKey);
       }
     }
@@ -343,10 +269,17 @@ export const FileBrowser: React.FC = () => {
         if (!res.ok) return [];
         return res.json();
       })
-      .then((deployments: any[]) => {
-        // Extract deployed filenames (case-insensitive)
+      .then((deployments: { deployed_filename?: string; deployed_path?: string }[]) => {
+        // Build two lookup sets for path-aware badge matching.
+        // deployed_path values are stored as full remote paths (e.g. "/FOLDER_A/O0003.nc")
+        // and let us correctly distinguish same-named files in different directories.
+        // deployed_filename values (basename only) serve as a fallback for older records
+        // that were registered before path-aware tracking was introduced.
         const deployedFilenames = new Set<string>();
-        deployments.forEach((deployment: any) => {
+        deployments.forEach((deployment) => {
+          if (deployment.deployed_path) {
+            deployedFilenames.add(deployment.deployed_path.toUpperCase());
+          }
           if (deployment.deployed_filename) {
             deployedFilenames.add(deployment.deployed_filename.toUpperCase());
           }
@@ -389,6 +322,7 @@ export const FileBrowser: React.FC = () => {
       setDeploymentError(null);
       setSelectedDeploymentId(null);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProgram]);
 
   // Handle deployment selection change from history dropdown
@@ -404,6 +338,7 @@ export const FileBrowser: React.FC = () => {
         fetchSelectedDeploymentDetails(currentEntry.id);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDeploymentId, deploymentDetail?.history]);
 
   const selectedMachine = machines.find(m => m.id === selectedMachineId);
@@ -459,8 +394,8 @@ export const FileBrowser: React.FC = () => {
   };
 
   // Get the currently displayed deployment (either selected from history or current)
-  // @ts-ignore - reserved for future use
-  const getCurrentDisplayedDeployment = () => {
+  // reserved for future use
+  const _getCurrentDisplayedDeployment = () => {
     if (!deploymentDetail) return null;
 
     // If a specific deployment is selected from history, find and return it
@@ -790,8 +725,8 @@ export const FileBrowser: React.FC = () => {
     }
   };
 
-  // @ts-ignore - reserved for future use
-  const handleUploadClick = () => {
+  // reserved for future use
+  const _handleUploadClick = () => {
     fileInputRef.current?.click();
   };
 
@@ -1034,17 +969,24 @@ export const FileBrowser: React.FC = () => {
                 ├{'─'.repeat(80)}┤
               </div>
               <div className="table-body">
-                {displayPrograms.map((program, idx) => (
+                {displayPrograms.map((program, idx) => {
+                  // Check for deployment badge: prefer path-aware match, fall back to basename.
+                  const filePath = ((currentPath || '/').replace(/\/$/, '') + '/' + program.name).replace('//', '/');
+                  const hasDeployment = !program.is_directory && (
+                    filesWithDeployments.has(filePath.toUpperCase()) ||
+                    filesWithDeployments.has(program.name.toUpperCase())
+                  );
+                  return (
                   <div
                     key={idx}
                     ref={selectedProgram?.name === program.name ? selectedProgramRef : null}
-                    className={`table-row ${selectedProgram?.name === program.name ? 'selected' : ''} ${!program.is_directory && filesWithDeployments.has(program.name.toUpperCase()) ? 'has-deployment' : ''}`}
+                    className={`table-row ${selectedProgram?.name === program.name ? 'selected' : ''} ${hasDeployment ? 'has-deployment' : ''}`}
                     onClick={() => handleItemClick(program)}
                   >
                     <div className="col-name">
                       {program.is_directory ? '/ ' : (selectedProgram?.name === program.name ? '► ' : '  ')}
                       {program.name}
-                      {!program.is_directory && filesWithDeployments.has(program.name.toUpperCase()) && (
+                      {hasDeployment && (
                         <span className="deployment-indicator" title="Has deployment data">●</span>
                       )}
                     </div>
@@ -1085,7 +1027,8 @@ export const FileBrowser: React.FC = () => {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="table-footer">
                 └{'─'.repeat(80)}┘
@@ -1286,7 +1229,7 @@ export const FileBrowser: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {Object.entries((freshValidation?.validation?.tools || deploymentDetail?.deployment?.validation_results?.tools || {})).map(([toolKey, validation]: [string, any]) => {
+                        {Object.entries((freshValidation?.validation?.tools || deploymentDetail?.deployment?.validation_results?.tools || {})).map(([toolKey, validation]: [string, ToolValidation]) => {
                           const toolNumber = parseInt(toolKey, 10);
                           if (isNaN(toolNumber)) return null;
                           const isExpanded = expandedTools.has(toolNumber);
@@ -1460,7 +1403,7 @@ export const FileBrowser: React.FC = () => {
                             </tr>
 
                             {expandedWCS && ['x', 'y', 'z'].map((axis) => {
-                              const actual = (wcs.actual as any)[axis];
+                              const actual = (wcs.actual as Record<string, number>)[axis];
                               return (
                                 <tr key={axis} className="wcs-detail-row">
                                   <td></td>
@@ -1524,9 +1467,9 @@ export const FileBrowser: React.FC = () => {
 
                           {/* Detail Rows - X/Y/Z Axes */}
                           {expandedWCS && ['x', 'y', 'z'].map((axis) => {
-                            const expected = (wcs.expected as any)[axis];
-                            const actual = (wcs.actual as any)[axis];
-                            const difference = (wcs.difference as any)[axis];
+                            const expected = (wcs.expected as Record<string, number>)[axis];
+                            const actual = (wcs.actual as Record<string, number>)[axis];
+                            const difference = (wcs.difference as Record<string, number>)[axis];
                             const diff = Math.abs(difference || 0);
                             const withinTol = diff <= (wcs.tolerance || 0.1);
 
