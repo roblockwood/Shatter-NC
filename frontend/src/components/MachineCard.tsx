@@ -902,7 +902,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             setValidationResult(null);
             setSelectedFilename('');
           }}
-          result={validationResult}
+          result={validationResult as never}
           filename={selectedFilename}
           machineId={machine.machine_id}
           machineName={machine.machine_name}
@@ -1875,7 +1875,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           setValidationResult(null);
           setSelectedFilename('');
         }}
-        result={validationResult}
+        result={validationResult as never}
         filename={selectedFilename}
         machineId={machine.machine_id}
         machineName={machine.machine_name}

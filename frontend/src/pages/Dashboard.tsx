@@ -484,7 +484,7 @@ export const Dashboard = () => {
               editingCompressorId === null && (
                 <>
                   {!isAddingCompressor && (
-                    <AddMachineCard onCancel={() => {}} onAdd={addMachine} onActiveChange={setIsAddingMachine} />
+                    <AddMachineCard onCancel={() => {}} onAdd={(m) => addMachine(m as never)} onActiveChange={setIsAddingMachine} />
                   )}
                   {showCompressorUi && !isAddingMachine && (
                     <AddCompressorCard onCancel={() => {}} onAdd={addCompressor} onActiveChange={setIsAddingCompressor} />
