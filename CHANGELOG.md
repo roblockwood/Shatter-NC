@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.2.1...v1.2.2) (2026-04-25)
+
+
+### Bug Fixes
+
+* resolve all TypeScript errors blocking Docker frontend image build ([bed2aaf](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/bed2aaf52e28e21c5ad0330aa7189d18bf5f75b5))
+
 ## [1.2.1](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.2.0...v1.2.1) (2026-04-25)
 
 
