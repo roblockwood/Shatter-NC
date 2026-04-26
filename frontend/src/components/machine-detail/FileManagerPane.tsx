@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TerminalBox } from '../ui/TerminalBox';
+import { Select } from '../ui/Select';
 import { API_BASE_URL, getApiErrorMessage } from '../../config/api';
 import type {
   Program,
@@ -646,15 +647,16 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                   </div>
                   <div className="file-manager-sort-controls">
                     <label className="file-manager-sort-label">SORT:</label>
-                    <select
+                    <Select
                       className="file-manager-terminal-select-sm"
                       value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as 'name' | 'size' | 'modified')}
-                    >
-                      <option value="name">NAME</option>
-                      <option value="size">SIZE</option>
-                      <option value="modified">MODIFIED</option>
-                    </select>
+                      onChange={(value) => setSortBy(value as 'name' | 'size' | 'modified')}
+                      options={[
+                        { value: 'name', label: 'NAME' },
+                        { value: 'size', label: 'SIZE' },
+                        { value: 'modified', label: 'MODIFIED' },
+                      ]}
+                    />
                     <button
                       className="file-manager-sort-direction-btn"
                       onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
