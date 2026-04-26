@@ -29,9 +29,84 @@ from app.services.program_service import ProgramService
 router = APIRouter()
 
 
+class ATCOptimizeRequest(BaseModel):
+    """Request body for the ATC pot optimizer."""
+    gcode_content: str
+    num_pockets: int = 21
+    # str(tool_number) -> current_pot
+    current_assignment: Dict[str, int] = {}
+    # tool numbers to keep in their current pots
+    pinned_tools: List[int] = []
+
+
+class ATCOptimizeResponse(BaseModel):
+    """Optimized ATC pot assignments derived from an NC program."""
+    tool_sequence: List[int]
+    unique_tools: List[int]
+    tool_change_count: int
+    transition_matrix: Dict[str, int]
+    baseline_assignment: Dict[str, int]
+    optimized_assignment: Dict[str, int]
+    baseline_cost: int
+    optimized_cost: int
+    improvement_pct: float
+
+
+@router.post("/analyze-atc", response_model=ATCOptimizeResponse)
+async def analyze_atc_pot_assignment(request: ATCOptimizeRequest):
+    """
+    Recommend optimized ATC pot assignments for a Brother NC program.
+
+    Parses the NC content for tool-change calls (G100 / M6 with T-word),
+    then runs a greedy-seeded simulated annealing + 2-opt optimizer to find
+    the pot placement that minimizes total carousel rotation distance.
+    """
+    from app.parsers.nc_tool_sequence_parser import extract_tool_sequence
+    from app.services.atc_optimizer import optimize_atc
+
+    if request.num_pockets < 1 or request.num_pockets > 60:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="num_pockets must be between 1 and 60",
+        )
+
+    tool_sequence = extract_tool_sequence(request.gcode_content)
+    if not tool_sequence:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "No tool-change calls found in the NC program. "
+                "Expected G100 T## or M6 T## patterns."
+            ),
+        )
+
+    current_assignment = {int(k): v for k, v in (request.current_assignment or {}).items()} or None
+    pinned_map = (
+        {t: current_assignment[t] for t in request.pinned_tools if current_assignment and t in current_assignment}
+        or None
+    )
+
+    try:
+        result = optimize_atc(
+            tool_sequence=tool_sequence,
+            num_pockets=request.num_pockets,
+            current_assignment=current_assignment,
+            pinned_tools=pinned_map,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
+
+    return ATCOptimizeResponse(**result)
+
+
 class ProgramValidateRequest(BaseModel):
     """Request to validate a G-code program before upload."""
     gcode_content: str
+    # Optional pre-fetched tool data (e.g. from FTP sync runs) to avoid per-file Telnet calls.
+    prefetched_tool_data: Optional[Dict[str, Any]] = None
 
 
 class ToolValidationResult(BaseModel):
@@ -146,7 +221,20 @@ async def validate_program(
     machine_tool_fetch_failed = False
     cached_status = None
     
-    if websocket_api.websocket_manager:
+    # Fast path: caller already fetched tool data (e.g. FTP sync prefetch).
+    if request.prefetched_tool_data is not None:
+        machine_tool_data = request.prefetched_tool_data
+        if machine_tool_data.get("tools"):
+            logger.info(
+                f"Machine {machine.id} - VALIDATE: Using {len(machine_tool_data['tools'])} pre-fetched tools"
+            )
+        else:
+            machine_tool_fetch_failed = True
+            logger.info(
+                f"Machine {machine.id} - VALIDATE: Pre-fetched tool data had no tools (machine offline during run)"
+            )
+
+    if not machine_tool_data.get("tools") and request.prefetched_tool_data is None and websocket_api.websocket_manager:
         try:
             cached_status = websocket_api.websocket_manager.get_machine_status(machine.id)
             if cached_status and "tools" in cached_status and cached_status["tools"]:
@@ -162,12 +250,14 @@ async def validate_program(
     # Tool data is ONLY available via Telnet (port 10000, Protocol Type 2).
     # First try the same polling-service refresh path that feeds the ATC card/WebSocket,
     # then fall back to a direct Telnet read for this request.
-    if not machine_tool_data.get("tools"):
+    polling_service_attempted = False
+    if not machine_tool_data.get("tools") and request.prefetched_tool_data is None:
         logger.warning(f"Machine {machine.id} - No cached tool data available; attempting polling-service tool refresh for validation")
         try:
             from app.api import status as status_api
 
             if status_api.polling_service:
+                polling_service_attempted = True
                 for attempt in range(2):
                     refreshed_tool_data = await status_api.polling_service.refresh_tool_data(machine.id)
                     refreshed_tools = (refreshed_tool_data or {}).get("tools", [])
@@ -180,7 +270,11 @@ async def validate_program(
         except Exception as e:
             logger.warning(f"Machine {machine.id} - Polling-service refresh for validation failed: {e}")
 
-    if not machine_tool_data.get("tools"):
+    # Only attempt direct Telnet fallback if the polling service was unavailable and
+    # no pre-fetched data was supplied. When polling service is available but returns
+    # no tools, the direct Telnet path makes identical calls and typically fails for
+    # the same reason, adding unnecessary load on the machine.
+    if not machine_tool_data.get("tools") and not polling_service_attempted and request.prefetched_tool_data is None:
         logger.warning(f"Machine {machine.id} - Polling-service refresh had no tools, fetching directly via Telnet for validation")
         try:
             from app.clients.telnet_client import create_fresh_connection
@@ -300,40 +394,37 @@ async def validate_program(
             # No tools in NC program
             warnings.append("No tool data found in NC program")
 
-    # Always fetch machine work offsets (even if no WCS in NC)
-    # Phase 5: Using Telnet for data reads (FTP deprecated for data, kept only for file transfers)
+    # Fetch machine work offsets only when the NC program actually specifies a WCS offset.
+    # This avoids one Telnet round-trip per validation (important for FTP sync runs).
     position_data = None
     wcs_fetch_failed = False
-    telnet_client = None
-    try:
-        from app.clients.telnet_client import create_fresh_connection
-        from app.parsers.posni_parser_v2 import parse_posni_v2
+    if parsed.get("wcs_offset"):
+        telnet_client = None
+        try:
+            from app.clients.telnet_client import create_fresh_connection
 
-        # Create fresh connection
-        telnet_client = await create_fresh_connection(
-            ip_address=machine.ip_address,
-            port=10000,
-            timeout=10
-        )
-        
-        # Use machine.units to select correct data name (POSNI1 vs POSNM1)
-        position_data = await telnet_client.get_position_data(units=machine.units, verbose=False)
-        
-        if not position_data:
-            raise Exception("Could not retrieve POSNI1.NC/POSNM1.NC from machine via Telnet (file may not exist or Telnet connection failed)")
-        
-        # Connection is cleaned up automatically
-    except Exception as e:
-        # Log Telnet error but don't prevent other validation
-        wcs_fetch_failed = True
-        import traceback
-        error_msg = f"Could not fetch machine WCS data via Telnet: {str(e)}"
-        warnings.append(error_msg)
-        print(f"WCS Fetch Error: {error_msg}")
-        print(traceback.format_exc())
-    finally:
-        if telnet_client:
-            await telnet_client.disconnect()
+            telnet_client = await create_fresh_connection(
+                ip_address=machine.ip_address,
+                port=10000,
+                timeout=10
+            )
+
+            position_data = await telnet_client.get_position_data(units=machine.units, verbose=False)
+            if not position_data:
+                raise Exception(
+                    "Could not retrieve POSNI1.NC/POSNM1.NC from machine via Telnet "
+                    "(file may not exist or Telnet connection failed)"
+                )
+        except Exception as e:
+            wcs_fetch_failed = True
+            import traceback
+            error_msg = f"Could not fetch machine WCS data via Telnet: {str(e)}"
+            warnings.append(error_msg)
+            print(f"WCS Fetch Error: {error_msg}")
+            print(traceback.format_exc())
+        finally:
+            if telnet_client:
+                await telnet_client.disconnect()
 
     # Validate WCS offset
     if parsed["wcs_offset"] and position_data:
