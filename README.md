@@ -8,8 +8,10 @@ Shatter is an open-source web platform for monitoring and managing multiple Brot
 
 - 🔴 **Real-time Monitoring** - Live status, cycle times, alarms, and counters for all machines
 - 📁 **Smart File Transfer** - G-code validation, tool verification, and multi-machine deployment
+- 🔁 **Folder Sync (Upload/Download)** - Configure repeatable FTP sync jobs with run history (`/sync`)
 - 📊 **Production Analytics** - Historical data, cycle time trends, and fleet-wide statistics
 - 🔧 **Tool Management** - Track tool usage across programs with detailed speed/feed analysis
+- 🔔 **Notifications** - Email/SMS alerts for status changes, alarms, offline, and cycle complete (`/notifications`)
 - 🔄 **Version Control** - Git-like versioning for NC programs with deployment tracking
 - 🏭 **Multi-Machine** - Monitor and manage multiple CNCs from a single interface
 - 🐳 **Easy Deployment** - Docker-based, runs on isolated networks
@@ -27,6 +29,25 @@ docker compose -f docker-compose.dev.yml up -d
 Open http://localhost:3000 and add your CNC machines through the web UI.
 
 **For detailed deployment options**, see [Docker Deployment Guide](docs/DOCKER_DEPLOYMENT.md).
+
+## Sync & Notifications
+
+Shatter includes two operator-facing workflows that live in the main navigation:
+
+- **Sync (`/sync`)**: Create per-machine FTP sync configs for **upload** (local folder → CNC) or **download** (CNC → local folder), browse local folders (restricted by `FTP_SYNC_LOCAL_BROWSE_ROOT`), and trigger runs with progress + run item details. Exclusion rules and filename validation are enforced during candidate selection. See `docs/FTP_SYNC_EXCLUSION_RULES.md`.
+- **Notify (`/notifications`)**: Create notification **channels** (SMTP email or Twilio SMS) and **rules** that fire on status transitions (including error/offline) and cycle completion, with a delivery log and a “send test” action per channel.
+
+### Configuration knobs (high-level)
+
+- **FTP Sync**:
+  - `FTP_SYNC_ENABLED` (default true)
+  - `FTP_SYNC_LOCAL_WATCH_ENABLED` (watcher-triggered sync; default false)
+  - `FTP_SYNC_LOCAL_BROWSE_ROOT` (limits what the UI can browse)
+- **Notifications**:
+  - SMTP defaults: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_START_TLS`, `SMTP_USE_TLS`
+  - Twilio defaults: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`
+
+Per-channel config stored in the database can override global defaults.
 
 ## Architecture
 
@@ -84,9 +105,10 @@ Open http://localhost:3000 and add your CNC machines through the web UI.
 - ✅ Production analytics and summaries
 - ✅ Tool management with speed/feed analysis
 - ✅ File browser with FTP integration
+- ✅ Folder sync (upload/download) with run history UI
+- ✅ Email/SMS notifications with channels, rules, and delivery log
 - 🚧 Automated testing (in progress)
 - 📋 User authentication (planned)
-- 📋 Alarm notifications (planned)
 - 📋 Per-operation runtime tracking (planned)
 - reduce steps for upload (parallel upload and validate, auto issue O####, allow rename perhaps?)
 
