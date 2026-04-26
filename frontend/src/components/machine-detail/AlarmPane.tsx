@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import '../ui/TerminalBox.css';
@@ -46,36 +46,24 @@ export const AlarmPane: React.FC<AlarmPaneProps> = ({
   pollTimestamp,
   pollIntervalSeconds = 5,
 }) => {
-  const [alarms, setAlarms] = useState<Alarm[]>([]);
-  const [loading, setLoading] = useState(false);
   const [hoveredAlarm, setHoveredAlarm] = useState<Alarm | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
 
-  // Update from WebSocket data - websocket always provides alarms (even if empty array)
-  useEffect(() => {
-    if (currentAlarms !== undefined) {
-      // Always update from prop, even if empty array (handles alarm clearing)
-      const mappedAlarms = Array.isArray(currentAlarms) 
-        ? currentAlarms.map(a => ({
-            code: a.code,
-            message: a.message,
-            description: a.description,
-            severity: a.severity,
-            level_class: a.level_class,
-            stop_level: a.stop_level,
-            reset_level: a.reset_level,
-            cause: a.cause,
-            solution: a.solution,
-          }))
-        : [];
-      setAlarms(mappedAlarms);
-      setLoading(false);
-    } else {
-      // If currentAlarms is undefined, show empty state (websocket will provide data soon)
-      setAlarms([]);
-      setLoading(false);
-    }
+  const alarms = useMemo<Alarm[]>(() => {
+    if (currentAlarms === undefined || !Array.isArray(currentAlarms)) return [];
+    return currentAlarms.map(a => ({
+      code: a.code,
+      message: a.message,
+      description: a.description,
+      severity: a.severity,
+      level_class: a.level_class,
+      stop_level: a.stop_level,
+      reset_level: a.reset_level,
+      cause: a.cause,
+      solution: a.solution,
+    }));
   }, [currentAlarms]);
+  const loading = currentAlarms === undefined;
 
   const getSeverityLevel = (alarm: Alarm): number => {
     // Use stop_level exclusively (higher number = more severe)
