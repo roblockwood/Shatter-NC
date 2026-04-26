@@ -269,6 +269,20 @@
   box-shadow: var(--glow);
 }
 
+.tools-stale-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border: 1px solid #b36b00;
+  color: #ffcc80;
+  background: rgba(179, 107, 0, 0.2);
+  font-size: var(--font-xs);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .tools-more {
   text-align: center;
   color: var(--color-text-dim);
@@ -321,6 +335,25 @@
 .tools-error-text {
   display: inline-block;
   font-weight: bold;
+}
+
+.tools-stale-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: rgba(179, 107, 0, 0.88);
+  color: #ffe0b2;
+  padding: var(--spacing-xs);
+  text-align: center;
+  z-index: 9;
+  font-size: 0.82em;
+  border-bottom: 1px solid #ffb74d;
+}
+
+.tools-stale-text {
+  display: inline-block;
+  font-weight: 700;
 }
 
 @keyframes pulse {
