@@ -1,3 +1,10 @@
+## [0.20.1](https://github.com/roblockwood/Shatter-NC/compare/v0.20.0...v0.20.1) (2026-04-26)
+
+
+### Bug Fixes
+
+* **frontend:** restore tablet kiosk routes and hide header ([c5f32e5](https://github.com/roblockwood/Shatter-NC/commit/c5f32e53f8b112f86783b85b7bb0698d16ed2ba7))
+
 # [0.20.0](https://github.com/roblockwood/Shatter-NC/compare/v0.19.0...v0.20.0) (2026-04-26)
 
 
