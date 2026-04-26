@@ -54,7 +54,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
   onExpand: _onExpand,
   machineLastSuccessfulPollAt,
 }) => {
-  const { isBetaMode } = useBetaMode();
+  useBetaMode();
   const { timeAxisMode, toggleTimeAxisMode } = useLocalChartTimeAxisMode(
     `speedio-${machineId}-status-timeline`
   );
@@ -67,14 +67,22 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const [oscilloscopeWidth] = useState(180);
   const [scaleX, setScaleX] = useState(1);
-  const [colorMode, setColorMode] = useState<boolean>(() => {
-    return localStorage.getItem('oscilloscopeColorMode') === 'true';
-  });
-  const [oscillationMode, setOscillationMode] = useState<boolean>(() => {
-    const raw = localStorage.getItem('oscilloscopeOscillationMode');
-    // Default to enabled so existing "oscillating" trace remains the default.
-    if (raw == null) return true;
-    return raw === 'true';
+  type TraceMode = 'mono' | 'osc' | 'color' | 'color_osc';
+  const [traceMode, setTraceMode] = useState<TraceMode>(() => {
+    const stored = localStorage.getItem('oscilloscopeTraceMode') as TraceMode | null;
+    if (stored === 'mono' || stored === 'osc' || stored === 'color' || stored === 'color_osc') {
+      return stored;
+    }
+
+    // Migrate existing toggles if present.
+    const color = localStorage.getItem('oscilloscopeColorMode') === 'true';
+    const oscRaw = localStorage.getItem('oscilloscopeOscillationMode');
+    const osc = oscRaw == null ? true : oscRaw === 'true';
+
+    if (color && osc) return 'color_osc';
+    if (color) return 'color';
+    if (osc) return 'osc';
+    return 'mono';
   });
   const [lastFetchSuccessAt, setLastFetchSuccessAt] = useState<string | null>(null);
   const statusLightLastUpdatedAt = useMemo(
@@ -84,15 +92,29 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
   const oscilloscopeRef = React.useRef<HTMLDivElement>(null);
   const oscilloscopeDataRef = React.useRef<HTMLDivElement>(null);
   
-  // Update localStorage when colorMode changes
+  // Persist trace mode (single source of truth).
   useEffect(() => {
-    localStorage.setItem('oscilloscopeColorMode', String(colorMode));
-  }, [colorMode]);
+    localStorage.setItem('oscilloscopeTraceMode', traceMode);
+  }, [traceMode]);
 
-  // Update localStorage when oscillationMode changes
-  useEffect(() => {
-    localStorage.setItem('oscilloscopeOscillationMode', String(oscillationMode));
-  }, [oscillationMode]);
+  const colorMode = traceMode === 'color' || traceMode === 'color_osc';
+  const oscillationMode = traceMode === 'osc' || traceMode === 'color_osc';
+
+  const cycleTraceMode = () => {
+    setTraceMode((prev) => {
+      switch (prev) {
+        case 'mono':
+          return 'osc';
+        case 'osc':
+          return 'color';
+        case 'color':
+          return 'color_osc';
+        case 'color_osc':
+        default:
+          return 'mono';
+      }
+    });
+  };
   
   // Status mapping for Y-axis (oscilloscope) - using actual machine statuses
   // Order: Operating (top), Standby, Stopped, Error, Off (bottom)
@@ -669,21 +691,12 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
         >
           [7D]
         </button>
-        {isBetaMode && (
-          <button
-            className={`time-range-btn ${colorMode ? 'active' : ''}`}
-            onClick={() => setColorMode(!colorMode)}
-            title="Toggle color-coded trace"
-          >
-            [COLOR]
-          </button>
-        )}
         <button
-          className={`time-range-btn ${oscillationMode ? 'active' : ''}`}
-          onClick={() => setOscillationMode(!oscillationMode)}
-          title="Toggle oscilloscope oscillation"
+          className={`time-range-btn ${(colorMode || oscillationMode) ? 'active' : ''}`}
+          onClick={cycleTraceMode}
+          title="Cycle trace: mono → osc → color → color+osc"
         >
-          [OSC]
+          [{traceMode === 'mono' ? 'MONO' : traceMode === 'osc' ? 'OSC' : traceMode === 'color' ? 'COLOR' : 'C+OSC'}]
         </button>
       </div>
       <div className="status-timeline-content">
@@ -764,7 +777,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
                       />
                     ))}
                     {/* Oscilloscope trace - smooth curve with oscillation */}
-                    {svgPoints.length > 0 && (svgPoints.length > 1 ? (colorMode && isBetaMode ? (
+                    {svgPoints.length > 0 && (svgPoints.length > 1 ? (colorMode ? (
                       // Color mode: render path segments with interpolated colors
                       (() => {
                         const segments: Array<{ d: string; color: string }> = [];
