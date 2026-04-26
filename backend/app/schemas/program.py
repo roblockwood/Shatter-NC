@@ -139,7 +139,8 @@ class ProgramUploadRequest(BaseModel):
     gcode_content: str
     original_filename: str
     machine_id: Optional[int] = None  # If provided, deploy to this machine
-    deployed_filename: Optional[str] = None  # O-number if deploying
+    deployed_filename: Optional[str] = None  # O-number basename if deploying (e.g. "O0003.nc")
+    deployed_path: Optional[str] = None  # Full remote path if known (e.g. "/FOLDER_A/O0003.nc")
     validate_before_upload: bool = True
     validation_results: Optional[Dict[str, Any]] = None  # Pre-computed validation results to store
 
