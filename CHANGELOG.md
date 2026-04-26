@@ -1,3 +1,10 @@
+## [1.2.7](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.2.6...v1.2.7) (2026-04-26)
+
+
+### Bug Fixes
+
+* resolve correct deployment for NC header fetch on cycle start ([2dad9b6](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/2dad9b671268d6a0da30b1ad53f92eb51ee5eefd))
+
 ## [1.2.6](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.2.5...v1.2.6) (2026-04-26)
 
 
