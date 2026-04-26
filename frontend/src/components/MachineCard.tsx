@@ -16,6 +16,7 @@ import { PANE_IDS } from '../types/layout';
 import { useExpandedMachine } from '../contexts/ExpandedMachineContext';
 import './MachineCard.css';
 import { API_BASE_URL } from '../config/api';
+import { useBetaMode } from '../hooks/useBetaMode';
 
 interface Tool {
   tool_number: number;
@@ -156,6 +157,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   scrollToStatus = false,
   isAnyMachineEditing = false
 }) => {
+  const { isBetaMode } = useBetaMode();
   // Debug: Log machine status for debugging name color (only log when status actually changes)
   // Removed excessive logging - uncomment if needed for debugging
   // console.log(`Machine: ${machine.machine_name}, is_online: ${machine.is_online}, status: "${machine.status}", program_name: "${machine.program_name}"`);
@@ -1003,7 +1005,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 }
                 disabled={isEditSaving}
                 options={[
-                  { value: 'AUTO', label: 'AUTO DETECT' },
+                  ...((isBetaMode || editFormData.control_version === 'AUTO')
+                    ? [{ value: 'AUTO', label: 'AUTO DETECT (beta)' }]
+                    : []),
                   { value: 'C00', label: 'C00' },
                   { value: 'D00', label: 'D00' },
                 ]}
