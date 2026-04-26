@@ -7,6 +7,7 @@ import './ToolsPane.css';
 import { API_BASE_URL } from '../../config/api';
 import { ColorSelect } from './ColorSelect';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
+import { ToolsOptimizerTab } from './ToolsOptimizerTab';
 
 // Define type locally to avoid Vite import issues
 type ToolModificationOperationType = 
@@ -45,6 +46,10 @@ interface ToolsPaneProps {
   toolPollIntervalSeconds?: number;
   /** Compact layout for machine-card hover preview (scroll + slimmer chrome). */
   variant?: 'default' | 'hover';
+  /** O-number of the currently active program on the machine (e.g. "O2045"). Used by the Optimizer tab. */
+  programName?: string;
+  /** ATC carousel pocket count — defaults to 21. */
+  numPockets?: number;
 }
 
 type SortColumn = 'pot_number' | 'tool_number' | 'tool_name' | 'diameter' | 'length' | 'group' | 'life' | 'tool_type' | 'color';
@@ -64,6 +69,8 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   toolTableTimestamp,
   toolPollIntervalSeconds = 30,
   variant = 'default',
+  programName,
+  numPockets: numPocketsProp = 21,
 }) => {
   // Cache sort settings separately for each view (ATC and TABLE)
   const [sortSettings, setSortSettings] = useState<{
@@ -100,9 +107,13 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const [toolsSummary, setToolsSummary] = useState<Array<{ tool_number: number; description: string }>>([]);
 
   // Track pending changes (changes not yet pushed to server)
-  const [pendingChanges, setPendingChanges] = useState<Map<string, { tool: Tool; field: string; oldValue: any; newValue: any; operationType: ToolModificationOperationType }>>(new Map());
+  const [pendingChanges, setPendingChanges] = useState<Map<string, { tool: Tool; field: string; oldValue: string | number; newValue: string | number; operationType: ToolModificationOperationType }>>(new Map());
   const [isPushingChanges, setIsPushingChanges] = useState(false);
   const [pushComplete, setPushComplete] = useState(false);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<'atc' | 'table' | 'optimizer'>('atc');
+
   // Track recently pushed items to prevent stale WebSocket data from overwriting confirmed values
   const recentlyPushedRef = useRef<Map<string, { potNumber: number; toolNumber: number; color: number; timestamp: number }>>(new Map());
   
@@ -126,7 +137,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     if (wsAt) return wsAt;
     const ct = cacheTimestamps[toolSource];
     return ct != null ? ct : null;
-  }, [toolSource, toolsTimestamp, toolTableTimestamp, cacheTimestamps.atc, cacheTimestamps.table]);
+  }, [toolSource, toolsTimestamp, toolTableTimestamp, cacheTimestamps]);
 
   const toolExpectedIntervalMs = Math.max((toolPollIntervalSeconds ?? 30) * 1000, 5000);
 
@@ -228,7 +239,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     return cachedTool; // Use cached (confirmed) value
                   }
                   // Fallback to recently pushed value
-                  return { ...serverTool, color: recentlyPushed.color };
+                  return { ...serverTool, color: recentlyPushed.color as number };
                 }
               }
               
@@ -237,7 +248,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               const change = pendingChanges.get(changeKey);
               if (change) {
                 // Has pending change - apply the optimistic newValue to the server tool
-                return { ...serverTool, color: change.newValue };
+                return { ...serverTool, color: change.newValue as number };
               }
               return serverTool; // No pending change - use fresh WebSocket data
             });
@@ -292,6 +303,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         }));
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTools, initialToolTable, machineId, isPushingChanges]);
   const navigate = useNavigate();
   const { isBetaMode } = useBetaMode();
@@ -544,8 +556,15 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       const colorChanges = changeArray.filter(c => c.operationType === 'color');
       const otherChanges = changeArray.filter(c => c.operationType !== 'color');
       
+      interface ColorChangeResult {
+        pot_number: number;
+        tool_number: number;
+        color: number;
+        success: boolean;
+        message?: string;
+      }
       // Process color changes in batch (more efficient)
-      let colorResults: any[] = [];
+      let colorResults: ColorChangeResult[] = [];
       if (colorChanges.length > 0) {
         const batchRequest = {
           changes: colorChanges.map(change => {
@@ -581,9 +600,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         colorResults = batchData.results || [];
         
         // Check for failures in batch
-        const batchFailures = colorResults.filter((r: any) => !r.success);
+        const batchFailures = colorResults.filter((r) => !r.success);
         if (batchFailures.length > 0) {
-          const errorMessages = batchFailures.map((f: any) => 
+          const errorMessages = batchFailures.map((f) => 
             `Pot ${f.pot_number}: ${f.message || 'Unknown error'}`
           ).join('; ');
           throw new Error(`Some color changes failed: ${errorMessages}`);
@@ -594,7 +613,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           const updated = {
             ...prev,
             atc: prev.atc.map(tool => {
-              const result = colorResults.find((r: any) => 
+              const result = colorResults.find((r) => 
                 r.pot_number === tool.pot_number && 
                 r.tool_number === tool.tool_number &&
                 r.success
@@ -623,7 +642,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           // Clear pending changes after success animation
           setPendingChanges(prev => {
             const next = new Map(prev);
-            colorResults.forEach((result: any) => {
+            colorResults.forEach((result) => {
               if (result.success) {
                 const changeKey = `${result.pot_number}-${result.tool_number}-color`;
                 next.delete(changeKey);
@@ -658,7 +677,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         const changeKey = `${tool.pot_number}-${tool.tool_number}-color`;
         const change = pendingChanges.get(changeKey);
         if (change) {
-          return { ...tool, color: change.oldValue };
+          return { ...tool, color: change.oldValue as number };
         }
         return tool;
       });
@@ -667,6 +686,26 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
     // Clear pending changes
     setPendingChanges(new Map());
+  };
+
+  // Build tool_number → actual_pot map from live ATC data (passed to optimizer tab)
+  const actualPotMap = useMemo(() => {
+    const map = new Map<number, number>();
+    (toolsCache.atc || []).forEach(tool => {
+      const tn = tool.tool_number;
+      const pot = Number(tool.pot_number);
+      if (tn && !isNaN(pot)) map.set(tn, pot);
+    });
+    return map;
+  }, [toolsCache.atc]);
+
+  const handleTabClick = (tab: 'atc' | 'table' | 'optimizer', e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveTab(tab);
+    if (tab === 'atc' || tab === 'table') {
+      setToolSource(tab);
+    }
+    // Optimizer auto-runs in ToolsOptimizerTab when it mounts with a programName
   };
 
   const isCurrentTool = (toolNum: number) => {
@@ -727,8 +766,8 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
     // Apply sorting
     const sorted = [...filtered].sort((a, b) => {
-      let aVal: any;
-      let bVal: any;
+      let aVal: string | number;
+      let bVal: string | number;
 
       switch (sortColumn) {
         case 'pot_number':
@@ -821,7 +860,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const visibleCount = filteredAndSortedTools.length;
 
   const toolsListTitleMid =
-    toolSource === 'atc' ? `ATC (${tools.length})` : `TABLE (${tools.length})`;
+    activeTab === 'optimizer'
+      ? `OPTIMIZER${programName ? ` ─ ${programName}` : ''}`
+      : activeTab === 'atc' ? `ATC (${tools.length})` : `TABLE (${tools.length})`;
   /** Long run clipped by flex so header rule length matches pane width for any label. */
   const terminalRuleFill = '─'.repeat(320);
 
@@ -849,7 +890,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                   ariaLabel={`Tools (${toolSource.toUpperCase()}) data freshness`}
                 />
               )}
-              {!isHoverPreview && isToolsSnapshotStale && (
+              {!isHoverPreview && isToolsSnapshotStale && activeTab !== 'optimizer' && (
                 <span
                   className="tools-stale-chip"
                   title={`Visible ${toolSource.toUpperCase()} tools are stale (${formatToolsAge}). Validation uses backend live data.`}
@@ -873,25 +914,28 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               {machineId && (
                 <div className="tools-source-toggle" onClick={(e) => e.stopPropagation()}>
                   <button
-                    className={`source-toggle-btn ${toolSource === 'atc' ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setToolSource('atc');
-                    }}
-                    title="ATC Table"
+                    className={`source-toggle-btn ${activeTab === 'atc' ? 'active' : ''}`}
+                    onClick={(e) => handleTabClick('atc', e)}
+                    title="ATC Magazine"
                   >
                     ATC
                   </button>
                   <button
-                    className={`source-toggle-btn ${toolSource === 'table' ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setToolSource('table');
-                    }}
+                    className={`source-toggle-btn ${activeTab === 'table' ? 'active' : ''}`}
+                    onClick={(e) => handleTabClick('table', e)}
                     title="Tool Table"
                   >
                     TABLE
                   </button>
+                  {!isHoverPreview && (
+                    <button
+                      className={`source-toggle-btn ${activeTab === 'optimizer' ? 'active' : ''}`}
+                      onClick={(e) => handleTabClick('optimizer', e)}
+                      title="ATC Pot Optimizer"
+                    >
+                      OPTIMIZER
+                    </button>
+                  )}
                 </div>
               )}
               {pendingChanges.size > 0 && (
@@ -936,7 +980,16 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         </div>
       </div>
       <div className="terminal-box-content">
-        {tools.length === 0 && !isLoadingTools && !currentError ? (
+        {activeTab === 'optimizer' ? (
+          <div className="tools-pane-content-inner">
+            <ToolsOptimizerTab
+              machineId={machineId}
+              programName={programName}
+              numPockets={numPocketsProp}
+              actualPotMap={actualPotMap}
+            />
+          </div>
+        ) : tools.length === 0 && !isLoadingTools && !currentError ? (
           <div className="tools-empty">NO TOOLS LOADED</div>
         ) : (
           <div className="tools-pane-content-inner">
