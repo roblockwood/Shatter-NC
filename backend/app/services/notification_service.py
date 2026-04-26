@@ -2,9 +2,10 @@
 import asyncio
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from email.message import EmailMessage
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 import aiosmtplib
 
@@ -14,6 +15,7 @@ from app.models.notification import NotificationChannel, NotificationLog, Notifi
 
 logger = logging.getLogger(__name__)
 
+PACIFIC_TZ = ZoneInfo("America/Los_Angeles")
 
 def _normalize_alarm_code(code: Any) -> str:
     """Normalize alarm code strings for robust rule matching."""
@@ -22,6 +24,53 @@ def _normalize_alarm_code(code: Any) -> str:
     raw = str(code).upper().strip()
     # Keep only alphanumerics so values like "OM0500]" still match "OM0500".
     return re.sub(r"[^A-Z0-9]", "", raw)
+
+
+def _format_runtime_hms(duration_seconds: Optional[int]) -> str:
+    if duration_seconds is None:
+        return ""
+    total_seconds = max(0, int(duration_seconds))
+    hours, rem = divmod(total_seconds, 3600)
+    mins, secs = divmod(rem, 60)
+    return f"{hours:02d}:{mins:02d}:{secs:02d}"
+
+
+def _format_pacific_time(value: Optional[datetime]) -> str:
+    if value is None:
+        return ""
+    aware_value = value
+    if aware_value.tzinfo is None:
+        aware_value = aware_value.replace(tzinfo=timezone.utc)
+    pacific_dt = aware_value.astimezone(PACIFIC_TZ)
+    return pacific_dt.strftime("%d-%b-%y %H:%M %Z").upper()
+
+
+def extract_nc_program_header(content: str) -> dict:
+    """Extract program title and file label from an NC file's header comments."""
+    title: Optional[str] = None
+    file_label: Optional[str] = None
+    comment_re = re.compile(r"^\\(([^)]*)\\)\\s*$")
+
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped == "%" or re.match(r"^O\\d+\\b", stripped, re.IGNORECASE):
+            continue
+        m = comment_re.match(stripped)
+        if not m:
+            break
+        text = m.group(1).strip()
+        if not text:
+            continue
+        if title is None:
+            title = text
+        if file_label is None and text.upper().startswith("FILE:"):
+            file_label = text[5:].strip()
+        if title is not None and file_label is not None:
+            break
+
+    return {"title": title, "file_label": file_label}
 
 
 class NotificationService:
@@ -51,17 +100,28 @@ class NotificationService:
         if previous_status == new_status:
             return
 
-        sanitized_alarms = [self._sanitize_alarm_for_notification(a) for a in (alarms or [])]
+        # Cycle-complete transitions should use notify_cycle_complete formatting.
+        if previous_status == "operating" and new_status in ["standby", "stopped"]:
+            return
 
         subject_prefix = "[ALARM]" if new_status == "error" else "[STATUS]"
         subject = f"{subject_prefix} {machine_name}: {previous_status} → {new_status}"
 
         lines = [f"Machine: {machine_name}", f"Status change: {previous_status} → {new_status}"]
-        if new_status == "error" and sanitized_alarms:
+        if new_status == "error" and alarms:
             lines.append("")
             lines.append("Active alarms:")
-            for alarm in sanitized_alarms:
-                lines.append(f"  [{alarm.get('code', '')}] {alarm.get('description', '')}")
+            for alarm in alarms:
+                code = alarm.get("code", "")
+                msg = alarm.get("description") or alarm.get("message", "")
+                severity = alarm.get("severity", "")
+                lines.append(f"  [{code}] {msg}" + (f" ({severity})" if severity else ""))
+                cause = alarm.get("cause", "")
+                solution = alarm.get("solution", "")
+                if cause:
+                    lines.append(f"     Cause: {cause}")
+                if solution:
+                    lines.append(f"     Solution: {solution}")
 
         body = "\n".join(lines)
         await self._dispatch_to_matching_rules(
@@ -71,7 +131,7 @@ class NotificationService:
             subject=subject,
             body=body,
             event_type="status_change",
-            event_data={"previous_status": previous_status, "new_status": new_status, "alarms": sanitized_alarms},
+            event_data={"previous_status": previous_status, "new_status": new_status, "alarms": alarms},
         )
 
     async def notify_cycle_complete(
@@ -83,53 +143,48 @@ class NotificationService:
         o_number: Optional[str] = None,
         started_at: Optional[datetime] = None,
         ended_at: Optional[datetime] = None,
+        new_status: str = "stopped",
+        program_title: Optional[str] = None,
+        file_label: Optional[str] = None,
     ) -> None:
-        duration_str = ""
-        duration_hms = ""
-        if duration_seconds is not None:
-            minutes, seconds = divmod(duration_seconds, 60)
-            duration_str = f"{minutes}m {seconds}s" if minutes else f"{seconds}s"
-            hours, rem = divmod(duration_seconds, 3600)
-            mins, secs = divmod(rem, 60)
-            duration_hms = f"{hours:02d}:{mins:02d}:{secs:02d}"
+        duration_hms = _format_runtime_hms(duration_seconds)
+        start_time_local = _format_pacific_time(started_at)
+        stop_time_local = _format_pacific_time(ended_at)
 
-        # Derive O-number from program name when not explicitly available.
-        detected_onumber = o_number
-        if not detected_onumber and program_name:
-            m = re.search(r"(O?\d{4})", str(program_name).upper())
-            if m:
-                detected_onumber = m.group(1)
-
-        subject = f"[CYCLE DONE] {machine_name}: {program_name or 'unknown program'}"
-        lines = [
-            f"Machine: {machine_name}",
-            f"Program: {program_name or '(unknown)'}",
-        ]
-        if detected_onumber:
-            lines.append(f"Program Number: {detected_onumber}")
-        if duration_str:
-            if duration_hms:
-                lines.append(f"Cycle Time: {duration_hms} ({duration_str})")
-            else:
-                lines.append(f"Cycle Time: {duration_str}")
-        if started_at:
-            lines.append(f"Started: {started_at.isoformat()}")
-        if ended_at:
+        subject = f"[CYCLE COMPLETE] {machine_name}"
+        lines = [f"[CYCLE COMPLETE] {machine_name}"]
+        if program_name:
+            lines.append(program_name)
+        if program_title:
+            lines.append(f"Program: {program_title}")
+        if file_label:
+            lines.append(f"File: {file_label}")
+        if start_time_local:
+            lines.append(f"Start Time: {start_time_local}")
+        if stop_time_local:
+            lines.append(f"Stop Time: {stop_time_local}")
+        elif ended_at:
             lines.append(f"Ended: {ended_at.isoformat()}")
+        if duration_hms:
+            lines.append(f"Total Runtime: {duration_hms}")
 
         body = "\n".join(lines)
         await self._dispatch_to_matching_rules(
             machine_id=machine_id,
             previous_status="operating",
-            new_status="stopped",
+            new_status=new_status,
             subject=subject,
             body=body,
             event_type="cycle_complete",
             event_data={
                 "program_name": program_name,
-                "o_number": detected_onumber,
+                "program_title": program_title,
+                "file_label": file_label,
+                "o_number": o_number,
                 "duration_seconds": duration_seconds,
                 "duration_hms": duration_hms,
+                "start_time_local": start_time_local,
+                "stop_time_local": stop_time_local,
                 "started_at": started_at.isoformat() if started_at else None,
                 "ended_at": ended_at.isoformat() if ended_at else None,
             },
