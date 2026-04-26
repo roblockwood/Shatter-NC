@@ -1,3 +1,12 @@
+## [0.17.2](https://github.com/roblockwood/Shatter-NC/compare/v0.17.1...v0.17.2) (2026-04-26)
+
+
+### Bug Fixes
+
+* resolve correct deployment for NC header fetch on cycle start ([55437f6](https://github.com/roblockwood/Shatter-NC/commit/55437f6e2f8c44291557fe925418ec87ce8a2f60))
+* **runtime:** harden telnet/http/websocket handling and migration startup ([1ce565c](https://github.com/roblockwood/Shatter-NC/commit/1ce565c56532936619f91aa1e695a466d402d9a9))
+* treat background alarms correctly — use stop_level >= 4 to determine machine-halting alarms ([b6ae30b](https://github.com/roblockwood/Shatter-NC/commit/b6ae30b700d82da5814b77199d469e8728008692))
+
 ## [0.17.1](https://github.com/roblockwood/Shatter-NC/compare/v0.17.0...v0.17.1) (2026-04-26)
 
 
