@@ -63,6 +63,19 @@ interface ValidationResult {
   };
 }
 
+interface ReplacementInfo {
+  original_filename: string;
+  [key: string]: unknown;
+}
+
+interface DeployedInfo {
+  onumber: string;
+  path: string;
+  machine: string;
+  was_replacement: boolean;
+  replacement_details: ReplacementInfo | null;
+}
+
 interface UploadConfirmationModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -89,13 +102,13 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
   const navigate = useNavigate();
   const [customONumber, setCustomONumber] = useState('O2000.nc');
   const [isReplacingExisting, setIsReplacingExisting] = useState(false);
-  const [replacementInfo, setReplacementInfo] = useState<any>(null);
+  const [replacementInfo, setReplacementInfo] = useState<ReplacementInfo | null>(null);
   const [isLoadingONumber, setIsLoadingONumber] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
-  const [deployedInfo, setDeployedInfo] = useState<any>(null);
+  const [deployedInfo, setDeployedInfo] = useState<DeployedInfo | null>(null);
   const [closeCountdown, setCloseCountdown] = useState(0);
   const onCloseRef = useRef(onClose);
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
@@ -111,6 +124,7 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
     if (isOpen && machineId && result) {
       fetchNextONumber();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, machineId, result]);
 
   // Auto-close success screen after 5 seconds with countdown
@@ -807,6 +821,7 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
         ) : (
           <>
             {/* Success Screen */}
+            {deployedInfo && (
             <div className="success-section">
               <div className="success-details">
                 <div className="detail-row">
@@ -829,6 +844,7 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
                 )}
               </div>
             </div>
+            )}
           </>
         )}
       </div>

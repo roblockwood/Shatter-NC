@@ -60,6 +60,7 @@ export const ExpandedMachineProvider: React.FC<{ children: ReactNode }> = ({ chi
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useExpandedMachine = () => {
   const context = useContext(ExpandedMachineContext);
   if (context === undefined) {
