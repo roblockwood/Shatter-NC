@@ -1,3 +1,18 @@
+# [0.19.0](https://github.com/roblockwood/Shatter-NC/compare/v0.18.0...v0.19.0) (2026-04-26)
+
+
+### Bug Fixes
+
+* **frontend:** remove unused locals blocking TS build ([e23f24b](https://github.com/roblockwood/Shatter-NC/commit/e23f24b50cb7681feb5c8f4e112cca6fa3b65210))
+* **ftp-sync:** dedupe remote file entries during recursive listing ([3194ecb](https://github.com/roblockwood/Shatter-NC/commit/3194ecb5e2534268f6a9841c0ba08deb2a5907e9))
+
+
+### Features
+
+* **frontend:** add oscilloscope oscillation user toggle ([c9ce34a](https://github.com/roblockwood/Shatter-NC/commit/c9ce34adfda10d27315d14ae6a479fdf4ead46c4))
+* **platform:** add FTP sync and notifications services, APIs, UI, and migrations ([b0b19e9](https://github.com/roblockwood/Shatter-NC/commit/b0b19e98a58851c29ceb3085adb35157ab047236))
+* **validation:** add machine control/toggles and fix current-program tool/path validation behavior ([aef35f5](https://github.com/roblockwood/Shatter-NC/commit/aef35f5d5618cb766480ffd2de80e6372a60e8b0))
+
 # [0.18.0](https://github.com/roblockwood/Shatter-NC/compare/v0.17.2...v0.18.0) (2026-04-26)
 
 
