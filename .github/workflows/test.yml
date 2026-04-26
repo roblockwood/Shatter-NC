@@ -27,4 +27,9 @@ jobs:
       - name: Run tests
         env:
           PYTHONPATH: backend
-        run: pytest backend/tests/ -q --tb=short --continue-on-collection-errors
+        run: >
+          pytest backend/tests/ -q --tb=short --continue-on-collection-errors
+          --cov=app
+          --cov-report=term-missing
+          --cov-report=xml:coverage.xml
+          --cov-fail-under=25
