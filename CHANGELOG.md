@@ -1,3 +1,10 @@
+## [1.2.6](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.2.5...v1.2.6) (2026-04-26)
+
+
+### Bug Fixes
+
+* restore ATCTLD file name for D00 ATC polling; remove control type auto-detection ([59747ea](https://github.com/BlackwellEngineering/Shatter-NC-BE/commit/59747ea473be0b89299021e44c9d9c4ca44b7224))
+
 ## [1.2.5](https://github.com/BlackwellEngineering/Shatter-NC-BE/compare/v1.2.4...v1.2.5) (2026-04-25)
 
 
