@@ -29,6 +29,40 @@ def get_pending_migrations(migrations_dir, applied):
     sql_files = sorted(Path(migrations_dir).glob("*.sql"))
     return [f for f in sql_files if f.name not in applied]
 
+
+def resolve_migrations_dir() -> Path:
+    """Resolve migration directory by preferring the first path with SQL files.
+
+    This avoids selecting an empty bind-mounted directory in development.
+    """
+    env_dir = os.getenv("MIGRATIONS_DIR")
+    candidates = []
+
+    if env_dir:
+        candidates.append(Path(env_dir))
+
+    candidates.extend(
+        [
+            Path("/app/migrations"),
+            Path("/docker-entrypoint-initdb.d"),
+            Path(__file__).parent.parent.parent / "database" / "init",
+        ]
+    )
+
+    first_existing = None
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_dir():
+            if first_existing is None:
+                first_existing = candidate
+            if any(candidate.glob("*.sql")):
+                return candidate
+
+    if first_existing is not None:
+        return first_existing
+
+    # Fall back to local path for clearer errors downstream.
+    return Path(__file__).parent.parent.parent / "database" / "init"
+
 def apply_migration(db_config, migration_file):
     """Apply a single migration file using psql for full PostgreSQL support."""
     print(f"Applying migration: {migration_file.name}")
@@ -102,21 +136,7 @@ def run_migrations():
     # Get database connection
     engine = create_engine(db_url)
 
-    # Determine migrations directory
-    # Priority order:
-    # 1. MIGRATIONS_DIR environment variable (explicit override)
-    # 2. /app/migrations (migrations baked into the image - default for production)
-    # 3. /docker-entrypoint-initdb.d (volume mount fallback)
-    # 4. ../database/init (local development)
-    migrations_dir = os.getenv("MIGRATIONS_DIR")
-    if migrations_dir and Path(migrations_dir).exists():
-        pass  # Use the environment variable
-    elif Path("/app/migrations").exists():
-        migrations_dir = "/app/migrations"
-    elif Path("/docker-entrypoint-initdb.d").exists():
-        migrations_dir = "/docker-entrypoint-initdb.d"
-    else:
-        migrations_dir = Path(__file__).parent.parent.parent / "database" / "init"
+    migrations_dir = resolve_migrations_dir()
 
     print(f"Checking for pending migrations in: {migrations_dir}")
 
