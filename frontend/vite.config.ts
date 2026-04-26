@@ -1,5 +1,4 @@
-import { defineConfig } from 'vite'
-import type { Plugin } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
@@ -61,95 +60,24 @@ function getVersion(): string {
 
 const version = getVersion()
 
-/** PWA launch URL; machine id is chosen per device at runtime (localStorage / setup), not at build time. */
-function resolvePwaStartUrl(): string {
-  const explicit = process.env.VITE_PWA_START_URL?.trim()
-  if (explicit) {
-    return explicit
-  }
-  return './tablet'
-}
-
-function buildPwaManifest(): Record<string, unknown> {
-  return {
-    name: 'Shatter',
-    short_name: 'Shatter',
-    description: 'CNC machine monitoring',
-    start_url: resolvePwaStartUrl(),
-    scope: './',
-    display: 'standalone',
-    display_override: ['standalone', 'minimal-ui'],
-    theme_color: '#0a0a0a',
-    background_color: '#0a0a0a',
-    icons: [
-      {
-        src: './icon-192.png',
-        sizes: '192x192',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        src: './icon-512.png',
-        sizes: '512x512',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        src: './icon-512.png',
-        sizes: '512x512',
-        type: 'image/png',
-        purpose: 'maskable',
-      },
-      {
-        src: './favicon.svg',
-        sizes: 'any',
-        type: 'image/svg+xml',
-        purpose: 'any',
-      },
-    ],
-  }
-}
-
-function pwaManifestPlugin(): Plugin {
-  return {
-    name: 'shatter-pwa-manifest',
-    enforce: 'pre',
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        const url = req.url?.split('?')[0] ?? ''
-        if (url === '/manifest.webmanifest' || url === '/manifest.json') {
-          try {
-            const manifest = buildPwaManifest()
-            res.setHeader('Content-Type', 'application/manifest+json')
-            res.end(JSON.stringify(manifest, null, 2))
-          } catch (e) {
-            next(e as Error)
-          }
-          return
-        }
-        next()
-      })
-    },
-    generateBundle(_options, _bundle, isWrite) {
-      if (!isWrite) return
-      const manifest = buildPwaManifest()
-      this.emitFile({
-        type: 'asset',
-        fileName: 'manifest.webmanifest',
-        source: JSON.stringify(manifest, null, 2),
-      })
-    },
-  }
-}
-
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [pwaManifestPlugin(), react()],
+  plugins: [react()],
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(version),
   },
   server: {
     host: '0.0.0.0',
     port: 3000,
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/test/**', 'src/main.tsx', 'src/**/*.d.ts'],
+    },
   },
 })

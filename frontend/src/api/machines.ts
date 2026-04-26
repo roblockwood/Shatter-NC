@@ -35,12 +35,19 @@ export async function refreshProgramName(machineId: number): Promise<RefreshProg
   }
 }
 
+interface ToolEntry {
+  tool_number: number;
+  tool_name?: string;
+  diameter?: number;
+  length?: number;
+}
+
 export interface RefreshToolDataResponse {
   machine_id: number;
   machine_name: string;
   tool_data: {
-    tools?: Array<any>;
-    tool_table?: Array<any>;
+    tools?: Array<ToolEntry>;
+    tool_table?: Array<ToolEntry>;
     current_tool?: number;
     tools_timestamp?: string;
     tool_table_timestamp?: string;
