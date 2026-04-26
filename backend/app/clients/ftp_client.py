@@ -1,10 +1,12 @@
 """FTP client for file operations with Brother CNC machines."""
 import asyncio
+import time
 from ftplib import FTP, error_perm
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
 from io import BytesIO
+from pathlib import PurePosixPath
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +148,98 @@ class CNCFtpClient:
         except Exception as e:
             logger.debug(f"Error parsing date {date_str}: {e}")
             return ""
+
+    @staticmethod
+    def _directory_parts(path: str) -> List[str]:
+        """Split remote directory path into sequential parts.
+
+        Example: "/PROGRAM/JOB1" -> ["PROGRAM", "JOB1"]
+        """
+        normalized = PurePosixPath(path or "/").as_posix().strip()
+        if not normalized or normalized == "/":
+            return []
+        return [part for part in normalized.split("/") if part and part != "."]
+
+    async def ensure_directory(
+        self,
+        path: str,
+        retries: int = 2,
+        settle_delay_seconds: float = 0.2,
+    ) -> Dict[str, Any]:
+        """Ensure a remote directory exists, creating parent folders as needed."""
+
+        parts = self._directory_parts(path)
+        if not parts:
+            return {"success": True, "path": "/", "created": []}
+
+        def _ensure_sync():
+            self._ensure_connection()
+            original_dir = self.ftp.pwd()
+            created = []
+
+            try:
+                self.ftp.cwd("/")
+                current = ""
+
+                for part in parts:
+                    current = f"{current}/{part}" if current else f"/{part}"
+                    try:
+                        self.ftp.cwd(part)
+                        continue
+                    except Exception:
+                        pass
+
+                    try:
+                        self.ftp.mkd(part)
+                        created.append(current)
+                        if settle_delay_seconds > 0:
+                            time.sleep(settle_delay_seconds)
+                        self.ftp.cwd(part)
+                    except error_perm as e:
+                        # 550 often means "already exists" or transient state; verify by cwd.
+                        if "550" in str(e):
+                            self.ftp.cwd(part)
+                        else:
+                            raise
+
+                return created
+            finally:
+                try:
+                    self.ftp.cwd(original_dir)
+                except Exception:
+                    pass
+
+        loop = asyncio.get_event_loop()
+
+        for attempt in range(retries + 1):
+            try:
+                created = await asyncio.wait_for(
+                    loop.run_in_executor(None, _ensure_sync),
+                    timeout=self.timeout,
+                )
+                return {
+                    "success": True,
+                    "path": PurePosixPath(path).as_posix(),
+                    "created": created,
+                    "attempt": attempt + 1,
+                }
+            except Exception as e:
+                logger.warning(
+                    "Failed to ensure remote directory %s (attempt %s/%s): %s",
+                    path,
+                    attempt + 1,
+                    retries + 1,
+                    e,
+                )
+                self._connected = False
+                if attempt >= retries:
+                    return {
+                        "success": False,
+                        "path": PurePosixPath(path).as_posix(),
+                        "error": str(e),
+                        "attempt": attempt + 1,
+                    }
+                await asyncio.sleep(settle_delay_seconds)
 
     async def list_files(self, path: str = "/") -> List[Dict[str, Any]]:
         """
@@ -304,8 +398,25 @@ class CNCFtpClient:
             try:
                 self._ensure_connection()
 
+                original_dir = self.ftp.pwd()
+                remote = PurePosixPath(remote_path)
+                parent_dir = remote.parent.as_posix() or "/"
+                file_name = remote.name
+
+                if not file_name:
+                    raise ValueError(f"Invalid remote file path: {remote_path}")
+
+                if parent_dir != ".":
+                    self.ftp.cwd(parent_dir)
+
                 buffer = BytesIO()
-                self.ftp.retrbinary(f'RETR {remote_path}', buffer.write)
+                self.ftp.retrbinary(f'RETR {file_name}', buffer.write)
+
+                try:
+                    self.ftp.cwd(original_dir)
+                except Exception:
+                    pass
+
                 return buffer.getvalue()
 
             except Exception as e:
@@ -335,6 +446,15 @@ class CNCFtpClient:
         Returns:
             Upload result dict
         """
+        remote_parent = PurePosixPath(remote_path).parent.as_posix()
+        ensure_result = await self.ensure_directory(remote_parent)
+        if not ensure_result.get("success"):
+            return {
+                "success": False,
+                "error": f"Could not ensure remote directory {remote_parent}: {ensure_result.get('error', 'unknown error')}",
+                "timestamp": datetime.now().isoformat(),
+            }
+
         def _upload_sync():
             try:
                 self._ensure_connection()
