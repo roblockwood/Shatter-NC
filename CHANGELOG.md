@@ -1,3 +1,38 @@
+# [0.18.0](https://github.com/roblockwood/Shatter-NC/compare/v0.17.2...v0.18.0) (2026-04-26)
+
+
+### Bug Fixes
+
+* address exhaustive-deps warnings (partial) ([32632fa](https://github.com/roblockwood/Shatter-NC/commit/32632fa072166846b123d424f7753c399e453d60))
+* **backend:** add time_utils module for CNC time formatting ([cbd403a](https://github.com/roblockwood/Shatter-NC/commit/cbd403ae3f9b568c899a8cacfa0e2d21e59eee63))
+* eliminate no-explicit-any violations in frontend (68 fixed) ([d549f2f](https://github.com/roblockwood/Shatter-NC/commit/d549f2f7bc8830fd2dbfb729079f8ddf0d05a314))
+* resolve all ESLint errors — 0 errors remaining ([71d5967](https://github.com/roblockwood/Shatter-NC/commit/71d59675f55df1ef273327c09283dac74b1f999f))
+* resolve all ESLint warnings — 0 problems remaining ([afc50a2](https://github.com/roblockwood/Shatter-NC/commit/afc50a2c5f764ef74d6e191a0b2a560366f07e1c))
+* resolve all TypeScript errors blocking Docker frontend image build ([e7d9fba](https://github.com/roblockwood/Shatter-NC/commit/e7d9fba97ec4da6149180aab382174040a72c50f))
+* resolve safe ESLint violations (no-unused-vars, no-case-declarations, no-prototype-builtins, etc.) ([b0c77a8](https://github.com/roblockwood/Shatter-NC/commit/b0c77a8a867ecfdf3afa6590eea1227b749c4e7e))
+* set PYTHONPATH for pytest in CI; narrow units select type ([c8b15b4](https://github.com/roblockwood/Shatter-NC/commit/c8b15b4cc86c30821a85c0efc1dd83c0fcf9b15c))
+
+
+### Features
+
+* add Vitest frontend test framework with initial tests ([868d339](https://github.com/roblockwood/Shatter-NC/commit/868d33958dc627cc373ed54063608f3e94c98ec3))
+
+## [0.17.2](https://github.com/roblockwood/Shatter-NC/compare/v0.17.1...v0.17.2) (2026-04-26)
+
+
+### Bug Fixes
+
+* resolve correct deployment for NC header fetch on cycle start ([55437f6](https://github.com/roblockwood/Shatter-NC/commit/55437f6e2f8c44291557fe925418ec87ce8a2f60))
+* **runtime:** harden telnet/http/websocket handling and migration startup ([1ce565c](https://github.com/roblockwood/Shatter-NC/commit/1ce565c56532936619f91aa1e695a466d402d9a9))
+* treat background alarms correctly — use stop_level >= 4 to determine machine-halting alarms ([b6ae30b](https://github.com/roblockwood/Shatter-NC/commit/b6ae30b700d82da5814b77199d469e8728008692))
+
+## [0.17.1](https://github.com/roblockwood/Shatter-NC/compare/v0.17.0...v0.17.1) (2026-04-26)
+
+
+### Bug Fixes
+
+* prevent CM7522 on ALL LOD commands, not just TOLNI1 ([94ae4ac](https://github.com/roblockwood/Shatter-NC/commit/94ae4ac0fe70ff30fa67fecf9738a69864dd289f))
+
 # [0.17.0](https://github.com/roblockwood/Shatter-NC/compare/v0.16.0...v0.17.0) (2026-04-18)
 
 

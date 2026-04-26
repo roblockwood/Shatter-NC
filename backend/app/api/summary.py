@@ -13,7 +13,7 @@ router = APIRouter()
 
 # Polling service and WebSocket manager will be injected from main.py
 # These are initialized in main.py and accessed as globals
-from app.api.websocket import websocket_manager
+from app.api import websocket as websocket_api
 polling_service = None
 
 def set_polling_service(service):
@@ -333,7 +333,7 @@ def get_running_summary(
         run_percentage = (total_run_time / time_range_seconds * 100) if time_range_seconds > 0 else 0.0
 
         # Get current status from Redis cache (with fallback to in-memory cache)
-        cached_status = websocket_manager.get_machine_status_from_cache(row.machine_id) if websocket_manager else {}
+        cached_status = websocket_api.websocket_manager.get_machine_status_from_cache(row.machine_id) if websocket_api.websocket_manager else {}
         current_status = cached_status.get("status") if cached_status else None
 
         # Get status history for the time range (filter out 'off' status)
@@ -655,7 +655,7 @@ def get_machines_summary(
             offline_duration_formatted = ""  # Don't show offline duration when backend was down
 
         # Get current status from WebSocket cache
-        cached_status = websocket_manager.get_machine_status(machine.id) if websocket_manager else None
+        cached_status = websocket_api.websocket_manager.get_machine_status(machine.id) if websocket_api.websocket_manager else None
         current_status = cached_status.get("status") if cached_status else None
 
         # Get connection health

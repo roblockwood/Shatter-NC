@@ -39,6 +39,7 @@ export const BetaModeProvider: React.FC<{ children: ReactNode }> = ({ children }
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useBetaModeContext = (): BetaModeContextType => {
   const context = useContext(BetaModeContext);
   if (context === undefined) {
