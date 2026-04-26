@@ -70,6 +70,12 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
   const [colorMode, setColorMode] = useState<boolean>(() => {
     return localStorage.getItem('oscilloscopeColorMode') === 'true';
   });
+  const [oscillationMode, setOscillationMode] = useState<boolean>(() => {
+    const raw = localStorage.getItem('oscilloscopeOscillationMode');
+    // Default to enabled so existing "oscillating" trace remains the default.
+    if (raw == null) return true;
+    return raw === 'true';
+  });
   const [lastFetchSuccessAt, setLastFetchSuccessAt] = useState<string | null>(null);
   const statusLightLastUpdatedAt = useMemo(
     () => earlierIsoTimestamp(lastFetchSuccessAt, machineLastSuccessfulPollAt),
@@ -82,6 +88,11 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
   useEffect(() => {
     localStorage.setItem('oscilloscopeColorMode', String(colorMode));
   }, [colorMode]);
+
+  // Update localStorage when oscillationMode changes
+  useEffect(() => {
+    localStorage.setItem('oscilloscopeOscillationMode', String(oscillationMode));
+  }, [oscillationMode]);
   
   // Status mapping for Y-axis (oscilloscope) - using actual machine statuses
   // Order: Operating (top), Standby, Stopped, Error, Off (bottom)
@@ -482,8 +493,8 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
         // Add tight oscillation to keep it within the row (oscilloscope-style)
         const rowCenter = paddedY;
         const rowHeight = 84 / 5; // Each status row is ~16.8% of padded height (84% / 5 rows)
-        // Much tighter oscillation frequency for realistic oscilloscope effect
-        const oscillation = Math.sin(x * 2.5) * (rowHeight * 0.12); // Tight, high-frequency oscillation
+        // Optional tight oscillation (oscilloscope-style). Toggleable via user preference.
+        const oscillation = oscillationMode ? (Math.sin(x * 2.5) * (rowHeight * 0.12)) : 0;
         const y = Math.max(rowCenter - rowHeight/2 + 1, Math.min(rowCenter + rowHeight/2 - 1, rowCenter + oscillation));
         
         const timestamp = new Date(startTime.getTime() + (point.time / 100) * totalDuration);
@@ -507,7 +518,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
               const interpX = x + (nextX - x) * t;
               const nextPaddedY = 8 + (nextLevelY / 100) * 84;
               const interpY = rowCenter + (nextPaddedY - rowCenter) * t;
-              const interpOscillation = Math.sin(interpX * 2.5) * (rowHeight * 0.12);
+              const interpOscillation = oscillationMode ? (Math.sin(interpX * 2.5) * (rowHeight * 0.12)) : 0;
               const finalY = Math.max(interpY - rowHeight/2 + 1, Math.min(interpY + rowHeight/2 - 1, interpY + interpOscillation));
               svgPoints.push({ 
                 x: interpX, 
@@ -667,6 +678,13 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
             [COLOR]
           </button>
         )}
+        <button
+          className={`time-range-btn ${oscillationMode ? 'active' : ''}`}
+          onClick={() => setOscillationMode(!oscillationMode)}
+          title="Toggle oscilloscope oscillation"
+        >
+          [OSC]
+        </button>
       </div>
       <div className="status-timeline-content">
         {loading ? (
