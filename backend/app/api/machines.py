@@ -95,6 +95,8 @@ async def update_machine(
             poller = polling_service.pollers[machine_id]
             if getattr(poller, "machine", None):
                 poller.machine.part_display_mode = getattr(db_machine, "part_display_mode", "parts")
+                poller.machine.control_version = getattr(db_machine, "control_version", None)
+                poller.machine.units = getattr(db_machine, "units", "in")
     except Exception as e:
         logger.warning(f"Failed to update poller config for machine {machine_id}: {e}")
 
@@ -107,6 +109,8 @@ async def update_machine(
                 "machine_id": machine_id,
                 "machine_name": db_machine.name,
                 "part_display_mode": getattr(db_machine, "part_display_mode", "parts"),
+                "control_version": getattr(db_machine, "control_version", None),
+                "units": getattr(db_machine, "units", "in"),
             }
             await polling_service.websocket_manager.broadcast_status(merged)
     except Exception as e:
@@ -148,13 +152,35 @@ async def test_connection(machine_id: int, db: Session = Depends(get_db)):
 
     # Test Telnet connection (primary communication protocol)
     try:
+        from datetime import datetime
         from app.clients.telnet_client import CNCTelnetClient
         telnet_client = CNCTelnetClient(
             db_machine.ip_address,
             port=10000,  # Telnet port is always 10000
             timeout=5,
         )
-        results["telnet"] = await telnet_client.test_connection()
+        # Use LOD MEM (with built-in retry/reconnect in load_data) as health check.
+        # This mirrors the same read path used by polling and is more reliable than a
+        # single-shot command check under transient contention.
+        start_time = datetime.now()
+        mem_data = await telnet_client.load_data("MEM", verbose=False, max_retries=2)
+        end_time = datetime.now()
+        latency = (end_time - start_time).total_seconds() * 1000
+
+        if mem_data:
+            results["telnet"] = {
+                "success": True,
+                "latency_ms": round(latency, 2),
+                "status_code": "00",
+                "timestamp": datetime.now().isoformat(),
+            }
+        else:
+            results["telnet"] = {
+                "success": False,
+                "latency_ms": round(latency, 2),
+                "status_code": None,
+                "timestamp": datetime.now().isoformat(),
+            }
         # Clean up test connection
         await telnet_client.disconnect()
     except Exception as e:

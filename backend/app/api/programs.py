@@ -1,17 +1,20 @@
 """Program validation and upload endpoints."""
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 
+logger = logging.getLogger(__name__)
+
 from app.db.base import get_db
 from app.models.machine import Machine
 from app.models.program import Program, ProgramDeployment
 from app.parsers.gcode_parser import parse_gcode
 # Note: get_work_offset from posni_parser is deprecated - use parse_posni_v2 instead
-from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
+from app.api import websocket as websocket_api
 from app.schemas.program import (
     ProgramUploadRequest,
     ProgramUploadResponse,
@@ -41,6 +44,10 @@ class ToolValidationResult(BaseModel):
     length_sufficient: bool = False
     machine_tool_data: Dict[str, Any] = {}
     warnings: List[str] = []
+    validate_diameter: bool = True
+    validate_length: bool = True
+    requirements_complete: bool = True
+    tolerance_source: str = "gcode_defaults"
     # Tolerance values from machine settings (not from NC file)
     diameter_tolerance: Optional[float] = None
     length_tolerance_plus: Optional[float] = None
@@ -133,14 +140,131 @@ async def validate_program(
     wcs_validation = None
     
     # Always fetch machine tool data (even if no tools in NC)
+    # Tool data is sourced from WebSocket cache populated by Telnet polling.
+    # Brother HTTP endpoints do not provide tool table data.
     machine_tool_data = {}
     machine_tool_fetch_failed = False
-    try:
-        http_client = CNCHttpClient(machine.ip_address, machine.http_port)
-        machine_tool_data = http_client.get_tool_data()
-    except Exception as e:
-        machine_tool_fetch_failed = True
-        warnings.append(f"Could not fetch machine tool data: {str(e)}")
+    cached_status = None
+    
+    if websocket_api.websocket_manager:
+        try:
+            cached_status = websocket_api.websocket_manager.get_machine_status(machine.id)
+            if cached_status and "tools" in cached_status and cached_status["tools"]:
+                # Use cached tools from Telnet polling
+                machine_tool_data = {"tools": cached_status["tools"]}
+                logger.info(f"Machine {machine.id} - VALIDATE: Using {len(cached_status['tools'])} cached tools from WebSocket cache")
+            else:
+                logger.warning(f"Machine {machine.id} - VALIDATE: WebSocket cache empty/missing tools (ws_manager={'set' if websocket_api.websocket_manager else 'None'}, cached_status_keys={list((cached_status or {}).keys())}, tools_count={len((cached_status or {}).get('tools', []))})")
+        except Exception as e:
+            machine_tool_fetch_failed = True
+            logger.warning(f"Machine {machine.id} - Error accessing WebSocket cache: {e}")
+    
+    # Tool data is ONLY available via Telnet (port 10000, Protocol Type 2).
+    # First try the same polling-service refresh path that feeds the ATC card/WebSocket,
+    # then fall back to a direct Telnet read for this request.
+    if not machine_tool_data.get("tools"):
+        logger.warning(f"Machine {machine.id} - No cached tool data available; attempting polling-service tool refresh for validation")
+        try:
+            from app.api import status as status_api
+
+            if status_api.polling_service:
+                for attempt in range(2):
+                    refreshed_tool_data = await status_api.polling_service.refresh_tool_data(machine.id)
+                    refreshed_tools = (refreshed_tool_data or {}).get("tools", [])
+                    if refreshed_tools:
+                        machine_tool_data = {"tools": refreshed_tools}
+                        logger.debug(
+                            f"Machine {machine.id} - Loaded {len(refreshed_tools)} tools via polling-service refresh for validation (attempt {attempt + 1})"
+                        )
+                        break
+        except Exception as e:
+            logger.warning(f"Machine {machine.id} - Polling-service refresh for validation failed: {e}")
+
+    if not machine_tool_data.get("tools"):
+        logger.warning(f"Machine {machine.id} - Polling-service refresh had no tools, fetching directly via Telnet for validation")
+        try:
+            from app.clients.telnet_client import create_fresh_connection
+            from app.parsers.atctl_parser_v2 import parse_atctl_v2
+            from app.parsers.tolni_parser_v2 import parse_tolni_v2
+
+            tool_telnet_client = None
+            try:
+                tool_telnet_client = await create_fresh_connection(
+                    ip_address=machine.ip_address,
+                    port=10000,
+                    timeout=10,
+                )
+
+                # Read tool table first (diameter/length/name)
+                tool_table_content = await tool_telnet_client.get_tool_table_data(units=machine.units, verbose=False)
+                if not tool_table_content:
+                    # Force one fresh reconnect and retry for transient sessions
+                    await tool_telnet_client.disconnect()
+                    tool_telnet_client = await create_fresh_connection(
+                        ip_address=machine.ip_address,
+                        port=10000,
+                        timeout=10,
+                    )
+                    tool_table_content = await tool_telnet_client.get_tool_table_data(units=machine.units, verbose=False)
+
+                # Read ATC pot mappings
+                control_version = machine.control_version if machine.control_version in ("C00", "D00") else None
+                atc_data = await tool_telnet_client.get_atc_magazine_data(control_version=control_version, verbose=False)
+
+                if tool_table_content and atc_data:
+                    tool_table_parsed = parse_tolni_v2(
+                        tool_table_content.encode('utf-8'),
+                        units=machine.units,
+                        control_version=control_version,
+                    )
+                    atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=control_version)
+
+                    # Build lookup from tool table
+                    tool_lookup = {}
+                    for tool in tool_table_parsed.get("tools", []):
+                        tool_num = tool.get("tool_number")
+                        if tool_num:
+                            tool_lookup[tool_num] = tool
+
+                    merged_tools = []
+                    for atc_tool in atc_parsed.get("tools", []):
+                        tool_num = atc_tool.get("tool_number")
+                        if tool_num and tool_num > 0 and tool_num != 255 and tool_num in tool_lookup:
+                            tol_tool = tool_lookup[tool_num]
+                            merged_tools.append(
+                                {
+                                    "pot_number": atc_tool.get("pot_number"),
+                                    "tool_number": tool_num,
+                                    "tool_name": tol_tool.get("tool_name"),
+                                    "diameter": tol_tool.get("diameter"),
+                                    "length": tol_tool.get("length"),
+                                    "group": atc_tool.get("group"),
+                                    "life": None,
+                                    "tool_type": atc_tool.get("tool_type"),
+                                    "color": atc_tool.get("color"),
+                                }
+                            )
+
+                    machine_tool_data = {"tools": merged_tools}
+                    logger.debug(f"Machine {machine.id} - Fetched {len(merged_tools)} tools via direct Telnet fallback for validation")
+
+                    # Best effort: update websocket cache so subsequent validations can reuse cached tools
+                    try:
+                        if websocket_api.websocket_manager and merged_tools:
+                            current = websocket_api.websocket_manager.get_machine_status(machine.id) or {}
+                            merged_status = {**current, "machine_id": machine.id, "tools": merged_tools}
+                            await websocket_api.websocket_manager.broadcast_status(merged_status)
+                    except Exception:
+                        pass
+                else:
+                    machine_tool_fetch_failed = True
+                    logger.warning(f"Machine {machine.id} - Direct Telnet fallback returned incomplete tool data (table={bool(tool_table_content)}, atc={bool(atc_data)})")
+            finally:
+                if tool_telnet_client:
+                    await tool_telnet_client.disconnect()
+        except Exception as e:
+            machine_tool_fetch_failed = True
+            logger.warning(f"Machine {machine.id} - Direct Telnet fallback for tool validation failed: {e}")
 
     # Validate tools
     if parsed["tools"]:
@@ -151,24 +275,21 @@ async def validate_program(
                 tool,
                 machine_tool_data,
                 use_machine_tolerances=machine.use_machine_tool_tolerances,
+                validate_diameter=machine.validate_tool_diameter,
+                validate_length=machine.validate_tool_length,
                 diameter_tolerance=machine.diameter_tolerance,
                 length_tolerance_plus=machine.length_tolerance_plus,
                 length_tolerance_minus=machine.length_tolerance_minus
             )
-            # Only add tolerance values if using machine tolerances (function sets None for G-code mode)
-            if machine.use_machine_tool_tolerances:
-                result.diameter_tolerance = machine.diameter_tolerance
-                result.length_tolerance_plus = machine.length_tolerance_plus
-                result.length_tolerance_minus = machine.length_tolerance_minus
             tools_validation[tool_num] = result
 
             # Check each tool's validation result
             if not result.available:
                 errors.append(f"Tool T{tool_num:02d} not found in machine tool table")
             else:
-                if not result.diameter_match:
+                if result.validate_diameter and not result.diameter_match:
                     warnings.append(f"Tool T{tool_num:02d} diameter mismatch")
-                if not result.length_sufficient:
+                if result.validate_length and not result.length_sufficient:
                     errors.append(f"Tool T{tool_num:02d} too short (need {result.required_length:.4f}\", have {result.machine_tool_data.get('length', 0):.4f}\")")
     else:
         # No tools found in NC code
@@ -321,6 +442,12 @@ async def validate_file_on_machine(
             detail=f"Machine {machine_id} not found"
         )
 
+    # Normalize remote file path to avoid malformed values like "//O0003.NC"
+    # while preserving subfolder paths (e.g. "/PROGRAM/O0003.NC").
+    normalized_file_path = "/" + "/".join(
+        segment for segment in file_path.replace("\\", "/").split("/") if segment
+    )
+
     # Download file via FTP
     try:
         ftp_client = CNCFtpClient(
@@ -329,11 +456,11 @@ async def validate_file_on_machine(
             machine.ftp_username,
             machine.ftp_password
         )
-        file_bytes = await ftp_client.download_file(file_path)
+        file_bytes = await ftp_client.download_file(normalized_file_path)
         if not file_bytes:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"File not found on machine: {file_path}"
+                detail=f"File not found on machine: {normalized_file_path}"
             )
 
         gcode_content = file_bytes.decode('utf-8', errors='replace')
@@ -360,6 +487,8 @@ def _validate_tool(
     program_tool: Dict[str, Any],
     machine_tool_data: Dict[str, Any],
     use_machine_tolerances: bool = False,
+    validate_diameter: bool = True,
+    validate_length: bool = True,
     diameter_tolerance: float = 0.00025,
     length_tolerance_plus: float = 0.0079,
     length_tolerance_minus: float = 0.0
@@ -379,64 +508,94 @@ def _validate_tool(
         ToolValidationResult
     """
     tool_num = program_tool["tool_number"]
+    required_length = float(program_tool.get("length_total", 0.0) or 0.0)
+    required_diameter = float(program_tool.get("diameter", 0.0) or 0.0)
+    requirements_complete = not bool(program_tool.get("from_tool_call", False))
 
     # Find tool in machine tool table
+    # Handle both string and integer tool numbers (type-safe comparison)
     machine_tools = machine_tool_data.get("tools", [])
     machine_tool = None
     for t in machine_tools:
-        if t["tool_number"] == tool_num:
-            machine_tool = t
-            break
+        # Normalize both values to int for comparison
+        machine_tool_num = t.get("tool_number")
+        if machine_tool_num is not None:
+            try:
+                # Convert both to int for reliable comparison
+                if int(machine_tool_num) == int(tool_num):
+                    machine_tool = t
+                    break
+            except (ValueError, TypeError):
+                # If conversion fails, skip this tool
+                continue
 
     # Tool not found in machine
     if not machine_tool:
+        # Log detailed debug info for troubleshooting
+        logger.warning(
+            f"Tool T{tool_num:02d} not found in machine tool table. "
+            f"Available tools: {[int(t.get('tool_number', 0)) for t in machine_tools if t.get('tool_number') is not None]}"
+        )
         return ToolValidationResult(
             tool_number=tool_num,
-            required_diameter=program_tool["diameter"],
-            required_length=program_tool["length_total"],
+            required_diameter=required_diameter,
+            required_length=required_length,
             available=False,
             diameter_match=False,
             length_sufficient=False,
+            validate_diameter=validate_diameter,
+            validate_length=validate_length,
+            requirements_complete=requirements_complete,
+            tolerance_source="machine_settings" if use_machine_tolerances else "gcode_defaults",
             machine_tool_data={},
             warnings=[f"Tool T{tool_num:02d} not found in machine tool table"]
         )
 
     machine_diameter = machine_tool.get("diameter", 0)
     machine_length = machine_tool.get("length", 0)
-    required_length = program_tool["length_total"]
-    diameter_diff = abs(machine_diameter - program_tool["diameter"])
+    diameter_diff = abs(machine_diameter - required_diameter)
     
+    # Apply tolerances based on mode
+    diameter_match = True
+    length_sufficient = True
+
+    if validate_diameter and requirements_complete:
+        if use_machine_tolerances:
+            diameter_match = diameter_diff <= diameter_tolerance
+        else:
+            diameter_match = diameter_diff < 0.0001
+
+    if validate_length and requirements_complete:
+        if use_machine_tolerances:
+            length_min = required_length - length_tolerance_minus
+            length_max = required_length + length_tolerance_plus
+            length_sufficient = length_min <= machine_length <= length_max
+        else:
+            length_sufficient = machine_length >= required_length
+
     # Apply tolerances based on mode
     if use_machine_tolerances:
         # Use machine-defined tolerances
-        diameter_match = diameter_diff <= diameter_tolerance
-        
-        length_min = required_length - length_tolerance_minus
-        length_max = required_length + length_tolerance_plus
-        length_sufficient = length_min <= machine_length <= length_max
+        if validate_length and requirements_complete:
+            length_min = required_length - length_tolerance_minus
+            length_max = required_length + length_tolerance_plus
     else:
-        # Use G-code defaults: exact diameter match, length >= required
-        diameter_match = diameter_diff < 0.0001  # Very tight tolerance (exact match)
-        length_sufficient = machine_length >= required_length  # Just need to be >= required
-        
-        # For display purposes, set effective tolerances to indicate G-code mode
-        diameter_tolerance = 0.0001  # Display as "exact match"
-        length_tolerance_plus = None  # No upper limit (indicates G-code mode)
-        length_tolerance_minus = 0.0  # Cannot be shorter
+        length_min = required_length
+        length_max = None
 
     warnings = []
-    if not diameter_match:
+    if validate_diameter and requirements_complete and not diameter_match:
         if use_machine_tolerances:
             warnings.append(
-                f"Diameter mismatch: need {program_tool['diameter']:.4f}\", "
+                f"Diameter mismatch: need {required_diameter:.4f}\", "
                 f"have {machine_diameter:.4f}\" (diff: {diameter_diff:.4f}\", tolerance: ±{diameter_tolerance:.5f}\")"
             )
         else:
             warnings.append(
-                f"Diameter mismatch: need {program_tool['diameter']:.4f}\", "
+                f"Diameter mismatch: need {required_diameter:.4f}\", "
                 f"have {machine_diameter:.4f}\" (exact match required)"
             )
-    if not length_sufficient:
+    if validate_length and requirements_complete and not length_sufficient:
         if use_machine_tolerances:
             warnings.append(
                 f"Tool length out of tolerance: need {required_length:.4f}\", "
@@ -450,20 +609,24 @@ def _validate_tool(
 
     return ToolValidationResult(
         tool_number=tool_num,
-        required_diameter=program_tool["diameter"],
+        required_diameter=required_diameter,
         required_length=required_length,
         available=True,
         diameter_match=diameter_match,
         length_sufficient=length_sufficient,
+        validate_diameter=validate_diameter,
+        validate_length=validate_length,
+        requirements_complete=requirements_complete,
+        tolerance_source="machine_settings" if use_machine_tolerances else "gcode_defaults",
         machine_tool_data={
             "tool_name": machine_tool.get("tool_name", ""),
             "diameter": machine_diameter,
             "length": machine_length,
         },
         warnings=warnings,
-        diameter_tolerance=diameter_tolerance if use_machine_tolerances else None,  # None indicates G-code mode
-        length_tolerance_plus=length_tolerance_plus if use_machine_tolerances else None,
-        length_tolerance_minus=length_tolerance_minus if use_machine_tolerances else None,
+        diameter_tolerance=diameter_tolerance if (use_machine_tolerances and validate_diameter and requirements_complete) else None,
+        length_tolerance_plus=length_tolerance_plus if (use_machine_tolerances and validate_length and requirements_complete) else None,
+        length_tolerance_minus=length_tolerance_minus if (use_machine_tolerances and validate_length and requirements_complete) else None,
     )
 
 
@@ -682,6 +845,7 @@ async def upload_program(
             original_filename=request.original_filename,
             machine_id=request.machine_id,
             deployed_filename=request.deployed_filename,
+            deployed_path=request.deployed_path,
             validate=request.validate_before_upload,
             validation_results=validation_results
         )
@@ -832,19 +996,31 @@ async def get_deployment_by_onumber(
     """
     import re
 
-    # Extract numeric part: "2000", "O2000", "O2000.nc" -> 2000
-    onumber_match = re.search(r'(\d{4})', onumber)
+    # Extract numeric part and build both padded and unpadded filename patterns.
+    # The machine may report "O0003" (zero-padded) or "O3" (unpadded), and stored
+    # records may use either form depending on how they were registered.  Matching
+    # both forms avoids a silent miss that produces "NO DEPLOYMENT DATA" in the UI.
+    onumber_match = re.search(r'(\d+)', onumber)
     if not onumber_match:
         raise HTTPException(status_code=400, detail="Invalid O-number format")
 
     onumber_int = int(onumber_match.group(1))
-    deployed_filename_pattern = f"O{onumber_int}.nc"
+    onumber_raw = onumber_match.group(1)  # preserve original digits (may be zero-padded)
+    # Always represent as exactly 4 digits for the canonical padded form
+    onumber_padded = f"{onumber_int:04d}"
+    # Build the two filename patterns we want to match
+    deployed_filename_padded   = f"O{onumber_padded}.nc"    # "O0003.nc"
+    deployed_filename_unpadded = f"O{onumber_int}.nc"       # "O3.nc" (legacy)
 
     # Query current deployment with program join
     # Order by deployed_at DESC to get the most recent deployment
+    from sqlalchemy import or_
     query = db.query(ProgramDeployment).filter(
         ProgramDeployment.machine_id == machine_id,
-        ProgramDeployment.deployed_filename.ilike(deployed_filename_pattern),
+        or_(
+            ProgramDeployment.deployed_filename.ilike(deployed_filename_padded),
+            ProgramDeployment.deployed_filename.ilike(deployed_filename_unpadded),
+        ),
         ProgramDeployment.is_current == True
     ).order_by(ProgramDeployment.deployed_at.desc())
 
@@ -862,12 +1038,44 @@ async def get_deployment_by_onumber(
             "program": None
         }
 
+    # If current deployment has a shallow/root path (e.g. "/O0003.NC"), try to recover
+    # the canonical full remote path from history for the same machine/program/filename.
+    # This prevents re-validation from targeting the wrong file when duplicate O-numbers exist
+    # in subfolders (e.g. "/PROGRAM/F1USTD/O0003.NC").
+    resolved_deployed_path = deployment.deployed_path
+    try:
+        def _path_depth(p: str) -> int:
+            return len([seg for seg in str(p or "").replace('\\\\', '/').split('/') if seg])
+
+        current_depth = _path_depth(resolved_deployed_path)
+        if current_depth <= 1:
+            better_path_row = (
+                db.query(ProgramDeployment.deployed_path)
+                .filter(
+                    ProgramDeployment.machine_id == machine_id,
+                    ProgramDeployment.program_id == deployment.program_id,
+                    ProgramDeployment.deployed_filename.ilike(deployment.deployed_filename),
+                    ProgramDeployment.deployed_path.isnot(None),
+                )
+                .order_by(ProgramDeployment.deployed_at.desc())
+                .all()
+            )
+
+            for row in better_path_row:
+                candidate = row.deployed_path
+                if _path_depth(candidate) > current_depth:
+                    resolved_deployed_path = candidate
+                    break
+    except Exception:
+        # Best effort only; fall back to stored path.
+        resolved_deployed_path = deployment.deployed_path
+
     # Build response
     response = {
         "deployment": {
             "id": deployment.id,
             "deployed_filename": deployment.deployed_filename,
-            "deployed_path": deployment.deployed_path,
+            "deployed_path": resolved_deployed_path,
             "deployed_at": deployment.deployed_at,
             "validation_passed": deployment.validation_passed,
             "validation_results": deployment.validation_results,
@@ -891,7 +1099,10 @@ async def get_deployment_by_onumber(
     if include_history:
         history = db.query(ProgramDeployment).filter(
             ProgramDeployment.machine_id == machine_id,
-            ProgramDeployment.deployed_filename.ilike(deployed_filename_pattern)
+            or_(
+                ProgramDeployment.deployed_filename.ilike(deployed_filename_padded),
+                ProgramDeployment.deployed_filename.ilike(deployed_filename_unpadded),
+            )
         ).order_by(ProgramDeployment.deployed_at.desc()).all()
 
         response["history"] = [
