@@ -168,6 +168,12 @@
 }
 
 .terminal-select-sm {
+  /* This class is now applied to the custom Select wrapper. */
+  width: auto;
+  min-width: 140px;
+}
+
+.terminal-select-sm .custom-select {
   padding: var(--spacing-xs) var(--spacing-sm);
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
@@ -175,9 +181,10 @@
   font-family: var(--font-mono);
   font-size: var(--font-sm);
   cursor: pointer;
+  min-height: unset;
 }
 
-.terminal-select-sm:focus {
+.terminal-select-sm .custom-select:focus {
   outline: none;
   border-color: var(--color-text-primary);
   box-shadow: var(--glow);

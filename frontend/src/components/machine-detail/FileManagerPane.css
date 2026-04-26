@@ -178,6 +178,12 @@
 }
 
 .file-manager-terminal-select-sm {
+  /* This class is now applied to the custom Select wrapper. */
+  width: auto;
+  min-width: 120px;
+}
+
+.file-manager-terminal-select-sm .custom-select {
   padding: 2px var(--spacing-xs);
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
@@ -185,9 +191,10 @@
   font-family: var(--font-mono);
   font-size: var(--font-xs);
   cursor: pointer;
+  min-height: unset;
 }
 
-.file-manager-terminal-select-sm:focus {
+.file-manager-terminal-select-sm .custom-select:focus {
   outline: none;
   border-color: var(--color-text-primary);
   box-shadow: var(--glow);

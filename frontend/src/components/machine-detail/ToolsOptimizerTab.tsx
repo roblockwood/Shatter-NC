@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../../config/api';
+import { Select } from '../ui/Select';
 
 export interface ATCOptimizerResult {
   tool_sequence: number[];
@@ -292,16 +293,17 @@ export const ToolsOptimizerTab: React.FC<ToolsOptimizerTabProps> = ({
 
       {/* Controls */}
       <div className="optimizer-actions">
-        <select
-          className="optimizer-pockets-select"
-          value={optimizerNumPockets}
-          onChange={(e) => setOptimizerNumPockets(Number(e.target.value))}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {[8, 14, 21, 30, 40, 60].map(n => (
-            <option key={n} value={n}>{n} POCKETS</option>
-          ))}
-        </select>
+        <div onClick={(e) => e.stopPropagation()}>
+          <Select
+            className="optimizer-pockets-select"
+            value={String(optimizerNumPockets)}
+            onChange={(value) => setOptimizerNumPockets(Number(value))}
+            options={[8, 14, 21, 30, 40, 60].map((n) => ({
+              value: String(n),
+              label: `${n} POCKETS`,
+            }))}
+          />
+        </div>
         <button
           className="optimizer-action-btn"
           onClick={(e) => { e.stopPropagation(); runOptimizer(true); }}
