@@ -9,6 +9,8 @@ import { TabletMachineShell } from './pages/tablet/TabletMachineShell';
 import { TabletRedirectToDefaultPane } from './pages/tablet/TabletRedirectToDefaultPane';
 import { TabletSetupPage } from './pages/tablet/TabletSetupPage';
 import { ToolManagement } from './pages/ToolManagement';
+import { SyncConfig } from './pages/SyncConfig';
+import { NotificationSettings } from './pages/NotificationSettings';
 import { useBetaMode, useBetaModeActivator } from './hooks/useBetaMode';
 import { BetaRoute } from './components/BetaRoute';
 import { WebSocketProvider } from './contexts/WebSocketContext';
@@ -55,6 +57,18 @@ function Navigation() {
           >
             [ FILES ]
           </Link>
+          <Link
+            to="/sync"
+            className={`nav-link ${isActive('/sync') ? 'active' : ''}`}
+          >
+            [ SYNC ]
+          </Link>
+          <Link
+            to="/notifications"
+            className={`nav-link ${isActive('/notifications') ? 'active' : ''}`}
+          >
+            [ NOTIFY ]
+          </Link>
           {isBetaMode && (
             <Link
               to="/tools"
@@ -94,6 +108,8 @@ function AppLayout() {
           <Route path="/tablet" element={<TabletEntry />} />
           <Route path="/" element={<Dashboard />} />
           <Route path="/files" element={<FileBrowser />} />
+          <Route path="/sync" element={<SyncConfig />} />
+          <Route path="/notifications" element={<NotificationSettings />} />
           <Route
             path="/tools"
             element={

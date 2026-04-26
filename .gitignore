@@ -1,3 +1,6 @@
+# Brother Manuals
+docs/brother-manuals/
+
 # Environment
 .env
 docker/kaeser-sc2-api.env
@@ -41,6 +44,9 @@ dist/
 *~
 .DS_Store
 
+# Cursor / agent local settings
+.claude/
+
 # Docker
 *.log
 
@@ -57,3 +63,6 @@ temp/
 
 # OS
 Thumbs.db
+
+# Local scratch notes (not for commit)
+scratch/

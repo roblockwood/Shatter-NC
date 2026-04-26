@@ -11,11 +11,11 @@ Features:
 - Maps to expected output format (pot_number, tool_number, etc.)
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 import re
 import logging
 
-from app.schemas.cnc_data.atctl_schema import SCHEMA_REGISTRY, C00_SCHEMA, D00_SCHEMA
+from app.schemas.cnc_data.atctl_schema import SCHEMA_REGISTRY, C00_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class ATCTLParserV2:
             logger.info(f"Detected D00 control version (found {d00_indicators} D00-specific lines)")
             return "D00"
         else:
-            logger.info(f"Detected C00 control version (no D00-specific lines found)")
+            logger.info("Detected C00 control version (no D00-specific lines found)")
             return "C00"
 
     def parse(self) -> Dict[str, Any]:
@@ -161,11 +161,11 @@ class ATCTLParserV2:
             
             # Parse based on data type
             try:
-                if field_def.data_type == int:
+                if field_def.data_type is int:
                     tool[field_def.name] = int(field_value)
-                elif field_def.data_type == float:
+                elif field_def.data_type is float:
                     tool[field_def.name] = float(field_value)
-                elif field_def.data_type == str:
+                elif field_def.data_type is str:
                     tool[field_def.name] = field_value
                 else:
                     tool[field_def.name] = field_value

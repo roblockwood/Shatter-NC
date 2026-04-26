@@ -10,10 +10,9 @@ Features:
 """
 
 from typing import Dict, Any, Optional
-import re
 import logging
 
-from app.schemas.cnc_data.panel_schema import PANEL_SCHEMAS, C00_SCHEMA, D00_SCHEMA
+from app.schemas.cnc_data.panel_schema import PANEL_SCHEMAS, C00_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -149,9 +148,9 @@ class PANELParserV2:
             
             # Parse value based on data type
             try:
-                if field_def.data_type == int:
+                if field_def.data_type is int:
                     door_data[field_def.name] = int(value_str)
-                elif field_def.data_type == float:
+                elif field_def.data_type is float:
                     door_data[field_def.name] = float(value_str)
                 else:
                     door_data[field_def.name] = value_str
@@ -184,9 +183,9 @@ class PANELParserV2:
             
             # Parse value based on data type
             try:
-                if field_def.data_type == int:
+                if field_def.data_type is int:
                     mode_data[field_def.name] = int(value_str)
-                elif field_def.data_type == float:
+                elif field_def.data_type is float:
                     mode_data[field_def.name] = float(value_str)
                 else:
                     mode_data[field_def.name] = value_str
@@ -219,9 +218,9 @@ class PANELParserV2:
             
             # Parse value based on data type
             try:
-                if field_def.data_type == int:
+                if field_def.data_type is int:
                     override_data[field_def.name] = int(value_str)
-                elif field_def.data_type == float:
+                elif field_def.data_type is float:
                     override_data[field_def.name] = float(value_str)
                 else:
                     override_data[field_def.name] = value_str

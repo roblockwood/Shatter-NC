@@ -66,6 +66,34 @@
   cursor: not-allowed;
 }
 
+.revalidate-btn {
+  background: transparent;
+  border: 1px solid var(--color-text-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  cursor: pointer;
+  padding: 1px 6px;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.revalidate-btn:hover:not(:disabled) {
+  background: rgba(0, 255, 0, 0.12);
+  border-color: var(--color-text-primary);
+  box-shadow: var(--glow);
+}
+
+.revalidate-btn:active:not(:disabled) {
+  background: rgba(0, 255, 0, 0.22);
+}
+
+.revalidate-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
 .program-loading,
 .program-empty {
   text-align: center;
@@ -121,16 +149,28 @@
 }
 
 .program-filename-link {
-  color: var(--color-text-primary);
-  text-decoration: none;
+  color: var(--color-info);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font-weight: 700;
   transition: all 0.2s ease;
-  border-bottom: 1px solid transparent;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  padding: 0 2px;
 }
 
 .program-filename-link:hover {
-  color: var(--color-info);
-  border-bottom-color: var(--color-info);
+  color: var(--color-text-primary);
+  text-decoration-thickness: 2px;
+  border-color: var(--color-info);
   text-shadow: var(--glow);
+}
+
+.program-filename-link:focus-visible {
+  outline: 1px solid var(--color-info);
+  outline-offset: 1px;
 }
 
 /* Validation Section */

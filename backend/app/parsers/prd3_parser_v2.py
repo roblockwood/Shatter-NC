@@ -14,7 +14,7 @@ from typing import Dict, Any, Optional
 import re
 import logging
 
-from app.schemas.cnc_data.prd3_schema import PRD3_SCHEMAS, C00_SCHEMA, D00_SCHEMA
+from app.schemas.cnc_data.prd3_schema import PRD3_SCHEMAS, C00_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -203,17 +203,17 @@ class PRD3ParserV2:
             
             # Convert to appropriate type
             try:
-                if field_def.data_type == int:
+                if field_def.data_type is int:
                     header_data[field_def.name] = int(value_str)
-                elif field_def.data_type == float:
+                elif field_def.data_type is float:
                     header_data[field_def.name] = float(value_str)
                 else:
                     header_data[field_def.name] = value_str
             except (ValueError, TypeError) as e:
                 logger.warning(f"Failed to parse {field_def.name}='{value_str}': {e}")
-                if field_def.data_type == int:
+                if field_def.data_type is int:
                     header_data[field_def.name] = 0
-                elif field_def.data_type == float:
+                elif field_def.data_type is float:
                     header_data[field_def.name] = 0.0
                 else:
                     header_data[field_def.name] = value_str
@@ -239,7 +239,7 @@ class PRD3ParserV2:
             
             # Convert to appropriate type
             try:
-                if field_def.data_type == int:
+                if field_def.data_type is int:
                     # Some controls appear to emit non-numeric placeholders for
                     # memory_operation_type and similar fields (e.g. quoted
                     # strings like 'PROGRAM ' or just quotes/spaces). In those
@@ -253,17 +253,17 @@ class PRD3ParserV2:
                         status_data[field_def.name] = int(numeric)
                     else:
                         status_data[field_def.name] = int(value_str)
-                elif field_def.data_type == float:
+                elif field_def.data_type is float:
                     status_data[field_def.name] = float(value_str)
                 else:
                     # Strip quotes from folder_name if present
                     if field_def.name == "folder_name" and value_str:
                         value_str = value_str.strip("'\"")
                     status_data[field_def.name] = value_str
-            except (ValueError, TypeError) as e:
+            except (ValueError, TypeError):
                 # For non-critical fields we prefer to skip bad values quietly
                 # rather than flood logs on every poll.
-                if field_def.data_type == int or field_def.data_type == float:
+                if field_def.data_type is int or field_def.data_type is float:
                     # Skip setting the field when parsing fails
                     continue
                 else:

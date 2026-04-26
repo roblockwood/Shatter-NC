@@ -90,6 +90,8182 @@
           "External error **",
           "Alarm messages can be\nchanged by user parameters.\n(A)External input signal\nEXER** has turned ON.\n(B)Internal output EXER** of\nbuilt-in PLC has turned ON.",
           "Turn the signal OFF and turn power\nON again."
+        ],
+        [
+          "CM4000",
+          "3",
+          "2",
+          "DR signal off",
+          "",
+          ""
+        ],
+        [
+          "CM4001",
+          "3",
+          "2",
+          "Connected to",
+          "",
+          ""
+        ],
+        [
+          "CM4002",
+          "3",
+          "2",
+          "Press [RST] after",
+          "",
+          ""
+        ],
+        [
+          "CM4003",
+          "3",
+          "2",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM4004",
+          "3",
+          "2",
+          "Received invalid",
+          "",
+          ""
+        ],
+        [
+          "CM4005",
+          "3",
+          "2",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM4006",
+          "3",
+          "2",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM4007",
+          "3",
+          "2",
+          "CS signal off",
+          "",
+          ""
+        ],
+        [
+          "CM4008",
+          "3",
+          "2",
+          "Receive buffer",
+          "",
+          ""
+        ],
+        [
+          "CM4009",
+          "3",
+          "2",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM4010",
+          "3",
+          "2",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM4011",
+          "3",
+          "2",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM4012",
+          "3",
+          "2",
+          "Communicating",
+          "",
+          ""
+        ],
+        [
+          "CM4013",
+          "3",
+          "2",
+          "Press the [RST]",
+          "",
+          ""
+        ],
+        [
+          "CM4014",
+          "3",
+          "2",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM4015",
+          "3",
+          "2",
+          "The memory card The memory card reader is not (a)Press the [RST] key and then",
+          "",
+          ""
+        ],
+        [
+          "CM4016",
+          "3",
+          "2",
+          "Memory card error (A)An error associated with the (A)Press the [RST] key and then",
+          "",
+          ""
+        ],
+        [
+          "CM4017",
+          "3",
+          "2",
+          "Multiple memory Multiple memory devices (e.g. Connect only one memory device to",
+          "",
+          ""
+        ],
+        [
+          "CM4018",
+          "3",
+          "2",
+          "Unusable format",
+          "",
+          ""
+        ],
+        [
+          "CM4019",
+          "3",
+          "2",
+          "Different from",
+          "",
+          ""
+        ],
+        [
+          "CM4020",
+          "3",
+          "2",
+          "Write protect",
+          "",
+          ""
+        ],
+        [
+          "CM4021",
+          "3",
+          "2",
+          "Folder for",
+          "",
+          ""
+        ],
+        [
+          "CM4022",
+          "3",
+          "2",
+          "Cannot connect to (A)An invalid FTP server name (A)Check the host name for the",
+          "",
+          ""
+        ],
+        [
+          "CM4023",
+          "3",
+          "2",
+          "Ethernet",
+          "",
+          ""
+        ],
+        [
+          "CM4024",
+          "3",
+          "2",
+          "Name resolution of (A)An invalid FTP server name (A)Follow the procedure below.",
+          "",
+          ""
+        ],
+        [
+          "CM4025",
+          "3",
+          "2",
+          "Connecting server 001)The server certificate is not 001)Follow one of the procedures",
+          "",
+          ""
+        ],
+        [
+          "CM7000",
+          "1",
+          "2",
+          "There is a PLC",
+          "",
+          ""
+        ],
+        [
+          "CM7001",
+          "1",
+          "2",
+          "Server certificate The server certificate validity Follow one of the procedures below to",
+          "",
+          ""
+        ],
+        [
+          "CM7500",
+          "1",
+          "1",
+          "Editing",
+          "",
+          ""
+        ],
+        [
+          "CM7501",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM7502",
+          "1",
+          "1",
+          "DR signal off",
+          "",
+          ""
+        ],
+        [
+          "CM7503",
+          "1",
+          "1",
+          "CS signal off",
+          "",
+          ""
+        ],
+        [
+          "CM7504",
+          "1",
+          "1",
+          "Receive buffer",
+          "",
+          ""
+        ],
+        [
+          "CM7505",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM7506",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM7507",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM7508",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM7509",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM7510",
+          "1",
+          "1",
+          "Receive header",
+          "",
+          ""
+        ],
+        [
+          "CM7511",
+          "1",
+          "1",
+          "Receive data name The data name of the header",
+          "",
+          ""
+        ],
+        [
+          "CM7512",
+          "1",
+          "1",
+          "Receive response An abnormal end response was Check the connected device.",
+          "",
+          ""
+        ],
+        [
+          "CM7513",
+          "1",
+          "1",
+          "Receive data",
+          "",
+          ""
+        ],
+        [
+          "CM7514",
+          "1",
+          "1",
+          "Receive data",
+          "",
+          ""
+        ],
+        [
+          "CM7515",
+          "1",
+          "1",
+          "Receive data",
+          "",
+          ""
+        ],
+        [
+          "CM7516",
+          "1",
+          "1",
+          "Receive data",
+          "",
+          ""
+        ],
+        [
+          "CM7517",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM7518",
+          "1",
+          "1",
+          "Too many receive The number of received",
+          "",
+          ""
+        ],
+        [
+          "CM7519",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM7520",
+          "1",
+          "1",
+          "Received invalid Invalid data was received when Check the communication parameter",
+          "",
+          ""
+        ],
+        [
+          "CM7521",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM7522",
+          "1",
+          "1",
+          "Receive command A command received via TC",
+          "",
+          ""
+        ],
+        [
+          "CM7523",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM7524",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM7525",
+          "1",
+          "1",
+          "Program",
+          "",
+          ""
+        ],
+        [
+          "CM7526",
+          "1",
+          "1",
+          "Multiple files",
+          "",
+          ""
+        ],
+        [
+          "CM7527",
+          "1",
+          "1",
+          "Slave",
+          "",
+          ""
+        ],
+        [
+          "CM7528",
+          "1",
+          "1",
+          "Comm. param. set An invalid IP address is set.",
+          "",
+          ""
+        ],
+        [
+          "CM7529",
+          "1",
+          "1",
+          "Comm. param. set An invalid mask bit is set.",
+          "",
+          ""
+        ],
+        [
+          "CM7530",
+          "1",
+          "1",
+          "Comm. param. set An invalid default gateway is Set the correct default gateway.",
+          "",
+          ""
+        ],
+        [
+          "CM7531",
+          "1",
+          "1",
+          "Ethernet is",
+          "",
+          ""
+        ],
+        [
+          "CM7532",
+          "1",
+          "1",
+          "Ethernet",
+          "",
+          ""
+        ],
+        [
+          "CM7533",
+          "1",
+          "1",
+          "Old program",
+          "",
+          ""
+        ],
+        [
+          "CM7534",
+          "1",
+          "1",
+          "File access error",
+          "",
+          ""
+        ],
+        [
+          "CM7535",
+          "1",
+          "1",
+          "Memory card",
+          "",
+          ""
+        ],
+        [
+          "CM7536",
+          "1",
+          "1",
+          "Main station is",
+          "",
+          ""
+        ],
+        [
+          "CM7537",
+          "1",
+          "1",
+          "Following station The file to be transferred is",
+          "",
+          ""
+        ],
+        [
+          "CM7538",
+          "1",
+          "1",
+          "The main station is The file to be transferred is",
+          "",
+          ""
+        ],
+        [
+          "CM7539",
+          "1",
+          "1",
+          "Main station is",
+          "",
+          ""
+        ],
+        [
+          "CM7540",
+          "1",
+          "1",
+          "Folowing station is The file to be transferred is",
+          "",
+          ""
+        ],
+        [
+          "CM7541",
+          "1",
+          "1",
+          "Sending failed",
+          "",
+          ""
+        ],
+        [
+          "CM7542",
+          "1",
+          "1",
+          "Receiving failed",
+          "",
+          ""
+        ],
+        [
+          "CM7543",
+          "1",
+          "1",
+          "Deleting failed",
+          "",
+          ""
+        ],
+        [
+          "CM7544",
+          "1",
+          "1",
+          "Renaming failed",
+          "",
+          ""
+        ],
+        [
+          "CM7545",
+          "1",
+          "1",
+          "Failed to stop",
+          "",
+          ""
+        ],
+        [
+          "CM7546",
+          "1",
+          "1",
+          "Memory card error (A)An error associated with the (A)Recheck the memory card.",
+          "",
+          ""
+        ],
+        [
+          "CM7547",
+          "1",
+          "1",
+          "Write protect",
+          "",
+          ""
+        ],
+        [
+          "CM7548",
+          "1",
+          "1",
+          "Multiple memory Multiple memory devices (e.g. Connect only one memory device to",
+          "",
+          ""
+        ],
+        [
+          "CM7549",
+          "1",
+          "1",
+          "Unusable format",
+          "",
+          ""
+        ],
+        [
+          "CM7550",
+          "1",
+          "1",
+          "Name resolution of (A)An invalid FTP server name (A)Follow the procedure below.",
+          "",
+          ""
+        ],
+        [
+          "CM7551",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "CM7552",
+          "1",
+          "1",
+          "Name resolution",
+          "",
+          ""
+        ],
+        [
+          "CM7553",
+          "1",
+          "1",
+          "Ether. comm. err An Ethernet communication",
+          "",
+          ""
+        ],
+        [
+          "CM7554",
+          "1",
+          "1",
+          "Auto notification An error occurred when",
+          "",
+          ""
+        ],
+        [
+          "CM7555",
+          "1",
+          "1",
+          "Invalid file name There are characters included Check the specified file name.",
+          "",
+          ""
+        ],
+        [
+          "CM7556",
+          "1",
+          "1",
+          "User login",
+          "",
+          ""
+        ],
+        [
+          "CM7557",
+          "1",
+          "1",
+          "Security",
+          "",
+          ""
+        ],
+        [
+          "CM7559",
+          "1",
+          "1",
+          "Following station The file to be transferred is",
+          "",
+          ""
+        ],
+        [
+          "CM7560",
+          "1",
+          "1",
+          "Folder for",
+          "",
+          ""
+        ],
+        [
+          "FN0000",
+          "5",
+          "3",
+          "Field network",
+          "",
+          ""
+        ],
+        [
+          "FN0001",
+          "5",
+          "3",
+          "Field network",
+          "",
+          ""
+        ],
+        [
+          "FN0002",
+          "5",
+          "3",
+          "Field network",
+          "",
+          ""
+        ],
+        [
+          "FN2000",
+          "4",
+          "2",
+          "Field network",
+          "",
+          ""
+        ],
+        [
+          "FN4000",
+          "3",
+          "2",
+          "CC-Link",
+          "",
+          ""
+        ],
+        [
+          "FN5000",
+          "2",
+          "3",
+          "Field bus watch",
+          "",
+          ""
+        ],
+        [
+          "FN5001",
+          "2",
+          "3",
+          "Field bus watch",
+          "",
+          ""
+        ],
+        [
+          "FN5002",
+          "2",
+          "3",
+          "FC board",
+          "",
+          ""
+        ],
+        [
+          "FN5003",
+          "2",
+          "3",
+          "The FC board",
+          "",
+          ""
+        ],
+        [
+          "FN5004",
+          "2",
+          "3",
+          "CM PCB error (*) CM PCB data is abnormal.",
+          "",
+          ""
+        ],
+        [
+          "FN5005",
+          "2",
+          "3",
+          "FE unit",
+          "",
+          ""
+        ],
+        [
+          "FN5006",
+          "2",
+          "3",
+          "FE unit error (*)",
+          "",
+          ""
+        ],
+        [
+          "FN5500",
+          "2",
+          "2",
+          "Interface board",
+          "",
+          ""
+        ],
+        [
+          "FN7000",
+          "1",
+          "2",
+          "Transient",
+          "",
+          ""
+        ],
+        [
+          "FN7500",
+          "1",
+          "1",
+          "Field bus",
+          "",
+          ""
+        ],
+        [
+          "FN7501",
+          "1",
+          "1",
+          "Field network",
+          "",
+          ""
+        ],
+        [
+          "IO0005",
+          "5",
+          "3",
+          "The 12-V DC",
+          "",
+          ""
+        ],
+        [
+          "IO0006",
+          "5",
+          "3",
+          "The 12-V DC",
+          "",
+          ""
+        ],
+        [
+          "IO0007",
+          "5",
+          "3",
+          "The 12-V DC",
+          "",
+          ""
+        ],
+        [
+          "IO0011",
+          "5",
+          "3",
+          "The 24-V DC",
+          "",
+          ""
+        ],
+        [
+          "IO0090",
+          "5",
+          "3",
+          "The 24-V DC",
+          "",
+          ""
+        ],
+        [
+          "IO0091",
+          "5",
+          "3",
+          "The 24-V DC",
+          "",
+          ""
+        ],
+        [
+          "IO0092",
+          "5",
+          "3",
+          "The 24-V DC",
+          "",
+          ""
+        ],
+        [
+          "IO0093",
+          "5",
+          "3",
+          "The 24-V DC",
+          "",
+          ""
+        ],
+        [
+          "PN0000",
+          "5",
+          "3",
+          "Teaching pendant Communication with teaching Check connection of the teaching",
+          "",
+          ""
+        ],
+        [
+          "PN0001",
+          "5",
+          "3",
+          "Teaching pendant Received an error response",
+          "",
+          ""
+        ],
+        [
+          "PN0500",
+          "5",
+          "2",
+          "Teaching pendant",
+          "",
+          ""
+        ],
+        [
+          "PN4000",
+          "3",
+          "2",
+          "There is no",
+          "",
+          ""
+        ],
+        [
+          "PN4001",
+          "3",
+          "2",
+          "There is no",
+          "",
+          ""
+        ],
+        [
+          "PN7500",
+          "1",
+          "1",
+          "External panel 1",
+          "",
+          ""
+        ],
+        [
+          "PN7501",
+          "1",
+          "1",
+          "External panel 2",
+          "",
+          ""
+        ],
+        [
+          "PN7502",
+          "1",
+          "1",
+          "Response data",
+          "",
+          ""
+        ],
+        [
+          "PN7503",
+          "1",
+          "1",
+          "Response data",
+          "",
+          ""
+        ],
+        [
+          "PN7504",
+          "1",
+          "1",
+          "External panel 1",
+          "",
+          ""
+        ],
+        [
+          "PN7505",
+          "1",
+          "1",
+          "External panel 2",
+          "",
+          ""
+        ],
+        [
+          "PN7506",
+          "1",
+          "1",
+          "External panel 1",
+          "",
+          ""
+        ],
+        [
+          "PN7507",
+          "1",
+          "1",
+          "External panel 2",
+          "",
+          ""
+        ],
+        [
+          "PN7508",
+          "1",
+          "1",
+          "External panel 1",
+          "",
+          ""
+        ],
+        [
+          "PN7509",
+          "1",
+          "1",
+          "External panel 2",
+          "",
+          ""
+        ],
+        [
+          "PN7510",
+          "1",
+          "1",
+          "External panel 1",
+          "",
+          ""
+        ],
+        [
+          "PN7511",
+          "1",
+          "1",
+          "External panel 2",
+          "",
+          ""
+        ],
+        [
+          "SL0000",
+          "5",
+          "3",
+          "Machine param.",
+          "",
+          ""
+        ],
+        [
+          "SL0001",
+          "5",
+          "3",
+          "Memory is not",
+          "",
+          ""
+        ],
+        [
+          "SL0002",
+          "5",
+          "3",
+          "Machine param.",
+          "",
+          ""
+        ],
+        [
+          "SL0003",
+          "5",
+          "3",
+          "Local CPU",
+          "",
+          ""
+        ],
+        [
+          "SL0004",
+          "5",
+          "3",
+          "Additional axis",
+          "",
+          ""
+        ],
+        [
+          "SL0500",
+          "5",
+          "2",
+          "No machine",
+          "",
+          ""
+        ],
+        [
+          "SL0501",
+          "5",
+          "2",
+          "No PLC axis",
+          "",
+          ""
+        ],
+        [
+          "SL0502",
+          "5",
+          "2",
+          "W/o turning",
+          "",
+          ""
+        ],
+        [
+          "SL0503",
+          "5",
+          "2",
+          "Special setting",
+          "",
+          ""
+        ],
+        [
+          "SL0504",
+          "5",
+          "2",
+          "Special setting",
+          "",
+          ""
+        ],
+        [
+          "SL0505",
+          "5",
+          "2",
+          "No special setting There is no data for the special Press the [RST] key.",
+          "",
+          ""
+        ],
+        [
+          "SL1500",
+          "4",
+          "3",
+          "User param. setting 001)<Tool breakage detection 001)Correct each parameter of the",
+          "",
+          ""
+        ],
+        [
+          "SL1501",
+          "4",
+          "3",
+          "Machine param.",
+          "",
+          ""
+        ],
+        [
+          "SL2000",
+          "4",
+          "2",
+          "No user parameter There is no user parameter data. Create a user parameter, and then turn",
+          "",
+          ""
+        ],
+        [
+          "SL2001",
+          "4",
+          "2",
+          "No tool in tool list The tool to be used for",
+          "",
+          ""
+        ],
+        [
+          "SL2002",
+          "4",
+          "2",
+          "Tap size error",
+          "",
+          ""
+        ],
+        [
+          "SL2003",
+          "4",
+          "2",
+          "No workpiece zero There is no workpiece",
+          "",
+          ""
+        ],
+        [
+          "SL2004",
+          "4",
+          "2",
+          "No tool data",
+          "",
+          ""
+        ],
+        [
+          "SL2005",
+          "4",
+          "2",
+          "No macro variable There is no macro variable",
+          "",
+          ""
+        ],
+        [
+          "SL2006",
+          "4",
+          "2",
+          "Machine param.",
+          "",
+          ""
+        ],
+        [
+          "SL2007",
+          "4",
+          "2",
+          "User param. setting 001)When the machine",
+          "",
+          ""
+        ],
+        [
+          "SL2008",
+          "4",
+          "2",
+          "Specified memory The specified memory range",
+          "",
+          ""
+        ],
+        [
+          "SL2009",
+          "4",
+          "2",
+          "Left- or right-hand The torsion direction is not set Press the [RST] key, and then set the",
+          "",
+          ""
+        ],
+        [
+          "SL2010",
+          "4",
+          "2",
+          "Machine param.",
+          "",
+          ""
+        ],
+        [
+          "SL2011",
+          "4",
+          "2",
+          "User param. setting 001)<Conversation/NC",
+          "",
+          ""
+        ],
+        [
+          "SL2012",
+          "4",
+          "2",
+          "Too many tools",
+          "",
+          ""
+        ],
+        [
+          "SL2013",
+          "4",
+          "2",
+          "T-code range error The T-command is not within Check the T-command in the",
+          "",
+          ""
+        ],
+        [
+          "SL2014",
+          "4",
+          "2",
+          "No tool in spindle Tap job was attempted in MDI Press the [RST] key. Attach the tool",
+          "",
+          ""
+        ],
+        [
+          "SL2015",
+          "4",
+          "2",
+          "Editing",
+          "",
+          ""
+        ],
+        [
+          "SL2016",
+          "4",
+          "2",
+          "There is no",
+          "",
+          ""
+        ],
+        [
+          "SL2017",
+          "4",
+          "2",
+          "No external I/O",
+          "",
+          ""
+        ],
+        [
+          "SL2018",
+          "4",
+          "2",
+          "No communication Communication parameter data Create communication parameter data",
+          "",
+          ""
+        ],
+        [
+          "SL2019",
+          "4",
+          "2",
+          "Machine param.",
+          "",
+          ""
+        ],
+        [
+          "SL2020",
+          "4",
+          "2",
+          "No operation level There is no operation level",
+          "",
+          ""
+        ],
+        [
+          "SL2021",
+          "4",
+          "2",
+          "Param. not set",
+          "",
+          ""
+        ],
+        [
+          "SL2022",
+          "4",
+          "2",
+          "No data for G/M",
+          "",
+          ""
+        ],
+        [
+          "SL2023",
+          "4",
+          "2",
+          "Parameter setting",
+          "",
+          ""
+        ],
+        [
+          "SL2024",
+          "4",
+          "2",
+          "User parameter",
+          "",
+          ""
+        ],
+        [
+          "SL2025",
+          "4",
+          "2",
+          "Parameter required One of the following user",
+          "",
+          ""
+        ],
+        [
+          "SL2026",
+          "4",
+          "2",
+          "Rotation axis/Tilt 001)The axis used for the <Tilt 001)Change the user parameters",
+          "",
+          ""
+        ],
+        [
+          "SL2027",
+          "4",
+          "2",
+          "User parameter",
+          "",
+          ""
+        ],
+        [
+          "SL2028",
+          "4",
+          "2",
+          "Machine param.",
+          "",
+          ""
+        ],
+        [
+          "SL2029",
+          "4",
+          "2",
+          "No field network",
+          "",
+          ""
+        ],
+        [
+          "SL4000",
+          "3",
+          "2",
+          "Mark not found",
+          "",
+          ""
+        ],
+        [
+          "SL4002",
+          "3",
+          "2",
+          "Maintenance notice The setting for <Type> on the Check the setting on the screen, and",
+          "",
+          ""
+        ],
+        [
+          "SL4003",
+          "3",
+          "2",
+          "Required data not There is no specified data.",
+          "",
+          ""
+        ],
+        [
+          "SL4004",
+          "3",
+          "2",
+          "Not formatted.",
+          "",
+          ""
+        ],
+        [
+          "SL4005",
+          "3",
+          "2",
+          "Tool automatic",
+          "",
+          ""
+        ],
+        [
+          "SL4006",
+          "3",
+          "2",
+          "The tool is",
+          "",
+          ""
+        ],
+        [
+          "SL4007",
+          "3",
+          "2",
+          "Error of the kind of 001)A program whose thread 001)Check the setting of the machine",
+          "",
+          ""
+        ],
+        [
+          "SL4008",
+          "3",
+          "2",
+          "The machining",
+          "",
+          ""
+        ],
+        [
+          "SL4009",
+          "3",
+          "2",
+          "Tool allocation",
+          "",
+          ""
+        ],
+        [
+          "SL4010",
+          "3",
+          "2",
+          "W/o smooth path",
+          "",
+          ""
+        ],
+        [
+          "SL4011",
+          "3",
+          "2",
+          "Backup memory",
+          "",
+          ""
+        ],
+        [
+          "SL4012",
+          "3",
+          "2",
+          "PLC program",
+          "",
+          ""
+        ],
+        [
+          "SL4013",
+          "3",
+          "2",
+          "Press the [RST]",
+          "",
+          ""
+        ],
+        [
+          "SL4014",
+          "3",
+          "2",
+          "No applicable",
+          "",
+          ""
+        ],
+        [
+          "SL4015",
+          "3",
+          "2",
+          "Memory overflow Insufficient memory.",
+          "",
+          ""
+        ],
+        [
+          "SL4016",
+          "3",
+          "2",
+          "External output file The maximum number of",
+          "",
+          ""
+        ],
+        [
+          "SL4017",
+          "3",
+          "2",
+          "No machining load There is no machining load",
+          "",
+          ""
+        ],
+        [
+          "SL4018",
+          "3",
+          "2",
+          "No G/M code",
+          "",
+          ""
+        ],
+        [
+          "SL5000",
+          "2",
+          "3",
+          "Stop the specified",
+          "",
+          ""
+        ],
+        [
+          "SL5500",
+          "2",
+          "2",
+          "Local CPU",
+          "",
+          ""
+        ],
+        [
+          "SL5501",
+          "2",
+          "2",
+          "G code macro",
+          "",
+          ""
+        ],
+        [
+          "SL5502",
+          "2",
+          "2",
+          "M code macro",
+          "",
+          ""
+        ],
+        [
+          "SL7000",
+          "1",
+          "2",
+          "Memory overflow Insufficient directory or data",
+          "",
+          ""
+        ],
+        [
+          "SL7001",
+          "1",
+          "2",
+          "Battery has",
+          "",
+          ""
+        ],
+        [
+          "SL7002",
+          "1",
+          "2",
+          "Machine data",
+          "",
+          ""
+        ],
+        [
+          "SL7003",
+          "1",
+          "2",
+          "There is no",
+          "",
+          ""
+        ],
+        [
+          "SL7004",
+          "1",
+          "2",
+          "Machine unit",
+          "",
+          ""
+        ],
+        [
+          "SL7005",
+          "1",
+          "2",
+          "In special operation Special operation level is valid. Contact the nearest BROTHER",
+          "",
+          ""
+        ],
+        [
+          "SL7006",
+          "1",
+          "2",
+          "Program restart",
+          "",
+          ""
+        ],
+        [
+          "SL7007",
+          "1",
+          "2",
+          "ATC monitoring",
+          "",
+          ""
+        ],
+        [
+          "SL7008",
+          "1",
+          "2",
+          "The 5-V DC power An overcurrent occurred on the Check the wiring and the XUSB1",
+          "",
+          ""
+        ],
+        [
+          "SL7009",
+          "1",
+          "2",
+          "The 5-V DC power An overcurrent occurred on the Check the wiring and the XUSB2,",
+          "",
+          ""
+        ],
+        [
+          "SL7010",
+          "1",
+          "2",
+          "X-axis machine",
+          "",
+          ""
+        ],
+        [
+          "SL7011",
+          "1",
+          "2",
+          "Y-axis machine",
+          "",
+          ""
+        ],
+        [
+          "SL7012",
+          "1",
+          "2",
+          "Z-axis machine",
+          "",
+          ""
+        ],
+        [
+          "SL7013",
+          "1",
+          "2",
+          "Time to change",
+          "",
+          ""
+        ],
+        [
+          "SL7014",
+          "1",
+          "2",
+          "CFast write",
+          "",
+          ""
+        ],
+        [
+          "SL7015",
+          "1",
+          "2",
+          "Stop the specified The user parameter (switch 1: Press the [RST] key.",
+          "",
+          ""
+        ],
+        [
+          "SL7016",
+          "1",
+          "2",
+          "Specified function The communication parameters Set the communication parameters",
+          "",
+          ""
+        ],
+        [
+          "SL7500",
+          "1",
+          "1",
+          "Input data error",
+          "",
+          ""
+        ],
+        [
+          "SL7501",
+          "1",
+          "1",
+          "No copy source",
+          "",
+          ""
+        ],
+        [
+          "SL7502",
+          "1",
+          "1",
+          "Data is write-",
+          "",
+          ""
+        ],
+        [
+          "SL7504",
+          "1",
+          "1",
+          "Running program Editing or deleting a file used Edit or delete the program after",
+          "",
+          ""
+        ],
+        [
+          "SL7505",
+          "1",
+          "1",
+          "Check error",
+          "",
+          ""
+        ],
+        [
+          "SL7506",
+          "1",
+          "1",
+          "Editing area",
+          "",
+          ""
+        ],
+        [
+          "SL7507",
+          "1",
+          "1",
+          "This tool is already (A)The tool set for [ATC tool] Delete the registered tool, and then set",
+          "",
+          ""
+        ],
+        [
+          "SL7508",
+          "1",
+          "1",
+          "Too many tools",
+          "",
+          ""
+        ],
+        [
+          "SL7509",
+          "1",
+          "1",
+          "Tool is registered Setting a large tool was",
+          "",
+          ""
+        ],
+        [
+          "SL7510",
+          "1",
+          "1",
+          "Deletion position Deleting data was attempted at Move the cursor to a position where",
+          "",
+          ""
+        ],
+        [
+          "SL7511",
+          "1",
+          "1",
+          "Prog. edit prohibit Changing data was attempted Turn the signal off, and then change",
+          "",
+          ""
+        ],
+        [
+          "SL7512",
+          "1",
+          "1",
+          "Edit prohibit signal Changing data was attempted Turn the signal off, and then change",
+          "",
+          ""
+        ],
+        [
+          "SL7513",
+          "1",
+          "1",
+          "Set position error The data was set to a position The data cannot be set for that",
+          "",
+          ""
+        ],
+        [
+          "SL7514",
+          "1",
+          "1",
+          "No subprogram",
+          "",
+          ""
+        ],
+        [
+          "SL7515",
+          "1",
+          "1",
+          "No tools assigned Tool assignment has not been Assign the tools.",
+          "",
+          ""
+        ],
+        [
+          "SL7516",
+          "1",
+          "1",
+          "Machining",
+          "",
+          ""
+        ],
+        [
+          "SL7517",
+          "1",
+          "1",
+          "No program",
+          "",
+          ""
+        ],
+        [
+          "SL7518",
+          "1",
+          "1",
+          "Too many digits",
+          "",
+          ""
+        ],
+        [
+          "SL7519",
+          "1",
+          "1",
+          "Has a minus sign",
+          "",
+          ""
+        ],
+        [
+          "SL7520",
+          "1",
+          "1",
+          "Copy import",
+          "",
+          ""
+        ],
+        [
+          "SL7521",
+          "1",
+          "1",
+          "No search data",
+          "",
+          ""
+        ],
+        [
+          "SL7522",
+          "1",
+          "1",
+          "Too many jobs",
+          "",
+          ""
+        ],
+        [
+          "SL7523",
+          "1",
+          "1",
+          "Specified",
+          "",
+          ""
+        ],
+        [
+          "SL7524",
+          "1",
+          "1",
+          "Change position",
+          "",
+          ""
+        ],
+        [
+          "SL7525",
+          "1",
+          "1",
+          "Cannot delete",
+          "",
+          ""
+        ],
+        [
+          "SL7526",
+          "1",
+          "1",
+          "Insertion position Inserting a program was",
+          "",
+          ""
+        ],
+        [
+          "SL7527",
+          "1",
+          "1",
+          "Cursor movement The cursor was moved to a",
+          "",
+          ""
+        ],
+        [
+          "SL7528",
+          "1",
+          "1",
+          "Copy insertion",
+          "",
+          ""
+        ],
+        [
+          "SL7529",
+          "1",
+          "1",
+          "Too many",
+          "",
+          ""
+        ],
+        [
+          "SL7530",
+          "1",
+          "1",
+          "Too many lines",
+          "",
+          ""
+        ],
+        [
+          "SL7531",
+          "1",
+          "1",
+          "Workpiece zero set Setting the workpiece zero",
+          "",
+          ""
+        ],
+        [
+          "SL7532",
+          "1",
+          "1",
+          "Cannot search",
+          "",
+          ""
+        ],
+        [
+          "SL7533",
+          "1",
+          "1",
+          "Too many",
+          "",
+          ""
+        ],
+        [
+          "SL7534",
+          "1",
+          "1",
+          "Copy not imported Copy was not imported",
+          "",
+          ""
+        ],
+        [
+          "SL7535",
+          "1",
+          "1",
+          "Too many",
+          "",
+          ""
+        ],
+        [
+          "SL7536",
+          "1",
+          "1",
+          "No tool in tool list A tool that is not registered in Register the tool in the tool list.",
+          "",
+          ""
+        ],
+        [
+          "SL7537",
+          "1",
+          "1",
+          "Too many points The number of point random",
+          "",
+          ""
+        ],
+        [
+          "SL7538",
+          "1",
+          "1",
+          "Data error",
+          "",
+          ""
+        ],
+        [
+          "SL7539",
+          "1",
+          "1",
+          "Wrong tool length The tool length becomes 0 or Check the user parameter (switch 1:",
+          "",
+          ""
+        ],
+        [
+          "SL7540",
+          "1",
+          "1",
+          "No tool list data",
+          "",
+          ""
+        ],
+        [
+          "SL7541",
+          "1",
+          "1",
+          "No tool pattern",
+          "",
+          ""
+        ],
+        [
+          "SL7542",
+          "1",
+          "1",
+          "No tapping drill",
+          "",
+          ""
+        ],
+        [
+          "SL7543",
+          "1",
+          "1",
+          "No cutting",
+          "",
+          ""
+        ],
+        [
+          "SL7544",
+          "1",
+          "1",
+          "Workpiece material Workpiece material is not set. Set the workpiece material.",
+          "",
+          ""
+        ],
+        [
+          "SL7546",
+          "1",
+          "1",
+          "Too many tools",
+          "",
+          ""
+        ],
+        [
+          "SL7547",
+          "1",
+          "1",
+          "No job",
+          "",
+          ""
+        ],
+        [
+          "SL7548",
+          "1",
+          "1",
+          "No data in tool list There is no tool data specified Set data for the tool number specified",
+          "",
+          ""
+        ],
+        [
+          "SL7549",
+          "1",
+          "1",
+          "Tool type error",
+          "",
+          ""
+        ],
+        [
+          "SL7550",
+          "1",
+          "1",
+          "Tap size error",
+          "",
+          ""
+        ],
+        [
+          "SL7551",
+          "1",
+          "1",
+          "There are jobs",
+          "",
+          ""
+        ],
+        [
+          "SL7552",
+          "1",
+          "1",
+          "Illegal tool pattern Tools required for machining Check the tool pattern, and correct it.",
+          "",
+          ""
+        ],
+        [
+          "SL7553",
+          "1",
+          "1",
+          "? cannot be",
+          "",
+          ""
+        ],
+        [
+          "SL7554",
+          "1",
+          "1",
+          "Depth too shallow The tip of the tool contacts the Check the machining data and tool",
+          "",
+          ""
+        ],
+        [
+          "SL7555",
+          "1",
+          "1",
+          "Counter boring",
+          "",
+          ""
+        ],
+        [
+          "SL7556",
+          "1",
+          "1",
+          "Wrong workpiece The maximum tool infeed",
+          "",
+          ""
+        ],
+        [
+          "SL7557",
+          "1",
+          "1",
+          "Minor diameter too The minor diameter of the tool Check the machining data and tool",
+          "",
+          ""
+        ],
+        [
+          "SL7558",
+          "1",
+          "1",
+          "No tool length",
+          "",
+          ""
+        ],
+        [
+          "SL7559",
+          "1",
+          "1",
+          "No tool life setting The assigned tool is expired.",
+          "",
+          ""
+        ],
+        [
+          "SL7560",
+          "1",
+          "1",
+          "Tool too long",
+          "",
+          ""
+        ],
+        [
+          "SL7561",
+          "1",
+          "1",
+          "Minor diameter too The minor diameter is too",
+          "",
+          ""
+        ],
+        [
+          "SL7562",
+          "1",
+          "1",
+          "Wrong minor",
+          "",
+          ""
+        ],
+        [
+          "SL7563",
+          "1",
+          "1",
+          "Minor diameter",
+          "",
+          ""
+        ],
+        [
+          "SL7564",
+          "1",
+          "1",
+          "Wrong minor",
+          "",
+          ""
+        ],
+        [
+          "SL7565",
+          "1",
+          "1",
+          "Minor diameter",
+          "",
+          ""
+        ],
+        [
+          "SL7566",
+          "1",
+          "1",
+          "Tool length too",
+          "",
+          ""
+        ],
+        [
+          "SL7567",
+          "1",
+          "1",
+          "Tool diameter too The tool diameter is too small.",
+          "",
+          ""
+        ],
+        [
+          "SL7568",
+          "1",
+          "1",
+          "Wrong tool",
+          "",
+          ""
+        ],
+        [
+          "SL7569",
+          "1",
+          "1",
+          "Wrong center angle The center angle is not correct.",
+          "",
+          ""
+        ],
+        [
+          "SL7570",
+          "1",
+          "1",
+          "Wrong chamfer",
+          "",
+          ""
+        ],
+        [
+          "SL7571",
+          "1",
+          "1",
+          "Length of teeth too The length of teeth is too short.",
+          "",
+          ""
+        ],
+        [
+          "SL7572",
+          "1",
+          "1",
+          "Wrong torsion",
+          "",
+          ""
+        ],
+        [
+          "SL7573",
+          "1",
+          "1",
+          "Wrong thread type The tap type is not correct.",
+          "",
+          ""
+        ],
+        [
+          "SL7574",
+          "1",
+          "1",
+          "Wrong thread size The tap size is not correct.",
+          "",
+          ""
+        ],
+        [
+          "SL7575",
+          "1",
+          "1",
+          "Wrong pitches or The tap pitch or thread is not",
+          "",
+          ""
+        ],
+        [
+          "SL7576",
+          "1",
+          "1",
+          "Drilling depth not The drilling depth is not deep Check the machining data, tool list,",
+          "",
+          ""
+        ],
+        [
+          "SL7577",
+          "1",
+          "1",
+          "No tool number",
+          "",
+          ""
+        ],
+        [
+          "SL7578",
+          "1",
+          "1",
+          "Tool diameter too The tool diameter is too large. Check the machining data, tool list,",
+          "",
+          ""
+        ],
+        [
+          "SL7579",
+          "1",
+          "1",
+          "Pocket milling not Chamfering was attempted",
+          "",
+          ""
+        ],
+        [
+          "SL7580",
+          "1",
+          "1",
+          "Interfered (side)",
+          "",
+          ""
+        ],
+        [
+          "SL7581",
+          "1",
+          "1",
+          "Interfered (bottom) The tool contacts the bottom of",
+          "",
+          ""
+        ],
+        [
+          "SL7582",
+          "1",
+          "1",
+          "Eye hole tool is",
+          "",
+          ""
+        ],
+        [
+          "SL7583",
+          "1",
+          "1",
+          "Tool not matching The tool set for tool assignment",
+          "",
+          ""
+        ],
+        [
+          "SL7584",
+          "1",
+          "1",
+          "Corner R too large Corner R is larger than half the",
+          "",
+          ""
+        ],
+        [
+          "SL7585",
+          "1",
+          "1",
+          "Approach radius",
+          "",
+          ""
+        ],
+        [
+          "SL7586",
+          "1",
+          "1",
+          "Wrong machine",
+          "",
+          ""
+        ],
+        [
+          "SL7587",
+          "1",
+          "1",
+          "No threading",
+          "",
+          ""
+        ],
+        [
+          "SL7588",
+          "1",
+          "1",
+          "No subprogram (*) 001) The specified sub program 001) Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SL7589",
+          "1",
+          "1",
+          "Subprogram",
+          "",
+          ""
+        ],
+        [
+          "SL7590",
+          "1",
+          "1",
+          "Tool number not",
+          "",
+          ""
+        ],
+        [
+          "SL7591",
+          "1",
+          "1",
+          "Memory overflow (A)All data areas or directories Decrease the program size when",
+          "",
+          ""
+        ],
+        [
+          "SL7592",
+          "1",
+          "1",
+          "No tool registered The tool is not registered to the Check the tool group setting.",
+          "",
+          ""
+        ],
+        [
+          "SL7593",
+          "1",
+          "1",
+          "No recovery",
+          "",
+          ""
+        ],
+        [
+          "SL7594",
+          "1",
+          "1",
+          "Program is write- Programs from 8000 to 8999",
+          "",
+          ""
+        ],
+        [
+          "SL7595",
+          "1",
+          "1",
+          "Cannot be copied. Copying the data to the current Copy the data to a number other than",
+          "",
+          ""
+        ],
+        [
+          "SL7596",
+          "1",
+          "1",
+          "No item selected. The program or data bank",
+          "",
+          ""
+        ],
+        [
+          "SL7597",
+          "1",
+          "1",
+          "NC data being",
+          "",
+          ""
+        ],
+        [
+          "SL7598",
+          "1",
+          "1",
+          "Connected device Output was attempted although Unselect the item before output.",
+          "",
+          ""
+        ],
+        [
+          "SL7599",
+          "1",
+          "1",
+          "Cannot be deleted. The old data bank file cannot",
+          "",
+          ""
+        ],
+        [
+          "SL7600",
+          "1",
+          "1",
+          "Not formatted.",
+          "",
+          ""
+        ],
+        [
+          "SL7601",
+          "1",
+          "1",
+          "Invalidate",
+          "",
+          ""
+        ],
+        [
+          "SL7602",
+          "1",
+          "1",
+          "This program",
+          "",
+          ""
+        ],
+        [
+          "SL7603",
+          "1",
+          "1",
+          "Workpiece quantity The number of workpieces is Set the number of workpieces.",
+          "",
+          ""
+        ],
+        [
+          "SL7604",
+          "1",
+          "1",
+          "No step data",
+          "",
+          ""
+        ],
+        [
+          "SL7605",
+          "1",
+          "1",
+          "? not calculated",
+          "",
+          ""
+        ],
+        [
+          "SL7606",
+          "1",
+          "1",
+          "No B-axis option 001)Running the B-axis",
+          "",
+          ""
+        ],
+        [
+          "SL7607",
+          "1",
+          "1",
+          "Next tool in",
+          "",
+          ""
+        ],
+        [
+          "SL7608",
+          "1",
+          "1",
+          "Wrong data type",
+          "",
+          ""
+        ],
+        [
+          "SL7609",
+          "1",
+          "1",
+          "No tool in spindle The tool is not attached to the Set the correct tool to the spindle.",
+          "",
+          ""
+        ],
+        [
+          "SL7610",
+          "1",
+          "1",
+          "Specified G code The specified G-code is not",
+          "",
+          ""
+        ],
+        [
+          "SL7611",
+          "1",
+          "1",
+          "Mark not found",
+          "",
+          ""
+        ],
+        [
+          "SL7612",
+          "1",
+          "1",
+          "Program too large Machining data size is larger",
+          "",
+          ""
+        ],
+        [
+          "SL7613",
+          "1",
+          "1",
+          "No A-axis option",
+          "",
+          ""
+        ],
+        [
+          "SL7614",
+          "1",
+          "1",
+          "0 holes (*)",
+          "",
+          ""
+        ],
+        [
+          "SL7615",
+          "1",
+          "1",
+          "Tap size error (*) When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7616",
+          "1",
+          "1",
+          "0 divisions (*)",
+          "",
+          ""
+        ],
+        [
+          "SL7617",
+          "1",
+          "1",
+          "Cutter",
+          "",
+          ""
+        ],
+        [
+          "SL7618",
+          "1",
+          "1",
+          "No pitch data (*) When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7619",
+          "1",
+          "1",
+          "Spindle speed not When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7620",
+          "1",
+          "1",
+          "Feedrate not",
+          "",
+          ""
+        ],
+        [
+          "SL7621",
+          "1",
+          "1",
+          "Position cannot be When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7622",
+          "1",
+          "1",
+          "Too many lines (*) When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7623",
+          "1",
+          "1",
+          "Too many infeeds When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7624",
+          "1",
+          "1",
+          "Corner cannot be When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7625",
+          "1",
+          "1",
+          "Calculation error When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7626",
+          "1",
+          "1",
+          "Pocket milling not When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7627",
+          "1",
+          "1",
+          "Chamfering not",
+          "",
+          ""
+        ],
+        [
+          "SL7628",
+          "1",
+          "1",
+          "ATC not possible When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7629",
+          "1",
+          "1",
+          "Too many holes (*) When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7630",
+          "1",
+          "1",
+          "Spindle speed",
+          "",
+          ""
+        ],
+        [
+          "SL7631",
+          "1",
+          "1",
+          "Feedrate exceeded When a conversation program Set the correct data.",
+          "",
+          ""
+        ],
+        [
+          "SL7632",
+          "1",
+          "1",
+          "Cutter",
+          "",
+          ""
+        ],
+        [
+          "SL7633",
+          "1",
+          "1",
+          "Invalid approach",
+          "",
+          ""
+        ],
+        [
+          "SL7634",
+          "1",
+          "1",
+          "Invalid release",
+          "",
+          ""
+        ],
+        [
+          "SL7635",
+          "1",
+          "1",
+          "No cutting length",
+          "",
+          ""
+        ],
+        [
+          "SL7636",
+          "1",
+          "1",
+          "Not a valid B-axis When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7637",
+          "1",
+          "1",
+          "No axis specified When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7638",
+          "1",
+          "1",
+          "Invalid axis",
+          "",
+          ""
+        ],
+        [
+          "SL7639",
+          "1",
+          "1",
+          "B-axis radius not When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7640",
+          "1",
+          "1",
+          "No ATC return",
+          "",
+          ""
+        ],
+        [
+          "SL7641",
+          "1",
+          "1",
+          "B-axis command When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7642",
+          "1",
+          "1",
+          "Thread cutting",
+          "",
+          ""
+        ],
+        [
+          "SL7643",
+          "1",
+          "1",
+          "No thread cutting",
+          "",
+          ""
+        ],
+        [
+          "SL7644",
+          "1",
+          "1",
+          "Tool breakage",
+          "",
+          ""
+        ],
+        [
+          "SL7645",
+          "1",
+          "1",
+          "Rotational",
+          "",
+          ""
+        ],
+        [
+          "SL7646",
+          "1",
+          "1",
+          "A-axis radius not When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7647",
+          "1",
+          "1",
+          "A-axis command When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7648",
+          "1",
+          "1",
+          "Not a valid A-axis When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7649",
+          "1",
+          "1",
+          "Cannot measure in When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7650",
+          "1",
+          "1",
+          "Cannot measure",
+          "",
+          ""
+        ],
+        [
+          "SL7651",
+          "1",
+          "1",
+          "Cannot measure in When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7652",
+          "1",
+          "1",
+          "Tool type error (*) When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7653",
+          "1",
+          "1",
+          "No tool length",
+          "",
+          ""
+        ],
+        [
+          "SL7654",
+          "1",
+          "1",
+          "Outside diameter When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7655",
+          "1",
+          "1",
+          "Left- or right-hand When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7656",
+          "1",
+          "1",
+          "Tool life end (*)",
+          "",
+          ""
+        ],
+        [
+          "SL7657",
+          "1",
+          "1",
+          "No tool in tool list When converting a",
+          "",
+          ""
+        ],
+        [
+          "SL7658",
+          "1",
+          "1",
+          "There are jobs",
+          "",
+          ""
+        ],
+        [
+          "SL7659",
+          "1",
+          "1",
+          "Conversation/NC 001) An error occurred when 001)Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SL7660",
+          "1",
+          "1",
+          "Same number",
+          "",
+          ""
+        ],
+        [
+          "SL7661",
+          "1",
+          "1",
+          "<No> is set for",
+          "",
+          ""
+        ],
+        [
+          "SL7662",
+          "1",
+          "1",
+          "Extended memory Editing a file related to the",
+          "",
+          ""
+        ],
+        [
+          "SL7663",
+          "1",
+          "1",
+          "Too many",
+          "",
+          ""
+        ],
+        [
+          "SL7664",
+          "1",
+          "1",
+          "No C-axis option Automatic C-axis setting was",
+          "",
+          ""
+        ],
+        [
+          "SL7665",
+          "1",
+          "1",
+          "Start position",
+          "",
+          ""
+        ],
+        [
+          "SL7666",
+          "1",
+          "1",
+          "Memory operation Memory operation data is not Assign tools.",
+          "",
+          ""
+        ],
+        [
+          "SL7667",
+          "1",
+          "1",
+          "No schedule",
+          "",
+          ""
+        ],
+        [
+          "SL7668",
+          "1",
+          "1",
+          "Spindle speed not The spindle speed is not set",
+          "",
+          ""
+        ],
+        [
+          "SL7669",
+          "1",
+          "1",
+          "No axis specified The axis data is not set",
+          "",
+          ""
+        ],
+        [
+          "SL7670",
+          "1",
+          "1",
+          "A-axis command The A-axis angle setting is not Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SL7671",
+          "1",
+          "1",
+          "B-axis command The B-axis angle setting is not Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SL7672",
+          "1",
+          "1",
+          "Invalid axis",
+          "",
+          ""
+        ],
+        [
+          "SL7673",
+          "1",
+          "1",
+          "Feedrate not",
+          "",
+          ""
+        ],
+        [
+          "SL7674",
+          "1",
+          "1",
+          "Radius not set for The radius is not specified",
+          "",
+          ""
+        ],
+        [
+          "SL7676",
+          "1",
+          "1",
+          "Z-axis not",
+          "",
+          ""
+        ],
+        [
+          "SL7677",
+          "1",
+          "1",
+          "XYAB-axes",
+          "",
+          ""
+        ],
+        [
+          "SL7678",
+          "1",
+          "1",
+          "Feed not specified The feed type is not set in MDI Set the feed type.",
+          "",
+          ""
+        ],
+        [
+          "SL7679",
+          "1",
+          "1",
+          "PLC program is",
+          "",
+          ""
+        ],
+        [
+          "SL7680",
+          "1",
+          "1",
+          "Specified M code An M code that cannot be used Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SL7681",
+          "1",
+          "1",
+          "Cannot move to",
+          "",
+          ""
+        ],
+        [
+          "SL7682",
+          "1",
+          "1",
+          "Cannot move to",
+          "",
+          ""
+        ],
+        [
+          "SL7683",
+          "1",
+          "1",
+          "There are",
+          "",
+          ""
+        ],
+        [
+          "SL7684",
+          "1",
+          "1",
+          "There is no tool for Although initializing the tool",
+          "",
+          ""
+        ],
+        [
+          "SL7685",
+          "1",
+          "1",
+          "Cannot be",
+          "",
+          ""
+        ],
+        [
+          "SL7686",
+          "1",
+          "1",
+          "Addition not",
+          "",
+          ""
+        ],
+        [
+          "SL7687",
+          "1",
+          "1",
+          "Log data writing",
+          "",
+          ""
+        ],
+        [
+          "SL7688",
+          "1",
+          "1",
+          "Alarm history",
+          "",
+          ""
+        ],
+        [
+          "SL7689",
+          "1",
+          "1",
+          "There is no alarm (A)The alarm history details",
+          "",
+          ""
+        ],
+        [
+          "SL7690",
+          "1",
+          "1",
+          "The alarm history Alarm history detail file to be Contact the nearest BROTHER",
+          "",
+          ""
+        ],
+        [
+          "SL7691",
+          "1",
+          "1",
+          "Alarm history",
+          "",
+          ""
+        ],
+        [
+          "SL7692",
+          "1",
+          "1",
+          "This is an unusable Unusable or existing folder",
+          "",
+          ""
+        ],
+        [
+          "SL7693",
+          "1",
+          "1",
+          "T-code area error T command is out of the",
+          "",
+          ""
+        ],
+        [
+          "SL7694",
+          "1",
+          "1",
+          "No folder can be",
+          "",
+          ""
+        ],
+        [
+          "SL7695",
+          "1",
+          "1",
+          "The same program",
+          "",
+          ""
+        ],
+        [
+          "SL7696",
+          "1",
+          "1",
+          "The same program",
+          "",
+          ""
+        ],
+        [
+          "SL7697",
+          "1",
+          "1",
+          "Transfer to the",
+          "",
+          ""
+        ],
+        [
+          "SL7698",
+          "1",
+          "1",
+          "Copy to and check",
+          "",
+          ""
+        ],
+        [
+          "SL7699",
+          "1",
+          "1",
+          "A program is",
+          "",
+          ""
+        ],
+        [
+          "SL7700",
+          "1",
+          "1",
+          "This is a program The specified program number Specify another program number, or",
+          "",
+          ""
+        ],
+        [
+          "SL7701",
+          "1",
+          "1",
+          "Edit cancelled due The comment sentence of a",
+          "",
+          ""
+        ],
+        [
+          "SL7702",
+          "1",
+          "1",
+          "Automatic setting <Cutter compensation>,",
+          "",
+          ""
+        ],
+        [
+          "SL7703",
+          "1",
+          "1",
+          "Automatic setting The sum of <Cutter",
+          "",
+          ""
+        ],
+        [
+          "SL7704",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "SL7705",
+          "1",
+          "1",
+          "Program folder",
+          "",
+          ""
+        ],
+        [
+          "SL7706",
+          "1",
+          "1",
+          "This is a folder",
+          "",
+          ""
+        ],
+        [
+          "SL7707",
+          "1",
+          "1",
+          "No folder can enter When the current folder",
+          "",
+          ""
+        ],
+        [
+          "SL7708",
+          "1",
+          "1",
+          "There was a",
+          "",
+          ""
+        ],
+        [
+          "SL7709",
+          "1",
+          "1",
+          "Interrupted",
+          "",
+          ""
+        ],
+        [
+          "SL7710",
+          "1",
+          "1",
+          "Zero return not",
+          "",
+          ""
+        ],
+        [
+          "SL7711",
+          "1",
+          "1",
+          "No tool in",
+          "",
+          ""
+        ],
+        [
+          "SL7712",
+          "1",
+          "1",
+          "No measurement Automatic setting (parameter) Perform measurement using the",
+          "",
+          ""
+        ],
+        [
+          "SL7713",
+          "1",
+          "1",
+          "No auto thermal",
+          "",
+          ""
+        ],
+        [
+          "SL7714",
+          "1",
+          "1",
+          "Tape operation",
+          "",
+          ""
+        ],
+        [
+          "SL7715",
+          "1",
+          "1",
+          "No Z-axis",
+          "",
+          ""
+        ],
+        [
+          "SL7716",
+          "1",
+          "1",
+          "Not all items are",
+          "",
+          ""
+        ],
+        [
+          "SL7717",
+          "1",
+          "1",
+          "Check the tool in Already NC tool was set for",
+          "",
+          ""
+        ],
+        [
+          "SL7718",
+          "1",
+          "1",
+          "Scheduled program Schedule program change was Change the program after schedule",
+          "",
+          ""
+        ],
+        [
+          "SL7719",
+          "1",
+          "1",
+          "Program number The specified program number Set the correct program number.",
+          "",
+          ""
+        ],
+        [
+          "SL7720",
+          "1",
+          "1",
+          "No program (*)",
+          "",
+          ""
+        ],
+        [
+          "SL7721",
+          "1",
+          "1",
+          "Invalid pot",
+          "",
+          ""
+        ],
+        [
+          "SL7722",
+          "1",
+          "1",
+          "Different from",
+          "",
+          ""
+        ],
+        [
+          "SL7723",
+          "1",
+          "1",
+          "This is a folder",
+          "",
+          ""
+        ],
+        [
+          "SL7724",
+          "1",
+          "1",
+          "There was a",
+          "",
+          ""
+        ],
+        [
+          "SL7725",
+          "1",
+          "1",
+          "There was a file",
+          "",
+          ""
+        ],
+        [
+          "SL7726",
+          "1",
+          "1",
+          "Custom screen data (A)A control identifier was",
+          "",
+          ""
+        ],
+        [
+          "SL7727",
+          "1",
+          "1",
+          "Custom screen data (A)The set value of starting",
+          "",
+          ""
+        ],
+        [
+          "SL7728",
+          "1",
+          "1",
+          "Custom screen data Groups or controls other than Correct and enter the data on the",
+          "",
+          ""
+        ],
+        [
+          "SL7729",
+          "1",
+          "1",
+          "Custom screen data (A)Reference address of",
+          "",
+          ""
+        ],
+        [
+          "SL7730",
+          "1",
+          "1",
+          "Custom screen data (A)Notification address/write Correct and enter the data on the",
+          "",
+          ""
+        ],
+        [
+          "SL7731",
+          "1",
+          "1",
+          "Custom screen data (A)The set value of",
+          "",
+          ""
+        ],
+        [
+          "SL7732",
+          "1",
+          "1",
+          "Custom screen data Setting items are insufficient. Correct and enter the data on the",
+          "",
+          ""
+        ],
+        [
+          "SL7733",
+          "1",
+          "1",
+          "Custom screen data (A)The number of characters of Correct and enter the data on the",
+          "",
+          ""
+        ],
+        [
+          "SL7734",
+          "1",
+          "1",
+          "Custom screen data There are nine or more page",
+          "",
+          ""
+        ],
+        [
+          "SL7735",
+          "1",
+          "1",
+          "Custom screen data (A)There are 16 or more groups Correct and enter the data on the",
+          "",
+          ""
+        ],
+        [
+          "SL7736",
+          "1",
+          "1",
+          "External alarm",
+          "",
+          ""
+        ],
+        [
+          "SL7737",
+          "1",
+          "1",
+          "W/o external I/O",
+          "",
+          ""
+        ],
+        [
+          "SL7738",
+          "1",
+          "1",
+          "Special operation",
+          "",
+          ""
+        ],
+        [
+          "SL7739",
+          "1",
+          "1",
+          "Version update file 001)The version update file is 001) Store any of the following",
+          "",
+          ""
+        ],
+        [
+          "SL7740",
+          "1",
+          "1",
+          "Version update",
+          "",
+          ""
+        ],
+        [
+          "SL7741",
+          "1",
+          "1",
+          "Memory overflow Insufficient memory.",
+          "",
+          ""
+        ],
+        [
+          "SL7742",
+          "1",
+          "1",
+          "Set value outside of A set value was entered that",
+          "",
+          ""
+        ],
+        [
+          "SL7743",
+          "1",
+          "1",
+          "No G code macro",
+          "",
+          ""
+        ],
+        [
+          "SL7744",
+          "1",
+          "1",
+          "No M code macro 001)The specified M code",
+          "",
+          ""
+        ],
+        [
+          "SL7745",
+          "1",
+          "1",
+          "G code macro",
+          "",
+          ""
+        ],
+        [
+          "SL7746",
+          "1",
+          "1",
+          "M code macro",
+          "",
+          ""
+        ],
+        [
+          "SL7747",
+          "1",
+          "1",
+          "Interrupt type",
+          "",
+          ""
+        ],
+        [
+          "SL7748",
+          "1",
+          "1",
+          "Memory operation An operation which cannot be Perform the operation after the",
+          "",
+          ""
+        ],
+        [
+          "SL7749",
+          "1",
+          "1",
+          "MDI operation",
+          "",
+          ""
+        ],
+        [
+          "SL7750",
+          "1",
+          "1",
+          "No subprogram in The specified subprogram is",
+          "",
+          ""
+        ],
+        [
+          "SL7751",
+          "1",
+          "1",
+          "No subprogram in The specified subprogram is",
+          "",
+          ""
+        ],
+        [
+          "SL7752",
+          "1",
+          "1",
+          "Tool assignment",
+          "",
+          ""
+        ],
+        [
+          "SL7753",
+          "1",
+          "1",
+          "Version updated",
+          "",
+          ""
+        ],
+        [
+          "SL7754",
+          "1",
+          "1",
+          "Comm. parameter 001) The combination of",
+          "",
+          ""
+        ],
+        [
+          "SL7755",
+          "1",
+          "1",
+          "External output file The external output file for the Check the external output file in the",
+          "",
+          ""
+        ],
+        [
+          "SL7756",
+          "1",
+          "1",
+          "Machine is",
+          "",
+          ""
+        ],
+        [
+          "SL7757",
+          "1",
+          "1",
+          "This magazine is An attempt was made to",
+          "",
+          ""
+        ],
+        [
+          "SL7758",
+          "1",
+          "1",
+          "Backup memory",
+          "",
+          ""
+        ],
+        [
+          "SL7759",
+          "1",
+          "1",
+          "Memory is full",
+          "",
+          ""
+        ],
+        [
+          "SL7760",
+          "1",
+          "1",
+          "Data cannot be",
+          "",
+          ""
+        ],
+        [
+          "SL7761",
+          "1",
+          "1",
+          "Automatic data",
+          "",
+          ""
+        ],
+        [
+          "SL7762",
+          "1",
+          "1",
+          "External sub",
+          "",
+          ""
+        ],
+        [
+          "SL7763",
+          "1",
+          "1",
+          "No interrupt",
+          "",
+          ""
+        ],
+        [
+          "SL7764",
+          "1",
+          "1",
+          "Feature coordinate An operation was performed",
+          "",
+          ""
+        ],
+        [
+          "SL7765",
+          "1",
+          "1",
+          "Writing not",
+          "",
+          ""
+        ],
+        [
+          "SL7766",
+          "1",
+          "1",
+          "File cannot be",
+          "",
+          ""
+        ],
+        [
+          "SL7767",
+          "1",
+          "1",
+          "Special operation",
+          "",
+          ""
+        ],
+        [
+          "SL7768",
+          "1",
+          "1",
+          "Communication",
+          "",
+          ""
+        ],
+        [
+          "SL7769",
+          "1",
+          "1",
+          "Screen is dirty.",
+          "",
+          ""
+        ],
+        [
+          "SL7770",
+          "1",
+          "1",
+          "No load weight",
+          "",
+          ""
+        ],
+        [
+          "SL7771",
+          "1",
+          "1",
+          "File cannot be",
+          "",
+          ""
+        ],
+        [
+          "SL7772",
+          "1",
+          "1",
+          "Certificate cannot 001)An attempt was made to",
+          "",
+          ""
+        ],
+        [
+          "SL7773",
+          "1",
+          "1",
+          "Copy range",
+          "",
+          ""
+        ],
+        [
+          "SL7774",
+          "1",
+          "1",
+          "Calibration error",
+          "",
+          ""
+        ],
+        [
+          "SL7775",
+          "1",
+          "1",
+          "Version update file The firmware file for the",
+          "",
+          ""
+        ],
+        [
+          "SL7776",
+          "1",
+          "1",
+          "Cannot create",
+          "",
+          ""
+        ],
+        [
+          "SL7777",
+          "1",
+          "1",
+          "Subfolder could",
+          "",
+          ""
+        ],
+        [
+          "SL7778",
+          "1",
+          "1",
+          "Touch panel",
+          "",
+          ""
+        ],
+        [
+          "SL7779",
+          "1",
+          "1",
+          "The file already",
+          "",
+          ""
+        ],
+        [
+          "SM2053",
+          "4",
+          "2",
+          "No tool in",
+          "",
+          ""
+        ],
+        [
+          "SM2054",
+          "4",
+          "2",
+          "Capped",
+          "",
+          ""
+        ],
+        [
+          "SM2055",
+          "4",
+          "2",
+          "No A-axis option",
+          "",
+          ""
+        ],
+        [
+          "SM2056",
+          "4",
+          "2",
+          "No B-axis option",
+          "",
+          ""
+        ],
+        [
+          "SM2057",
+          "4",
+          "2",
+          "No C-axis option",
+          "",
+          ""
+        ],
+        [
+          "SM2058",
+          "4",
+          "2",
+          "No empty pot",
+          "",
+          ""
+        ],
+        [
+          "SM2059",
+          "4",
+          "2",
+          "Invalid pot",
+          "",
+          ""
+        ],
+        [
+          "SM2060",
+          "4",
+          "2",
+          "Pallet position",
+          "",
+          ""
+        ],
+        [
+          "SM2061",
+          "4",
+          "2",
+          "Outer pallet",
+          "",
+          ""
+        ],
+        [
+          "SM2062",
+          "4",
+          "2",
+          "End mill tapping",
+          "",
+          ""
+        ],
+        [
+          "SM2063",
+          "4",
+          "2",
+          "No const. speed",
+          "",
+          ""
+        ],
+        [
+          "SM2064",
+          "4",
+          "2",
+          "No const. speed",
+          "",
+          ""
+        ],
+        [
+          "SM2065",
+          "4",
+          "2",
+          "End mill tapping",
+          "",
+          ""
+        ],
+        [
+          "SM2066",
+          "4",
+          "2",
+          "XY-axes position 001)ATC, synchronized tap",
+          "",
+          ""
+        ],
+        [
+          "SM2067",
+          "4",
+          "2",
+          "X-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM2068",
+          "4",
+          "2",
+          "Tapping command An end milling/tapping",
+          "",
+          ""
+        ],
+        [
+          "SM2069",
+          "4",
+          "2",
+          "Excessive thermal Automatic thermal distortion",
+          "",
+          ""
+        ],
+        [
+          "SM2070",
+          "4",
+          "2",
+          "No auto thermal",
+          "",
+          ""
+        ],
+        [
+          "SM2071",
+          "4",
+          "2",
+          "No auto thermal",
+          "",
+          ""
+        ],
+        [
+          "SM2072",
+          "4",
+          "2",
+          "No auto thermal",
+          "",
+          ""
+        ],
+        [
+          "SM2073",
+          "4",
+          "2",
+          "Compensating",
+          "",
+          ""
+        ],
+        [
+          "SM2074",
+          "4",
+          "2",
+          "During rotational A G/M code command was",
+          "",
+          ""
+        ],
+        [
+          "SM2075",
+          "4",
+          "2",
+          "Cutter",
+          "",
+          ""
+        ],
+        [
+          "SM2076",
+          "4",
+          "2",
+          "Cutter",
+          "",
+          ""
+        ],
+        [
+          "SM2077",
+          "4",
+          "2",
+          "Canned cycle",
+          "",
+          ""
+        ],
+        [
+          "SM2078",
+          "4",
+          "2",
+          "No pitch data",
+          "",
+          ""
+        ],
+        [
+          "SM2079",
+          "4",
+          "2",
+          "Program restart",
+          "",
+          ""
+        ],
+        [
+          "SM2080",
+          "4",
+          "2",
+          "Canned cycle",
+          "",
+          ""
+        ],
+        [
+          "SM2081",
+          "4",
+          "2",
+          "Auto workpc.",
+          "",
+          ""
+        ],
+        [
+          "SM2082",
+          "4",
+          "2",
+          "Macro command 001)The macro command",
+          "",
+          ""
+        ],
+        [
+          "SM2083",
+          "4",
+          "2",
+          "Center through",
+          "",
+          ""
+        ],
+        [
+          "SM2084",
+          "4",
+          "2",
+          "Tool length range Tool length is not set correctly Make sure that the following",
+          "",
+          ""
+        ],
+        [
+          "SM2085",
+          "4",
+          "2",
+          "Magazine index",
+          "",
+          ""
+        ],
+        [
+          "SM2086",
+          "4",
+          "2",
+          "Spindle tool cannot The tool specified by the M5xx Return the spindle tool to the",
+          "",
+          ""
+        ],
+        [
+          "SM2087",
+          "4",
+          "2",
+          "Unregistered",
+          "",
+          ""
+        ],
+        [
+          "SM2088",
+          "4",
+          "2",
+          "Invalid axis",
+          "",
+          ""
+        ],
+        [
+          "SM2089",
+          "4",
+          "2",
+          "Door open",
+          "",
+          ""
+        ],
+        [
+          "SM2090",
+          "4",
+          "2",
+          "Cannot measure in Automatic workpiece",
+          "",
+          ""
+        ],
+        [
+          "SM2091",
+          "4",
+          "2",
+          "External program Memory operation was",
+          "",
+          ""
+        ],
+        [
+          "SM2092",
+          "4",
+          "2",
+          "Arc radius error",
+          "",
+          ""
+        ],
+        [
+          "SM2093",
+          "4",
+          "2",
+          "Feedrate not",
+          "",
+          ""
+        ],
+        [
+          "SM2094",
+          "4",
+          "2",
+          "Wrong tool",
+          "",
+          ""
+        ],
+        [
+          "SM2095",
+          "4",
+          "2",
+          "Start position",
+          "",
+          ""
+        ],
+        [
+          "SM2096",
+          "4",
+          "2",
+          "Memory operation G17 to G19 was executed via Press the [RST] key.",
+          "",
+          ""
+        ],
+        [
+          "SM2097",
+          "4",
+          "2",
+          "Unable to prepare Conversation language",
+          "",
+          ""
+        ],
+        [
+          "SM2098",
+          "4",
+          "2",
+          "Press [M.LCK] to Changing tool by specifying the Press the [MLCK] key to turn OFF",
+          "",
+          ""
+        ],
+        [
+          "SM2099",
+          "4",
+          "2",
+          "Pallet turn",
+          "",
+          ""
+        ],
+        [
+          "SM2100",
+          "4",
+          "2",
+          "ATC arm turn",
+          "",
+          ""
+        ],
+        [
+          "SM2101",
+          "4",
+          "2",
+          "Servo power off",
+          "",
+          ""
+        ],
+        [
+          "SM2102",
+          "4",
+          "2",
+          "Pot position error",
+          "",
+          ""
+        ],
+        [
+          "SM2103",
+          "4",
+          "2",
+          "Editing",
+          "",
+          ""
+        ],
+        [
+          "SM2104",
+          "4",
+          "2",
+          "Magazine position The position of the magazine Check the value of <M-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM2105",
+          "4",
+          "2",
+          "ATC return",
+          "",
+          ""
+        ],
+        [
+          "SM2106",
+          "4",
+          "2",
+          "Additional axis",
+          "",
+          ""
+        ],
+        [
+          "SM2107",
+          "4",
+          "2",
+          "Tool type error",
+          "",
+          ""
+        ],
+        [
+          "SM2108",
+          "4",
+          "2",
+          "Tool data spindle Spindle rotation was attempted Press the [RST] key, and the check",
+          "",
+          ""
+        ],
+        [
+          "SM2109",
+          "4",
+          "2",
+          "The tapping",
+          "",
+          ""
+        ],
+        [
+          "SM2110",
+          "4",
+          "2",
+          "High-accuracy B Dry run was turned off just",
+          "",
+          ""
+        ],
+        [
+          "SM2111",
+          "4",
+          "2",
+          "An external output The mode was changed during Press the [RST] key.",
+          "",
+          ""
+        ],
+        [
+          "SM2112",
+          "4",
+          "2",
+          "The high-accuracy The dry run was changed by the The operation described in the left",
+          "",
+          ""
+        ],
+        [
+          "SM2113",
+          "4",
+          "2",
+          "Therm.",
+          "",
+          ""
+        ],
+        [
+          "SM2114",
+          "4",
+          "2",
+          "Spline function",
+          "",
+          ""
+        ],
+        [
+          "SM2115",
+          "4",
+          "2",
+          "Feedrate error",
+          "",
+          ""
+        ],
+        [
+          "SM2116",
+          "4",
+          "2",
+          "Max. speed",
+          "",
+          ""
+        ],
+        [
+          "SM2117",
+          "4",
+          "2",
+          "Measurement",
+          "",
+          ""
+        ],
+        [
+          "SM2118",
+          "4",
+          "2",
+          "Axis travel",
+          "",
+          ""
+        ],
+        [
+          "SM2119",
+          "4",
+          "2",
+          "Spindle speed error S command was not specified Press the [RST] key, and the check",
+          "",
+          ""
+        ],
+        [
+          "SM2120",
+          "4",
+          "2",
+          "Perform Spindle",
+          "",
+          ""
+        ],
+        [
+          "SM2121",
+          "4",
+          "2",
+          "The spindle",
+          "",
+          ""
+        ],
+        [
+          "SM2122",
+          "4",
+          "2",
+          "No tool is mounted (A)There was no tool at tool",
+          "",
+          ""
+        ],
+        [
+          "SM2123",
+          "4",
+          "2",
+          "No interrupt type An attempt was made to use the Purchase the option.",
+          "",
+          ""
+        ],
+        [
+          "SM2125",
+          "4",
+          "2",
+          "The high-accuracy Current command exceeded the Decrease the cutting load and",
+          "",
+          ""
+        ],
+        [
+          "SM2126",
+          "4",
+          "2",
+          "The high-accuracy Current command exceeded the Decrease the cutting load and",
+          "",
+          ""
+        ],
+        [
+          "SM2127",
+          "4",
+          "2",
+          "The high-accuracy Current command exceeded the Decrease the cutting load and",
+          "",
+          ""
+        ],
+        [
+          "SM2128",
+          "4",
+          "2",
+          "Stroke exceeded 3 The axis has entered stroke 3",
+          "",
+          ""
+        ],
+        [
+          "SM2129",
+          "4",
+          "2",
+          "Stroke exceeded 4 The axis has entered stroke 4",
+          "",
+          ""
+        ],
+        [
+          "SM2130",
+          "4",
+          "2",
+          "Stroke exceeded 5 The axis has entered stroke 5",
+          "",
+          ""
+        ],
+        [
+          "SM2131",
+          "4",
+          "2",
+          "Spindle rotating",
+          "",
+          ""
+        ],
+        [
+          "SM2132",
+          "4",
+          "2",
+          "*-axis overload in The current command value in Lower the operation pattern and",
+          "",
+          ""
+        ],
+        [
+          "SM2133",
+          "4",
+          "2",
+          "*-axis overload in The current command value in Lower the operation pattern and",
+          "",
+          ""
+        ],
+        [
+          "SM2134",
+          "4",
+          "2",
+          "*-axis overload in The current command value in Lower the operation pattern and",
+          "",
+          ""
+        ],
+        [
+          "SM2135",
+          "4",
+          "2",
+          "*-axis overload in The current command value in Lower the operation pattern and",
+          "",
+          ""
+        ],
+        [
+          "SM2136",
+          "4",
+          "2",
+          "*-axis overload in The current command value in Lower the operation pattern and",
+          "",
+          ""
+        ],
+        [
+          "SM2137",
+          "4",
+          "2",
+          "Excessive thermal The automatic thermal",
+          "",
+          ""
+        ],
+        [
+          "SM2138",
+          "4",
+          "2",
+          "Excessive thermal The automatic thermal",
+          "",
+          ""
+        ],
+        [
+          "SM2139",
+          "4",
+          "2",
+          "Excessive thermal The automatic thermal",
+          "",
+          ""
+        ],
+        [
+          "SM2140",
+          "4",
+          "2",
+          "Thread cutting",
+          "",
+          ""
+        ],
+        [
+          "SM2141",
+          "4",
+          "2",
+          "Special setting",
+          "",
+          ""
+        ],
+        [
+          "SM2142",
+          "4",
+          "2",
+          "Positioning",
+          "",
+          ""
+        ],
+        [
+          "SM2143",
+          "4",
+          "2",
+          "Program restart",
+          "",
+          ""
+        ],
+        [
+          "SM2144",
+          "4",
+          "2",
+          "Pitch data error The pitch during a tapping",
+          "",
+          ""
+        ],
+        [
+          "SM2145",
+          "4",
+          "2",
+          "No spindle tool",
+          "",
+          ""
+        ],
+        [
+          "SM2146",
+          "4",
+          "2",
+          "Spindle tool",
+          "",
+          ""
+        ],
+        [
+          "SM2147",
+          "4",
+          "2",
+          "Spindle tool",
+          "",
+          ""
+        ],
+        [
+          "SM2148",
+          "4",
+          "2",
+          "Operation",
+          "",
+          ""
+        ],
+        [
+          "SM2149",
+          "4",
+          "2",
+          "Axis travel not",
+          "",
+          ""
+        ],
+        [
+          "SM2150",
+          "4",
+          "2",
+          "Axis travel not",
+          "",
+          ""
+        ],
+        [
+          "SM2151",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2152",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2153",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2154",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2155",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2156",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2157",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2158",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2159",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2160",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2161",
+          "4",
+          "2",
+          "Operation disabled (A)The door interlock mode is Change the door interlock mode to",
+          "",
+          ""
+        ],
+        [
+          "SM2162",
+          "4",
+          "2",
+          "No spindle tool",
+          "",
+          ""
+        ],
+        [
+          "SM2163",
+          "4",
+          "2",
+          "Timeout for load The required load was not",
+          "",
+          ""
+        ],
+        [
+          "SM2164",
+          "4",
+          "2",
+          "Timeout for load The required load was not",
+          "",
+          ""
+        ],
+        [
+          "SM2165",
+          "4",
+          "2",
+          "Timeout for load The required load was not",
+          "",
+          ""
+        ],
+        [
+          "SM2166",
+          "4",
+          "2",
+          "Timeout for load The required load was not",
+          "",
+          ""
+        ],
+        [
+          "SM2167",
+          "4",
+          "2",
+          "Timeout for load The required load was not",
+          "",
+          ""
+        ],
+        [
+          "SM2168",
+          "4",
+          "2",
+          "Timeout for load The required load was not",
+          "",
+          ""
+        ],
+        [
+          "SM2169",
+          "4",
+          "2",
+          "Timeout for load The required load was not",
+          "",
+          ""
+        ],
+        [
+          "SM2170",
+          "4",
+          "2",
+          "Timeout for load The required load was not",
+          "",
+          ""
+        ],
+        [
+          "SM2171",
+          "4",
+          "2",
+          "Timeout for load The required load was not",
+          "",
+          ""
+        ],
+        [
+          "SM2172",
+          "4",
+          "2",
+          "Timeout for load The required load was not",
+          "",
+          ""
+        ],
+        [
+          "SM2173",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2174",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2175",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2176",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2177",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2178",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2179",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2180",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2181",
+          "4",
+          "2",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM2182",
+          "4",
+          "2",
+          "Macro variable",
+          "",
+          ""
+        ],
+        [
+          "SM2183",
+          "4",
+          "2",
+          "Macro execution 001)The nesting of the macro 001)Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM2184",
+          "4",
+          "2",
+          "Rotational",
+          "",
+          ""
+        ],
+        [
+          "SM2185",
+          "4",
+          "2",
+          "Compensating",
+          "",
+          ""
+        ],
+        [
+          "SM2186",
+          "4",
+          "2",
+          "ATC monitoring",
+          "",
+          ""
+        ],
+        [
+          "SM2187",
+          "4",
+          "2",
+          "Machining load",
+          "",
+          ""
+        ],
+        [
+          "SM2188",
+          "4",
+          "2",
+          "Machining load",
+          "",
+          ""
+        ],
+        [
+          "SM2189",
+          "4",
+          "2",
+          "Stroke exceeded 6",
+          "",
+          ""
+        ],
+        [
+          "SM2190",
+          "4",
+          "2",
+          "Stroke exceeded 7",
+          "",
+          ""
+        ],
+        [
+          "SM2191",
+          "4",
+          "2",
+          "Stroke exceeded 8",
+          "",
+          ""
+        ],
+        [
+          "SM2192",
+          "4",
+          "2",
+          "Stroke exceeded 9 The axis has entered stroke 9",
+          "",
+          ""
+        ],
+        [
+          "SM2193",
+          "4",
+          "2",
+          "Stroke exceeded 10 The axis has entered stroke 10 Press the [RST] key, and then correct",
+          "",
+          ""
+        ],
+        [
+          "SM2195",
+          "4",
+          "2",
+          "Door operation",
+          "",
+          ""
+        ],
+        [
+          "SM2196",
+          "4",
+          "2",
+          "Door open timeout The automatic door does not",
+          "",
+          ""
+        ],
+        [
+          "SM2197",
+          "4",
+          "2",
+          "Spindle rotation",
+          "",
+          ""
+        ],
+        [
+          "SM2198",
+          "4",
+          "2",
+          "Lathe spindle",
+          "",
+          ""
+        ],
+        [
+          "SM2199",
+          "4",
+          "2",
+          "Automatic door",
+          "",
+          ""
+        ],
+        [
+          "SM2200",
+          "4",
+          "2",
+          "Door was not",
+          "",
+          ""
+        ],
+        [
+          "SM2201",
+          "4",
+          "2",
+          "Compensation",
+          "",
+          ""
+        ],
+        [
+          "SM2202",
+          "4",
+          "2",
+          "Return position",
+          "",
+          ""
+        ],
+        [
+          "SM2203",
+          "4",
+          "2",
+          "Return position",
+          "",
+          ""
+        ],
+        [
+          "SM2204",
+          "4",
+          "2",
+          "Side door lock",
+          "",
+          ""
+        ],
+        [
+          "SM4000",
+          "3",
+          "2",
+          "Spindle speed error 001) An attempt was made to 001)Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4001",
+          "3",
+          "2",
+          "Specified G code 001) An unregistered G code",
+          "",
+          ""
+        ],
+        [
+          "SM4002",
+          "3",
+          "2",
+          "Simultaneous",
+          "",
+          ""
+        ],
+        [
+          "SM4003",
+          "3",
+          "2",
+          "Specified M code 001) An unregistered M code 001)Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4005",
+          "3",
+          "2",
+          "Same code cannot Two or more M codes are used Check the program after pressing the",
+          "",
+          ""
+        ],
+        [
+          "SM4006",
+          "3",
+          "2",
+          "Invalid data",
+          "",
+          ""
+        ],
+        [
+          "SM4007",
+          "3",
+          "2",
+          "Command data",
+          "",
+          ""
+        ],
+        [
+          "SM4008",
+          "3",
+          "2",
+          "Characters per",
+          "",
+          ""
+        ],
+        [
+          "SM4009",
+          "3",
+          "2",
+          "No end of program M02 or M30 is not included in Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4010",
+          "3",
+          "2",
+          "Arc command error 001)There is no radius",
+          "",
+          ""
+        ],
+        [
+          "SM4011",
+          "3",
+          "2",
+          "Subprogram call",
+          "",
+          ""
+        ],
+        [
+          "SM4012",
+          "3",
+          "2",
+          "Subprogram",
+          "",
+          ""
+        ],
+        [
+          "SM4013",
+          "3",
+          "2",
+          "Modal subprogram 001)G67 was used although the 001)Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4014",
+          "3",
+          "2",
+          "Feedrate error",
+          "",
+          ""
+        ],
+        [
+          "SM4015",
+          "3",
+          "2",
+          "Coordinate",
+          "",
+          ""
+        ],
+        [
+          "SM4016",
+          "3",
+          "2",
+          "Arc mode",
+          "",
+          ""
+        ],
+        [
+          "SM4017",
+          "3",
+          "2",
+          "No T-code",
+          "",
+          ""
+        ],
+        [
+          "SM4018",
+          "3",
+          "2",
+          "Subprogram return 001)A return number was",
+          "",
+          ""
+        ],
+        [
+          "SM4019",
+          "3",
+          "2",
+          "No applicable",
+          "",
+          ""
+        ],
+        [
+          "SM4020",
+          "3",
+          "2",
+          "High accuracy A 001)An interrupt type macro",
+          "",
+          ""
+        ],
+        [
+          "SM4021",
+          "3",
+          "2",
+          "High accuracy A High accuracy mode A start",
+          "",
+          ""
+        ],
+        [
+          "SM4022",
+          "3",
+          "2",
+          "Max. speed",
+          "",
+          ""
+        ],
+        [
+          "SM4023",
+          "3",
+          "2",
+          "Mirror image mode A G/M code command was",
+          "",
+          ""
+        ],
+        [
+          "SM4024",
+          "3",
+          "2",
+          "Scaling (*)",
+          "",
+          ""
+        ],
+        [
+          "SM4025",
+          "3",
+          "2",
+          "Scaling address",
+          "",
+          ""
+        ],
+        [
+          "SM4026",
+          "3",
+          "2",
+          "Plane selection",
+          "",
+          ""
+        ],
+        [
+          "SM4027",
+          "3",
+          "2",
+          "Two or more axes Two or more axes were",
+          "",
+          ""
+        ],
+        [
+          "SM4028",
+          "3",
+          "2",
+          "Load weight",
+          "",
+          ""
+        ],
+        [
+          "SM4029",
+          "3",
+          "2",
+          "Coordinate",
+          "",
+          ""
+        ],
+        [
+          "SM4030",
+          "3",
+          "2",
+          "Turn external",
+          "",
+          ""
+        ],
+        [
+          "SM4031",
+          "3",
+          "2",
+          "Comment error",
+          "",
+          ""
+        ],
+        [
+          "SM4032",
+          "3",
+          "2",
+          "No intersection",
+          "",
+          ""
+        ],
+        [
+          "SM4033",
+          "3",
+          "2",
+          "The tool data",
+          "",
+          ""
+        ],
+        [
+          "SM4034",
+          "3",
+          "2",
+          "Multiple M codes An M code command was",
+          "",
+          ""
+        ],
+        [
+          "SM4035",
+          "3",
+          "2",
+          "CTS unable tool",
+          "",
+          ""
+        ],
+        [
+          "SM4036",
+          "3",
+          "2",
+          "Comm. issued to",
+          "",
+          ""
+        ],
+        [
+          "SM4037",
+          "3",
+          "2",
+          "Interrupted",
+          "",
+          ""
+        ],
+        [
+          "SM4038",
+          "3",
+          "2",
+          "High-accuracy B High accuracy mode B start",
+          "",
+          ""
+        ],
+        [
+          "SM4039",
+          "3",
+          "2",
+          "High-accuracy B 001) An interrupt type macro 001) Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4040",
+          "3",
+          "2",
+          "Too many external The range of data that can be",
+          "",
+          ""
+        ],
+        [
+          "SM4041",
+          "3",
+          "2",
+          "POPEN is unable. BPRNT or DPRNT command Press the [RST] key, and the check",
+          "",
+          ""
+        ],
+        [
+          "SM4042",
+          "3",
+          "2",
+          "No subprogram (*) 001)The specified sub program 001)Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4043",
+          "3",
+          "2",
+          "Too many",
+          "",
+          ""
+        ],
+        [
+          "SM4044",
+          "3",
+          "2",
+          "A command unable 001)While lathe spindle was",
+          "",
+          ""
+        ],
+        [
+          "SM4045",
+          "3",
+          "2",
+          "Spindle selection M code command which cannot Press the [RST] key, and the check",
+          "",
+          ""
+        ],
+        [
+          "SM4046",
+          "3",
+          "2",
+          "Communicating",
+          "",
+          ""
+        ],
+        [
+          "SM4047",
+          "3",
+          "2",
+          "There is no P",
+          "",
+          ""
+        ],
+        [
+          "SM4048",
+          "3",
+          "2",
+          "Different from",
+          "",
+          ""
+        ],
+        [
+          "SM4049",
+          "3",
+          "2",
+          "W/o turning",
+          "",
+          ""
+        ],
+        [
+          "SM4050",
+          "3",
+          "2",
+          "Cannot use intrpl.",
+          "",
+          ""
+        ],
+        [
+          "SM4051",
+          "3",
+          "2",
+          "No spindle speed",
+          "",
+          ""
+        ],
+        [
+          "SM4052",
+          "3",
+          "2",
+          "Press the [RST]",
+          "",
+          ""
+        ],
+        [
+          "SM4053",
+          "3",
+          "2",
+          "Tool length offset G49 with no Z-axis command (a)Correct the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4054",
+          "3",
+          "2",
+          "Tool position offset G49 with no X-, Y- or Z-axis (a)Correct the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4055",
+          "3",
+          "2",
+          "Rotary fixture",
+          "",
+          ""
+        ],
+        [
+          "SM4056",
+          "3",
+          "2",
+          "Rotary fixture",
+          "",
+          ""
+        ],
+        [
+          "SM4057",
+          "3",
+          "2",
+          "Failed to search",
+          "",
+          ""
+        ],
+        [
+          "SM4058",
+          "3",
+          "2",
+          "No G code macro",
+          "",
+          ""
+        ],
+        [
+          "SM4059",
+          "3",
+          "2",
+          "No M code macro 001)The specified M code",
+          "",
+          ""
+        ],
+        [
+          "SM4060",
+          "3",
+          "2",
+          "G code macro",
+          "",
+          ""
+        ],
+        [
+          "SM4061",
+          "3",
+          "2",
+          "M code macro",
+          "",
+          ""
+        ],
+        [
+          "SM4062",
+          "3",
+          "2",
+          "Macro program",
+          "",
+          ""
+        ],
+        [
+          "SM4063",
+          "3",
+          "2",
+          "No subprogram in The specified subprogram does Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4064",
+          "3",
+          "2",
+          "No subprogram in The specified subprogram does Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4065",
+          "3",
+          "2",
+          "No rotary fixture There is no option for the rotary Purchase the option to use this",
+          "",
+          ""
+        ],
+        [
+          "SM4067",
+          "3",
+          "2",
+          "No relief amount There is no relief amount after Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4068",
+          "3",
+          "2",
+          "Cutting amount",
+          "",
+          ""
+        ],
+        [
+          "SM4069",
+          "3",
+          "2",
+          "Cutting angle error The cutting angle is too small Set an appropriate value for the user",
+          "",
+          ""
+        ],
+        [
+          "SM4070",
+          "3",
+          "2",
+          "Taper amount too The position which was only",
+          "",
+          ""
+        ],
+        [
+          "SM4071",
+          "3",
+          "2",
+          "Initial infeed",
+          "",
+          ""
+        ],
+        [
+          "SM4072",
+          "3",
+          "2",
+          "Finishing",
+          "",
+          ""
+        ],
+        [
+          "SM4073",
+          "3",
+          "2",
+          "Thread height error The thread height in a complex Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4074",
+          "3",
+          "2",
+          "Thread cutting",
+          "",
+          ""
+        ],
+        [
+          "SM4075",
+          "3",
+          "2",
+          "Thread cutting",
+          "",
+          ""
+        ],
+        [
+          "SM4076",
+          "3",
+          "2",
+          "Thread cutting",
+          "",
+          ""
+        ],
+        [
+          "SM4077",
+          "3",
+          "2",
+          "Cutting amount",
+          "",
+          ""
+        ],
+        [
+          "SM4078",
+          "3",
+          "2",
+          "Arc angle error",
+          "",
+          ""
+        ],
+        [
+          "SM4079",
+          "3",
+          "2",
+          "Unavailable modal The M298 command was",
+          "",
+          ""
+        ],
+        [
+          "SM4080",
+          "3",
+          "2",
+          "Machining mode The L7 (Adjustment A), L8",
+          "",
+          ""
+        ],
+        [
+          "SM4081",
+          "3",
+          "2",
+          "The lathe spindle is The brake load test was",
+          "",
+          ""
+        ],
+        [
+          "SM4082",
+          "3",
+          "2",
+          "Interpolation",
+          "",
+          ""
+        ],
+        [
+          "SM4083",
+          "3",
+          "2",
+          "Command using 2 An interpolation command was Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4084",
+          "3",
+          "2",
+          "Address where",
+          "",
+          ""
+        ],
+        [
+          "SM4085",
+          "3",
+          "2",
+          "Command address A command has not been",
+          "",
+          ""
+        ],
+        [
+          "SM4086",
+          "3",
+          "2",
+          "Computation error 001) The computation resulted 001)Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4087",
+          "3",
+          "2",
+          "Syntax error",
+          "",
+          ""
+        ],
+        [
+          "SM4088",
+          "3",
+          "2",
+          "Arc calculation",
+          "",
+          ""
+        ],
+        [
+          "SM4089",
+          "3",
+          "2",
+          "Scaling",
+          "",
+          ""
+        ],
+        [
+          "SM4090",
+          "3",
+          "2",
+          "Mirror image mode 001) A spiral/conical command 001)Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4091",
+          "3",
+          "2",
+          "Rotary fixture",
+          "",
+          ""
+        ],
+        [
+          "SM4092",
+          "3",
+          "2",
+          "Plane selection",
+          "",
+          ""
+        ],
+        [
+          "SM4093",
+          "3",
+          "2",
+          "Sub program open The sub program file failed to If there is another alarm triggering at",
+          "",
+          ""
+        ],
+        [
+          "SM4094",
+          "3",
+          "2",
+          "Sub program close The sub program file failed to If there is another alarm triggering at",
+          "",
+          ""
+        ],
+        [
+          "SM4095",
+          "3",
+          "2",
+          "Angle",
+          "",
+          ""
+        ],
+        [
+          "SM4096",
+          "3",
+          "2",
+          "Pallet index not",
+          "",
+          ""
+        ],
+        [
+          "SM4097",
+          "3",
+          "2",
+          "Interrupt program",
+          "",
+          ""
+        ],
+        [
+          "SM4098",
+          "3",
+          "2",
+          "Interrupt program",
+          "",
+          ""
+        ],
+        [
+          "SM4099",
+          "3",
+          "2",
+          "Interrupt type",
+          "",
+          ""
+        ],
+        [
+          "SM4100",
+          "3",
+          "2",
+          "No interrupt",
+          "",
+          ""
+        ],
+        [
+          "SM4101",
+          "3",
+          "2",
+          "Macro program",
+          "",
+          ""
+        ],
+        [
+          "SM4102",
+          "3",
+          "2",
+          "M code macro call 001) In a M code based macro 001)Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4103",
+          "3",
+          "2",
+          "External sub",
+          "",
+          ""
+        ],
+        [
+          "SM4104",
+          "3",
+          "2",
+          "Rotation axis/Tilt (A)When the user parameter",
+          "",
+          ""
+        ],
+        [
+          "SM4105",
+          "3",
+          "2",
+          "No feature",
+          "",
+          ""
+        ],
+        [
+          "SM4106",
+          "3",
+          "2",
+          "Feature coordinate 001)The command for the",
+          "",
+          ""
+        ],
+        [
+          "SM4107",
+          "3",
+          "2",
+          "Feature coordinate A command was specified that Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4108",
+          "3",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM4109",
+          "3",
+          "2",
+          "Machining load",
+          "",
+          ""
+        ],
+        [
+          "SM4110",
+          "3",
+          "2",
+          "Machining load",
+          "",
+          ""
+        ],
+        [
+          "SM4111",
+          "3",
+          "2",
+          "Cutter",
+          "",
+          ""
+        ],
+        [
+          "SM4112",
+          "3",
+          "2",
+          "Invalid command The specified command cannot (a)Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4113",
+          "3",
+          "2",
+          "Invalid command The command cannot be used (a)Check the program.",
+          "",
+          ""
+        ],
+        [
+          "SM4114",
+          "3",
+          "2",
+          "Involute",
+          "",
+          ""
+        ],
+        [
+          "SM4115",
+          "3",
+          "2",
+          "Invalid command G and M code commands were Press the [RST] key and check the",
+          "",
+          ""
+        ],
+        [
+          "SM4116",
+          "3",
+          "2",
+          "There is no",
+          "",
+          ""
+        ],
+        [
+          "SM4117",
+          "3",
+          "2",
+          "Involute",
+          "",
+          ""
+        ],
+        [
+          "SM4118",
+          "3",
+          "2",
+          "An external output The mode was changed during Press the [RST] key.",
+          "",
+          ""
+        ],
+        [
+          "SM4119",
+          "3",
+          "2",
+          "Coolant pump OFF Memory operation was started (a)Turn ON the [CLT.P] key.",
+          "",
+          ""
+        ],
+        [
+          "SM4121",
+          "3",
+          "2",
+          "Door operation",
+          "",
+          ""
+        ],
+        [
+          "SM4122",
+          "3",
+          "2",
+          "Door open timeout The automatic door does not",
+          "",
+          ""
+        ],
+        [
+          "SM4123",
+          "3",
+          "2",
+          "Compensating",
+          "",
+          ""
+        ],
+        [
+          "SM5500",
+          "2",
+          "2",
+          "Time to change",
+          "",
+          ""
+        ],
+        [
+          "SM5501",
+          "2",
+          "2",
+          "Machining load",
+          "",
+          ""
+        ],
+        [
+          "SM5502",
+          "2",
+          "2",
+          "Machining load",
+          "",
+          ""
+        ],
+        [
+          "SM5503",
+          "2",
+          "2",
+          "Door operation",
+          "",
+          ""
+        ],
+        [
+          "SM5504",
+          "2",
+          "2",
+          "Door open timeout The automatic door does not",
+          "",
+          ""
+        ],
+        [
+          "SM5505",
+          "2",
+          "2",
+          "*-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM5506",
+          "2",
+          "2",
+          "*-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM5507",
+          "2",
+          "2",
+          "*-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM5508",
+          "2",
+          "2",
+          "*-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM5509",
+          "2",
+          "2",
+          "*-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM5510",
+          "2",
+          "2",
+          "*-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM5511",
+          "2",
+          "2",
+          "*-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM5512",
+          "2",
+          "2",
+          "*-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM7000",
+          "1",
+          "2",
+          "There is no P1-axis P1-axis travel command was",
+          "",
+          ""
+        ],
+        [
+          "SM7001",
+          "1",
+          "2",
+          "There is no P2-axis P2-axis travel command was",
+          "",
+          ""
+        ],
+        [
+          "SM7002",
+          "1",
+          "2",
+          "There is no P3-axis P3-axis travel command was",
+          "",
+          ""
+        ],
+        [
+          "SM7003",
+          "1",
+          "2",
+          "There is no P4-axis P4-axis travel command was",
+          "",
+          ""
+        ],
+        [
+          "SM7004",
+          "1",
+          "2",
+          "No comm.",
+          "",
+          ""
+        ],
+        [
+          "SM7005",
+          "1",
+          "2",
+          "No comm.",
+          "",
+          ""
+        ],
+        [
+          "SM7006",
+          "1",
+          "2",
+          "No comm.",
+          "",
+          ""
+        ],
+        [
+          "SM7007",
+          "1",
+          "2",
+          "No comm.",
+          "",
+          ""
+        ],
+        [
+          "SM7008",
+          "1",
+          "2",
+          "Command is",
+          "",
+          ""
+        ],
+        [
+          "SM7009",
+          "1",
+          "2",
+          "Command is",
+          "",
+          ""
+        ],
+        [
+          "SM7010",
+          "1",
+          "2",
+          "Command is",
+          "",
+          ""
+        ],
+        [
+          "SM7011",
+          "1",
+          "2",
+          "Command is",
+          "",
+          ""
+        ],
+        [
+          "SM7012",
+          "1",
+          "2",
+          "Stroke exceeded",
+          "",
+          ""
+        ],
+        [
+          "SM7013",
+          "1",
+          "2",
+          "Stroke exceeded (- The axis has exceeded <P1-axis Turn the CTRL_P1 signal (BY:P1axis",
+          "",
+          ""
+        ],
+        [
+          "SM7014",
+          "1",
+          "2",
+          "Stroke exceeded",
+          "",
+          ""
+        ],
+        [
+          "SM7015",
+          "1",
+          "2",
+          "Stroke exceeded (- The axis has exceeded <P2-axis Turn the CTRL_P2 signal (BY:P2axis",
+          "",
+          ""
+        ],
+        [
+          "SM7016",
+          "1",
+          "2",
+          "Stroke exceeded",
+          "",
+          ""
+        ],
+        [
+          "SM7017",
+          "1",
+          "2",
+          "Stroke exceeded (- The axis has exceeded <P3-axis Turn the CTRL_P3 signal (BY:P3axis",
+          "",
+          ""
+        ],
+        [
+          "SM7018",
+          "1",
+          "2",
+          "Stroke exceeded",
+          "",
+          ""
+        ],
+        [
+          "SM7019",
+          "1",
+          "2",
+          "Stroke exceeded (- The axis has exceeded <P4-axis Turn the CTRL_P4 signal (BY:P4axis",
+          "",
+          ""
+        ],
+        [
+          "SM7020",
+          "1",
+          "2",
+          "P1-axis servo",
+          "",
+          ""
+        ],
+        [
+          "SM7021",
+          "1",
+          "2",
+          "P2-axis servo",
+          "",
+          ""
+        ],
+        [
+          "SM7022",
+          "1",
+          "2",
+          "P3-axis servo",
+          "",
+          ""
+        ],
+        [
+          "SM7023",
+          "1",
+          "2",
+          "P4-axis servo",
+          "",
+          ""
+        ],
+        [
+          "SM7024",
+          "1",
+          "2",
+          "P1-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM7025",
+          "1",
+          "2",
+          "P2-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM7026",
+          "1",
+          "2",
+          "P3-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM7027",
+          "1",
+          "2",
+          "P4-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM7028",
+          "1",
+          "2",
+          "P1-axis in-position The axis did not reach in-",
+          "",
+          ""
+        ],
+        [
+          "SM7029",
+          "1",
+          "2",
+          "P2-axis in-position The axis did not reach in-",
+          "",
+          ""
+        ],
+        [
+          "SM7030",
+          "1",
+          "2",
+          "P3-axis in-position The axis did not reach in-",
+          "",
+          ""
+        ],
+        [
+          "SM7031",
+          "1",
+          "2",
+          "P4-axis in-position The axis did not reach in-",
+          "",
+          ""
+        ],
+        [
+          "SM7032",
+          "1",
+          "2",
+          "P1-axis speed",
+          "",
+          ""
+        ],
+        [
+          "SM7033",
+          "1",
+          "2",
+          "P2-axis speed",
+          "",
+          ""
+        ],
+        [
+          "SM7034",
+          "1",
+          "2",
+          "P3-axis speed",
+          "",
+          ""
+        ],
+        [
+          "SM7035",
+          "1",
+          "2",
+          "P4-axis speed",
+          "",
+          ""
+        ],
+        [
+          "SM7036",
+          "1",
+          "2",
+          "P1-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM7037",
+          "1",
+          "2",
+          "P2-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM7038",
+          "1",
+          "2",
+          "P3-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM7039",
+          "1",
+          "2",
+          "P4-axis position",
+          "",
+          ""
+        ],
+        [
+          "SM7040",
+          "1",
+          "2",
+          "The P1-axis servo",
+          "",
+          ""
+        ],
+        [
+          "SM7041",
+          "1",
+          "2",
+          "The P2-axis servo",
+          "",
+          ""
+        ],
+        [
+          "SM7042",
+          "1",
+          "2",
+          "The P3-axis servo",
+          "",
+          ""
+        ],
+        [
+          "SM7043",
+          "1",
+          "2",
+          "The P4-axis servo",
+          "",
+          ""
+        ],
+        [
+          "SM7044",
+          "1",
+          "2",
+          "The P1-axis servo",
+          "",
+          ""
+        ],
+        [
+          "SM7045",
+          "1",
+          "2",
+          "The P2-axis servo",
+          "",
+          ""
+        ],
+        [
+          "SM7046",
+          "1",
+          "2",
+          "The P3-axis servo",
+          "",
+          ""
+        ],
+        [
+          "SM7047",
+          "1",
+          "2",
+          "The P4-axis servo The servo off command was",
+          "",
+          ""
+        ],
+        [
+          "SM7048",
+          "1",
+          "2",
+          "External panel",
+          "",
+          ""
+        ],
+        [
+          "SM7049",
+          "1",
+          "2",
+          "No comm",
+          "",
+          ""
+        ],
+        [
+          "SM7050",
+          "1",
+          "2",
+          "No comm",
+          "",
+          ""
+        ],
+        [
+          "SM7051",
+          "1",
+          "2",
+          "No comm",
+          "",
+          ""
+        ],
+        [
+          "SM7052",
+          "1",
+          "2",
+          "No comm",
+          "",
+          ""
+        ],
+        [
+          "SM7053",
+          "1",
+          "2",
+          "No command",
+          "",
+          ""
+        ],
+        [
+          "SM7054",
+          "1",
+          "2",
+          "No command",
+          "",
+          ""
+        ],
+        [
+          "SM7055",
+          "1",
+          "2",
+          "No command",
+          "",
+          ""
+        ],
+        [
+          "SM7056",
+          "1",
+          "2",
+          "No command",
+          "",
+          ""
+        ],
+        [
+          "SM7057",
+          "1",
+          "2",
+          "OPSEL mounted OPSEL is mounted.",
+          "",
+          ""
+        ],
+        [
+          "SM7058",
+          "1",
+          "2",
+          "No command is",
+          "",
+          ""
+        ],
+        [
+          "SM7059",
+          "1",
+          "2",
+          "No command is",
+          "",
+          ""
+        ],
+        [
+          "SM7060",
+          "1",
+          "2",
+          "No command is",
+          "",
+          ""
+        ],
+        [
+          "SM7061",
+          "1",
+          "2",
+          "No command is",
+          "",
+          ""
+        ],
+        [
+          "SM7062",
+          "1",
+          "2",
+          "Speed error when The P1-axis moved at a speed Turn the CTRL_P1 signal (BY:P1axis",
+          "",
+          ""
+        ],
+        [
+          "SM7063",
+          "1",
+          "2",
+          "Speed error when The P2-axis moved at a speed Turn the CTRL_P2 signal (BY:P2axis",
+          "",
+          ""
+        ],
+        [
+          "SM7064",
+          "1",
+          "2",
+          "Speed error when",
+          "",
+          ""
+        ],
+        [
+          "SM7065",
+          "1",
+          "2",
+          "Speed error when The P4-axis moved at a speed Turn the CTRL_P4 signal (BY:P4axis",
+          "",
+          ""
+        ],
+        [
+          "SM7066",
+          "1",
+          "2",
+          "A different key was The [START] switch or the",
+          "",
+          ""
+        ],
+        [
+          "SM7067",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7068",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7069",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7070",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7071",
+          "1",
+          "2",
+          "ATC monitoring",
+          "",
+          ""
+        ],
+        [
+          "SM7072",
+          "1",
+          "2",
+          "Command cannot",
+          "",
+          ""
+        ],
+        [
+          "SM7073",
+          "1",
+          "2",
+          "Command cannot P2-axis travel command was",
+          "",
+          ""
+        ],
+        [
+          "SM7074",
+          "1",
+          "2",
+          "Command cannot P3-axis travel command was",
+          "",
+          ""
+        ],
+        [
+          "SM7075",
+          "1",
+          "2",
+          "Command cannot P4-axis travel command was",
+          "",
+          ""
+        ],
+        [
+          "SM7076",
+          "1",
+          "2",
+          "Spindle taper not The spindle taper specification Set the spindle taper specification.",
+          "",
+          ""
+        ],
+        [
+          "SM7077",
+          "1",
+          "2",
+          "Machining load",
+          "",
+          ""
+        ],
+        [
+          "SM7078",
+          "1",
+          "2",
+          "Machining load",
+          "",
+          ""
+        ],
+        [
+          "SM7079",
+          "1",
+          "2",
+          "Load weight",
+          "",
+          ""
+        ],
+        [
+          "SM7080",
+          "1",
+          "2",
+          "Stroke exceeded",
+          "",
+          ""
+        ],
+        [
+          "SM7081",
+          "1",
+          "2",
+          "Stroke exceeded",
+          "",
+          ""
+        ],
+        [
+          "SM7082",
+          "1",
+          "2",
+          "Automatic door",
+          "",
+          ""
+        ],
+        [
+          "SM7083",
+          "1",
+          "2",
+          "Automatic door in- The axis did not enter the in-",
+          "",
+          ""
+        ],
+        [
+          "SM7084",
+          "1",
+          "2",
+          "Automatic door",
+          "",
+          ""
+        ],
+        [
+          "SM7085",
+          "1",
+          "2",
+          "Front door unlock The front door could not be",
+          "",
+          ""
+        ],
+        [
+          "SM7086",
+          "1",
+          "2",
+          "Outer door unlock The outer door could not be",
+          "",
+          ""
+        ],
+        [
+          "SM7087",
+          "1",
+          "2",
+          "Left side door",
+          "",
+          ""
+        ],
+        [
+          "SM7088",
+          "1",
+          "2",
+          "Right side door",
+          "",
+          ""
+        ],
+        [
+          "SM7089",
+          "1",
+          "2",
+          "Inner door unlock The inner door could not be",
+          "",
+          ""
+        ],
+        [
+          "SM7090",
+          "1",
+          "2",
+          "Setup chamber left The setup chamber left door",
+          "",
+          ""
+        ],
+        [
+          "SM7091",
+          "1",
+          "2",
+          "Setup chamber",
+          "",
+          ""
+        ],
+        [
+          "SM7092",
+          "1",
+          "2",
+          "Outside door 1",
+          "",
+          ""
+        ],
+        [
+          "SM7093",
+          "1",
+          "2",
+          "Outside door 2",
+          "",
+          ""
+        ],
+        [
+          "SM7094",
+          "1",
+          "2",
+          "Magazine door",
+          "",
+          ""
+        ],
+        [
+          "SM7095",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7096",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7097",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7098",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7099",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7100",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7101",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7102",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7103",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7104",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7105",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7106",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7107",
+          "1",
+          "2",
+          "X-axis machine",
+          "",
+          ""
+        ],
+        [
+          "SM7108",
+          "1",
+          "2",
+          "Y-axis machine",
+          "",
+          ""
+        ],
+        [
+          "SM7109",
+          "1",
+          "2",
+          "Z-axis machine",
+          "",
+          ""
+        ],
+        [
+          "SM7110",
+          "1",
+          "2",
+          "X-axis machine",
+          "",
+          ""
+        ],
+        [
+          "SM7111",
+          "1",
+          "2",
+          "Y-axis machine",
+          "",
+          ""
+        ],
+        [
+          "SM7112",
+          "1",
+          "2",
+          "Z-axis machine",
+          "",
+          ""
+        ],
+        [
+          "SM7113",
+          "1",
+          "2",
+          "Tolerance error",
+          "",
+          ""
+        ],
+        [
+          "SM7114",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7115",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7116",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7117",
+          "1",
+          "2",
+          "Command not",
+          "",
+          ""
+        ],
+        [
+          "SM7118",
+          "1",
+          "2",
+          "Error in",
+          "",
+          ""
+        ],
+        [
+          "SM7119",
+          "1",
+          "2",
+          "Teaching pendant An error occurred during",
+          "",
+          ""
+        ],
+        [
+          "SM7120",
+          "1",
+          "2",
+          "Teaching pendant An error was detected in",
+          "",
+          ""
+        ],
+        [
+          "SM7121",
+          "1",
+          "2",
+          "Side door lock",
+          "",
+          ""
+        ],
+        [
+          "SM7122",
+          "1",
+          "2",
+          "Side door lock",
+          "",
+          ""
+        ],
+        [
+          "SM7123",
+          "1",
+          "2",
+          "Side door lock",
+          "",
+          ""
+        ],
+        [
+          "SM7124",
+          "1",
+          "2",
+          "Side door lock",
+          "",
+          ""
+        ],
+        [
+          "SM7500",
+          "1",
+          "1",
+          "Memory operation MDI operation was attempted Execute MDI operation after memory",
+          "",
+          ""
+        ],
+        [
+          "SM7501",
+          "1",
+          "1",
+          "MDI operation",
+          "",
+          ""
+        ],
+        [
+          "SM7502",
+          "1",
+          "1",
+          "Handle mode",
+          "",
+          ""
+        ],
+        [
+          "SM7503",
+          "1",
+          "1",
+          "Spindle stopped",
+          "",
+          ""
+        ],
+        [
+          "SM7504",
+          "1",
+          "1",
+          "Tap time constant The tap time constant set by the Use the M code to set the appropriate",
+          "",
+          ""
+        ],
+        [
+          "SM7505",
+          "1",
+          "1",
+          "Pallet position",
+          "",
+          ""
+        ],
+        [
+          "SM7506",
+          "1",
+          "1",
+          "Press the",
+          "",
+          ""
+        ],
+        [
+          "SM7507",
+          "1",
+          "1",
+          "Different from",
+          "",
+          ""
+        ],
+        [
+          "SM7508",
+          "1",
+          "1",
+          "Spindle lock signal Spindle operation was executed Operate after turning off the input",
+          "",
+          ""
+        ],
+        [
+          "SM7509",
+          "1",
+          "1",
+          "ATC lock signal on ATC operation was executed",
+          "",
+          ""
+        ],
+        [
+          "SM7510",
+          "1",
+          "1",
+          "XY-axes lock",
+          "",
+          ""
+        ],
+        [
+          "SM7511",
+          "1",
+          "1",
+          "Z-ax lock signal on Z-axis operation was executed Operate after turning off the input",
+          "",
+          ""
+        ],
+        [
+          "SM7512",
+          "1",
+          "1",
+          "*-ax lock signal on 4-axis operation was executed Operate after turning off the input",
+          "",
+          ""
+        ],
+        [
+          "SM7513",
+          "1",
+          "1",
+          "*-ax lock signal on 5-axis operation was executed Operate after turning off the input",
+          "",
+          ""
+        ],
+        [
+          "SM7514",
+          "1",
+          "1",
+          "*-ax lock signal on 6-axis operation was executed Operate after turning off the input",
+          "",
+          ""
+        ],
+        [
+          "SM7515",
+          "1",
+          "1",
+          "*-ax lock signal on 7-axis operation was executed Operate after turning off the input",
+          "",
+          ""
+        ],
+        [
+          "SM7516",
+          "1",
+          "1",
+          "*-ax lock signal on 8-axis operation was executed Operate after turning off the input",
+          "",
+          ""
+        ],
+        [
+          "SM7517",
+          "1",
+          "1",
+          "Mode change",
+          "",
+          ""
+        ],
+        [
+          "SM7518",
+          "1",
+          "1",
+          "Door locked",
+          "",
+          ""
+        ],
+        [
+          "SM7519",
+          "1",
+          "1",
+          "Area sensor",
+          "",
+          ""
+        ],
+        [
+          "SM7520",
+          "1",
+          "1",
+          "Manual operation An operation was carried out",
+          "",
+          ""
+        ],
+        [
+          "SM7521",
+          "1",
+          "1",
+          "No 4-axis option",
+          "",
+          ""
+        ],
+        [
+          "SM7522",
+          "1",
+          "1",
+          "No 5-axis option",
+          "",
+          ""
+        ],
+        [
+          "SM7523",
+          "1",
+          "1",
+          "No 6-axis option",
+          "",
+          ""
+        ],
+        [
+          "SM7525",
+          "1",
+          "1",
+          "No 8-axis option",
+          "",
+          ""
+        ],
+        [
+          "SM7526",
+          "1",
+          "1",
+          "During ATC",
+          "",
+          ""
+        ],
+        [
+          "SM7527",
+          "1",
+          "1",
+          "During",
+          "",
+          ""
+        ],
+        [
+          "SM7528",
+          "1",
+          "1",
+          "Restarting invalid Tape operation was performed Set the user parameter (switch 1:",
+          "",
+          ""
+        ],
+        [
+          "SM7529",
+          "1",
+          "1",
+          "No MDI execution The [START] switch was",
+          "",
+          ""
+        ],
+        [
+          "SM7530",
+          "1",
+          "1",
+          "Outer pallet",
+          "",
+          ""
+        ],
+        [
+          "SM7531",
+          "1",
+          "1",
+          "There is no quick A pallet index, an outside",
+          "",
+          ""
+        ],
+        [
+          "SM7532",
+          "1",
+          "1",
+          "[PALLET",
+          "",
+          ""
+        ],
+        [
+          "SM7533",
+          "1",
+          "1",
+          "Indexing prohibit The [OUTER ROTARY",
+          "",
+          ""
+        ],
+        [
+          "SM7534",
+          "1",
+          "1",
+          "Outer pallet",
+          "",
+          ""
+        ],
+        [
+          "SM7535",
+          "1",
+          "1",
+          "Cannot start from Memory operation was",
+          "",
+          ""
+        ],
+        [
+          "SM7536",
+          "1",
+          "1",
+          "Stroke exceeded",
+          "",
+          ""
+        ],
+        [
+          "SM7537",
+          "1",
+          "1",
+          "Stroke exceeded (- The outer pallet additional axis Check the stroke of user parameter",
+          "",
+          ""
+        ],
+        [
+          "SM7538",
+          "1",
+          "1",
+          "Stroke exceeded",
+          "",
+          ""
+        ],
+        [
+          "SM7539",
+          "1",
+          "1",
+          "Stroke exceeded (- The outer pallet additional axis Check the stroke of user parameter",
+          "",
+          ""
+        ],
+        [
+          "SM7540",
+          "1",
+          "1",
+          "Stroke exceeded",
+          "",
+          ""
+        ],
+        [
+          "SM7541",
+          "1",
+          "1",
+          "Stroke exceeded (- The outer pallet additional axis Check the stroke of user parameter",
+          "",
+          ""
+        ],
+        [
+          "SM7542",
+          "1",
+          "1",
+          "Stroke exceeded",
+          "",
+          ""
+        ],
+        [
+          "SM7543",
+          "1",
+          "1",
+          "Stroke exceeded (- The outer pallet additional axis Check the stroke of user parameter",
+          "",
+          ""
+        ],
+        [
+          "SM7544",
+          "1",
+          "1",
+          "Turn external",
+          "",
+          ""
+        ],
+        [
+          "SM7545",
+          "1",
+          "1",
+          "Mirror image mode MDI operation was attempted Execute MDI with mirror image mode",
+          "",
+          ""
+        ],
+        [
+          "SM7546",
+          "1",
+          "1",
+          "Scaling",
+          "",
+          ""
+        ],
+        [
+          "SM7547",
+          "1",
+          "1",
+          "Compensating",
+          "",
+          ""
+        ],
+        [
+          "SM7549",
+          "1",
+          "1",
+          "Machine is",
+          "",
+          ""
+        ],
+        [
+          "SM7550",
+          "1",
+          "1",
+          "Additional axis",
+          "",
+          ""
+        ],
+        [
+          "SM7551",
+          "1",
+          "1",
+          "Program number Memory operation was started Check the user parameter (quick",
+          "",
+          ""
+        ],
+        [
+          "SM7552",
+          "1",
+          "1",
+          "No program (*)",
+          "",
+          ""
+        ],
+        [
+          "SM7553",
+          "1",
+          "1",
+          "Wrong tool type",
+          "",
+          ""
+        ],
+        [
+          "SM7554",
+          "1",
+          "1",
+          "Invalid pot",
+          "",
+          ""
+        ],
+        [
+          "SM7555",
+          "1",
+          "1",
+          "Capped",
+          "",
+          ""
+        ],
+        [
+          "SM7556",
+          "1",
+          "1",
+          "The PLC axis",
+          "",
+          ""
+        ],
+        [
+          "SM7557",
+          "1",
+          "1",
+          "There is no P1-axis A P1-axis JOG or handle",
+          "",
+          ""
+        ],
+        [
+          "SM7558",
+          "1",
+          "1",
+          "There is no P2-axis A P2-axis JOG or handle",
+          "",
+          ""
+        ],
+        [
+          "SM7559",
+          "1",
+          "1",
+          "There is no P3-axis A P3-axis JOG or handle",
+          "",
+          ""
+        ],
+        [
+          "SM7560",
+          "1",
+          "1",
+          "There is no P4-axis A P4-axis JOG or handle",
+          "",
+          ""
+        ],
+        [
+          "SM7561",
+          "1",
+          "1",
+          "Communicating",
+          "",
+          ""
+        ],
+        [
+          "SM7562",
+          "1",
+          "1",
+          "No direction data The program was run without Set the measurement direction.",
+          "",
+          ""
+        ],
+        [
+          "SM7563",
+          "1",
+          "1",
+          "Setting data error The data is not set for the",
+          "",
+          ""
+        ],
+        [
+          "SM7564",
+          "1",
+          "1",
+          "Rotational",
+          "",
+          ""
+        ],
+        [
+          "SM7565",
+          "1",
+          "1",
+          "Time to change",
+          "",
+          ""
+        ],
+        [
+          "SM7566",
+          "1",
+          "1",
+          "An external output A mode change operation was Change the mode after data output via",
+          "",
+          ""
+        ],
+        [
+          "SM7567",
+          "1",
+          "1",
+          "Interrupt type",
+          "",
+          ""
+        ],
+        [
+          "SM7568",
+          "1",
+          "1",
+          "Interrupt type",
+          "",
+          ""
+        ],
+        [
+          "SM7569",
+          "1",
+          "1",
+          "Restart from the",
+          "",
+          ""
+        ],
+        [
+          "SM7570",
+          "1",
+          "1",
+          "Spindle rotating",
+          "",
+          ""
+        ],
+        [
+          "SM7571",
+          "1",
+          "1",
+          "Command",
+          "",
+          ""
+        ],
+        [
+          "SM7572",
+          "1",
+          "1",
+          "Perform Spindle",
+          "",
+          ""
+        ],
+        [
+          "SM7573",
+          "1",
+          "1",
+          "Step travel is",
+          "",
+          ""
+        ],
+        [
+          "SM7575",
+          "1",
+          "1",
+          "Synchr. tapping",
+          "",
+          ""
+        ],
+        [
+          "SM7576",
+          "1",
+          "1",
+          "Pallet turn speed",
+          "",
+          ""
+        ],
+        [
+          "SM7577",
+          "1",
+          "1",
+          "Servo disabled for (A) A jog feed, step feed or",
+          "",
+          ""
+        ],
+        [
+          "SM7578",
+          "1",
+          "1",
+          "Enter start position. Start position was not entered Enter the start position for program",
+          "",
+          ""
+        ],
+        [
+          "SM7579",
+          "1",
+          "1",
+          "ATC monitor.",
+          "",
+          ""
+        ],
+        [
+          "SM7580",
+          "1",
+          "1",
+          "ATC monitoring",
+          "",
+          ""
+        ],
+        [
+          "SM7581",
+          "1",
+          "1",
+          "ATC monitoring",
+          "",
+          ""
+        ],
+        [
+          "SM7582",
+          "1",
+          "1",
+          "Operation",
+          "",
+          ""
+        ],
+        [
+          "SM7583",
+          "1",
+          "1",
+          "Axis travel not",
+          "",
+          ""
+        ],
+        [
+          "SM7584",
+          "1",
+          "1",
+          "Axis travel not",
+          "",
+          ""
+        ],
+        [
+          "SM7585",
+          "1",
+          "1",
+          "Operation disabled A manual operation, other than 1.Stop the spindle.",
+          "",
+          ""
+        ],
+        [
+          "SM7586",
+          "1",
+          "1",
+          "Feature coordinate A command was specified that",
+          "",
+          ""
+        ],
+        [
+          "SM7587",
+          "1",
+          "1",
+          "Restricted travel",
+          "",
+          ""
+        ],
+        [
+          "SM7588",
+          "1",
+          "1",
+          "Machining load",
+          "",
+          ""
+        ],
+        [
+          "SM7589",
+          "1",
+          "1",
+          "*-axis clamp retry An attempt was made to re-",
+          "",
+          ""
+        ],
+        [
+          "SM7590",
+          "1",
+          "1",
+          "Support application The mode was changed during Wait for the tool change position",
+          "",
+          ""
+        ],
+        [
+          "SM7591",
+          "1",
+          "1",
+          "Support application The mode was changed during Wait for the tool change position",
+          "",
+          ""
+        ],
+        [
+          "SM7592",
+          "1",
+          "1",
+          "Support application The [START] switch was",
+          "",
+          ""
+        ],
+        [
+          "SM7593",
+          "1",
+          "1",
+          "Support application The [START] switch was",
+          "",
+          ""
+        ],
+        [
+          "SM7594",
+          "1",
+          "1",
+          "Spindle rotation",
+          "",
+          ""
+        ],
+        [
+          "SM7595",
+          "1",
+          "1",
+          "Lathe spindle",
+          "",
+          ""
+        ],
+        [
+          "SM7597",
+          "1",
+          "1",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM7598",
+          "1",
+          "1",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM7599",
+          "1",
+          "1",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM7600",
+          "1",
+          "1",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM7601",
+          "1",
+          "1",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM7602",
+          "1",
+          "1",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM7603",
+          "1",
+          "1",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM7604",
+          "1",
+          "1",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM7605",
+          "1",
+          "1",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM7606",
+          "1",
+          "1",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM7607",
+          "1",
+          "1",
+          "Automatic door",
+          "",
+          ""
+        ],
+        [
+          "SM7608",
+          "1",
+          "1",
+          "Support app (adjust [START] switch was pressed First, press the <Execute estimate>",
+          "",
+          ""
+        ],
+        [
+          "SM7609",
+          "1",
+          "1",
+          "Door interlock",
+          "",
+          ""
+        ],
+        [
+          "SM7610",
+          "1",
+          "1",
+          "Stopped with door",
+          "",
+          ""
+        ],
+        [
+          "SM7611",
+          "1",
+          "1",
+          "Operation disabled (A)The door interlock mode is Change the door interlock mode to",
+          "",
+          ""
+        ],
+        [
+          "SM7612",
+          "1",
+          "1",
+          "Operation not",
+          "",
+          ""
+        ],
+        [
+          "SM7613",
+          "1",
+          "1",
+          "Door was not",
+          "",
+          ""
+        ],
+        [
+          "SM7614",
+          "1",
+          "1",
+          "Timeout on fixed QT-axis did not reach the",
+          "",
+          ""
+        ],
+        [
+          "SM7615",
+          "1",
+          "1",
+          "Maximum angle",
+          "",
+          ""
+        ],
+        [
+          "SM7616",
+          "1",
+          "1",
+          "Side door lock",
+          "",
+          ""
+        ],
+        [
+          "SM7617",
+          "1",
+          "1",
+          "There is no",
+          "",
+          ""
+        ],
+        [
+          "SM7619",
+          "1",
+          "1",
+          "Teaching pendant An error was detected in",
+          "",
+          ""
+        ],
+        [
+          "SM7620",
+          "1",
+          "1",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM7621",
+          "1",
+          "1",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM7622",
+          "1",
+          "1",
+          "Brake load test",
+          "",
+          ""
+        ],
+        [
+          "SM7623",
+          "1",
+          "1",
+          "Teaching pendant An operation was carried out",
+          "",
+          ""
+        ],
+        [
+          "SM9000",
+          "3",
+          "2",
+          "Macro error",
+          "",
+          ""
+        ],
+        [
+          "SM9300",
+          "1",
+          "1",
+          "This is an alarm caused by the Check the program.",
+          "",
+          ""
+        ],
+        [
+          "CM7558",
+          "1",
+          "1",
+          "Connecting server\ncertificate error",
+          "The server certificate is not a trusted certificate for the connecting server.",
+          "Follow one of the prescribed certificate handling procedures."
+        ],
+        [
+          "SL7675",
+          "1",
+          "1",
+          "Radius not set for\nB-ax cutting",
+          "The radius is not specified when cutting using the B-axis.",
+          "Specify the radius."
+        ],
+        [
+          "SM7596",
+          "1",
+          "1",
+          "Weight estimate in\nprogress",
+          "The mode was changed during a weight estimate operation performed for support setup.",
+          "Change the mode once the weight estimate operation is complete."
+        ],
+        [
+          "SM7618",
+          "1",
+          "1",
+          "Teaching pendant\ncalibration data is abnormal.",
+          "Calibration data of the teaching pendant is not correct.",
+          "Perform calibration."
         ]
       ],
       "notes": "",
@@ -2941,8 +11117,8 @@
       "rows": [
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "002) The combination between\nthe magazine servo amplifier\nand motor cannot be\nrecognized.",
           "002) Follow one of the procedures\nbelow.\n(a) Replace the magazine servo\namplifier.\n(b) Update the version for the\nmagazine servo amplifier."
@@ -2957,8 +11133,8 @@
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "002) The motor model that is\nconnected is not compatible\nwith the motor model setting\nfor the spindle.",
           "002) Follow one of the procedures\nbelow.\n(a) Replace the spindle amplifier.\n(b) Update the version for the spindle\namplifier.\n(c) Make sure that the machine\nparameter (servo) values are correct."
@@ -3782,8 +11958,8 @@
         ],
         [
           "",
-          "",
-          "",
+          "1",
+          "2",
           "",
           "002)Release code was entered\nwhile the battery voltage was\nlow on the relocation detection\ndevice.",
           "002)While the power switch is turned\nON, replace all the batteries in the\nbattery compartment (GB3) on the\nside of the control box."
@@ -4132,8 +12308,8 @@
       "rows": [
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "",
           "• When IO_TCON is displayed in the\nparentheses ( )\nReplace the TSR motor.\n(D)Replace the IO PCB."
@@ -11104,8 +19280,8 @@
         ],
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "002)After M46X is output, the\nM46X signal is not turned ON\nor OFF even when the\nspecified time limit has been\nelapsed.",
           "002)Follow one of the procedures\nbelow.\n(a)Check the completion signal.\n(b)Change the setting for user\nparameter (switch 1:\nprogramming)<External signal\nreading time limit>."
@@ -11873,8 +20049,8 @@
         ],
         [
           "",
-          "",
-          "",
+          "3",
+          "2",
           "",
           "002)A value outside of the\nsetting range was set for the\nworkpiece coordinate zero.",
           "002)Check the PLC program."
@@ -13694,16 +21870,16 @@
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "002)The number of pulses for\nadditional axis obtained from\n<gear ratio>(5th- to 8th-axis)\nand the number of pulses per\nmotor rotation exceeds the\nacceptable value.",
           "002)Set the parameters of Machine\nParameters (system 2: additional\naxis) to the correct values and turn\npower on again."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "003)The parameter <Clamp\nmechanism> is set to <1: Type\n2> on an additional axis\nequipped with a brake\nmechanism.",
           "003)Set the parameters of Machine\nParameters (system 2: additional\naxis) to the correct values and turn\npower on again."
@@ -13727,56 +21903,56 @@
       "rows": [
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "004)There is an axis where the\nmachine parameter (system 2:\nadditional axis) <Optional\naxis> (5th- to 8th-axes) is set\nto <Yes(positioning only)>,\nand the machine parameter\n(system 2: additional axis)\n<Expansion I/O board station\nnumber for positioning> (5th-\nto 8th-axes) is set to <0> or has\nnot been set.",
           "004)Set the parameters of Machine\nParameters (system 2: additional\naxis) to the correct values and turn\npower on again."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "005)<Optional axis> (5th- to\n8th-axes) setting for the axis\ndoes not match the machine\nconfiguration.",
           "005)Set the parameters of Machine\nParameters (system 2: additional\naxis) to the correct values and turn\npower on again."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "006)A brake signal for another\naxis is set to the <Brake> (5th-\nto 8th-axis).",
           "006)Set the parameters of Machine\nParameters (system 2: additional\naxis) to the correct values and turn\npower on again."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "008)<Brake> (5th-axis) is\nconfigured to a setting besides\n<3: Brake 3> on a U series, M\nseries or DG series machine\nmodel.",
           "008)Set the parameters of Machine\nParameters (system 2: additional\naxis) to the correct values and turn\npower on again."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "009)<Brake> (7th-axis) is\nconfigured to a setting besides\n<4: Brake 4> on a U series\nmachine model.",
           "009)Set the parameters of Machine\nParameters (system 2: additional\naxis) to the correct values and turn\npower on again."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "010)<Brake> is not set to <0:\nNone> on the additional axis\nfor the lathe spindle.",
           "010)Set the parameters of Machine\nParameters (system 2: additional\naxis) to the correct values and turn\npower on again."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "011) The <Clamp\nmechanism> (5th- to 8th-axes)\nis set to <2: Type 3> while a\nservo parameter is specified for\na machine model other than a\nU series or M series model.",
           "011) Set the machine parameters\n(system 2: additional axis) to the\ncorrect values and turn the power\nOFF and ON again. If the alarm still\ntriggers after the changes, contact the\nnearest Brother approved service\ndealer."
@@ -13791,16 +21967,16 @@
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "002)When the <M-axis gear\nratio (numerator)> / <M-axis\ngear ratio (denominator)> is\nmultiplied by the number of\npulses per motor rotation, and\nthe product or value is not an\ninteger.",
           "002)Set the parameters of Machine\nParameters (system 3: common) to\nthe correct values and turn power on\nagain."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "003)The distance per magazine\nrotation obtained from <Tool\nstorage capacity> and\n<Distance between magazine\npots> exceeds acceptable\nvalue.",
           "003)Set the parameters of Machine\nParameters (system 3: common) to\nthe correct values and turn power on\nagain."
@@ -13824,72 +22000,72 @@
       "rows": [
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "004)The number of pulses for\nthe AT-axis, obtained from the\n<AT-axis gear ratio\n(numerator)> and <AT-axis\ngear ratio (denominator)>,\nexceeds the acceptable value.",
           "004)Set the parameters of Machine\nParameters (system 3: common) to\nthe correct values and turn power on\nagain."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "005)When the <AT-axis gear\nratio (numerator)> / <AT-axis\ngear ratio (denominator)> is\nmultiplied by the number of\npulses per motor rotation, and\nthe product or value is not an\ninteger.",
           "005)Set the parameters of Machine\nParameters (system 3: common) to\nthe correct values and turn power on\nagain."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "006)<M-axis irregular pitch> is\nset to <1: Enable> when an\nodd number was set as the\nmachine parameter (system 1:\ncommon) <Tool storage\ncapacity>.",
           "006)Set the parameters of Machine\nParameters (system 3: common) to\nthe correct values and turn power on\nagain."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "007)The setting is incorrect for\nthe machine parameter (system\n3: TC-axis) <Stocker tool\nposition> (TCR-axis).",
           "007)Set the machine parameters\n(system 3: TC-axis) to the correct\nvalues and turn the power OFF and\nON again."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "008)The setting is incorrect for\nthe machine parameter (system\n3: TC-axis) <Stocker tool\nposition> (TCL-axis).",
           "008)Set the machine parameters\n(system 3: TC-axis) to the correct\nvalues and turn the power OFF and\nON again."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "009)The number of pulses for\nthe stocker rotation axis,\nobtained from the <Gear ratio\n(numerator)> (TSR-axis) and\n<Gear ratio (denominator)>\n(TSR-axis), exceeds the\ntolerance.",
           "009)Set the machine parameters\n(system 3: TS-axis) to the correct\nvalues and turn the power OFF and\nON again."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "010)The number of pulses for\nthe stocker rotation axis,\nobtained from the <Gear ratio\n(numerator)> (TSL-axis) and\n<Gear ratio (denominator)>\n(TSL-axis), exceeds the\ntolerance.",
           "010)Set the machine parameters\n(system 3: TS-axis) to the correct\nvalues and turn the power OFF and\nON again."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "011)When the <Gear ratio\n(numerator)> (TSR-axis) /\n<Gear ratio (denominator)>\n(TSR-axis) is multiplied by the\nnumber of pulses per motor\nrotation, the product or value is\nnot an integer.",
           "011)Set the machine parameters\n(system 3: TS-axis) to the correct\nvalues and turn the power OFF and\nON again."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "012)When the <Gear ratio\n(numerator)> (TSL-axis) /\n<Gear ratio (denominator)>\n(TSL-axis) is multiplied by the\nnumber of pulses per motor\nrotation, the product or value is\nnot an integer.",
           "012)Set the machine parameters\n(system 3: TS-axis) to the correct\nvalues and turn the power OFF and\nON again."
@@ -13921,24 +22097,24 @@
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "002)<Door signal setting -\nFront door/outer door> setting\ndoes not match the machine\nconfiguration.",
           "002)Set the parameters of Machine\nParameters (system 1: common) to\nthe correct values and turn power on\nagain."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "003)<Side shutter setting>\nvalue does not match the\nmachine model.",
           "003)Set the parameters of Machine\nParameters (system 1: common) to\nthe correct values and turn power on\nagain."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "004)The values for the <Side\nshutter setting> and <Outside\ndoor 1 settings> or <Outside\ndoor 2 settings> do not match.",
           "004)When <Side shutter setting> is\nset to <1: Left side>, change\n<Outside door 1 settings> to <2:\nMachining chamber>, and then turn\nthe power OFF and ON. When <Side\nshutter setting> is set to <2: Right\nside>, change <Outside door 2\nsettings> to <2: Machining\nchamber>, and then turn the power\nOFF and ON."
@@ -13953,24 +22129,24 @@
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "002)The pulse of PLC axis\nobtained from <lead/gear\nratio>(P1- to P4-axis), etc.\nexceeds acceptable value.",
           "002)Set the parameters of Machine\nParameters (PLC: PLC-axis) to the\ncorrect values and turn power on\nagain."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "003)A brake signal which is\nused in another axis is set to\n<brake>(P1- to P4-axis).",
           "003)Set the parameters of Machine\nParameters (PLC: PLC-axis) to the\ncorrect values and turn power on\nagain."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "004)<brake>(P1- to P4-axis) is\nset to <0: None> on an axis\nwhere <Brake load test>(P1- to\nP4-axis) is set to <1: Test>.",
           "004)Set the parameters of Machine\nParameters (PLC: PLC-axis) to the\ncorrect values and turn power on\nagain."
@@ -14228,8 +22404,8 @@
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "3",
           "",
           "002) Recognition function is\ndisabled.",
           "002) Make sure that the machine\nparameter (servo) values are correct."
@@ -14269,24 +22445,24 @@
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "2",
           "",
           "002)《When using a turret\ntype ATC (excluding H\nseries)》\nRaising the Z-axis from the\nzero point was attempted with\nthe spindle servo ON (this does\nnot occur when the spindle is\noriented to 0 degrees).",
           "002)Press the [RST] key to reset the\nalarm."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "2",
           "",
           "003)《For turret type ATC (H\nseries)》\nAn attempt was made to raise\nthe Y-axis higher than the zero\npoint while the spindle servo\nwas ON (excluding spindle\norientation 0 degrees).",
           "003)Press the [RST] key to reset the\nalarm."
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "2",
           "",
           "004) 《For pickup type\nATC》\nAn attempt was made to move\nthe Y-axis to the plus side of\nthe zero point while the spindle\nservo was ON (excluding\nspindle orientation 0 degrees).",
           "004)Press the [RST] key to clear the\nalarm."
@@ -14787,8 +22963,8 @@
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "2",
           "",
           "002)A command was sent to\nthe amplifier, but it was not\ncompleted after the specified\ntime had elapsed (positioning\namplifier).",
           "002)Check the communication cable\nconnection. The servo amplifier may\nbe faulty. Replace the servo\namplifier."
@@ -14803,8 +22979,8 @@
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "2",
           "",
           "002)The set value for <5th-\n(6th-, 7th- or 8th-) axis\nstroke(-)(+)> is out of the\ntolerance range when the\nmachine parameter (system 2:\nadditional axis) <Optional\naxis> (5th- to 8th-axis) is\nconfigured to another setting\nbesides <No>, the machine\nparameter (system 2: additional\naxis) <Gear ratio> (5th- to 8th-\naxis) is set to “1” and the user\nparameter (switch 2: stroke)\n<5th-(6th-, 7th- or 8th-) axis\nstroke control> is set to\n<1:Yes>.",
           "002)Make sure that the difference\nbetween the set values for <5th-\n(6th-, 7th- or 8th-) axis stroke(-)> and\n<5th- (6th-, 7th- or 8th-) axis\nstroke(+)> is less than 350 degrees."
@@ -15746,8 +23922,8 @@
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "2",
           "",
           "002) The machine parameter\n(system 2: additional\naxis)<Tracking accuracy adjust\nconstant B lower limit> /\n<Tracking accuracy adjust\nconstant B upper limit> and\nservo parameter No.321 are\nboth enabled. Both settings\ncannot be enabled at the same\ntime.",
           "002) Change the set values for the\nmachine parameters (system 2:\nadditional axis) and the servo\nparameters to the recommended\nvalues to match the additional axis\nbeing used."
@@ -16013,8 +24189,8 @@
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "2",
           "",
           "002) A tool was detected in the\ntool stocker (left) where a tool\nis not registered as an ATC\ntool.",
           "002) For the tool with the tool stocker\nnumber shown in the parentheses ( ),\nmake sure that the ATC tool\nregistration information and the tool\nthat is actually mounted match. If the\ntool is not registered as an ATC tool,\nregister the tool or remove it."
@@ -16029,8 +24205,8 @@
         ],
         [
           "",
-          "",
-          "",
+          "5",
+          "2",
           "",
           "002) A tool could not be\ndetected in the tool stocker\n(left) where a tool is registered\nas an ATC tool.",
           "002) For the tool with the tool stocker\nnumber shown in the parentheses ( ),\nmake sure that the ATC tool\nregistration information and the tool\nthat is actually mounted match."
@@ -16233,8 +24409,8 @@
         ],
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "002)Turning the arm was\nattempted before spindle\norientation had been\ncompleted.",
           "002)Press the [RST] key to clear the\nalarm.\nThe NC PCB is defective.\nIf this error occurs repeatedly,\ncontact the nearest BROTHER\napproved service dealer."
@@ -16306,16 +24482,16 @@
       "rows": [
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "002)<<Turret type ATC>>\nThe Z-axis command was\ncarried out when the Z-axis\ncoordinate was above the Z-\naxis zero point.",
           "002)Follow the procedure below.\n1.Press the [RST] key.\n2.Press the [-Z] key with the\n[RELSE] key held down to lower the\nZ-axis below the Z-axis zero point."
         ],
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "003)<<Turret type ATC>>\nThe M498/M499 (Tool wash\nON/OFF) command was\nexecuted when the Z-axis\ncoordinate was above the Z-\naxis zero point.",
           "003)Follow the procedure below.\n1.Press the [RST] key.\n2.Press the [-Z] key with the\n[RELSE] key held down to lower the\nZ-axis below the Z-axis zero point."
@@ -16330,24 +24506,24 @@
         ],
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "002)《When using a turret\ntype ATC (excluding H\nseries)》\nThe spindle rotation command\nwas issued when the Z-axis\ncoordinate was above the Z-\naxis zero point.",
           "002)Follow the procedure below.\n1. Press the [RST] key to reset the\nalarm.\n2. Press the [-Z] key with the\n[RELSE] key held down to lower the\nZ-axis below the Z-axis home\nposition."
         ],
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "003)《For turret type ATC (H\nseries)》\nThe spindle rotation command\nwas issued when the Y-axis\ncoordinate was on the plus side\nabove the Y-axis zero point.",
           "003)Follow the procedure below.\n1. Press the [RST] key to reset the\nalarm.\n2.Use the support application\n(recovery support) to decrease the Y-\naxis coordinate in negative direction\nlower than Y-axis zero point."
         ],
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "004) 《For pickup type\nATC》\nThe spindle rotation command\nwas issued when the Y-axis\ncoordinate was on the plus side\nabove the Y-axis zero point.",
           "004) Follow the procedure below.\n1. Press the [RST] key to clear the\nalarm.\n2. Use the support application\n(pickup type ATC recovery) to move\nthe Y-axis coordinate to the minus\nside of the Y-axis zero point."
@@ -16379,16 +24555,16 @@
       "rows": [
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "002)《Turret type ATC》\n(a)The magazine was not\nindexed.\n(b)All data was input, or the\nstart data (adjusted absolute\nvalues) from the backup\nmemory recovery operation\nwas input. Encoder position\ndata does not match the\nmachine coordinates.",
           "002)Follow one of the procedures\nbelow.\n(a) When the alarm <<The machine\ncoordinates may be out of\nposition.>> is triggered, use\n<Automatically set adjusted counter\nvalue> from the <Reset abso. encoder\ncounter> screen.\n(b)Follow one of the procedures\nbelow if (a) above does not apply.\n1.Change to manual operation mode,\nand press the [RST] key while\npressing the [RELSE] key.\n2. While holding down the [RELSE]\nkey, press the [MAG.F] key or the\n[MAG.R] key to move the magazine\nto the correct position.\nIf the alarm <<Magazine number\nerror>> is triggered again, use\n<Turret type ATC recovery> in the\n<Support application (recovery\nsupport)> to restore operation."
         ],
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "003)《For pickup type ATC》\nThere is an error with the\nmagazine number for the\nspindle tool.",
           "003) Follow the procedure below.\n1.Press the [RST] key.\n2.Use ATC maintenance mode to\nrestore.Only maintenance personnel\nwho are trained can operate in ATC\nmaintenance mode."
@@ -16412,8 +24588,8 @@
       "rows": [
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "004)《For turret type ATC\n(with a tool stocker)》\n(a)The magazine was not\nindexed.\n(b)All data was input, or the\nstart data (adjusted absolute\nvalues) from the backup\nmemory recovery operation\nwas input. Encoder position\ndata does not match the\nmachine coordinates.",
           "004)《For turret type ATC (with a\ntool stocker)》\n(a) When the alarm <<The machine\ncoordinates may be out of\nposition.>> is triggered, use\n<Automatically set adjusted counter\nvalue> from the <Reset abso. encoder\ncounter> screen.\n(b) Follow the procedure below if the\nTCL- and TCR-axes are in a safe\nposition.\n1.Change to manual operation mode,\nand press the [RST] key while\npressing the [RELSE] key.\n2. While holding down the [RELSE]\nkey, press the [MAG.F] key or the\n[MAG.R] key to move the magazine\nto the correct position.\nIf the alarm <<Magazine number\nerror>> is triggered again, use\n<Turret type ATC recovery> in the\n<Support application (recovery\nsupport)> to restore operation.\n(c) Follow the procedure below if the\nTCL- and TCR-axes are not in a safe\nposition.\n1. Change to ATC maintenance\nmode, and press the [RST] key while\npressing the [RELSE] key. Only\nmaintenance personnel who are\ntrained can operate in ATC\nmaintenance mode.\n2. Hold down the [RELSE] key and\nmove the TCL- and TCR-axes to a\nsafe position.\n3. While holding down the [RELSE]\nkey, press the [MAG.F] key or the\n[MAG.R] key to move the magazine\nto the correct position.\nIf the alarm <<Magazine number\nerror>> is triggered again, use\n<Turret type ATC recovery> in the\n<Support application (recovery\nsupport)> to restore operation."
@@ -16428,8 +24604,8 @@
         ],
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "002)《For turret type ATC (H\nseries)》\nA magazine turn operation was\ncarried out when the X-axis\nwas not at the ATC position,\nthe Y-axis was not at the ATC\nposition and the Z-axis was not\nthe ATC zero coordinate.",
           "002)Follow the procedure below.\n1.Press the [RST] key while holding\ndown the [RELSE] key.\n2.Press the [ATC] key to move the\nspindle to a position where the\nmagazine can turn. If the problem is\nstill not resolved, use the support\napplication (turret type ATC\nrecovery) to restore the positioning."
@@ -16453,16 +24629,16 @@
       "rows": [
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "003) 《For pickup type\nATC》\nA tool selection operation was\nperformed when the X- and Y-\naxes were not in the magazine\nposition or when the Z-axis\nwas not in the safe position for\nthe Z-axis ((Larger value\nbetween the machine\nparameter (Deburring: ATC)\n<Magazine zero point Z-axis>\nand <Magazine reference\nposition Z-axis>) + <Z-axis\npull-out amount during tool\nchange>).",
           "003) Follow the procedure below.\n1.Press the [RST] key.\n2.Press the [ATC] key to move the\nX-, Y- and Z-axes to a position where\na tool can be selected. If the problem\nis still not resolved, use the support\napplication (pickup type ATC\nrecovery) to restore the positioning."
         ],
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "004)《For turret type ATC\n(with a tool stocker)》\nA magazine rotation operation\nwas carried out when either the\nTCL- or TCR-axis is not in a\nsafe position.",
           "004)Follow the procedure below.\n1.Press the [RST] key while holding\ndown the [RELSE] key.\n2.Move the TCL- and TCR-axes to a\nsafe position in ATC maintenance\nmode. Only maintenance personnel\nwho are trained can operate in ATC\nmaintenance mode."
@@ -16841,8 +25017,8 @@
         ],
         [
           "",
-          "",
-          "",
+          "4",
+          "2",
           "",
           "002)Measurement result could\nnot be calculated in automatic\nworkpiece measurement mode.",
           "002)Check the program."

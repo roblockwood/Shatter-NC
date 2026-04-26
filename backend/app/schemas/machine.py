@@ -1,6 +1,6 @@
 """Pydantic schemas for Machine API endpoints."""
-from pydantic import BaseModel, Field, IPvAnyAddress
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 
 
@@ -28,8 +28,11 @@ class MachineBase(BaseModel):
     # Tolerance override flags
     use_machine_tool_tolerances: bool = Field(default=False, description="Use machine-defined tool tolerances instead of G-code defaults (exact match for diameter, length >= required)")
     use_machine_wcs_tolerances: bool = Field(default=False, description="Use machine-defined WCS tolerances instead of G-code E parameter")
+    validate_tool_diameter: bool = Field(default=True, description="Whether to validate tool diameter")
+    validate_tool_length: bool = Field(default=True, description="Whether to validate tool length")
     # Measurement units
     units: str = Field(default='in', description="Measurement units: 'in' for inches, 'mm' for millimeters")
+    control_version: Optional[Literal['C00', 'D00']] = Field(default=None, description="Control version override. Set to C00 or D00 to disable auto-detection")
     layout_config: Optional[Dict[str, Any]] = Field(default=None, description="Custom pane layout configuration")
     part_display_mode: str = Field(default="parts", description="Compact machine card count label: 'parts' or 'cycle'")
 
@@ -64,8 +67,11 @@ class MachineUpdate(BaseModel):
     # Tolerance override flags
     use_machine_tool_tolerances: Optional[bool] = Field(None, description="Use machine-defined tool tolerances instead of G-code defaults (exact match for diameter, length >= required)")
     use_machine_wcs_tolerances: Optional[bool] = Field(None, description="Use machine-defined WCS tolerances instead of G-code E parameter")
+    validate_tool_diameter: Optional[bool] = Field(None, description="Whether to validate tool diameter")
+    validate_tool_length: Optional[bool] = Field(None, description="Whether to validate tool length")
     # Measurement units
     units: Optional[str] = Field(None, description="Measurement units: 'in' for inches, 'mm' for millimeters")
+    control_version: Optional[Literal['C00', 'D00']] = Field(None, description="Control version override. Set to C00 or D00 to disable auto-detection")
     layout_config: Optional[Dict[str, Any]] = Field(None, description="Custom pane layout configuration")
     part_display_mode: Optional[str] = Field(None, description="Compact machine card count label: 'parts' or 'cycle'")
 

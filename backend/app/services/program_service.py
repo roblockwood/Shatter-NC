@@ -24,6 +24,7 @@ class ProgramService:
         original_filename: str,
         machine_id: Optional[int] = None,
         deployed_filename: Optional[str] = None,
+        deployed_path: Optional[str] = None,
         validate: bool = True,
         validation_results: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
@@ -43,7 +44,8 @@ class ProgramService:
             gcode_content: Full G-code program content
             original_filename: Original filename (e.g., "PART_123_OP1.NC")
             machine_id: Optional machine ID for deployment
-            deployed_filename: Optional O-number deployment (e.g., "O2000.nc")
+            deployed_filename: Optional O-number basename (e.g., "O2000.nc")
+            deployed_path: Optional full remote path (e.g., "/FOLDER_A/O2000.nc") for path-aware identity
             validate: Whether to validate program before uploading
             validation_results: Optional validation results dict to store with deployment
 
@@ -105,6 +107,7 @@ class ProgramService:
                     program_id=existing_program.id,
                     machine_id=machine_id,
                     deployed_filename=deployed_filename,
+                    deployed_path=deployed_path,
                     validate=validate,
                     validation_results=validation_results
                 )
@@ -148,6 +151,7 @@ class ProgramService:
                 program_id=new_program.id,
                 machine_id=machine_id,
                 deployed_filename=deployed_filename,
+                deployed_path=deployed_path,
                 validate=validate,
                 validation_results=validation_results
             )
@@ -165,6 +169,7 @@ class ProgramService:
         program_id: int,
         machine_id: int,
         deployed_filename: str,
+        deployed_path: Optional[str] = None,
         validate: bool = True,
         validation_results: Optional[Dict[str, Any]] = None
     ) -> ProgramDeployment:
@@ -205,15 +210,38 @@ class ProgramService:
             validation_results = {}
             validation_passed = None  # No validation performed
 
-        # Construct deployment path
-        deployed_path = f"{machine.path}/{deployed_filename}"
+        def _normalize_remote_path(path_value: str) -> str:
+            """Normalize remote CNC file paths to a canonical /dir/file form."""
+            normalized = "/" + "/".join(
+                segment for segment in str(path_value).replace("\\", "/").split("/") if segment
+            )
+            return normalized if normalized != "/" else "/"
 
-        # Mark existing deployment as replaced (if O-number already in use)
-        existing_deployment = self.db.query(ProgramDeployment).filter(
-            ProgramDeployment.machine_id == machine_id,
-            ProgramDeployment.deployed_filename == deployed_filename,
-            ProgramDeployment.is_current == True
-        ).first()
+        # Construct deployment path: prefer caller-supplied full remote path so that
+        # files in different subfolders with the same basename are stored distinctly.
+        # Fall back to constructing from machine root for backward compatibility.
+        final_deployed_path = (
+            _normalize_remote_path(deployed_path)
+            if deployed_path
+            else _normalize_remote_path(f"{machine.path}/{deployed_filename}")
+        )
+
+        # Mark existing deployment as replaced.
+        # When a full remote path is available we key by path (path-safe for multi-folder
+        # layouts).  When only a basename is known we fall back to the filename-only key
+        # used by older records.
+        if deployed_path:
+            existing_deployment = self.db.query(ProgramDeployment).filter(
+                ProgramDeployment.machine_id == machine_id,
+                ProgramDeployment.deployed_path == deployed_path,
+                ProgramDeployment.is_current
+            ).first()
+        else:
+            existing_deployment = self.db.query(ProgramDeployment).filter(
+                ProgramDeployment.machine_id == machine_id,
+                ProgramDeployment.deployed_filename == deployed_filename,
+                ProgramDeployment.is_current
+            ).first()
 
         if existing_deployment:
             existing_deployment.is_current = False
@@ -225,7 +253,7 @@ class ProgramService:
             program_id=program_id,
             machine_id=machine_id,
             deployed_filename=deployed_filename,
-            deployed_path=deployed_path,
+            deployed_path=final_deployed_path,
             validation_results=validation_results,
             validation_passed=validation_passed,
             is_current=True
@@ -264,7 +292,7 @@ class ProgramService:
         return self.db.query(ProgramDeployment).filter(
             ProgramDeployment.machine_id == machine_id,
             ProgramDeployment.deployed_filename == deployed_filename,
-            ProgramDeployment.is_current == True
+            ProgramDeployment.is_current
         ).first()
 
     def get_deployment_history(

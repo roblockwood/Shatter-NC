@@ -280,7 +280,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
         if (cycleResponse.ok) {
           const cycleData = await cycleResponse.json();
           const arr = Array.isArray(cycleData) ? cycleData : [];
-          const minimalCycles: CycleHistoryEntryForTimeline[] = arr.map((c: any) => ({
+          const minimalCycles: CycleHistoryEntryForTimeline[] = arr.map((c: { start_time: string; end_time: string; part_count?: number }) => ({
             start_time: c.start_time,
             end_time: c.end_time,
             part_count: c.part_count ?? 0,
@@ -469,57 +469,17 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
     const statusLabels = ['OPERATING', 'STANDBY', 'STOPPED', 'ERROR', 'OFF'];
     const statusLevels = [4, 3, 2, 1, 0]; // Corresponding levels
     
-    // Convert data points to SVG coordinates with interpolation for smooth transitions
+    // Convert data points to SVG coordinates — flat Y per status level (digital step display)
     const svgPoints: Array<{ x: number; y: number; status: string; timestamp: Date; error?: string; is_heartbeat?: boolean }> = [];
     
     if (oscilloscopeData.length > 0) {
-      oscilloscopeData.forEach((point, idx) => {
-        const x = (point.time / 100) * 100; // Percentage of width
-        // Ensure Y stays within row boundaries (each status level gets 20% of height)
-        // Add padding: map 0-100 to 8-92 (8% padding top and bottom)
+      oscilloscopeData.forEach((point) => {
+        const x = (point.time / 100) * 100;
         const levelY = (1 - point.level / 4) * 100; // Invert Y (0 = bottom, 4 = top)
-        const paddedY = 8 + (levelY / 100) * 84; // Map to 8-92 range
-        // Add tight oscillation to keep it within the row (oscilloscope-style)
-        const rowCenter = paddedY;
-        const rowHeight = 84 / 5; // Each status row is ~16.8% of padded height (84% / 5 rows)
-        // Much tighter oscillation frequency for realistic oscilloscope effect
-        const oscillation = Math.sin(x * 2.5) * (rowHeight * 0.12); // Tight, high-frequency oscillation
-        const y = Math.max(rowCenter - rowHeight/2 + 1, Math.min(rowCenter + rowHeight/2 - 1, rowCenter + oscillation));
-        
+        const y = 8 + (levelY / 100) * 84; // Map to 8-92 range, flat within row
         const timestamp = new Date(startTime.getTime() + (point.time / 100) * totalDuration);
-        // For the final point (NOW), include error if offline
         const error = point.time === 100 && !isOnline && currentError ? currentError : undefined;
-        
-        // Regular point
         svgPoints.push({ x, y, status: point.status, timestamp, error, is_heartbeat: point.is_heartbeat });
-        
-        // Add intermediate points for smoother transitions
-        if (idx < oscilloscopeData.length - 1) {
-          const nextPoint = oscilloscopeData[idx + 1];
-          const nextX = (nextPoint.time / 100) * 100;
-          const nextLevelY = (1 - nextPoint.level / 4) * 100;
-          
-          // If there's a level change, add transition points
-          if (Math.abs(point.level - nextPoint.level) > 0.1) {
-            const steps = 3;
-            for (let i = 1; i < steps; i++) {
-              const t = i / steps;
-              const interpX = x + (nextX - x) * t;
-              const nextPaddedY = 8 + (nextLevelY / 100) * 84;
-              const interpY = rowCenter + (nextPaddedY - rowCenter) * t;
-              const interpOscillation = Math.sin(interpX * 2.5) * (rowHeight * 0.12);
-              const finalY = Math.max(interpY - rowHeight/2 + 1, Math.min(interpY + rowHeight/2 - 1, interpY + interpOscillation));
-              svgPoints.push({ 
-                x: interpX, 
-                y: finalY, 
-                status: point.status, 
-                timestamp: new Date(startTime.getTime() + (interpX / 100) * totalDuration),
-                error: undefined, // Intermediate points don't have errors
-                is_heartbeat: point.is_heartbeat // Inherit heartbeat flag
-              });
-            }
-          }
-        }
       });
     }
     
@@ -745,59 +705,37 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
                         className="oscilloscope-time-division"
                       />
                     ))}
-                    {/* Oscilloscope trace - smooth curve with oscillation */}
+                    {/* Oscilloscope trace - digital step (right-angle transitions) */}
                     {svgPoints.length > 0 && (svgPoints.length > 1 ? (colorMode && isBetaMode ? (
-                      // Color mode: render path segments with interpolated colors
+                      // Color mode: one path segment per status run, colored by status level
                       (() => {
                         const segments: Array<{ d: string; color: string }> = [];
-                        
-                        // Build continuous path segments, splitting on color changes or every N points
-                        const MAX_POINTS_PER_SEGMENT = 3; // Force splits frequently to show color transitions
                         let currentPath = `M ${svgPoints[0].x},${svgPoints[0].y}`;
                         let currentColor = getColorForY(svgPoints[0].y);
-                        let pointsInSegment = 0;
-                        
+
                         for (let i = 1; i < svgPoints.length; i++) {
                           const prev = svgPoints[i - 1];
                           const curr = svgPoints[i];
-                          const midX = (prev.x + curr.x) / 2;
-                          const midY = (prev.y + curr.y) / 2;
-                          
-                          // Get color for midpoint
-                          const segmentColor = getColorForY(midY);
-                          
-                          // Check if color changed or we've reached max points per segment
-                          const colorChanged = segmentColor !== currentColor;
-                          const shouldSplit = (colorChanged || pointsInSegment >= MAX_POINTS_PER_SEGMENT) && i > 1;
-                          
-                          if (shouldSplit) {
-                            // Split segment - close current segment and start new one
-                            // Complete path to previous point
-                            const prevPrev = svgPoints[i - 2];
-                            const prevMidX = (prevPrev.x + prev.x) / 2;
-                            const prevMidY = (prevPrev.y + prev.y) / 2;
-                            currentPath += ` Q ${prevPrev.x},${prevPrev.y} ${prevMidX},${prevMidY} T ${prev.x},${prev.y}`;
-                            
-                            // Save current segment
+                          const nextColor = getColorForY(curr.y);
+
+                          // Horizontal step at outgoing status Y
+                          currentPath += ` L ${curr.x},${prev.y}`;
+
+                          if (nextColor !== currentColor) {
                             segments.push({ d: currentPath, color: currentColor });
-                            
-                            // Start new segment from previous point
-                            currentPath = `M ${prev.x},${prev.y} Q ${prev.x},${prev.y} ${midX},${midY} T ${curr.x},${curr.y}`;
-                            currentColor = segmentColor;
-                            pointsInSegment = 1;
+                            // Vertical drop in new color
+                            currentPath = `M ${curr.x},${prev.y} L ${curr.x},${curr.y}`;
+                            currentColor = nextColor;
                           } else {
-                            // Continue current segment
-                            currentPath += ` Q ${prev.x},${prev.y} ${midX},${midY} T ${curr.x},${curr.y}`;
-                            currentColor = segmentColor;
-                            pointsInSegment++;
+                            // Same color — continue with vertical
+                            currentPath += ` L ${curr.x},${curr.y}`;
                           }
                         }
-                        
-                        // Add final segment
+
                         if (currentPath) {
                           segments.push({ d: currentPath, color: currentColor });
                         }
-                        
+
                         return segments.map((segment, idx) => (
                           <path
                             key={`trace-segment-${idx}`}
@@ -814,20 +752,15 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
                         ));
                       })()
                     ) : (
-                      // Normal mode: single path with default color
+                      // Normal mode: single digital step path
                       <path
                         d={(() => {
-                          // Create smooth path using quadratic bezier curves
+                          // Step path: horizontal to next X at current Y, then vertical to next Y
                           let pathD = `M ${svgPoints[0].x},${svgPoints[0].y}`;
                           for (let i = 1; i < svgPoints.length; i++) {
                             const prev = svgPoints[i - 1];
                             const curr = svgPoints[i];
-                            
-                            // Use smooth quadratic bezier for transitions
-                            const midX = (prev.x + curr.x) / 2;
-                            const midY = (prev.y + curr.y) / 2;
-                            
-                            pathD += ` Q ${prev.x},${prev.y} ${midX},${midY} T ${curr.x},${curr.y}`;
+                            pathD += ` L ${curr.x},${prev.y} L ${curr.x},${curr.y}`;
                           }
                           return pathD;
                         })()}

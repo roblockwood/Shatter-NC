@@ -49,7 +49,7 @@ class OperationStats(BaseModel):
 class ToolSummary(BaseModel):
     """Summary information for a tool across all programs."""
 
-    tool_number: int = Field(..., ge=1, le=99, description="Tool number (T01-T99)")
+    tool_number: int = Field(..., ge=1, description="Tool number")
     diameter: float = Field(..., description="Tool diameter in inches")
     description: str = Field(..., description="Tool type description")
     programs_using: int = Field(..., ge=0, description="Number of programs using this tool")
@@ -91,6 +91,7 @@ class ProgramUsage(BaseModel):
 
     program_id: int
     filename: str
+    deployed_path: Optional[str] = Field(default=None, description="Current deployed path (e.g. /PROGRAM/FOLDER/O0001.NC)")
     version: int
     production_runs: int = Field(..., ge=0, description="Number of production runs for this program")
     last_run: Optional[datetime] = Field(default=None, description="Timestamp of last production run")
@@ -112,7 +113,7 @@ class AlarmSummary(BaseModel):
 class ToolDetail(BaseModel):
     """Detailed analysis for a specific tool."""
 
-    tool_number: int = Field(..., ge=1, le=99)
+    tool_number: int = Field(..., ge=1)
     specifications: Dict[str, Any] = Field(
         ...,
         description="Tool specifications: diameter_range, descriptions, length_range"
@@ -210,7 +211,7 @@ class ExportRequest(BaseModel):
 class ToolInstanceBase(BaseModel):
     """Base schema for tool instance data."""
 
-    tool_number: int = Field(..., ge=1, le=99)
+    tool_number: int = Field(..., ge=1)
     diameter: float
     corner_radius: float = 0.0
     description: Optional[str] = None

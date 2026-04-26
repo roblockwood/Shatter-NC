@@ -1,7 +1,8 @@
 # FastAPI and ASGI server
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-python-multipart==0.0.6
+fastapi==0.124.4
+uvicorn[standard]==0.34.0
+python-multipart==0.0.26
+starlette==0.49.1
 
 # Database
 sqlalchemy==2.0.25
@@ -11,6 +12,10 @@ alembic==1.13.1
 # HTTP/FTP clients
 httpx==0.26.0
 aioftp==0.22.3
+aiosmtplib==3.0.1
+
+# SMS notifications
+twilio==9.3.3
 
 # Background tasks
 celery==5.3.6
@@ -18,10 +23,10 @@ celery==5.3.6
 # Validation and config
 pydantic==2.5.3
 pydantic-settings==2.1.0
-python-dotenv==1.0.0
+python-dotenv==1.2.2
 
 # Authentication (optional)
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.5.0
 passlib[bcrypt]==1.7.4
 
 # Utilities

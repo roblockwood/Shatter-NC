@@ -28,17 +28,19 @@ def _compressor_status_samples_table_ok() -> bool:
 
 
 # Import routers
-from app.api import machines, status, programs, websocket, history, summary, tools, compressors
-from app.api import settings as settings_api
+from app.api import machines, status, programs, websocket, history, summary, tools, compressors, ftp_sync, notifications  # noqa: E402
+from app.api import settings as settings_api  # noqa: E402
 
 # Import services
-from app.services import WebSocketManager, PollingService, CompressorPollingService, MqttPublisher
+from app.services import WebSocketManager, PollingService, CompressorPollingService, MqttPublisher, FtpSyncService, NotificationService  # noqa: E402
 
 # Global service instances
 websocket_manager = WebSocketManager()
 mqtt_publisher = MqttPublisher()
-polling_service = PollingService(websocket_manager, mqtt_publisher=mqtt_publisher)
+notification_service = NotificationService()
+polling_service = PollingService(websocket_manager, mqtt_publisher=mqtt_publisher, notification_service=notification_service)
 compressor_polling_service = CompressorPollingService(websocket_manager, mqtt_publisher=mqtt_publisher)
+ftp_sync_service = FtpSyncService(websocket_manager)
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -85,7 +87,7 @@ app.add_middleware(
 )
 
 # Add rate limiting middleware
-from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.rate_limit import RateLimitMiddleware  # noqa: E402
 app.add_middleware(RateLimitMiddleware)
 
 
@@ -129,6 +131,8 @@ app.include_router(summary.router, prefix="/api", tags=["summary"])
 app.include_router(tools.router, prefix="/api/tools", tags=["tools"])
 app.include_router(websocket.router, prefix="/api", tags=["websocket"])
 app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"])
+app.include_router(ftp_sync.router, prefix="/api", tags=["ftp-sync"])
+app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"])
 
 # Inject websocket manager into websocket router
 websocket.set_websocket_manager(websocket_manager)
@@ -140,6 +144,8 @@ compressors.set_websocket_manager_for_compressors(websocket_manager)
 summary.set_polling_service(polling_service)
 machines.set_polling_service(polling_service)
 status.set_polling_service(polling_service)
+ftp_sync.set_ftp_sync_service(ftp_sync_service)
+notifications.set_notification_service(notification_service)
 
 
 @app.on_event("startup")
@@ -148,11 +154,14 @@ async def startup_event():
     print(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
 
     await mqtt_publisher.start()
+    await notification_service.start()
     print("Starting background polling service...")
     await polling_service.start()
     print("Polling service started - monitoring all enabled machines")
     await compressor_polling_service.start()
     print("Compressor polling service started")
+    await ftp_sync_service.start()
+    print("FTP sync service started")
 
 
 @app.on_event("shutdown")
@@ -162,6 +171,8 @@ async def shutdown_event():
     print("Stopping background polling service...")
     await compressor_polling_service.stop()
     await polling_service.stop()
+    await ftp_sync_service.stop()
+    await notification_service.stop()
     await mqtt_publisher.stop()
     try:
         from app.clients.telnet_client import close_all_connections

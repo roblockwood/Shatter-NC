@@ -1,6 +1,6 @@
 """Tool management service - core business logic for tool analysis."""
 from sqlalchemy.orm import Session
-from sqlalchemy import text, func
+from sqlalchemy import text
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from collections import defaultdict
@@ -57,11 +57,15 @@ class ToolService:
             ORDER BY (tool_data->>'tool_number')::int
         """)
 
+        total_programs_query = text(
+            "SELECT COUNT(*) FROM programs WHERE is_active = TRUE"
+        )
+
         result = db.execute(query)
         tools_data = result.fetchall()
+        total_programs = db.execute(total_programs_query).scalar() or 0
 
         tools = []
-        total_programs = 0
         total_production_runs = 0
 
         for row in tools_data:
@@ -71,7 +75,6 @@ class ToolService:
 
             # Get programs using this tool
             programs_using = row.programs_using
-            total_programs = max(total_programs, programs_using)
 
             # Extract operation types
             operation_types = set()
@@ -446,7 +449,15 @@ class ToolService:
                 p.id,
                 p.original_filename,
                 p.version_number,
-                p.program_metadata
+                p.program_metadata,
+                (
+                    SELECT pd.deployed_path
+                    FROM program_deployments pd
+                    WHERE pd.program_id = p.id
+                      AND pd.is_current = TRUE
+                    ORDER BY pd.deployed_at DESC
+                    LIMIT 1
+                ) AS deployed_path
             FROM programs p,
                  jsonb_array_elements(p.program_metadata->'tools') as tool_data
             WHERE (tool_data->>'tool_number')::int = :tool_number
@@ -490,6 +501,7 @@ class ToolService:
             programs.append(ProgramUsage(
                 program_id=row.id,
                 filename=row.original_filename,
+                deployed_path=row.deployed_path,
                 version=row.version_number,
                 production_runs=len(runs),
                 last_run=last_run,

@@ -5,7 +5,7 @@ due to non-standard HTTP/1.1 implementation.
 """
 import socket
 import re
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from datetime import datetime
 import logging
 
@@ -349,8 +349,9 @@ class CNCHttpClient:
         # Each row has: pot number, tool number, tool name, tool data (diameter x length), group, life, type, color
         # Extract all <td> elements from each row to get all fields
         
-        # Find all tool rows
-        row_pattern = r'<tr bgcolor="#[^"]*">.*?</tr>'
+        # Find all tool rows - match any <tr> tag (with or without bgcolor, class, style, etc)
+        # Original pattern required bgcolor="#..." but HTML may use class, style, or no attributes
+        row_pattern = r'<tr[^>]*>.*?</tr>'
         tool_rows = re.findall(row_pattern, html, re.DOTALL)
 
         for row in tool_rows:
@@ -615,7 +616,7 @@ class CNCHttpClient:
                 else:
                     logger.debug(f"MEM parsed but no program_name found. Content: {repr(mem_data)}")
             else:
-                logger.debug(f"MEM file not found or empty")
+                logger.debug("MEM file not found or empty")
         except Exception as e:
             logger.debug(f"Failed to fetch program_name from MEM via Telnet: {e}")
             # Continue without program_name - not critical

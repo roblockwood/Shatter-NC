@@ -14,7 +14,7 @@ from typing import Dict, Any, Optional, List
 import re
 import logging
 
-from app.schemas.cnc_data.alarm_schema import ALARM_SCHEMAS, C00_SCHEMA, D00_SCHEMA
+from app.schemas.cnc_data.alarm_schema import ALARM_SCHEMAS, C00_SCHEMA
 from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
 
 logger = logging.getLogger(__name__)

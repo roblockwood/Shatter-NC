@@ -17,8 +17,6 @@ Format:
 - Single line with: A01,Program No.,Operation status,Inner pallet status,Spare tool,Mode,Expansion
 """
 
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass
 
 from app.schemas.cnc_data.tolni_schema import FieldDefinition, SchemaDefinition
 

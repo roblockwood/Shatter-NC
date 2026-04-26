@@ -1,5 +1,5 @@
 """Program and deployment models for NC file version tracking."""
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ForeignKey, Text, CheckConstraint, func
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ForeignKey, CheckConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from app.db.base import Base

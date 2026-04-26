@@ -103,13 +103,15 @@ jobs:
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
           DATE_TAG=$(date +%Y-%m-%d)
+          # Docker registry paths must be lowercase; repository_owner may contain uppercase.
           OWNER="${{ github.repository_owner }}"
+          OWNER_LOWER="${OWNER,,}"
           # Publish to the public install repo namespace (not the private source repo name).
           TARGET_REPO_LOWER="shatter-nc-install"
           echo "SHORT_SHA=$SHORT_SHA" >> "$GITHUB_OUTPUT"
           echo "DATE_TAG=$DATE_TAG" >> "$GITHUB_OUTPUT"
-          echo "BACKEND_IMAGE=ghcr.io/${OWNER}/${TARGET_REPO_LOWER}/backend" >> "$GITHUB_OUTPUT"
-          echo "FRONTEND_IMAGE=ghcr.io/${OWNER}/${TARGET_REPO_LOWER}/frontend" >> "$GITHUB_OUTPUT"
+          echo "BACKEND_IMAGE=ghcr.io/${OWNER_LOWER}/${TARGET_REPO_LOWER}/backend" >> "$GITHUB_OUTPUT"
+          echo "FRONTEND_IMAGE=ghcr.io/${OWNER_LOWER}/${TARGET_REPO_LOWER}/frontend" >> "$GITHUB_OUTPUT"
 
       - name: Build and push backend image
         if: steps.filter.outputs.need_docker == 'true'
@@ -164,6 +166,7 @@ jobs:
             exit 0
           fi
           owner="${{ github.repository_owner }}"
+          owner="${owner,,}"
           target_repo="shatter-nc-install"
           want_backend="${target_repo}/backend"
           want_frontend="${target_repo}/frontend"

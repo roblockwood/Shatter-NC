@@ -1,16 +1,17 @@
 import React, { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
+import type { MachineStatus, CompressorStatus } from '../hooks/useWebSocket';
 import { WS_URL } from '../config/api';
 
 interface WebSocketContextType {
-  machines: any[];
-  compressors: any[];
+  machines: MachineStatus[];
+  compressors: CompressorStatus[];
   isConnected: boolean;
   removeMachine: (machineId: number) => void;
-  addMachine: (machine: any) => void;
+  addMachine: (machine: MachineStatus) => void;
   removeCompressor: (compressorId: number) => void;
-  addCompressor: (compressor: any) => void;
+  addCompressor: (compressor: CompressorStatus) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -43,6 +44,7 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useWebSocketContext = () => {
   const context = useContext(WebSocketContext);
   if (context === undefined) {

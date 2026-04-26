@@ -20,6 +20,10 @@ interface ToolValidation {
     length?: number;
   };
   warnings: string[];
+  validate_diameter?: boolean;
+  validate_length?: boolean;
+  requirements_complete?: boolean;
+  tolerance_source?: 'machine_settings' | 'gcode_defaults';
   diameter_tolerance?: number;
   length_tolerance_plus?: number;
   length_tolerance_minus?: number;
@@ -188,6 +192,9 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
   );
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
   const [expandedWCS, setExpandedWCS] = useState<boolean>(false);
+  const [liveValidation, setLiveValidation] = useState<Deployment['validation_results'] | null>(null);
+  const [isRevalidating, setIsRevalidating] = useState(false);
+  const hasAutoRevalidatedRef = useRef(false);
   const isInitialLoadRef = useRef(true);
   const previousMachineIdRef = useRef<number | null>(null);
   const previousProgramNameRef = useRef<string | undefined>(undefined);
@@ -318,8 +325,9 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                   );
                   if (listResponse.ok) {
                     const listData = await listResponse.json();
+<<<<<<< HEAD
                     const file = listData.programs?.find(
-                      (p: any) =>
+                      (p: { name: string; size?: number; modified?: string }) =>
                         p.name === filename ||
                         p.name === effectiveProgramName ||
                         p.name === `${effectiveProgramName}.NC`
@@ -375,9 +383,28 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
             console.error('Error fetching deployment by O-number:', err);
             // Fall through to fallback
           }
+        } else {
+          // No valid programName — machine is idle or program is unknown.
+          // Do NOT show the most recently deployed program; that would be misleading.
+          setDeployment(null);
+          setProgram(null);
+          setFileInfo(null);
+          hasDataRef.current = true;
+          if (isInitialLoadRef.current) {
+            isInitialLoadRef.current = false;
+            setLoading(false);
+          }
+          setIsRefreshing(false);
+          setRefreshing(false);
+          if (refreshTrigger > 0) {
+            setRefreshTrigger(0);
+          }
+          recordFetchSuccess();
+          return;
         }
         
-        // Fallback: Fetch most recent deployment if no program_name or fetch by O-number failed
+        // Fallback: programName was valid but the by-onumber fetch threw an exception.
+        // Show the most recent deployment as a last resort so the pane is not empty.
         const response = await fetch(`${API_BASE_URL}/api/programs/machines/${machineId}/deployments?current_only=true`);
         if (response.ok) {
           const data = await response.json();
@@ -428,8 +455,9 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                 );
                 if (listResponse.ok) {
                   const listData = await listResponse.json();
+<<<<<<< HEAD
                   const file = listData.programs?.find(
-                    (p: any) =>
+                    (p: { name: string; size?: number; modified?: string }) =>
                       p.name === filename ||
                       p.name === effectiveProgramName ||
                       p.name === `${effectiveProgramName}.NC`
@@ -538,6 +566,98 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const normalizeRemotePath = (rawPath?: string | null): string => {
+    const normalized = `/${String(rawPath ?? '').replace(/\\/g, '/').split('/').filter(Boolean).join('/')}`;
+    return normalized === '/' ? '/' : normalized;
+  };
+
+  const buildDeploymentFilePath = (dep: Deployment): string => {
+    const filename = (dep.deployed_filename || '').trim();
+    const rawPath = (dep.deployed_path || '').trim();
+
+    if (!rawPath) {
+      return normalizeRemotePath(filename ? `/${filename}` : '/');
+    }
+
+    const normalizedPath = normalizeRemotePath(rawPath);
+    if (!filename) {
+      return normalizedPath;
+    }
+
+    const pathLower = normalizedPath.toLowerCase();
+    const fileLower = `/${filename.toLowerCase()}`;
+    if (pathLower.endsWith(fileLower)) {
+      return normalizedPath;
+    }
+
+    return normalizeRemotePath(`${normalizedPath}/${filename}`);
+  };
+
+  const buildFileBrowserLink = (fullFilePath: string): string => {
+    const normalized = normalizeRemotePath(fullFilePath);
+    const segments = normalized.split('/').filter(Boolean);
+    const fileName = segments.length > 0 ? segments[segments.length - 1] : '';
+    const directoryPath = segments.length > 1 ? `/${segments.slice(0, -1).join('/')}` : '/';
+
+    return `/files?machine=${machineId}&file=${encodeURIComponent(fileName)}&file_path=${encodeURIComponent(normalized)}&path=${encodeURIComponent(directoryPath)}`;
+  };
+
+  const handleRevalidate = async (deploymentArg?: Deployment) => {
+    const dep = deploymentArg || deployment;
+    if (!dep) return;
+    const filePath = buildDeploymentFilePath(dep);
+    setIsRevalidating(true);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/programs/machines/${machineId}/programs/validate-file?file_path=${encodeURIComponent(filePath)}`,
+        { method: 'POST' }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const freshValidation = {
+          tools: data.validation?.tools ?? data.tools,
+          wcs_offset: data.validation?.wcs_offset ?? data.wcs_offset ?? null,
+          valid: data.validation?.valid ?? data.valid,
+        };
+        setLiveValidation(freshValidation);
+
+        // Persist the fresh results back to the deployment record so that the
+        // next page load shows current-machine-config tolerances, not the stale
+        // upload-time results.
+        if (dep.id) {
+          try {
+            await fetch(
+              `${API_BASE_URL}/api/programs/deployments/${dep.id}/validation`,
+              {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  validation_results: freshValidation,
+                  validation_passed: freshValidation.valid ?? true,
+                }),
+              }
+            );
+            // Update the module-level cache so a cache-hit also shows fresh data
+            if (programName) {
+              const cached = dataCache.get(getCacheKey(machineId, programName));
+              if (cached?.deployment) {
+                cached.deployment.validation_results = freshValidation;
+                cached.deployment.validation_passed = freshValidation.valid ?? true;
+              }
+            }
+          } catch (patchErr) {
+            // Persistence failure is non-fatal — live result is already shown
+            console.warn('Could not persist re-validation results:', patchErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Re-validate error:', err);
+    } finally {
+      setIsRevalidating(false);
+    }
+  };
+
   const handleRefresh = async () => {
     try {
       setRefreshing(true);
@@ -564,6 +684,38 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
     // Don't set refreshing to false here - let the fetch complete in useEffect
   };
 
+  // Auto-revalidate when a deployment with failed tools is loaded for the first time
+  useEffect(() => {
+    if (!deployment || hasAutoRevalidatedRef.current) return;
+    const tools = deployment.validation_results?.tools;
+    if (!tools) return;
+    const hasFailedTools = Object.values(tools).some(t => !t.available);
+    if (hasFailedTools) {
+      hasAutoRevalidatedRef.current = true;
+      handleRevalidate(deployment);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deployment]);
+
+  // Reset live validation only when the *program* actually changes, not on every render.
+  // Using a ref to track the previous key avoids clearing liveValidation during the
+  // periodic parent re-renders that pass the same machineId + programName, or during
+  // brief poll cycles where programName momentarily becomes '----' then returns.
+  const liveValidationKeyRef = useRef<string | null>(null);
+  const currentKey = `${machineId}:${programName ?? ''}`;
+  const isRealProgramName = programName && programName !== '----' && programName !== 'undefined' && programName !== 'null' && programName.trim() !== '';
+
+  useEffect(() => {
+    // Only treat this as a genuine program-change if the incoming name is a real O-number.
+    // Ignore transient blank/placeholder values so a brief polling gap doesn't wipe the live result.
+    if (!isRealProgramName) return;
+    if (liveValidationKeyRef.current === currentKey) return;
+    liveValidationKeyRef.current = currentKey;
+    setLiveValidation(null);
+    hasAutoRevalidatedRef.current = false;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentKey, isRealProgramName]);
+
   const extractONumber = (filename: string): string => {
     const match = filename.match(/O(\d{4})/i);
     return match ? match[1] : 'N/A';
@@ -582,11 +734,20 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
   };
 
   const renderToolsValidationTable = () => {
-    if (!deployment?.validation_results?.tools) {
+    // Prefer live re-validation results; fall back to stored deployment results
+    const validationResults = liveValidation ?? deployment?.validation_results;
+    const isLiveResult = liveValidation !== null;
+    // A "stale fail" is a stored result where a required tool (non-zero specs) shows not available
+    const hasStaleFail = !isLiveResult && Object.values(deployment?.validation_results?.tools ?? {}).some(
+      t => !t.available && (t.required_diameter !== 0 || t.required_length !== 0)
+    );
+
+    if (!validationResults?.tools) {
       return null;
     }
 
-    const toolsArray = Object.values(deployment.validation_results.tools);
+    const toolsArray = Object.values(validationResults.tools);
+    const toleranceSource = toolsArray.find(t => t.tolerance_source)?.tolerance_source;
 
     if (toolsArray.length === 0) {
       return null;
@@ -594,7 +755,27 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
 
     return (
       <div className="validation-section">
-        <div className="section-header">TOOLS & VALIDATION</div>
+        <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>TOOLS &amp; VALIDATION{hasStaleFail ? ' ⚠' : ''}</span>
+          <button
+            onClick={() => handleRevalidate()}
+            disabled={isRevalidating}
+            className="revalidate-btn"
+            title="Re-run tool validation against current machine state"
+          >
+            {isRevalidating ? '[CHECKING...]' : '[RE-VALIDATE]'}
+          </button>
+        </div>
+        {hasStaleFail && (
+          <div style={{ fontSize: '0.7rem', color: '#ffcc80', padding: '2px 4px', marginBottom: '4px' }}>
+            ⚠ Stored results may be stale — tool data was unavailable when deployed. Click RE-VALIDATE.
+          </div>
+        )}
+        {toleranceSource && (
+          <div style={{ fontSize: '0.7rem', color: '#9fb2c8', padding: '2px 4px', marginBottom: '4px' }}>
+            Tolerance source: {toleranceSource === 'machine_settings' ? 'MACHINE SETTINGS' : 'PROGRAM DEFAULTS'}
+          </div>
+        )}
         <table className="validation-table">
           <thead>
             <tr className="validation-table-header">
@@ -628,8 +809,10 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                 );
               }
               
+              const requirementsMissing = tool.requirements_complete === false;
+
               // Check if tool is not referenced in NC (required values are 0)
-              const notInNC = tool.required_diameter === 0 && tool.required_length === 0;
+              const notInNC = !requirementsMissing && tool.required_diameter === 0 && tool.required_length === 0;
               
               if (notInNC) {
                 // Tool is available on machine but not referenced in NC program
@@ -638,7 +821,7 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                     <td className="text-muted">─</td>
                     <td>T{String(tool.tool_number).padStart(2, '0')}</td>
                     <td>
-                      Ø{(tool.machine_tool_data.diameter || 0).toFixed(3)}" L{(tool.machine_tool_data.length || 0).toFixed(2)}"
+                      Ø{(tool.machine_tool_data.diameter || 0).toFixed(3)}" L{(tool.machine_tool_data.length || 0).toFixed(4)}"
                       {tool.machine_tool_data.tool_name && (
                         <span className="text-muted"> ({tool.machine_tool_data.tool_name})</span>
                       )}
@@ -653,8 +836,8 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
 
               // Determine overall status
               const toolPassed = tool.available && tool.diameter_match && tool.length_sufficient;
-              const hasError = !tool.available || !tool.length_sufficient;
-              const hasWarning = tool.available && !tool.diameter_match;
+              const hasError = !tool.available || ((tool.validate_length ?? true) && !tool.length_sufficient);
+              const hasWarning = requirementsMissing || (tool.available && (tool.validate_diameter ?? true) && !tool.diameter_match);
               const statusClass = hasError ? 'text-error' : hasWarning ? 'text-warning' : 'text-success';
               const statusIcon = hasError ? '✕' : hasWarning ? '⚠' : '✓';
               const expandIcon = isExpanded ? '▼' : '▶';
@@ -686,6 +869,8 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                     <td colSpan={4}>
                       {!tool.available ? (
                         <span className="text-error">NOT AVAILABLE</span>
+                      ) : requirementsMissing ? (
+                        <span className="text-warning">TOOL CALL FOUND - HEADER DIAMETER/LENGTH NOT PROVIDED</span>
                       ) : (
                         <>
                           {tool.machine_tool_data.tool_name && (
@@ -704,18 +889,18 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                     <tr className="validation-table-row tool-detail-row">
                       <td></td>
                       <td className="detail-label">Length</td>
-                      <td>{actualLength.toFixed(2)}"</td>
-                      <td>{requiredLength.toFixed(2)}"</td>
+                      <td>{actualLength.toFixed(4)}"</td>
+                      <td>{requiredLength.toFixed(4)}"</td>
                       <td className={lengthPassed ? 'text-success' : 'text-error'}>
-                        {lengthDiff.toFixed(2)}"
+                        {lengthDiff.toFixed(4)}"
                       </td>
                       <td>
                         {tool.length_tolerance_plus != null && tool.length_tolerance_minus != null
                           ? `+${tool.length_tolerance_plus.toFixed(4)}"/-${tool.length_tolerance_minus.toFixed(4)}"`
-                          : '≥ required'}
+                          : ((tool.validate_length ?? true) ? '≥ required' : 'SKIPPED')}
                       </td>
                       <td className={lengthPassed ? 'text-success' : 'text-error'}>
-                        {lengthPassed ? '✓' : '✕'}
+                        {(tool.validate_length ?? true) ? (lengthPassed ? '✓' : '✕') : '─'}
                       </td>
                     </tr>
                   )}
@@ -733,10 +918,10 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
                       <td>
                         {tool.diameter_tolerance != null
                           ? `±${tool.diameter_tolerance.toFixed(4)}"`
-                          : 'exact match'}
+                          : ((tool.validate_diameter ?? true) ? 'exact match' : 'SKIPPED')}
                       </td>
                       <td className={diameterPassed ? 'text-success' : 'text-error'}>
-                        {diameterPassed ? '✓' : '✕'}
+                        {(tool.validate_diameter ?? true) ? (diameterPassed ? '✓' : '✕') : '─'}
                       </td>
                     </tr>
                   )}
@@ -1059,13 +1244,18 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
               <div className="program-row">
                 <span className="program-label">FILENAME:</span>
                 <span className="program-value">
-                  <Link 
-                    to={`/files?machine=${machineId}&file=${encodeURIComponent(deployment!.deployed_filename)}`}
+                  <Link
+                    to={buildFileBrowserLink(buildDeploymentFilePath(deployment!))}
                     className="program-filename-link"
+                    title={`Open in File Browser: ${buildDeploymentFilePath(deployment!)}`}
                   >
                     {deployment!.deployed_filename}
                   </Link>
                 </span>
+              </div>
+              <div className="program-row">
+                <span className="program-label">FILE PATH:</span>
+                <span className="program-value">{buildDeploymentFilePath(deployment!)}</span>
               </div>
               {program && (
                 <>

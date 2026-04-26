@@ -50,7 +50,7 @@ class CompressorPoller:
     async def poll(self) -> Dict[str, Any]:
         poll_start = time.time()
         poll_ts = datetime.now(timezone.utc)
-        cid = self.compressor.id
+        _cid = self.compressor.id
 
         bundle, err = await self._get_client().fetch_bundle()
 
@@ -188,7 +188,7 @@ class CompressorPollingService:
                 await self._poll_all()
                 db = SessionLocal()
                 try:
-                    q = db.query(Compressor).filter(Compressor.enabled == True).all()
+                    q = db.query(Compressor).filter(Compressor.enabled).all()
                     min_iv = min((c.poll_interval_seconds for c in q), default=5)
                 finally:
                     db.close()
@@ -202,7 +202,7 @@ class CompressorPollingService:
     async def _poll_all(self):
         db = SessionLocal()
         try:
-            compressors = db.query(Compressor).filter(Compressor.enabled == True).all()
+            compressors = db.query(Compressor).filter(Compressor.enabled).all()
             ids = {c.id for c in compressors}
 
             for cid in list(self.pollers.keys()):

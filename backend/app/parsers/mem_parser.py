@@ -10,7 +10,7 @@ Example formats:
 - O2045\n
 - O2045\r\n
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import re
 
 

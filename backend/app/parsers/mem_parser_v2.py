@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional
 import re
 import logging
 
-from app.schemas.cnc_data.mem_schema import MEM_SCHEMAS, C00_SCHEMA, D00_SCHEMA
+from app.schemas.cnc_data.mem_schema import MEM_SCHEMAS, C00_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -208,9 +208,9 @@ class MEMParserV2:
             
             # Parse value based on data type
             try:
-                if field_def.data_type == int:
+                if field_def.data_type is int:
                     mem_data[field_def.name] = int(value_str)
-                elif field_def.data_type == float:
+                elif field_def.data_type is float:
                     mem_data[field_def.name] = float(value_str)
                 else:
                     # String field - remove quotes if present
@@ -226,9 +226,9 @@ class MEMParserV2:
                     # Required field failed to parse
                     return {"program_name": None}
                 # Use default for optional fields
-                if field_def.data_type == float:
+                if field_def.data_type is float:
                     mem_data[field_def.name] = 0.0
-                elif field_def.data_type == int:
+                elif field_def.data_type is int:
                     mem_data[field_def.name] = 0
                 else:
                     mem_data[field_def.name] = ""

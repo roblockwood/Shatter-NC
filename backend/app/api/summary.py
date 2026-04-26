@@ -9,11 +9,9 @@ from app.db.base import get_db
 from app.models.machine import Machine
 from app.models.event import ProductionRun, MachineStatusEvent
 
-router = APIRouter()
+from app.api import websocket as websocket_api
 
-# Polling service and WebSocket manager will be injected from main.py
-# These are initialized in main.py and accessed as globals
-from app.api.websocket import websocket_manager
+router = APIRouter()
 polling_service = None
 
 def set_polling_service(service):
@@ -202,7 +200,7 @@ def is_backend_healthy() -> bool:
                 return False
         
         return True
-    except Exception as e:
+    except Exception:
         # If we can't check, assume backend is healthy to avoid false negatives
         return True
     finally:
@@ -333,7 +331,7 @@ def get_running_summary(
         run_percentage = (total_run_time / time_range_seconds * 100) if time_range_seconds > 0 else 0.0
 
         # Get current status from Redis cache (with fallback to in-memory cache)
-        cached_status = websocket_manager.get_machine_status_from_cache(row.machine_id) if websocket_manager else {}
+        cached_status = websocket_api.websocket_manager.get_machine_status_from_cache(row.machine_id) if websocket_api.websocket_manager else {}
         current_status = cached_status.get("status") if cached_status else None
 
         # Get status history for the time range (filter out 'off' status)
@@ -394,7 +392,7 @@ def get_online_summary(
     }
     hours = hours_map.get(time_range, 8)
     # Get all enabled machines
-    machines_query = db.query(Machine).filter(Machine.enabled == True).all()
+    machines_query = db.query(Machine).filter(Machine.enabled).all()
 
     online_machines = []
     
@@ -468,7 +466,7 @@ def get_offline_summary(db: Session = Depends(get_db)):
     Uses the polling service as the source of truth for online status.
     """
     # Get all enabled machines
-    machines_query = db.query(Machine).filter(Machine.enabled == True).all()
+    machines_query = db.query(Machine).filter(Machine.enabled).all()
 
     offline_machines = []
 
@@ -557,7 +555,7 @@ def get_machines_summary(
     }
     hours = hours_map.get(time_range, 8)
     # Get all enabled machines
-    machines_query = db.query(Machine).filter(Machine.enabled == True).all()
+    machines_query = db.query(Machine).filter(Machine.enabled).all()
 
     machines_list = []
     online_count = 0
@@ -655,7 +653,7 @@ def get_machines_summary(
             offline_duration_formatted = ""  # Don't show offline duration when backend was down
 
         # Get current status from WebSocket cache
-        cached_status = websocket_manager.get_machine_status(machine.id) if websocket_manager else None
+        cached_status = websocket_api.websocket_manager.get_machine_status(machine.id) if websocket_api.websocket_manager else None
         current_status = cached_status.get("status") if cached_status else None
 
         # Get connection health

@@ -12,11 +12,11 @@ Features:
   fixture_offsets (H01), rotary_offsets (B01)
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 import re
 import logging
 
-from app.schemas.cnc_data.posni_schema import POSN_SCHEMAS, C00_SCHEMA, D00_SCHEMA
+from app.schemas.cnc_data.posni_schema import POSN_SCHEMAS, C00_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -248,9 +248,9 @@ class POSNIParserV2:
                         return None
                     else:
                         # Optional field - use default value
-                        if field_def.data_type == float:
+                        if field_def.data_type is float:
                             offset_data[field_def.name] = 0.0
-                        elif field_def.data_type == int:
+                        elif field_def.data_type is int:
                             offset_data[field_def.name] = 0
                         else:
                             offset_data[field_def.name] = ""
@@ -258,9 +258,9 @@ class POSNIParserV2:
                 
                 # Parse value based on data type
                 try:
-                    if field_def.data_type == float:
+                    if field_def.data_type is float:
                         offset_data[field_def.name] = float(value_str)
-                    elif field_def.data_type == int:
+                    elif field_def.data_type is int:
                         offset_data[field_def.name] = int(value_str)
                     else:
                         offset_data[field_def.name] = value_str
@@ -269,9 +269,9 @@ class POSNIParserV2:
                     if field_def.required:
                         return None
                     # Use default for optional fields
-                    if field_def.data_type == float:
+                    if field_def.data_type is float:
                         offset_data[field_def.name] = 0.0
-                    elif field_def.data_type == int:
+                    elif field_def.data_type is int:
                         offset_data[field_def.name] = 0
                     else:
                         offset_data[field_def.name] = ""
