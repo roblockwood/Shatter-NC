@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import './SyncConfig.css';
 import { API_BASE_URL } from '../config/api';
 import { SyncRunProgress } from '../components/SyncRunProgress';
+import { Select } from '../components/ui/Select';
 import {
   browseLocalFolders,
   createSyncConfig,
@@ -319,17 +320,15 @@ export const SyncConfig: React.FC = () => {
 
       <div className="sync-machine-row">
         <label className="sync-label">MACHINE</label>
-        <select
+        <Select
           className="sync-select"
-          value={selectedMachineId ?? ''}
-          onChange={(e) => setSelectedMachineId(Number(e.target.value))}
-        >
-          {machines.map((machine) => (
-            <option key={machine.id} value={machine.id}>
-              {machine.name} ({machine.ip_address})
-            </option>
-          ))}
-        </select>
+          value={selectedMachineId != null ? String(selectedMachineId) : ''}
+          onChange={(value) => setSelectedMachineId(Number(value))}
+          options={machines.map((machine) => ({
+            value: String(machine.id),
+            label: `${machine.name} (${machine.ip_address})`,
+          }))}
+        />
         <button
           className="terminal-button"
           type="button"
@@ -358,13 +357,14 @@ export const SyncConfig: React.FC = () => {
 
             <label>
               Direction
-              <select
+              <Select
                 value={form.sync_direction}
-                onChange={(e) => updateForm('sync_direction', e.target.value as 'upload' | 'download')}
-              >
-                <option value="upload">Upload (local → CNC)</option>
-                <option value="download">Download (CNC → local)</option>
-              </select>
+                onChange={(value) => updateForm('sync_direction', value as 'upload' | 'download')}
+                options={[
+                  { value: 'upload', label: 'Upload (local → CNC)' },
+                  { value: 'download', label: 'Download (CNC → local)' },
+                ]}
+              />
             </label>
 
             <label>
@@ -400,13 +400,14 @@ export const SyncConfig: React.FC = () => {
             <div className="sync-form-inline">
               <label>
                 Control Type
-                <select
+                <Select
                   value={form.control_type}
-                  onChange={(e) => updateForm('control_type', e.target.value as 'C00' | 'D00')}
-                >
-                  <option value="C00">C00</option>
-                  <option value="D00">D00</option>
-                </select>
+                  onChange={(value) => updateForm('control_type', value as 'C00' | 'D00')}
+                  options={[
+                    { value: 'C00', label: 'C00' },
+                    { value: 'D00', label: 'D00' },
+                  ]}
+                />
               </label>
               <label>
                 Debounce Seconds

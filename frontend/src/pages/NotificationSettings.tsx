@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import './NotificationSettings.css';
 import { API_BASE_URL } from '../config/api';
+import { Select } from '../components/ui/Select';
 import {
   listChannels,
   createChannel,
@@ -346,20 +347,22 @@ export function NotificationSettings() {
         <div className="notify-row">
           <div className="notify-field">
             <label>Machine</label>
-            <select value={ruleForm.machineId} onChange={(e) => setRuleForm({ ...ruleForm, machineId: e.target.value })}>
-              <option value="">All machines</option>
-              {machines.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
+            <Select
+              value={ruleForm.machineId}
+              onChange={(value) => setRuleForm({ ...ruleForm, machineId: value })}
+              options={[
+                { value: '', label: 'All machines' },
+                ...machines.map((m) => ({ value: String(m.id), label: m.name })),
+              ]}
+            />
           </div>
           <div className="notify-field">
             <label>Trigger</label>
-            <select value={ruleForm.trigger} onChange={(e) => setRuleForm({ ...ruleForm, trigger: e.target.value })}>
-              {TRIGGER_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+            <Select
+              value={ruleForm.trigger}
+              onChange={(value) => setRuleForm({ ...ruleForm, trigger: value })}
+              options={TRIGGER_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            />
           </div>
         </div>
         <div className="notify-field">

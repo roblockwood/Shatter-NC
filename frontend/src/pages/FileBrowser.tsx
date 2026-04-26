@@ -846,15 +846,16 @@ export const FileBrowser: React.FC = () => {
                 </div>
                 <div className="sort-controls">
                   <label className="sort-label">SORT:</label>
-                  <select
+                  <Select
                     className="terminal-select-sm"
                     value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as 'name' | 'size' | 'modified')}
-                  >
-                    <option value="name">NAME</option>
-                    <option value="size">SIZE</option>
-                    <option value="modified">MODIFIED</option>
-                  </select>
+                    onChange={(value) => setSortBy(value as 'name' | 'size' | 'modified')}
+                    options={[
+                      { value: 'name', label: 'NAME' },
+                      { value: 'size', label: 'SIZE' },
+                      { value: 'modified', label: 'MODIFIED' },
+                    ]}
+                  />
                   <button
                     className="sort-direction-btn"
                     onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
