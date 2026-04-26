@@ -6,9 +6,9 @@ import './ToolListModal.css';
 
 interface Tool {
   tool_number: number;
-  tool_name: string;
-  diameter: number;
-  length: number;
+  tool_name?: string;
+  diameter?: number;
+  length?: number;
 }
 
 interface ToolListModalProps {

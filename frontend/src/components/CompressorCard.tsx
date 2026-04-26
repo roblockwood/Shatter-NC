@@ -250,6 +250,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
     } else {
       performEditCancel();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCollapse, isEditing]);
 
   useEffect(() => {
@@ -267,6 +268,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
       document.addEventListener('keydown', handleEscape);
       return () => document.removeEventListener('keydown', handleEscape);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isExpanded, isEditing, editMode, onCollapse]);
 
   const handleCardClick = (e: React.MouseEvent) => {

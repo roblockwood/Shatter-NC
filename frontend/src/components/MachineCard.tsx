@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ToolListModal } from './ToolListModal';
 import { UploadConfirmationModal } from './UploadConfirmationModal';
-import { MachineCardAsciiDivider } from './MachineCardAsciiDivider';
 import { SaveConfirmModal } from './SaveConfirmModal';
 import { Select } from './ui/Select';
 import { AlarmPane } from './machine-detail/AlarmPane';
@@ -17,10 +16,6 @@ import { PANE_IDS } from '../types/layout';
 import { useExpandedMachine } from '../contexts/ExpandedMachineContext';
 import './MachineCard.css';
 import { API_BASE_URL } from '../config/api';
-import { useLatestMachineProductionRun } from '../hooks/useLatestMachineProductionRun';
-import { alarmStopLevel } from '../utils/alarmStopLevel';
-import { fastPollLastSuccessAt } from '../utils/machinePollFreshness';
-import { ProductionRunCompactSummary } from './machine-detail/ProductionRunCompactSummary';
 
 interface Tool {
   tool_number: number;
@@ -35,6 +30,34 @@ interface Alarm {
   severity?: string;
   level_class?: string;
   stop_level?: string;
+}
+
+interface PanelData {
+  doors?: Record<string, unknown>;
+  mode?: unknown;
+  overrides?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface ValidationResult {
+  valid: boolean;
+  tools: Record<number, unknown>;
+  wcs_offset: unknown;
+  warnings: string[];
+  errors: string[];
+  metadata: {
+    posted_date?: string;
+    estimated_runtime_seconds?: number;
+    tool_count: number;
+    line_count: number;
+    file_size: number;
+  };
+}
+
+interface ConnectionTestResult {
+  overall_status: string;
+  telnet?: { success: boolean; error?: string };
+  ftp?: { success: boolean; error?: string };
 }
 
 interface MachineStatus {
@@ -52,7 +75,7 @@ interface MachineStatus {
   tool_table?: Tool[];  // TABLE data (TOLN)
   current_tool?: number;
   alarms?: Alarm[];
-  panel?: any;  // Panel data (doors, mode, overrides)
+  panel?: PanelData;  // Panel data (doors, mode, overrides)
   error?: string;
   poll_timestamp: string;
   /** When the last successful fast (status) poll completed; does not advance on failed attempts. */
@@ -73,6 +96,25 @@ interface MachineStatus {
   part_display_mode?: 'cycle' | 'parts';
   enabled?: boolean;
   units?: 'in' | 'mm';
+  control_version?: 'C00' | 'D00' | null;
+  diameter_tolerance?: number;
+  length_tolerance_plus?: number;
+  length_tolerance_minus?: number;
+  tolerance_x?: number;
+  tolerance_y?: number;
+  tolerance_z?: number;
+  use_machine_tool_tolerances?: boolean;
+  use_machine_wcs_tolerances?: boolean;
+  validate_tool_diameter?: boolean;
+  validate_tool_length?: boolean;
+}
+
+/** Fast-poll freshness time for status/alarms/panel: last successful controller poll only (falls back to legacy poll_timestamp if field absent). */
+function fastPollLastSuccessAt(machine: MachineStatus): string | null | undefined {
+  if (machine.last_successful_poll_at !== undefined) {
+    return machine.last_successful_poll_at;
+  }
+  return machine.poll_timestamp;
 }
 
 interface MachineCardProps {
@@ -121,7 +163,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const [showToolModal, setShowToolModal] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
-  const [validationResult, setValidationResult] = useState<any>(null);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [selectedFilename, setSelectedFilename] = useState('');
   const [fileContent, setFileContent] = useState('');
   const [isValidating, setIsValidating] = useState(false);
@@ -157,7 +199,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const [editSuccess, setEditSuccess] = useState(false);
   const [isEditSaving, setIsEditSaving] = useState(false);
   const [isEditTesting, setIsEditTesting] = useState(false);
-  const [editTestResult, setEditTestResult] = useState<any>(null);
+  const [editTestResult, setEditTestResult] = useState<ConnectionTestResult | null>(null);
   const { 
     setExpandedMachine,
     setExpandedAssetKind,
@@ -200,7 +242,15 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const fileManagerPaneRef = useRef<HTMLDivElement>(null);
   const expandedContentRef = useRef<HTMLDivElement>(null);
   const [currentProgram, setCurrentProgram] = useState<string | null>(null);
-  const { latestRun, latestRunLoading } = useLatestMachineProductionRun(machine.machine_id);
+  const [latestRun, setLatestRun] = useState<{
+    program_no: string | null;
+    run_start: string;
+    run_end: string;
+    cycles: number;
+    part_count: number;
+    segments: { status: string | null; start_time: string; end_time: string }[];
+  } | null>(null);
+  const [latestRunLoading, setLatestRunLoading] = useState(false);
   
   // Cache alarms from machine prop to avoid refetching
   useEffect(() => {
@@ -208,6 +258,19 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       setCachedAlarms(machine.alarms);
     }
   }, [machine.alarms]);
+
+  const getAlarmSeverityLevel = (alarm: Alarm): number => {
+    // Mirror AlarmPane: stop_level 5..1 (5 highest). Default to 3 if missing/invalid.
+    const raw = alarm.stop_level;
+    if (raw !== undefined && raw !== null && String(raw) !== '') {
+      const level = parseInt(String(raw), 10);
+      if (!isNaN(level) && level >= 1 && level <= 5) {
+        return level;
+      }
+    }
+    return 3;
+  };
+
 
   // Use program_name from machine status (active program from polling)
   // This shows the actual program running on the machine, not just the most recent deployment
@@ -228,6 +291,47 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       setCurrentProgram(null);
     }
   }, [machine.program_name, machine.machine_name]);
+
+  // Fetch most recent production run for compact card summary
+  useEffect(() => {
+    let cancelled = false;
+    const fetchLatestRun = async () => {
+      try {
+        setLatestRunLoading(true);
+        const endTime = new Date();
+        const startTime = new Date(endTime);
+        startTime.setDate(startTime.getDate() - 7);
+
+        const resp = await fetch(
+          `${API_BASE_URL}/api/machines/${machine.machine_id}/production-runs-timeline?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&limit=1&offset=0`
+        );
+        if (!resp.ok) {
+          if (!cancelled) {
+            setLatestRun(null);
+          }
+          return;
+        }
+        const data = await resp.json();
+        const runs = Array.isArray(data) ? data : [];
+        if (!cancelled) {
+          setLatestRun(runs[0] || null);
+        }
+      } catch (_e) {
+        if (!cancelled) {
+          setLatestRun(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLatestRunLoading(false);
+        }
+      }
+    };
+
+    fetchLatestRun();
+    return () => {
+      cancelled = true;
+    };
+  }, [machine.machine_id]);
 
   // Helper function to find pane element within current card
   const findPaneElement = (paneId: string): HTMLElement | null => {
@@ -269,18 +373,21 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     // http_port removed - Telnet port is always 10000
     path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
     poll_interval_seconds: machine.poll_interval_seconds || 5,
-    tool_poll_interval_seconds: (machine as any).tool_poll_interval_seconds || 30,
+    tool_poll_interval_seconds: machine.tool_poll_interval_seconds || 30,
     enabled: machine.enabled !== false,
     part_display_mode: machine.part_display_mode || 'parts',
-    diameter_tolerance: (machine as any).diameter_tolerance || 0.010,
-    length_tolerance_plus: (machine as any).length_tolerance_plus || 0.02,
-    length_tolerance_minus: (machine as any).length_tolerance_minus || 0.0,
-    tolerance_x: (machine as any).tolerance_x || 0.0394,
-    tolerance_y: (machine as any).tolerance_y || 0.0394,
-    tolerance_z: (machine as any).tolerance_z || 0.0394,
-    use_machine_tool_tolerances: (machine as any).use_machine_tool_tolerances || false,
-    use_machine_wcs_tolerances: (machine as any).use_machine_wcs_tolerances || false,
-    units: (machine as any).units || 'in',
+    diameter_tolerance: machine.diameter_tolerance || 0.010,
+    length_tolerance_plus: machine.length_tolerance_plus || 0.02,
+    length_tolerance_minus: machine.length_tolerance_minus || 0.0,
+    tolerance_x: machine.tolerance_x || 0.0394,
+    tolerance_y: machine.tolerance_y || 0.0394,
+    tolerance_z: machine.tolerance_z || 0.0394,
+    use_machine_tool_tolerances: machine.use_machine_tool_tolerances || false,
+    use_machine_wcs_tolerances: machine.use_machine_wcs_tolerances || false,
+    validate_tool_diameter: machine.validate_tool_diameter !== false,
+    validate_tool_length: machine.validate_tool_length !== false,
+    units: machine.units || 'in',
+    control_version: (machine.control_version ?? 'AUTO') as 'AUTO' | 'C00' | 'D00',
   });
   const [editMachineName, setEditMachineName] = useState(machine.machine_name || '');
   // Store the original form data when editing starts (from fetched API data)
@@ -315,7 +422,10 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             tolerance_z: fullMachineData.tolerance_z || 0.0394,
             use_machine_tool_tolerances: fullMachineData.use_machine_tool_tolerances || false,
             use_machine_wcs_tolerances: fullMachineData.use_machine_wcs_tolerances || false,
+            validate_tool_diameter: fullMachineData.validate_tool_diameter !== false,
+            validate_tool_length: fullMachineData.validate_tool_length !== false,
             units: fullMachineData.units || 'in',
+            control_version: (fullMachineData.control_version || 'AUTO') as 'AUTO' | 'C00' | 'D00',
           };
           setOriginalFormData(fetchedFormData);
           setOriginalMachineName(fullMachineData.name || '');
@@ -358,10 +468,14 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     setEditSuccess(false);
 
     try {
+      const payload = {
+        ...editFormData,
+        control_version: editFormData.control_version === 'AUTO' ? null : editFormData.control_version,
+      };
       const response = await fetch(`${API_BASE_URL}/api/machines/${machine.machine_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editFormData),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -401,18 +515,21 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         // http_port removed - Telnet port is always 10000
         path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
         poll_interval_seconds: machine.poll_interval_seconds || 5,
-        tool_poll_interval_seconds: (machine as any).tool_poll_interval_seconds || 30,
+        tool_poll_interval_seconds: machine.tool_poll_interval_seconds || 30,
         enabled: machine.enabled !== false,
         part_display_mode: machine.part_display_mode || 'parts',
-        diameter_tolerance: (machine as any).diameter_tolerance || 0.010,
-        length_tolerance_plus: (machine as any).length_tolerance_plus || 0.02,
-        length_tolerance_minus: (machine as any).length_tolerance_minus || 0.0,
-        tolerance_x: (machine as any).tolerance_x || 0.0394,
-        tolerance_y: (machine as any).tolerance_y || 0.0394,
-        tolerance_z: (machine as any).tolerance_z || 0.0394,
-        use_machine_tool_tolerances: (machine as any).use_machine_tool_tolerances || false,
-        use_machine_wcs_tolerances: (machine as any).use_machine_wcs_tolerances || false,
-        units: (machine as any).units || 'in',
+        diameter_tolerance: machine.diameter_tolerance || 0.010,
+        length_tolerance_plus: machine.length_tolerance_plus || 0.02,
+        length_tolerance_minus: machine.length_tolerance_minus || 0.0,
+        tolerance_x: machine.tolerance_x || 0.0394,
+        tolerance_y: machine.tolerance_y || 0.0394,
+        tolerance_z: machine.tolerance_z || 0.0394,
+        use_machine_tool_tolerances: machine.use_machine_tool_tolerances || false,
+        use_machine_wcs_tolerances: machine.use_machine_wcs_tolerances || false,
+        validate_tool_diameter: machine.validate_tool_diameter !== false,
+        validate_tool_length: machine.validate_tool_length !== false,
+        units: machine.units || 'in',
+        control_version: (machine.control_version ?? 'AUTO') as 'AUTO' | 'C00' | 'D00',
       });
     }
   };
@@ -645,7 +762,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
 
     setOnToggleLayoutEdit(() => toggleLayoutEdit);
     hasRegisteredExpandedContextRef.current = true;
-  }, [isExpanded, machine.machine_id, machine.machine_name, onCollapse, setExpandedAssetKind, setExpandedMachine]);
+  }, [isExpanded, machine.machine_id, machine.machine_name, onCollapse, setExpandedAssetKind, setExpandedMachine, setOnCollapse, setOnToggleLayoutEdit, toggleLayoutEdit]);
 
   // Render expanded view
   if (isExpanded && !isEditing && !editMode) {
@@ -710,13 +827,14 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               toolTable={machine.tool_table || []}
               currentTool={machine.current_tool}
               machineId={machine.machine_id}
-              units={(machine as any).units || 'in'}
+              units={machine.units ?? 'in'}
               machineStatus={machine.status}
-              memMode={(machine as any).mem_mode}
-              memOperationStatus={(machine as any).mem_operation_status}
+              memMode={machine.mem_mode}
+              memOperationStatus={machine.mem_operation_status}
               toolsTimestamp={machine.tools_timestamp ?? undefined}
               toolTableTimestamp={machine.tool_table_timestamp ?? undefined}
               toolPollIntervalSeconds={machine.tool_poll_interval_seconds ?? 30}
+              programName={currentProgram ?? undefined}
             />
                   </div>
                 ),
@@ -771,9 +889,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         <ToolListModal
           isOpen={showToolModal}
           onClose={() => setShowToolModal(false)}
-          tools={(machine.tools || []) as any}
+          tools={machine.tools || []}
           machineName={machine.machine_name}
-          units={(machine as any).units || machine.units || 'in'}
+          units={(machine.units || 'in') as 'in' | 'mm'}
         />
 
         <UploadConfirmationModal
@@ -784,13 +902,13 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             setValidationResult(null);
             setSelectedFilename('');
           }}
-          result={validationResult}
+          result={validationResult as never}
           filename={selectedFilename}
           machineId={machine.machine_id}
           machineName={machine.machine_name}
           machinePath={machine.path || '/'}
           fileContent={fileContent}
-          units={(machine as any).units || machine.units || 'in'}
+          units={(machine.units || 'in') as 'in' | 'mm'}
         />
 
         <input
@@ -836,7 +954,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         </div>
       </div>
 
-      <MachineCardAsciiDivider />
+      <div className="machine-card-divider">
+        ├{'─'.repeat(30)}┤
+      </div>
 
       {isEditing ? (
         <div className="machine-edit-form">
@@ -852,22 +972,40 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             </div>
           )}
 
-          <div className="form-row asset-id-field">
-            <label>MACHINE ID:</label>
-            <span className="asset-id-value">{machine.machine_id}</span>
-          </div>
-
           {/* Basic Settings */}
           <div className="form-row-inline">
             <div style={{ flex: '0 0 auto', minWidth: '200px' }}>
               <label>UNITS:</label>
               <Select
                 value={editFormData.units}
-                onChange={(value) => setEditFormData({ ...editFormData, units: value })}
+                onChange={(value) =>
+                  setEditFormData({
+                    ...editFormData,
+                    units: value as 'in' | 'mm',
+                  })
+                }
                 disabled={isEditSaving}
                 options={[
                   { value: 'in', label: 'INCHES (in)' },
                   { value: 'mm', label: 'MILLIMETERS (mm)' },
+                ]}
+              />
+            </div>
+            <div style={{ flex: '0 0 auto', minWidth: '260px' }}>
+              <label>CONTROL TYPE:</label>
+              <Select
+                value={editFormData.control_version}
+                onChange={(value) =>
+                  setEditFormData({
+                    ...editFormData,
+                    control_version: value as 'AUTO' | 'C00' | 'D00',
+                  })
+                }
+                disabled={isEditSaving}
+                options={[
+                  { value: 'AUTO', label: 'AUTO DETECT' },
+                  { value: 'C00', label: 'C00' },
+                  { value: 'D00', label: 'D00' },
                 ]}
               />
             </div>
@@ -1010,6 +1148,32 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             <div className="tolerance-group">
               <div className="tolerance-group-header">
                 <div className="tolerance-group-label">TOOL TOLERANCES</div>
+                <div className="tolerance-override-toggle" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div>
+                    <input
+                      type="checkbox"
+                      id={`validate-tool-diameter-${machine.machine_id}`}
+                      checked={editFormData.validate_tool_diameter}
+                      onChange={(e) => setEditFormData({ ...editFormData, validate_tool_diameter: e.target.checked })}
+                      disabled={isEditSaving}
+                    />
+                    <label htmlFor={`validate-tool-diameter-${machine.machine_id}`}>
+                      Validate diameter
+                    </label>
+                  </div>
+                  <div>
+                    <input
+                      type="checkbox"
+                      id={`validate-tool-length-${machine.machine_id}`}
+                      checked={editFormData.validate_tool_length}
+                      onChange={(e) => setEditFormData({ ...editFormData, validate_tool_length: e.target.checked })}
+                      disabled={isEditSaving}
+                    />
+                    <label htmlFor={`validate-tool-length-${machine.machine_id}`}>
+                      Validate length
+                    </label>
+                  </div>
+                </div>
                 <div className="tolerance-override-toggle">
                   <input
                     type="checkbox"
@@ -1389,11 +1553,69 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           >
             <span className="label">PRODUCTION RUN:</span>
             <span className="value production-run-summary">
-              <ProductionRunCompactSummary
-                latestRun={latestRun}
-                latestRunLoading={latestRunLoading}
-                partDisplayMode={machine.part_display_mode || 'parts'}
-              />
+              {latestRunLoading && !latestRun && 'LOADING...'}
+              {!latestRunLoading && !latestRun && 'NO RECENT RUNS'}
+              {latestRun && (
+                <>
+                  <span className="production-run-meta">
+                    {latestRun.program_no || 'UNKNOWN'} ·{' '}
+                    {(machine.part_display_mode || 'parts') === 'cycle'
+                      ? `cycles: ${latestRun.cycles}`
+                      : `parts: ${latestRun.part_count}`}
+                  </span>
+                  {(() => {
+                    const runStartMs = new Date(latestRun.run_start).getTime();
+                    const runEndMs = new Date(latestRun.run_end).getTime();
+                    const totalMs = Math.max(1, runEndMs - runStartMs);
+                    let activeMs = 0;
+                    for (const seg of latestRun.segments || []) {
+                      if ((seg.status || '').toLowerCase() !== 'operating') continue;
+                      const s0 = new Date(seg.start_time).getTime();
+                      const s1 = new Date(seg.end_time).getTime();
+                      if (!isNaN(s0) && !isNaN(s1) && s1 >= s0) activeMs += s1 - s0;
+                    }
+                    const utilPct = Math.min(100, Math.max(0, Math.round((activeMs / totalMs) * 100)));
+                    const runStartMs2 = new Date(latestRun.run_start).getTime();
+                    const runEndMs2 = new Date(latestRun.run_end).getTime();
+                    const span = Math.max(1, runEndMs2 - runStartMs2);
+                    return (
+                      <span className="production-run-util-row">
+                        <span className="production-run-util text-dim" title="Operating time / total run time">
+                          util: {utilPct}%
+                        </span>
+                        <span className="production-run-bar-track">
+                          {latestRun.segments.map((seg, idx) => {
+                        const sStartMs = new Date(seg.start_time).getTime();
+                        const sEndMs = new Date(seg.end_time).getTime();
+                        const left = ((sStartMs - runStartMs2) / span) * 100;
+                        const width = Math.max(2, ((sEndMs - sStartMs) / span) * 100);
+                        const status = (seg.status || '').toLowerCase();
+                        const statusClass =
+                          status === 'operating'
+                            ? 'mini-segment-operating'
+                            : status === 'standby'
+                            ? 'mini-segment-standby'
+                            : status === 'stopped'
+                            ? 'mini-segment-stopped'
+                            : status === 'error'
+                            ? 'mini-segment-error'
+                            : status === 'off'
+                            ? 'mini-segment-off'
+                            : 'mini-segment-standby';
+                        return (
+                          <span
+                            key={idx}
+                            className={`production-run-segment ${statusClass}`}
+                            style={{ left: `${left}%`, width: `${width}%` }}
+                          />
+                        );
+                          })}
+                        </span>
+                      </span>
+                    );
+                  })()}
+                </>
+              )}
             </span>
             {showProductionRunsHover && productionRunsHoverPosition && (
               <div
@@ -1489,7 +1711,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     toolTable={machine.tool_table || []}
                     currentTool={machine.current_tool}
                     machineId={machine.machine_id}
-                    units={(machine as any).units || machine.units || 'in'}
+                    units={machine.units ?? 'in'}
                     machineStatus={machine.status}
                     toolsTimestamp={machine.tools_timestamp ?? undefined}
                     toolTableTimestamp={machine.tool_table_timestamp ?? undefined}
@@ -1509,8 +1731,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
 
           {!isEditing && (() => {
             const allAlarms = machine.alarms || [];
-            const criticalAlarms = allAlarms.filter((a) => alarmStopLevel(a) >= 4);
-            const warningAlarms = allAlarms.filter((a) => alarmStopLevel(a) < 4);
+            const criticalAlarms = allAlarms.filter((a) => getAlarmSeverityLevel(a) >= 4);
+            const warningAlarms = allAlarms.filter((a) => getAlarmSeverityLevel(a) < 4);
 
             const showHoverAt = (el: HTMLElement | null) => {
               if (!el || allAlarms.length === 0) return;
@@ -1607,7 +1829,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             );
           })()}
 
-          <MachineCardAsciiDivider variant="thin" />
+          <div className="machine-card-divider-thin">
+            {'─'.repeat(32)}
+          </div>
 
           <div className="machine-actions">
             <button
@@ -1619,7 +1843,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             </button>
           </div>
 
-          <MachineCardAsciiDivider variant="thin" />
+          <div className="machine-card-divider-thin">
+            {'─'.repeat(32)}
+          </div>
 
           <div className="machine-footer">
             {!isEditing && (
@@ -1641,9 +1867,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       <ToolListModal
         isOpen={showToolModal}
         onClose={() => setShowToolModal(false)}
-        tools={(machine.tools || []) as any}
+        tools={machine.tools || []}
         machineName={machine.machine_name}
-        units={(machine as any).units || machine.units || 'in'}
+        units={(machine.units || 'in') as 'in' | 'mm'}
       />
 
       <UploadConfirmationModal
@@ -1654,13 +1880,13 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           setValidationResult(null);
           setSelectedFilename('');
         }}
-        result={validationResult}
+        result={validationResult as never}
         filename={selectedFilename}
         machineId={machine.machine_id}
         machineName={machine.machine_name}
         machinePath={machine.path || '/'}
         fileContent={fileContent}
-        units={(machine as any).units || machine.units || 'in'}
+        units={(machine.units || 'in') as 'in' | 'mm'}
       />
 
       <SaveConfirmModal
