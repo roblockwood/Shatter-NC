@@ -314,6 +314,7 @@ class FtpSyncService:
         """Recursively list remote files under a folder for download mode."""
         queue: list[tuple[str, int]] = [(start_folder, 0)]
         visited: set[str] = set()
+        seen_files: set[str] = set()
         results: list[dict] = []
 
         while queue:
@@ -331,6 +332,12 @@ class FtpSyncService:
                     if depth < max_depth:
                         queue.append((path, depth + 1))
                     continue
+                # Some FTP servers can return duplicate file rows across recursive listings
+                # (or, in tests, a folder listing stub may not scope by folder). Deduplicate
+                # by the full remote path so downstream candidate selection is stable.
+                if path in seen_files:
+                    continue
+                seen_files.add(path)
                 results.append(entry)
 
         return results
