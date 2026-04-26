@@ -1,3 +1,10 @@
+## [0.17.1](https://github.com/roblockwood/Shatter-NC/compare/v0.17.0...v0.17.1) (2026-04-26)
+
+
+### Bug Fixes
+
+* prevent CM7522 on ALL LOD commands, not just TOLNI1 ([94ae4ac](https://github.com/roblockwood/Shatter-NC/commit/94ae4ac0fe70ff30fa67fecf9738a69864dd289f))
+
 # [0.17.0](https://github.com/roblockwood/Shatter-NC/compare/v0.16.0...v0.17.0) (2026-04-18)
 
 
