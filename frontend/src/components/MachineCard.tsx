@@ -978,7 +978,12 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               <label>UNITS:</label>
               <Select
                 value={editFormData.units}
-                onChange={(value) => setEditFormData({ ...editFormData, units: value })}
+                onChange={(value) =>
+                  setEditFormData({
+                    ...editFormData,
+                    units: value as 'in' | 'mm',
+                  })
+                }
                 disabled={isEditSaving}
                 options={[
                   { value: 'in', label: 'INCHES (in)' },

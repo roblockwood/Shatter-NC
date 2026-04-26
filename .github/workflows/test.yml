@@ -25,4 +25,6 @@ jobs:
         run: pip install -r backend/requirements.txt
 
       - name: Run tests
+        env:
+          PYTHONPATH: backend
         run: pytest backend/tests/ -q --tb=short --continue-on-collection-errors
