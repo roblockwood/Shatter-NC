@@ -1,3 +1,12 @@
+## [0.20.3](https://github.com/roblockwood/Shatter-NC/compare/v0.20.2...v0.20.3) (2026-04-26)
+
+
+### Bug Fixes
+
+* **frontend:** beta-gate AUTO control type and theme file selects ([725c326](https://github.com/roblockwood/Shatter-NC/commit/725c32614598e6bbb5d61463f2109661d5e146c3))
+* **frontend:** theme shared Select on sync/notify pages ([2d4d4e1](https://github.com/roblockwood/Shatter-NC/commit/2d4d4e1a1a507655ce7fa889405929e29412c371))
+* **frontend:** use shared Select for sync/notify dropdown theming ([fb00799](https://github.com/roblockwood/Shatter-NC/commit/fb00799a0e6101ef2d85ec130c62541bb3f38671))
+
 ## [0.20.2](https://github.com/roblockwood/Shatter-NC/compare/v0.20.1...v0.20.2) (2026-04-26)
 
 
