@@ -1,133 +1,22 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import '../ui/TerminalBox.css';
-import { Select } from '../ui';
+import { TerminalBox } from '../ui/TerminalBox';
 import { API_BASE_URL, getApiErrorMessage } from '../../config/api';
-import { TERMINAL_RULE_FILL } from '../../utils/terminalAsciiRule';
-import { PollingStatusLight } from '../ui/PollingStatusLight';
-import { MachineCardAsciiDivider } from '../MachineCardAsciiDivider';
-import { PaneTerminalFooter, PaneTerminalFooterInner, PaneTerminalHeader } from './PaneTerminalChrome';
+import type {
+  Program,
+  ViewData,
+  FileMetadata,
+  DeploymentDetail,
+  FreshValidationState,
+} from './FileManagerPaneTypes';
+import {
+  formatBytes,
+  formatDate,
+  extractONumber,
+  isONumberFile,
+} from './FileManagerPaneUtils';
+import { FileManagerPaneDetailPanel } from './FileManagerPaneDetailPanel';
 import './FileManagerPane.css';
-
-/** JSON often sends numbers as strings; primitives lack .toFixed — must coerce before formatting. */
-function asFiniteNumber(value: unknown, fallback = 0): number {
-  if (value == null || value === '') return fallback;
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-/** For optional tolerances: undefined/null/invalid → undefined so we show "—" instead of throwing. */
-function optionalFiniteNumber(value: unknown): number | undefined {
-  if (value == null || value === '') return undefined;
-  const n = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-interface Program {
-  name: string;
-  size: number;
-  modified: string;
-  is_directory: boolean;
-  path: string;
-}
-
-interface ViewData {
-  file_path: string;
-  content: string;
-  size: number;
-  lines: number;
-}
-
-interface FileMetadata {
-  file_path: string;
-  tools: number[];
-  runtime_seconds: number;
-  has_errors: boolean;
-}
-
-interface ToolDetail {
-  tool_number: number;
-  diameter: number;
-  corner_radius: number;
-  description: string;
-  length_total: number;
-}
-
-interface ToolValidation {
-  tool_number: number;
-  required_diameter: number;
-  required_length: number;
-  available: boolean;
-  diameter_match: boolean;
-  length_sufficient: boolean;
-  machine_tool_data: any;
-  warnings: string[];
-  diameter_tolerance?: number;
-  length_tolerance_plus?: number;
-  length_tolerance_minus?: number;
-}
-
-interface WCSValidation {
-  valid: boolean;
-  work_offset: number;
-  expected: { x: number; y: number; z: number };
-  actual: { x: number; y: number; z: number };
-  difference: { x: number; y: number; z: number };
-  tolerance: number;
-  within_tolerance: boolean;
-  warnings: string[];
-}
-
-interface ValidationResults {
-  valid: boolean;
-  tools: { [key: number]: ToolValidation };
-  wcs_offset?: WCSValidation;
-  warnings: string[];
-  errors: string[];
-}
-
-interface FreshValidationState {
-  validation: ValidationResults;
-  gcode_content: string;
-  timestamp: number;
-}
-
-interface DeploymentHistoryEntry {
-  id: number;
-  deployed_at: string;
-  validation_passed: boolean | null;
-  replaced_at: string | null;
-  is_current: boolean;
-  program_version: number | null;
-  original_filename: string | null;
-}
-
-interface DeploymentDetail {
-  deployment: {
-    id: number;
-    deployed_filename: string;
-    deployed_path: string;
-    deployed_at: string;
-    validation_passed: boolean | null;
-    validation_results: ValidationResults | null;
-  };
-  program: {
-    id: number;
-    original_filename: string;
-    version_number: number;
-    posted_date: string | null;
-    estimated_runtime_seconds: number;
-    program_metadata: {
-      tools: ToolDetail[];
-      wcs_offset?: any;
-      stock_size?: any;
-    };
-    file_size_bytes: number;
-    line_count: number;
-  } | null;
-  history?: DeploymentHistoryEntry[];
-}
 
 interface FileManagerPaneProps {
   machineId: number;
@@ -167,22 +56,6 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [filesWithDeployments, setFilesWithDeployments] = useState<Set<string>>(new Set());
-  const [programsListFetchedAt, setProgramsListFetchedAt] = useState<string | null>(null);
-  const [deploymentsFetchedAt, setDeploymentsFetchedAt] = useState<string | null>(null);
-
-  /** Older of listing vs deployment-marker fetch — dot stays cautious if either is stale. */
-  const fileManagerDataFreshAt = useMemo(() => {
-    const a = programsListFetchedAt;
-    const b = deploymentsFetchedAt;
-    if (a == null && b == null) return null;
-    if (a == null) return b;
-    if (b == null) return a;
-    const ta = new Date(a).getTime();
-    const tb = new Date(b).getTime();
-    if (!Number.isFinite(ta)) return b;
-    if (!Number.isFinite(tb)) return a;
-    return ta <= tb ? a : b;
-  }, [programsListFetchedAt, deploymentsFetchedAt]);
 
   // Handle URL parameters for navigation from upload success screen
   useEffect(() => {
@@ -206,6 +79,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
         }, 100);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, programs.length, loading]);
 
   // Set path when component mounts - fetch machine data to get default path
@@ -251,12 +125,11 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
           setLoading(false);
           setError(null);
           setSelectedProgram(null);
-          setProgramsListFetchedAt(new Date(cacheData.timestamp).toISOString());
           return;
         } else {
           sessionStorage.removeItem(cacheKey);
         }
-      } catch (e) {
+      } catch (_e) {
         sessionStorage.removeItem(cacheKey);
       }
     }
@@ -287,7 +160,6 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
         if (fetchPath === currentPath) {
           setPrograms(data.programs || []);
           setLoading(false);
-          setProgramsListFetchedAt(new Date().toISOString());
         }
       })
       .catch(err => {
@@ -318,15 +190,14 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
         if (!res.ok) return [];
         return res.json();
       })
-      .then((deployments: any[]) => {
+      .then((deployments: { deployed_filename?: string }[]) => {
         const deployedFilenames = new Set<string>();
-        deployments.forEach((deployment: any) => {
+        deployments.forEach((deployment) => {
           if (deployment.deployed_filename) {
             deployedFilenames.add(deployment.deployed_filename.toUpperCase());
           }
         });
         setFilesWithDeployments(deployedFilenames);
-        setDeploymentsFetchedAt(new Date().toISOString());
       })
       .catch(err => {
         if (err.name !== 'AbortError') {
@@ -362,6 +233,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
       setDeploymentError(null);
       setSelectedDeploymentId(null);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProgram, machineId, currentPath]);
 
   // Handle deployment selection change from history dropdown
@@ -374,6 +246,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
         fetchSelectedDeploymentDetails(currentEntry.id);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDeploymentId, deploymentDetail?.history]);
 
   const toggleToolExpanded = (toolNumber: number) => {
@@ -384,70 +257,6 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
       newExpanded.add(toolNumber);
     }
     setExpandedTools(newExpanded);
-  };
-
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 10) / 10 + ' ' + sizes[i];
-  };
-
-  const formatDate = (dateStr: string) => {
-    try {
-      const date = new Date(dateStr);
-      return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
-  const formatRuntime = (seconds: number) => {
-    if (!seconds) return '─ unknown ─';
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const extractONumber = (filename: string): string | null => {
-    const match = filename.match(/^O(\d{4})\.nc$/i);
-    return match ? match[1] : null;
-  };
-
-  const isONumberFile = (filename: string): boolean => {
-    return extractONumber(filename) !== null;
-  };
-
-  const [progressState, setProgressState] = React.useState(0);
-
-  React.useEffect(() => {
-    if (!metadataLoading) return;
-    const interval = setInterval(() => {
-      setProgressState(prev => (prev + 1) % 8);
-    }, 900);
-    return () => clearInterval(interval);
-  }, [metadataLoading]);
-
-  const renderProgressBar = () => {
-    const stages = [
-      '[████░░░░░]',
-      '[██████░░░]',
-      '[████████░]',
-      '[██████████]',
-      '[██████████]',
-      '[████████░░]',
-      '[██████░░░░]',
-      '[████░░░░░░]',
-    ];
-    return <span className="ascii-progress-container">{stages[progressState]} PARSING...</span>;
   };
 
   const handleItemClick = (program: Program) => {
@@ -788,26 +597,12 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
 
   return (
     <div className="file-manager-pane">
-      <div className="terminal-box file-manager-terminal-box">
-        <PaneTerminalHeader label="FILE MANAGER">
-          <PollingStatusLight
-            lastUpdatedAt={fileManagerDataFreshAt}
-            expectedIntervalMs={180_000}
-            ariaLabel="File manager program listing and deployment markers freshness"
-          />
-        </PaneTerminalHeader>
-        <div className="terminal-box-content">
+      <TerminalBox title="FILE MANAGER" className="file-manager-terminal-box">
         <div className="file-manager-content">
           {/* Programs List */}
           <div className="file-manager-programs-panel">
-            <div className="file-manager-panel-header file-manager-pane-terminal-line">
-              <span className="pane-terminal-title-start">
-                ┌─ NC PROGRAMS{currentPath ? ` (${currentPath})` : ''}
-              </span>
-              <span className="pane-terminal-title-fill" aria-hidden>
-                {TERMINAL_RULE_FILL}
-              </span>
-              <span className="pane-terminal-title-corner">┐</span>
+            <div className="file-manager-panel-header">
+              ┌─ NC PROGRAMS {currentPath ? `(${currentPath})` : ''} {'─'.repeat(30)}┐
             </div>
 
             {loading && !pendingFileSelection && (
@@ -876,7 +671,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                   <div className="file-manager-col-actions">ACTIONS</div>
                 </div>
                 <div className="file-manager-table-divider">
-                  <MachineCardAsciiDivider />
+                  ├{'─'.repeat(60)}┤
                 </div>
                 <div className="file-manager-table-body">
                   {displayPrograms.map((program, idx) => (
@@ -933,7 +728,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                   ))}
                 </div>
                 <div className="file-manager-table-footer">
-                  <PaneTerminalFooterInner />
+                  └{'─'.repeat(60)}┘
                 </div>
                 <div className="file-manager-table-summary">
                   {programs.length} PROGRAMS │ TOTAL: {formatBytes(programs.reduce((sum, p) => sum + p.size, 0))}
@@ -965,505 +760,31 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
 
           {/* Program Details Panel */}
           {selectedProgram && (
-            <div className="file-manager-details-panel">
-              <div className="file-manager-panel-header file-manager-pane-terminal-line">
-                <span className="pane-terminal-title-start">┌─ SELECTED: {selectedProgram.name}</span>
-                <span className="pane-terminal-title-fill" aria-hidden>
-                  {TERMINAL_RULE_FILL}
-                </span>
-                <span className="pane-terminal-title-corner">┐</span>
-              </div>
-              <div className="file-manager-details-content">
-                {/* FILE INFO SECTION */}
-                <div className="file-manager-detail-section">
-                  <div className="file-manager-section-title">FILE INFO</div>
-                  <div className="file-manager-detail-row">
-                    <span className="file-manager-label">SIZE:</span>
-                    <span className="file-manager-value">{formatBytes(selectedProgram.size)}</span>
-                  </div>
-                  <div className="file-manager-detail-row">
-                    <span className="file-manager-label">MODIFIED:</span>
-                    <span className="file-manager-value">{formatDate(selectedProgram.modified)}</span>
-                  </div>
-                </div>
-
-                {/* DEPLOYMENT INFO SECTION */}
-                {isONumberFile(selectedProgram.name) && (
-                  <div className="file-manager-detail-section" ref={deploymentSectionRef}>
-                    <div className="file-manager-deployment-info-header">
-                      <div className="file-manager-section-title">
-                        {freshValidation ? (
-                          <span style={{ color: '#4ade80' }}>*FRESH* VALIDATION RESULTS</span>
-                        ) : (
-                          'DEPLOYMENT INFO'
-                        )}
-                      </div>
-                      {!freshValidation && deploymentDetail?.history && deploymentDetail.history.length > 1 && (
-                        <Select
-                          value={selectedDeploymentId?.toString() || ''}
-                          onChange={(value) => setSelectedDeploymentId(value ? parseInt(value) : null)}
-                          options={[
-                            {
-                              value: '',
-                              label: `${deploymentDetail.program?.original_filename} (${formatDate(deploymentDetail.deployment.deployed_at)}) - CURRENT`
-                            },
-                            ...deploymentDetail.history.slice(1).map((entry) => ({
-                              value: entry.id.toString(),
-                              label: `${entry.original_filename} (${formatDate(entry.deployed_at)})`
-                            }))
-                          ]}
-                          className="file-manager-deployment-selector"
-                        />
-                      )}
-                    </div>
-
-                    {validationError && (
-                      <div className="file-manager-validation-error">
-                        <div className="file-manager-detail-row">
-                          <span className="file-manager-value text-error">X {validationError}</span>
-                        </div>
-                        <div className="file-manager-error-actions">
-                          <button
-                            className="file-manager-terminal-button-sm"
-                            onClick={() => handleValidate(selectedProgram)}
-                          >
-                            [ RETRY ]
-                          </button>
-                          <button
-                            className="file-manager-terminal-button-sm"
-                            onClick={() => setValidationError(null)}
-                          >
-                            [ DISMISS ]
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {freshValidation ? (
-                      <>
-                        <div className="file-manager-detail-row">
-                          <span className="file-manager-label">STATUS:</span>
-                          <span className={`file-manager-value ${freshValidation.validation.valid ? 'text-success' : 'text-error'}`}>
-                            {freshValidation.validation.valid ? '✓ PASSED' : '✕ FAILED'}
-                          </span>
-                        </div>
-                        {freshValidation.validation.errors && freshValidation.validation.errors.length > 0 && (
-                          <div className="file-manager-detail-row">
-                            <span className="file-manager-label">ERRORS:</span>
-                            <div className="file-manager-value text-error">
-                              {freshValidation.validation.errors.map((err, i) => (
-                                <div key={i}>- {err}</div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {freshValidation.validation.warnings && freshValidation.validation.warnings.length > 0 && (
-                          <div className="file-manager-detail-row">
-                            <span className="file-manager-label">WARNINGS:</span>
-                            <div className="file-manager-value text-warning">
-                              {freshValidation.validation.warnings.map((warn, i) => (
-                                <div key={i}>- {warn}</div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        {deploymentLoading && (
-                          <div className="file-manager-detail-row">
-                            <span className="file-manager-value">{renderProgressBar()}</span>
-                          </div>
-                        )}
-                        {deploymentError && (
-                          <div className="file-manager-detail-row">
-                            <span className="file-manager-value text-error">{deploymentError}</span>
-                          </div>
-                        )}
-                        {deploymentDetail && (
-                          <>
-                            <div className="file-manager-detail-row">
-                              <span className="file-manager-label">DEPLOYED:</span>
-                              <span className="file-manager-value">
-                                {formatDate(deploymentDetail.deployment.deployed_at)}
-                              </span>
-                            </div>
-                            <div className="file-manager-detail-row">
-                              <span className="file-manager-label">POSTED DATE:</span>
-                              <span className="file-manager-value">
-                                {deploymentDetail.program?.posted_date ? formatDate(deploymentDetail.program.posted_date) : 'N/A'}
-                              </span>
-                            </div>
-                            <div className="file-manager-detail-row">
-                              <span className="file-manager-label">RUNTIME:</span>
-                              <span className="file-manager-value">
-                                {formatRuntime(deploymentDetail.program?.estimated_runtime_seconds || 0)}
-                              </span>
-                            </div>
-                            <div className="file-manager-detail-row">
-                              <span className="file-manager-label">VALIDATION:</span>
-                              <span className={`file-manager-value ${
-                                deploymentDetail.deployment.validation_passed === null ? 'text-muted' :
-                                deploymentDetail.deployment.validation_passed ? 'text-success' : 'text-error'
-                              }`}>
-                                {deploymentDetail.deployment.validation_passed === null ? '─ not validated ─' :
-                                 deploymentDetail.deployment.validation_passed ? '✓ PASSED' : '✕ FAILED'}
-                              </span>
-                            </div>
-                          </>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {/* TOOL DETAILS TABLE */}
-                {((deploymentDetail?.deployment?.validation_results?.tools && !freshValidation) ||
-                  (freshValidation?.validation?.tools)) && (
-                  <div className="file-manager-detail-section">
-                    <div className="file-manager-section-title">TOOLS</div>
-                    <div className="file-manager-tools-table">
-                      <table className="file-manager-detail-table">
-                        <thead>
-                          <tr>
-                            <th>ST</th>
-                            <th>TOOL#</th>
-                            <th>ACTUAL</th>
-                            <th>EXPECTED</th>
-                            <th>DIFF</th>
-                            <th>TOL</th>
-                            <th>RESULT</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Object.entries((freshValidation?.validation?.tools || deploymentDetail?.deployment?.validation_results?.tools || {})).map(([toolKey, validation]: [string, any]) => {
-                            const toolNumber = parseInt(toolKey, 10);
-                            if (isNaN(toolNumber)) return null;
-                            const isExpanded = expandedTools.has(toolNumber);
-                            const reqD = asFiniteNumber(validation.required_diameter);
-                            const reqL = asFiniteNumber(validation.required_length);
-                            const notInNC = reqD === 0 && reqL === 0;
-
-                            if (notInNC) {
-                              return (
-                                <tr key={toolNumber} className="file-manager-tool-summary-row">
-                                  <td className="text-muted">─</td>
-                                  <td>T{String(toolNumber).padStart(2, '0')}</td>
-                                  <td>
-                                    Ø{asFiniteNumber(validation.machine_tool_data?.diameter).toFixed(3)}" L{asFiniteNumber(validation.machine_tool_data?.length).toFixed(2)}"
-                                    {validation.machine_tool_data?.tool_name && (
-                                      <span className="text-muted"> ({validation.machine_tool_data.tool_name})</span>
-                                    )}
-                                  </td>
-                                  <td className="text-muted">────</td>
-                                  <td className="text-muted">────</td>
-                                  <td className="text-muted">─</td>
-                                  <td className="text-muted">N/A</td>
-                                </tr>
-                              );
-                            }
-
-                            const toolPassed = validation.available && validation.diameter_match && validation.length_sufficient;
-                            const hasError = !validation.available || !validation.length_sufficient;
-                            const hasWarning = validation.available && !validation.diameter_match;
-                            const statusClass = hasError ? 'text-error' : hasWarning ? 'text-warning' : 'text-success';
-                            const statusIcon = hasError ? '✕' : hasWarning ? '⚠' : '✓';
-                            const expandIcon = isExpanded ? '▼' : '▶';
-                            const actualLength = asFiniteNumber(validation.machine_tool_data?.length);
-                            const requiredLength = asFiniteNumber(validation.required_length);
-                            const lengthDiff = actualLength - requiredLength;
-                            const actualDiameter = asFiniteNumber(validation.machine_tool_data?.diameter);
-                            const requiredDiameter = asFiniteNumber(validation.required_diameter);
-                            const diameterDiff = actualDiameter - requiredDiameter;
-                            const lenTolPlus = optionalFiniteNumber(validation.length_tolerance_plus);
-                            const lenTolMinus = optionalFiniteNumber(validation.length_tolerance_minus);
-                            const diaTol = optionalFiniteNumber(validation.diameter_tolerance);
-
-                            return (
-                              <React.Fragment key={toolNumber}>
-                                <tr
-                                  className="file-manager-tool-summary-row clickable"
-                                  onClick={() => validation.available && toggleToolExpanded(toolNumber)}
-                                  onTouchStart={(e) => e.stopPropagation()}
-                                  onTouchEnd={(e) => e.stopPropagation()}
-                                  onTouchCancel={(e) => e.stopPropagation()}
-                                  style={{ cursor: validation.available ? 'pointer' : 'default' }}
-                                >
-                                  <td className={statusClass}>{statusIcon}</td>
-                                  <td>
-                                    {validation.available && <span className="file-manager-expand-icon">{expandIcon}</span>}
-                                    T{String(toolNumber).padStart(2, '0')}
-                                  </td>
-                                  <td colSpan={4}>
-                                    {!validation.available ? (
-                                      <span className="text-error">NOT AVAILABLE</span>
-                                    ) : (
-                                      <>
-                                        {validation.machine_tool_data?.tool_name && (
-                                          <span className="text-muted">{validation.machine_tool_data.tool_name}</span>
-                                        )}
-                                      </>
-                                    )}
-                                  </td>
-                                  <td className={statusClass}>
-                                    {toolPassed ? 'PASS' : 'FAIL'}
-                                  </td>
-                                </tr>
-
-                                {isExpanded && validation.available && (
-                                  <>
-                                    <tr className="file-manager-tool-detail-row">
-                                      <td></td>
-                                      <td className="file-manager-detail-label">Length</td>
-                                      <td>{actualLength.toFixed(2)}"</td>
-                                      <td>{requiredLength.toFixed(2)}"</td>
-                                      <td className={validation.length_sufficient ? 'text-success' : 'text-error'}>
-                                        {lengthDiff.toFixed(2)}"
-                                      </td>
-                                      <td>
-                                        {lenTolPlus !== undefined && lenTolMinus !== undefined
-                                          ? `+${lenTolPlus.toFixed(4)}"/-${lenTolMinus.toFixed(4)}"`
-                                          : '-'}
-                                      </td>
-                                      <td className={validation.length_sufficient ? 'text-success' : 'text-error'}>
-                                        {validation.length_sufficient ? '✓' : '✕'}
-                                      </td>
-                                    </tr>
-                                    <tr className="file-manager-tool-detail-row">
-                                      <td></td>
-                                      <td className="file-manager-detail-label">Diameter</td>
-                                      <td>{actualDiameter.toFixed(3)}"</td>
-                                      <td>{requiredDiameter.toFixed(3)}"</td>
-                                      <td className={validation.diameter_match ? 'text-success' : 'text-error'}>
-                                        {diameterDiff.toFixed(3)}"
-                                      </td>
-                                      <td>
-                                        {diaTol !== undefined ? `±${diaTol.toFixed(4)}"` : '-'}
-                                      </td>
-                                      <td className={validation.diameter_match ? 'text-success' : 'text-error'}>
-                                        {validation.diameter_match ? '✓' : '✕'}
-                                      </td>
-                                    </tr>
-                                  </>
-                                )}
-                              </React.Fragment>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* WCS VALIDATION TABLE */}
-                {((deploymentDetail?.deployment?.validation_results?.wcs_offset && !freshValidation) ||
-                  (freshValidation?.validation?.wcs_offset)) && (() => {
-                  const wcs = freshValidation?.validation?.wcs_offset || deploymentDetail?.deployment?.validation_results?.wcs_offset;
-                  if (!wcs) return null;
-
-                  const notInNC = wcs.expected.x === 0 && 
-                                  wcs.expected.y === 0 && 
-                                  wcs.expected.z === 0 &&
-                                  wcs.warnings?.some((w: string) => w.includes("not specified in NC"));
-
-                  if (notInNC) {
-                    const expandIcon = expandedWCS ? '▼' : '▶';
-                    return (
-                      <div className="file-manager-detail-section">
-                        <div className="file-manager-section-title">WCS OFFSET</div>
-                        <div className="file-manager-wcs-validation">
-                          <table className="file-manager-detail-table">
-                            <thead>
-                              <tr>
-                                <th>ST</th>
-                                <th>OFFSET</th>
-                                <th>ACTUAL</th>
-                                <th>EXPECTED</th>
-                                <th>DIFF</th>
-                                <th>TOL</th>
-                                <th>RESULT</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr 
-                                className="file-manager-wcs-summary-row clickable"
-                                onClick={() => setExpandedWCS(!expandedWCS)}
-                                onTouchStart={(e) => e.stopPropagation()}
-                                onTouchEnd={(e) => e.stopPropagation()}
-                                onTouchCancel={(e) => e.stopPropagation()}
-                                style={{ cursor: 'pointer' }}
-                              >
-                                <td className="text-warning">⚠</td>
-                                <td>
-                                  <span className="file-manager-expand-icon">{expandIcon}</span>
-                                  G{wcs.work_offset}
-                                </td>
-                                <td colSpan={4} className="text-muted">
-                                  XYZ NOT PARSED
-                                </td>
-                                <td className="text-warning">WARN</td>
-                              </tr>
-                              {expandedWCS && ['x', 'y', 'z'].map((axis) => {
-                                const actual = asFiniteNumber((wcs.actual as any)[axis]);
-                                return (
-                                  <tr key={axis} className="file-manager-wcs-detail-row">
-                                    <td></td>
-                                    <td className="file-manager-detail-label">{axis.toUpperCase()}</td>
-                                    <td>{actual.toFixed(4)}"</td>
-                                    <td className="text-muted">────</td>
-                                    <td className="text-muted">────</td>
-                                    <td className="text-muted">─</td>
-                                    <td className="text-muted">N/A</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  const withinTolerance = wcs.within_tolerance;
-                  const statusClass = withinTolerance ? 'text-success' : 'text-error';
-                  const statusIcon = withinTolerance ? '✓' : '✕';
-                  const expandIcon = expandedWCS ? '▼' : '▶';
-
-                  return (
-                    <div className="file-manager-detail-section">
-                      <div className="file-manager-section-title">WCS OFFSET</div>
-                      <div className="file-manager-wcs-validation">
-                        <table className="file-manager-detail-table">
-                          <thead>
-                            <tr>
-                              <th>ST</th>
-                              <th>OFFSET</th>
-                              <th>ACTUAL</th>
-                              <th>EXPECTED</th>
-                              <th>DIFF</th>
-                              <th>TOL</th>
-                              <th>RESULT</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr
-                              className="file-manager-wcs-summary-row clickable"
-                              onClick={() => setExpandedWCS(!expandedWCS)}
-                              onTouchStart={(e) => e.stopPropagation()}
-                              onTouchEnd={(e) => e.stopPropagation()}
-                              onTouchCancel={(e) => e.stopPropagation()}
-                              style={{ cursor: 'pointer' }}
-                            >
-                              <td className={statusClass}>{statusIcon}</td>
-                              <td>
-                                <span className="file-manager-expand-icon">{expandIcon}</span>
-                                G{wcs.work_offset}
-                              </td>
-                              <td colSpan={4}>
-                                <span className="text-muted">X/Y/Z Coordinates</span>
-                              </td>
-                              <td className={statusClass}>
-                                {withinTolerance ? 'PASS' : 'FAIL'}
-                              </td>
-                            </tr>
-                            {expandedWCS && ['x', 'y', 'z'].map((axis) => {
-                              const expected = asFiniteNumber((wcs.expected as any)[axis]);
-                              const actual = asFiniteNumber((wcs.actual as any)[axis]);
-                              const difference = asFiniteNumber((wcs.difference as any)[axis]);
-                              const diff = Math.abs(difference);
-                              const tol = asFiniteNumber(wcs.tolerance, 0.1);
-                              const withinTol = diff <= tol;
-
-                              return (
-                                <tr key={axis} className="file-manager-wcs-detail-row">
-                                  <td></td>
-                                  <td className="file-manager-detail-label">{axis.toUpperCase()}</td>
-                                  <td>{actual.toFixed(4)}"</td>
-                                  <td>{expected.toFixed(4)}"</td>
-                                  <td className={withinTol ? 'text-success' : 'text-error'}>
-                                    {diff.toFixed(4)}"
-                                  </td>
-                                  <td>±{tol.toFixed(4)}</td>
-                                  <td className={withinTol ? 'text-success' : 'text-error'}>
-                                    {withinTol ? '✓' : '✕'}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* ACTIONS SECTION */}
-                <div className="file-manager-detail-actions">
-                  <button
-                    className="file-manager-terminal-button"
-                    onClick={() => handleDownload(selectedProgram)}
-                  >
-                    [ DOWNLOAD ]
-                  </button>
-                  {selectedProgram.name.toUpperCase().endsWith('.NC') && (
-                    <button
-                      className="file-manager-terminal-button"
-                      onClick={() => handleViewCode(selectedProgram)}
-                    >
-                      [ VIEW CODE ]
-                    </button>
-                  )}
-                  {selectedProgram.name.match(/^O\d{4}\.NC$/i) && (
-                    validationLoading ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>{renderProgressBar()}</span>
-                        <span className="text-muted">Downloading and validating...</span>
-                      </div>
-                    ) : (
-                      <button
-                        className="file-manager-terminal-button"
-                        onClick={() => handleValidate(selectedProgram)}
-                      >
-                        [ VALIDATE ]
-                      </button>
-                    )
-                  )}
-                </div>
-
-                {/* CODE PREVIEW SECTION */}
-                {previewLines.length > 0 && selectedProgram.name.toUpperCase().endsWith('.NC') && (
-                  <div className="file-manager-code-preview">
-                    <div className="file-manager-preview-header file-manager-pane-terminal-line">
-                      <span className="pane-terminal-title-start">┌─ PREVIEW (FIRST 50 LINES)</span>
-                      <span className="pane-terminal-title-fill" aria-hidden>
-                        {TERMINAL_RULE_FILL}
-                      </span>
-                      <span className="pane-terminal-title-corner">┐</span>
-                    </div>
-                    <div className="file-manager-preview-content">
-                      {previewLines.map((line, idx) => (
-                        <div key={idx} className="file-manager-preview-line">
-                          <span className="file-manager-line-number">{idx + 1}</span>
-                          <span className="file-manager-line-text">{line || ' '}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="file-manager-preview-footer">
-                      <PaneTerminalFooterInner />
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="file-manager-panel-footer">
-                <PaneTerminalFooterInner />
-              </div>
-            </div>
+            <FileManagerPaneDetailPanel
+              selectedProgram={selectedProgram}
+              deploymentDetail={deploymentDetail}
+              deploymentLoading={deploymentLoading}
+              deploymentError={deploymentError}
+              freshValidation={freshValidation}
+              expandedTools={expandedTools}
+              expandedWCS={expandedWCS}
+              selectedDeploymentId={selectedDeploymentId}
+              validationError={validationError}
+              validationLoading={validationLoading}
+              previewLines={previewLines}
+              metadataLoading={metadataLoading}
+              deploymentSectionRef={deploymentSectionRef}
+              setExpandedWCS={setExpandedWCS}
+              setSelectedDeploymentId={setSelectedDeploymentId}
+              setValidationError={setValidationError}
+              toggleToolExpanded={toggleToolExpanded}
+              onDownload={handleDownload}
+              onValidate={handleValidate}
+              onViewCode={handleViewCode}
+            />
           )}
         </div>
-        </div>
-        <PaneTerminalFooter />
-      </div>
-
+      </TerminalBox>
       {/* View Modal */}
       {viewModalOpen && (
         <div className="file-manager-modal-overlay" onClick={() => setViewModalOpen(false)}>
