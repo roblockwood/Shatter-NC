@@ -1,3 +1,15 @@
+# [0.20.0](https://github.com/roblockwood/Shatter-NC/compare/v0.19.0...v0.20.0) (2026-04-26)
+
+
+### Bug Fixes
+
+* **frontend:** theme notify/sync form controls ([ec5ff73](https://github.com/roblockwood/Shatter-NC/commit/ec5ff73c3b5cc440ce3e9f0ad565e48d2910fb7c))
+
+
+### Features
+
+* **frontend:** cycle oscilloscope trace mode (mono/osc/color) ([c0ad238](https://github.com/roblockwood/Shatter-NC/commit/c0ad238885851c43f967d9aafae527e7c83eaf59))
+
 # [0.19.0](https://github.com/roblockwood/Shatter-NC/compare/v0.18.0...v0.19.0) (2026-04-26)
 
 
