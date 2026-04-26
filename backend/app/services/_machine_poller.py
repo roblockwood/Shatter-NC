@@ -1,6 +1,6 @@
 """Single-machine poller extracted from polling.py."""
 import asyncio
-from app.clients.telnet_client import create_fresh_connection
+from app.clients.telnet_client import create_fresh_connection, CNCTelnetClient
 from app.parsers.prd3_parser_v2 import parse_prd3_v2
 from app.parsers.alarm_parser_v2 import parse_alarm_v2
 from app.parsers.tolni_parser_v2 import parse_tolni_v2
@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 from typing import Dict, Any, Optional, Tuple, List
 from sqlalchemy.orm import Session
 from app.models.machine import Machine
+from app.models.program import ProgramDeployment
 from app.models.event import (
     MachineStatusEvent, 
     AlarmEvent, 
@@ -80,6 +81,9 @@ class MachinePoller:
         Called once after the poller is created so that operating→standby/stopped
         transitions are not missed when the backend restarts mid-run.
         Only sets last_status if it is still None (i.e., never overwritten by a live poll).
+
+        Also closes any dangling open production runs left by a previous backend process
+        that restarted while the machine was running (those runs have ended_at=NULL).
         """
         if self.last_status is not None:
             return
@@ -96,8 +100,31 @@ class MachinePoller:
                 logger.info(
                     f"Machine {self.machine.id}: seeded last_status='{self.last_status}' from DB"
                 )
+
+            # Close any open production runs that have no end time.
+            # These are left behind when the backend restarts while a machine is operating.
+            open_runs = (
+                db.query(ProductionRun)
+                .filter(
+                    ProductionRun.machine_id == self.machine.id,
+                    ProductionRun.ended_at.is_(None),
+                )
+                .all()
+            )
+            if open_runs:
+                now = datetime.now(timezone.utc)
+                for run in open_runs:
+                    run.ended_at = now
+                    run.duration_seconds = int((now - run.started_at).total_seconds())
+                    run.completion_status = "interrupted"
+                db.commit()
+                logger.info(
+                    f"Machine {self.machine.id}: closed {len(open_runs)} dangling open "
+                    f"production run(s) with status='interrupted'"
+                )
         except Exception as e:
             logger.warning(f"Machine {self.machine.id}: could not seed last_status from DB: {e}")
+            db.rollback()
         finally:
             db.close()
 
@@ -220,11 +247,15 @@ class MachinePoller:
 
         telnet_client = None
         try:
-            # Create fresh connection
-            telnet_client = await create_fresh_connection(
+            # Create an unconnected client.  The TCP connection is established lazily
+            # inside each load_data / get_macro_variable_range call, which holds the
+            # per-machine lock for the full duration and disconnects before releasing it.
+            # This prevents two poll tasks from ever having open sockets simultaneously
+            # — the root cause of CM7532 ("Ethernet communication error").
+            telnet_client = CNCTelnetClient(
                 ip_address=self.machine.ip_address,
                 port=10000,
-                timeout=10
+                timeout=10,
             )
 
             mem_data = await telnet_client.get_memory_data(verbose=False)
@@ -249,27 +280,58 @@ class MachinePoller:
 
         return None
 
-    async def _fetch_and_cache_nc_header(self, program_path: str) -> None:
-        """Fetch an NC program's header comments via FTP and cache them for cycle-complete notifications."""
+    async def _fetch_and_cache_nc_header(self, program_name: str) -> None:
+        """Fetch an NC program's header comments via FTP and cache them for cycle-complete notifications.
+
+        ``program_name`` is the O-number as stored in the production run (e.g. ``O0004``).
+        We look up the full deployed_path from program_deployments first so the FTP download
+        uses the correct directory (e.g. /PROGRAM/250HDFP/O0004.NC).  Falls back to
+        ``{program_name}.NC`` at the FTP root if no deployment record is found.
+        """
         try:
             from app.clients.ftp_client import CNCFtpClient
             from app.services.notification_service import extract_nc_program_header
+
+            # Resolve the full path via the deployments table.
+            deployed_path: str = f"{program_name}.NC"  # default fallback
+            db = SessionLocal()
+            try:
+                filename = f"{program_name}.NC"
+                deployment = (
+                    db.query(ProgramDeployment)
+                    .filter(
+                        ProgramDeployment.machine_id == self.machine.id,
+                        ProgramDeployment.deployed_filename == filename,
+                        ProgramDeployment.is_current.is_(True),
+                    )
+                    .order_by(ProgramDeployment.deployed_at.desc())
+                    .first()
+                )
+                if deployment:
+                    deployed_path = deployment.deployed_path
+            finally:
+                db.close()
+
             ftp = CNCFtpClient(
                 ip_address=self.machine.ip_address,
                 username=self.machine.ftp_username or "anonymous",
                 password=self.machine.ftp_password or "anonymous",
                 port=self.machine.ftp_port or 21,
             )
-            content = await ftp.download_file(program_path)
+            content = await ftp.download_file(deployed_path)
             if content:
                 text = content.decode('utf-8', errors='replace')
                 self._active_run_nc_header = extract_nc_program_header(text)
-                logger.debug(
-                    f"Machine {self.machine.id}: cached NC header for {program_path}: {self._active_run_nc_header}"
+                logger.info(
+                    f"Machine {self.machine.id}: cached NC header for {deployed_path}: {self._active_run_nc_header}"
+                )
+            else:
+                logger.warning(
+                    f"Machine {self.machine.id}: FTP download returned empty for {deployed_path}"
                 )
         except Exception as e:
-            logger.debug(
-                f"Machine {self.machine.id}: could not fetch NC header for {program_path}: {e}"
+            logger.warning(
+                f"Machine {self.machine.id}: could not fetch NC header for {program_name}: {e}"
             )
 
     async def poll_tool_data(self) -> Dict[str, Any]:
@@ -284,6 +346,18 @@ class MachinePoller:
             - tools_timestamp: ISO timestamp of when data was fetched
             - tool_table_timestamp: ISO timestamp of when data was fetched
         """
+        # Skip tool poll while the machine is actively running a program.
+        # TOLNI1 can take 10-30 s to transfer; holding the machine lock that long blocks
+        # the fast poll and can stress the controller's TC slave during cutting.
+        # Tool offsets and ATC configuration don't change mid-cycle, so skipping here
+        # is safe — the cached data remains valid until the next standby window.
+        if self.last_known_prd3_status == "operating":
+            logger.debug(
+                f"[TOOL_POLL] Machine {self.machine.id} ({self.machine.name}) - "
+                "skipping tool poll: machine is operating"
+            )
+            return {}
+
         poll_start_time = time.time()
         poll_timestamp = datetime.utcnow()
         tool_data = {}
@@ -294,12 +368,12 @@ class MachinePoller:
             logger.debug(f"[TOOL_POLL] Machine {self.machine.id} ({self.machine.name}) - Starting tool data poll")
 
 
-            # Create fresh connection
+            # Create an unconnected client (lazy-connect inside machine lock; see poll() for rationale).
             step_start = time.time()
-            telnet_client = await create_fresh_connection(
+            telnet_client = CNCTelnetClient(
                 ip_address=self.machine.ip_address,
                 port=10000,
-                timeout=10
+                timeout=10,
             )
             step_times['get_connection'] = time.time() - step_start
             
@@ -461,12 +535,12 @@ class MachinePoller:
 
             # Phase 5: Migrate to Telnet for MONTR and PRD3 data (replaces HTTP get_status_overview)
 
-            # Create fresh connection
+            # Create an unconnected client (lazy-connect inside machine lock; see fetch_program_name for rationale).
             step_start = time.time()
-            telnet_client = await create_fresh_connection(
+            telnet_client = CNCTelnetClient(
                 ip_address=self.machine.ip_address,
                 port=10000,
-                timeout=10
+                timeout=10,
             )
             step_times['get_connection'] = time.time() - step_start
             
@@ -1177,14 +1251,39 @@ class MachinePoller:
             # Start new production run
             if current_status == "operating" and program_name and program_name != "----":
                 if not active_run:
+                    # Resolve the current deployment to link program_id and deployment_id
+                    resolved_program_id = None
+                    resolved_deployment_id = None
+                    try:
+                        deployed_filename = f"{program_name}.NC"
+                        deployment = (
+                            db.query(ProgramDeployment)
+                            .filter(
+                                ProgramDeployment.machine_id == self.machine.id,
+                                ProgramDeployment.deployed_filename.ilike(deployed_filename),
+                                ProgramDeployment.is_current.is_(True),
+                            )
+                            .order_by(ProgramDeployment.deployed_at.desc())
+                            .first()
+                        )
+                        if deployment:
+                            resolved_program_id = deployment.program_id
+                            resolved_deployment_id = deployment.id
+                    except Exception as lookup_err:
+                        logger.warning(
+                            f"Machine {self.machine.id} - Could not resolve deployment for {program_name}: {lookup_err}"
+                        )
+
                     run = ProductionRun(
                         machine_id=self.machine.id,
+                        program_id=resolved_program_id,
+                        deployment_id=resolved_deployment_id,
                         program_name=program_name,
                         o_number=status_data.get("o_number"),
                         started_at=datetime.now(timezone.utc),
                     )
                     db.add(run)
-                    logger.debug(f"Started production run for machine {self.machine.id}: {program_name}")
+                    logger.debug(f"Started production run for machine {self.machine.id}: {program_name} (program_id={resolved_program_id})")
                     # Reset header cache and schedule background FTP fetch for notifications
                     self._active_run_nc_header = None
                     asyncio.create_task(self._fetch_and_cache_nc_header(program_name))

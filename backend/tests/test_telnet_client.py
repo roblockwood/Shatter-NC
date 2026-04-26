@@ -395,12 +395,27 @@ class _MultiResponseReader:
 
 
 def _make_multi_response_client(responses: list[bytes]) -> tuple[CNCTelnetClient, _FakeWriter]:
-    """Return a client with a multi-response fake reader, already marked connected."""
+    """Return a client with a multi-response fake reader, already marked connected.
+
+    The client's connect() is stubbed so that, after load_data disconnects inside the
+    machine lock (CM7532 fix), subsequent fallback calls can reconnect and continue
+    consuming the queued responses from the same reader.
+    """
     client = CNCTelnetClient("10.0.0.1", port=10000, timeout=5, command_delay=0.0)
     writer = _FakeWriter()
-    client.reader = _MultiResponseReader(responses)  # type: ignore[assignment]
-    client.writer = writer  # type: ignore[assignment]
+    reader = _MultiResponseReader(responses)
+    client.reader = reader
+    client.writer = writer
     client._connected = True
+
+    async def _reconnect() -> bool:
+        # Restore the same reader (still holds any unconsumed responses) and writer.
+        client.reader = reader
+        client.writer = writer
+        client._connected = True
+        return True
+
+    client.connect = _reconnect  # type: ignore[method-assign]
     return client, writer
 
 
@@ -431,24 +446,26 @@ async def test_atc_magazine_c00_requests_atctl():
 
 
 @pytest.mark.asyncio
-async def test_atc_magazine_d00_falls_back_to_atctl_on_status_07():
-    """If ATCTLD returns status 07 (not found), fall back to ATCTL."""
+async def test_atc_magazine_d00_does_not_fall_back_to_atctl_on_status_07():
+    """If ATCTLD returns status 07 on a known D00 machine, do NOT fall back to ATCTL.
+
+    ATCTL is a C00 file name and does not exist on D00 controls.  Sending it wastes
+    a command and connection cycle on a guaranteed status-07 response.
+    """
     primary_fail = _make_response("LOD", "ATCTLD", status="07")
-    fallback_ok = _make_response("LOD", "ATCTL", status="00", data="A01,,fallback")
-    client, writer = _make_multi_response_client([primary_fail, fallback_ok])
+    client, writer = _make_connected_client(primary_fail)
     result = await client.get_atc_magazine_data(control_version="D00")
     frames = [f.decode("ascii") for f in writer.written]
     assert any("ATCTLD" in f for f in frames), "Should try ATCTLD first"
-    assert any("ATCTL" in f for f in frames), "Should fall back to ATCTL"
-    assert result is not None
+    assert not any("ATCTL " in f for f in frames), "Should NOT fall back to ATCTL on known D00"
+    assert result is None
 
 
 @pytest.mark.asyncio
-async def test_atc_magazine_returns_none_when_both_files_absent():
-    """Returns None if both ATCTLD and ATCTL return status 07."""
+async def test_atc_magazine_returns_none_when_file_absent_known_control():
+    """Returns None if ATCTLD returns status 07 on a known D00 machine (no fallback attempted)."""
     fail1 = _make_response("LOD", "ATCTLD", status="07")
-    fail2 = _make_response("LOD", "ATCTL", status="07")
-    client, _ = _make_multi_response_client([fail1, fail2])
+    client, _ = _make_connected_client(fail1)
     result = await client.get_atc_magazine_data(control_version="D00")
     assert result is None
 
@@ -480,13 +497,15 @@ async def test_prd3_c00_requests_prd3():
 
 
 @pytest.mark.asyncio
-async def test_prd3_d00_falls_back_to_prd3_on_failure():
-    """If PRDD3 is unavailable, falls back to PRD3."""
+async def test_prd3_d00_does_not_fall_back_to_prd3_on_status_07():
+    """If PRDD3 is unavailable on a known D00 machine, do NOT fall back to PRD3.
+
+    PRD3 is a C00 file name and does not exist on D00 controls.
+    """
     primary_fail = _make_response("LOD", "PRDD3", status="07")
-    fallback_ok = _make_response("LOD", "PRD3", status="00", data="A01,,fallback")
-    client, writer = _make_multi_response_client([primary_fail, fallback_ok])
+    client, writer = _make_connected_client(primary_fail)
     result = await client.get_prd3_data(control_version="D00")
     frames = [f.decode("ascii") for f in writer.written]
     assert any("PRDD3" in f for f in frames)
-    assert any("PRD3" in f for f in frames)
-    assert result is not None
+    assert not any("PRD3 " in f for f in frames), "Should NOT fall back to PRD3 on known D00"
+    assert result is None

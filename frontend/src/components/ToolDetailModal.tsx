@@ -17,6 +17,7 @@ interface OperationStats {
 interface ProgramUsage {
   program_id: number;
   filename: string;
+  deployed_path: string | null;
   version: number;
   production_runs: number;
   last_run: string | null;
@@ -228,6 +229,9 @@ export const ToolDetailModal: React.FC<ToolDetailModalProps> = ({
                   <div className="program-header">
                     <span className="text-info">{prog.filename}</span>
                     <span className="text-dim"> v{prog.version}</span>
+                    {prog.deployed_path && (
+                      <span className="text-dim program-path"> [{prog.deployed_path}]</span>
+                    )}
                     <span className="separator"> │ </span>
                     <span>RUNS: {prog.production_runs}</span>
                     <span className="separator"> │ </span>

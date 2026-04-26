@@ -52,70 +52,86 @@ class CNCDataReadsMixin:
         Returns:
             Data content as string, or None on failure
         """
+        # Track whether the failure (if any) was a timeout after the command was already sent.
+        # Callers (get_prd3_data, get_atc_magazine_data) consult this flag before trying an
+        # alternate data name: sending a second LOD while the machine is still servicing the
+        # first triggers CM7522 ("Receive command abnormal end").
+        self._last_load_timed_out = False
+
         # Serialize all LOD operations per machine across all client instances.
         # Brother controls can reject or stall overlapping protocol sessions on the same port.
         machine_lock = await _get_machine_lock(self.ip_address, self.port)
 
         async with machine_lock:
-            for attempt in range(max_retries + 1):
-                try:
-                    # Ensure connection (will reconnect if needed)
-                    if not self._connected:
-                        connected = await self.connect()
-                        if not connected:
-                            if attempt < max_retries:
+            # Disconnect unconditionally when leaving the lock, whether via return, exception,
+            # or normal exit.  This ensures the TCP socket is gone before another task can
+            # acquire the machine lock and connect — preventing the dual-connection condition
+            # that causes CM7532 ("Ethernet communication error").
+            try:
+                for attempt in range(max_retries + 1):
+                    try:
+                        # Ensure connection (will reconnect if needed)
+                        if not self._connected:
+                            connected = await self.connect()
+                            if not connected:
+                                if attempt < max_retries:
+                                    wait_time = 0.5 * (attempt + 1)
+                                    logger.warning(f"Telnet connection failed for '{data_name}', retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
+                                    await asyncio.sleep(wait_time)
+                                    continue
+                                return None
+
+                        success, status, data = await self._send_command("LOD", data_name, verbose=verbose, read_timeout=read_timeout)
+                        if success:
+                            return data
+                        else:
+                            if status == "TIMEOUT":
+                                # The command reached the machine but got no response within
+                                # the timeout.  Retrying would send a second LOD while the
+                                # machine is still processing the first -- that triggers CM7522
+                                # ("Receive command abnormal end") on D00 controls.
+                                self._last_load_timed_out = True
+                                logger.warning(
+                                    f"Failed to load '{data_name}': command sent but no response "
+                                    f"(possible CM7522 risk) — not retrying"
+                                )
+                                return None
+                            elif status is None and attempt < max_retries:
+                                # Connection-level failure BEFORE the command was sent.
+                                # Safe to reconnect and retry.
                                 wait_time = 0.5 * (attempt + 1)
-                                logger.warning(f"Telnet connection failed for '{data_name}', retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
+                                logger.warning(f"Failed to load '{data_name}': no response status, reconnecting and retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
+                                self._connected = False
                                 await asyncio.sleep(wait_time)
                                 continue
-                            return None
-
-                    success, status, data = await self._send_command("LOD", data_name, verbose=verbose, read_timeout=read_timeout)
-                    if success:
-                        return data
-                    else:
-                        if status == "TIMEOUT":
-                            # The command reached the machine but got no response within
-                            # the timeout.  Retrying would send a second LOD while the
-                            # machine is still processing the first -- that triggers CM7522
-                            # ("Receive command abnormal end") on D00 controls.
-                            logger.warning(
-                                f"Failed to load '{data_name}': command sent but no response "
-                                f"(possible CM7522 risk) — not retrying"
-                            )
-                            return None
-                        elif status is None and attempt < max_retries:
-                            # Connection-level failure BEFORE the command was sent.
-                            # Safe to reconnect and retry.
+                            elif status == "40" and attempt < max_retries:
+                                # Communication conflict: machine rejected the command
+                                # without executing it, so retrying is safe.
+                                wait_time = 0.5 * (attempt + 1)
+                                logger.warning(f"Failed to load '{data_name}': status {status} (communication conflict), retrying in {wait_time}s")
+                                await asyncio.sleep(wait_time)
+                                self._connected = False
+                                continue
+                            else:
+                                logger.warning(f"Failed to load data '{data_name}': status {status}")
+                                return None
+                    except (ConnectionError, TimeoutError, asyncio.TimeoutError) as e:
+                        if attempt < max_retries:
                             wait_time = 0.5 * (attempt + 1)
-                            logger.warning(f"Failed to load '{data_name}': no response status, reconnecting and retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
+                            logger.warning(f"Connection error loading '{data_name}': {e}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
                             self._connected = False
                             await asyncio.sleep(wait_time)
-                            continue
-                        elif status == "40" and attempt < max_retries:
-                            # Communication conflict: machine rejected the command
-                            # without executing it, so retrying is safe.
-                            wait_time = 0.5 * (attempt + 1)
-                            logger.warning(f"Failed to load '{data_name}': status {status} (communication conflict), retrying in {wait_time}s")
-                            await asyncio.sleep(wait_time)
-                            self._connected = False
                             continue
                         else:
-                            logger.warning(f"Failed to load data '{data_name}': status {status}")
+                            logger.error(f"Error loading data '{data_name}' after {max_retries + 1} attempts: {e}")
                             return None
-                except (ConnectionError, TimeoutError, asyncio.TimeoutError) as e:
-                    if attempt < max_retries:
-                        wait_time = 0.5 * (attempt + 1)
-                        logger.warning(f"Connection error loading '{data_name}': {e}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
-                        self._connected = False
-                        await asyncio.sleep(wait_time)
-                        continue
-                    else:
-                        logger.error(f"Error loading data '{data_name}' after {max_retries + 1} attempts: {e}")
+                    except Exception as e:
+                        logger.error(f"Error loading data '{data_name}': {e}")
                         return None
-                except Exception as e:
-                    logger.error(f"Error loading data '{data_name}': {e}")
-                    return None
+            finally:
+                # Close the TCP socket while still inside the machine lock so no other
+                # task can open a competing connection before this one is fully gone.
+                await self.disconnect()
 
         return None
 
@@ -214,6 +230,22 @@ class CNCDataReadsMixin:
         data = await self.load_data(primary, verbose=verbose)
         if data is not None:
             return data
+        if getattr(self, '_last_load_timed_out', False):
+            # The primary LOD command was sent but the machine didn't respond in time.
+            # Sending the alternate while the machine is still servicing the first command
+            # triggers CM7522 ("Receive command abnormal end").
+            logger.warning(
+                f"Skipping {alternate} fallback after {primary} timed out (CM7522 prevention)"
+            )
+            return None
+        if control_version in ("C00", "D00"):
+            # Control version is confirmed: the alternate name does not exist on this
+            # machine type and will always return status 07.  Don't waste a command slot
+            # and connection cycle on a guaranteed failure.
+            logger.debug(
+                f"{primary} unavailable on {control_version} — skipping {alternate} (wrong control type)"
+            )
+            return None
         return await self.load_data(alternate, verbose=verbose)
 
     async def get_atc_magazine_data(self, control_version: Optional[str] = None, verbose: bool = False) -> Optional[str]:
@@ -239,14 +271,29 @@ class CNCDataReadsMixin:
             data = await self.load_data("ATCTLD", verbose=verbose)
             if data is not None:
                 return data
+            if getattr(self, '_last_load_timed_out', False):
+                logger.warning("Skipping ATCTL fallback after ATCTLD timed out (CM7522 prevention)")
+                return None
             return await self.load_data("ATCTL", verbose=verbose)
 
         data = await self.load_data(data_name, verbose=verbose)
         if data is not None:
             return data
-        # Try alternate format name if primary fails
+        # Fallback to the alternate name only makes sense when control_version was
+        # unknown (detection failed).  When the control type is confirmed, the alternate
+        # name does not exist on this machine type (always status 07) — skip it.
+        # A timed-out primary command must also never be followed by a retry or fallback
+        # (CM7522 prevention).
         alt_name = "ATCTL" if data_name == "ATCTLD" else "ATCTLD"
-        return await self.load_data(alt_name, verbose=verbose)
+        if getattr(self, '_last_load_timed_out', False):
+            logger.warning(
+                f"Skipping {alt_name} fallback after {data_name} timed out (CM7522 prevention)"
+            )
+            return None
+        logger.debug(
+            f"{data_name} unavailable on {control_version} — skipping {alt_name} (wrong control type)"
+        )
+        return None
 
     # ------------------------------------------------------------------
     # Directory listing
@@ -1201,60 +1248,65 @@ class CNCDataReadsMixin:
         machine_lock = await _get_machine_lock(self.ip_address, self.port)
 
         async with machine_lock:
-            if not self._connected:
-                connected = await self.connect()
-                if not connected:
-                    return None
-
-            if start_macro < 500 or start_macro > 999:
-                logger.warning(f"Start macro {start_macro} out of range (500-999)")
-                return None
-
-            if data_size < 1 or data_size > 999:
-                logger.warning(f"Data size {data_size} out of range (1-999)")
-                return None
-
+            # Disconnect unconditionally on exit (same pattern as load_data) to prevent
+            # stale TCP connections that would cause CM7532 on the next operation.
             try:
-                macro_str = f"{start_macro:03d}"
-                arguments = f"{macro_str}     "[:8]
-                data_payload = f"\n{data_size:03d}\n"
+                if not self._connected:
+                    connected = await self.connect()
+                    if not connected:
+                        return None
 
-                success, status, data = await self._send_multipart_command(
-                    "REDMCNM", arguments, data_payload, verbose=verbose
-                )
-                if not success:
-                    logger.warning(f"Failed to get macro variable range: status {status}")
+                if start_macro < 500 or start_macro > 999:
+                    logger.warning(f"Start macro {start_macro} out of range (500-999)")
                     return None
 
-                if not data:
-                    return None
-
-                data_line = data.replace('\n', '').replace('\r', '').strip()
-
-                if len(data_line) < 3:
+                if data_size < 1 or data_size > 999:
+                    logger.warning(f"Data size {data_size} out of range (1-999)")
                     return None
 
                 try:
-                    returned_size = int(data_line[0:3])
+                    macro_str = f"{start_macro:03d}"
+                    arguments = f"{macro_str}     "[:8]
+                    data_payload = f"\n{data_size:03d}\n"
 
-                    values = []
-                    offset = 3
-                    for _ in range(returned_size):
-                        if offset + 12 > len(data_line):
-                            break
-                        value_str = data_line[offset:offset + 12].strip()
-                        try:
-                            values.append(float(value_str))
-                        except ValueError:
-                            values.append(0.0)
-                        offset += 12
+                    success, status, data = await self._send_multipart_command(
+                        "REDMCNM", arguments, data_payload, verbose=verbose
+                    )
+                    if not success:
+                        logger.warning(f"Failed to get macro variable range: status {status}")
+                        return None
 
-                    return values
+                    if not data:
+                        return None
 
-                except (ValueError, IndexError) as e:
-                    logger.error(f"Error parsing REDMCNM range response: {e}")
+                    data_line = data.replace('\n', '').replace('\r', '').strip()
+
+                    if len(data_line) < 3:
+                        return None
+
+                    try:
+                        returned_size = int(data_line[0:3])
+
+                        values = []
+                        offset = 3
+                        for _ in range(returned_size):
+                            if offset + 12 > len(data_line):
+                                break
+                            value_str = data_line[offset:offset + 12].strip()
+                            try:
+                                values.append(float(value_str))
+                            except ValueError:
+                                values.append(0.0)
+                            offset += 12
+
+                        return values
+
+                    except (ValueError, IndexError) as e:
+                        logger.error(f"Error parsing REDMCNM range response: {e}")
+                        return None
+
+                except Exception as e:
+                    logger.error(f"Error getting macro variable range: {e}")
                     return None
-
-            except Exception as e:
-                logger.error(f"Error getting macro variable range: {e}")
-                return None
+            finally:
+                await self.disconnect()

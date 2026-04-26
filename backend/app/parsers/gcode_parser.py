@@ -104,10 +104,16 @@ class GCodeParser:
         tools = []
         # Pattern: (T## D=diameter CR=corner_radius [optional_token] - ZMIN=... - description - L=used/total)
         # Notes:
-        # - Some posts emit an extra token after CR (e.g. "TAPER-150DEG").
+        # - Some posts emit an extra token after CR (e.g. "TAPER=45DEG", "TAPER-150DEG").
+        # - ZMIN is optional — some postprocessors omit it entirely.
         # - ZMIN can be negative.
         # - Description can include hyphens, so capture lazily up to " - L=...".
-        pattern = r'\(T(\d+)\s+D=([\d.]+)\s+CR=([\d.]+)(?:\s+[^\s-][^\s]*)?\s+-\s+ZMIN=([-\d.]+)\s+-\s+(.+?)\s+-\s+L=([\d.]+)/([\d.]+)\)'
+        #
+        # Matches both:
+        #   (T01 D=0.25 CR=0 - ZMIN=1.7674 - FLAT END MILL - L=0.65/3.609)   <- with ZMIN
+        #   (T58 D=0.375 CR=0.03 - BULLNOSE END MILL - L=1.5/3.8206)           <- without ZMIN
+        #   (T09 D=0.375 CR=0 TAPER=45DEG - CHAMFER MILL - L=1.5355/4.5355)   <- extra token, no ZMIN
+        pattern = r'\(T(\d+)\s+D=([\d.]+)\s+CR=([\d.]+)(?:\s+[^\s-]\S*)?\s+-\s+(?:ZMIN=([-\d.]+)\s+-\s+)?(.+?)\s+-\s+L=([\d.]+)/([\d.]+)\)'
 
         for line in self.lines:
             match = re.search(pattern, line)
