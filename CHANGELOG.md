@@ -1,3 +1,10 @@
+# [0.21.0](https://github.com/roblockwood/Shatter-NC/compare/v0.20.3...v0.21.0) (2026-04-26)
+
+
+### Features
+
+* add ATC optimizer endpoint and sync/notify parity ([409e3bf](https://github.com/roblockwood/Shatter-NC/commit/409e3bfc9175f07d010102b86090f8b7f0b5e8ff))
+
 ## [0.20.3](https://github.com/roblockwood/Shatter-NC/compare/v0.20.2...v0.20.3) (2026-04-26)
 
 
