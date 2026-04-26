@@ -27,6 +27,8 @@ services:
       target: development  # Use development target for hot-reload
     container_name: shatter-backend
     restart: unless-stopped
+    env_file:
+      - .env
     init: true
     stop_grace_period: 20s
     environment:
@@ -44,6 +46,12 @@ services:
       MQTT_PUBLISH_PORT: ${MQTT_PUBLISH_PORT:-1883}
       MQTT_PUBLISH_USERNAME: ${MQTT_PUBLISH_USERNAME:-}
       MQTT_PUBLISH_PASSWORD: ${MQTT_PUBLISH_PASSWORD:-}
+      # Optional Telnet proxy for CNC Protocol Type 2 (port 10000)
+      # Useful on macOS Docker Desktop when containers cannot reach CNC telnet directly.
+      SHATTER_TELNET_PROXY_HOST: ${SHATTER_TELNET_PROXY_HOST:-}
+      SHATTER_TELNET_PROXY_PORT: ${SHATTER_TELNET_PROXY_PORT:-10000}
+      MIGRATIONS_DIR: /docker-entrypoint-initdb.d
+      FTP_SYNC_LOCAL_BROWSE_ROOT: /hostfs
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
@@ -55,6 +63,7 @@ services:
       - ./database/init:/app/migrations:ro
       - ./database/init:/docker-entrypoint-initdb.d:ro
       - ./docker/generated:/docker/generated
+      - ${FTP_SYNC_LOCAL_BROWSE_HOST_PATH:-/Users}:/hostfs:rw
 
   # Frontend web application
   frontend:
@@ -73,7 +82,7 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    command: npm run dev
+    command: /bin/sh -c "if [ ! -x /app/node_modules/.bin/vite ]; then npm install; fi && npm run dev -- --host"
 
   # Optional MQTT broker for telemetry fanout (CNC + compressors).
   mosquitto:

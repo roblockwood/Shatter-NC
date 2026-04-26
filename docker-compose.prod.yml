@@ -52,11 +52,14 @@ services:
       MQTT_PUBLISH_PORT: ${MQTT_PUBLISH_PORT:-1883}
       MQTT_PUBLISH_USERNAME: ${MQTT_PUBLISH_USERNAME:-}
       MQTT_PUBLISH_PASSWORD: ${MQTT_PUBLISH_PASSWORD:-}
-      # Migration directory - defaults to /app/migrations (baked into image)
-      # Can override with MIGRATIONS_DIR env var or volume mount if needed
-      # MIGRATIONS_DIR: /docker-entrypoint-initdb.d
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      MIGRATIONS_DIR: /app/migrations
+      FTP_SYNC_LOCAL_BROWSE_ROOT: /hostfs
     volumes:
       - ./docker/generated:/docker/generated
+      - ${FTP_SYNC_LOCAL_BROWSE_HOST_PATH:-/Users}:/hostfs:rw
       # Optional: - ./database/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "${BACKEND_PORT:-8000}:8000"

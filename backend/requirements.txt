@@ -11,6 +11,10 @@ alembic==1.13.1
 # HTTP/FTP clients
 httpx==0.26.0
 aioftp==0.22.3
+aiosmtplib==3.0.1
+
+# SMS notifications
+twilio==9.3.3
 
 # Background tasks
 celery==5.3.6

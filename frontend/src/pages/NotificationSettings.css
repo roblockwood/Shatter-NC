@@ -1,0 +1,230 @@
+.notify-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+  gap: var(--spacing-md);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+}
+
+.notify-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.notify-title {
+  font-size: var(--font-xl);
+  font-weight: 700;
+}
+
+.notify-subtitle {
+  color: var(--color-text-secondary);
+  font-size: var(--font-sm);
+}
+
+.notify-divider {
+  color: var(--color-text-dim);
+  white-space: pre;
+  line-height: 1;
+  overflow: hidden;
+}
+
+.notify-tabs {
+  display: flex;
+  gap: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--spacing-sm);
+}
+
+.notify-tab {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.notify-tab.active {
+  border-color: var(--color-text-primary);
+  color: var(--color-text-primary);
+}
+
+.notify-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.notify-card {
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  background: var(--color-bg-surface);
+}
+
+.notify-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.notify-card-title {
+  font-weight: 700;
+}
+
+.notify-card-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.notify-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-md);
+}
+
+.notify-form-title {
+  font-weight: 700;
+  margin-bottom: var(--spacing-xs);
+}
+
+.notify-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.notify-field label {
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+}
+
+.notify-field input,
+.notify-field select {
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.notify-field input:focus,
+.notify-field select:focus {
+  outline: 1px solid var(--color-text-primary);
+}
+
+.notify-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.notify-row .notify-field {
+  flex: 1;
+  min-width: 160px;
+}
+
+.notify-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  font-size: var(--font-sm);
+}
+
+.notify-btn:hover {
+  border-color: var(--color-text-primary);
+}
+
+.notify-btn.primary {
+  border-color: var(--color-text-primary);
+}
+
+.notify-btn.danger {
+  color: var(--color-error, #ff6b6b);
+  border-color: var(--color-error, #ff6b6b);
+}
+
+.notify-btn.success-flash {
+  color: var(--color-success, #4caf50);
+  border-color: var(--color-success, #4caf50);
+}
+
+.notify-status-ok {
+  color: var(--color-success, #4caf50);
+  font-size: var(--font-sm);
+}
+
+.notify-status-err {
+  color: var(--color-error, #ff6b6b);
+  font-size: var(--font-sm);
+}
+
+.notify-hint {
+  color: var(--color-text-dim);
+  font-size: var(--font-sm);
+}
+
+.notify-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+}
+
+.notify-toggle input[type='checkbox'] {
+  accent-color: var(--color-text-primary);
+}
+
+.notify-empty {
+  color: var(--color-text-dim);
+  font-size: var(--font-sm);
+}
+
+/* Delivery Log */
+.notify-log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+}
+
+.notify-log-table th {
+  text-align: left;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.notify-log-table td {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.notify-log-message {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 42ch;
+}
+
+.notify-log-sent {
+  color: var(--color-success, #4caf50);
+}
+
+.notify-log-failed {
+  color: var(--color-error, #ff6b6b);
+}
