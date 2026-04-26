@@ -280,37 +280,15 @@ class MachinePoller:
 
         return None
 
-    async def _fetch_and_cache_nc_header(self, program_name: str) -> None:
+    async def _fetch_and_cache_nc_header(self, deployed_path: str) -> None:
         """Fetch an NC program's header comments via FTP and cache them for cycle-complete notifications.
 
-        ``program_name`` is the O-number as stored in the production run (e.g. ``O0004``).
-        We look up the full deployed_path from program_deployments first so the FTP download
-        uses the correct directory (e.g. /PROGRAM/250HDFP/O0004.NC).  Falls back to
-        ``{program_name}.NC`` at the FTP root if no deployment record is found.
+        ``deployed_path`` must be the full FTP path (e.g. /PROGRAM/250HDFP/O0004.NC) as resolved
+        at production-run start time.  Callers should NOT pass a bare O-number here.
         """
         try:
             from app.clients.ftp_client import CNCFtpClient
             from app.services.notification_service import extract_nc_program_header
-
-            # Resolve the full path via the deployments table.
-            deployed_path: str = f"{program_name}.NC"  # default fallback
-            db = SessionLocal()
-            try:
-                filename = f"{program_name}.NC"
-                deployment = (
-                    db.query(ProgramDeployment)
-                    .filter(
-                        ProgramDeployment.machine_id == self.machine.id,
-                        ProgramDeployment.deployed_filename == filename,
-                        ProgramDeployment.is_current.is_(True),
-                    )
-                    .order_by(ProgramDeployment.deployed_at.desc())
-                    .first()
-                )
-                if deployment:
-                    deployed_path = deployment.deployed_path
-            finally:
-                db.close()
 
             ftp = CNCFtpClient(
                 ip_address=self.machine.ip_address,
@@ -331,7 +309,7 @@ class MachinePoller:
                 )
         except Exception as e:
             logger.warning(
-                f"Machine {self.machine.id}: could not fetch NC header for {program_name}: {e}"
+                f"Machine {self.machine.id}: could not fetch NC header for {deployed_path}: {e}"
             )
 
     async def poll_tool_data(self) -> Dict[str, Any]:
@@ -1251,12 +1229,18 @@ class MachinePoller:
             # Start new production run
             if current_status == "operating" and program_name and program_name != "----":
                 if not active_run:
-                    # Resolve the current deployment to link program_id and deployment_id
+                    # Resolve the current deployment to link program_id and deployment_id.
+                    # When multiple current deployments share the same filename (e.g. O0004.NC exists
+                    # in /PROGRAM/250HDFP/ AND /PROGRAM/SUBS/), prefer the one that is NOT in a
+                    # known sub-program folder.  Sub-programs are called by main programs and are
+                    # never run directly by the operator.
+                    _SUB_FOLDER_PATTERNS = {"/subs/", "/subprg/", "/subroutine/"}
                     resolved_program_id = None
                     resolved_deployment_id = None
+                    deployment = None
                     try:
                         deployed_filename = f"{program_name}.NC"
-                        deployment = (
+                        candidates = (
                             db.query(ProgramDeployment)
                             .filter(
                                 ProgramDeployment.machine_id == self.machine.id,
@@ -1264,8 +1248,14 @@ class MachinePoller:
                                 ProgramDeployment.is_current.is_(True),
                             )
                             .order_by(ProgramDeployment.deployed_at.desc())
-                            .first()
+                            .all()
                         )
+                        # Prefer a deployment NOT in a sub-program directory.
+                        non_sub = [
+                            d for d in candidates
+                            if not any(pat in d.deployed_path.lower() for pat in _SUB_FOLDER_PATTERNS)
+                        ]
+                        deployment = (non_sub or candidates or [None])[0]
                         if deployment:
                             resolved_program_id = deployment.program_id
                             resolved_deployment_id = deployment.id
@@ -1284,9 +1274,12 @@ class MachinePoller:
                     )
                     db.add(run)
                     logger.debug(f"Started production run for machine {self.machine.id}: {program_name} (program_id={resolved_program_id})")
-                    # Reset header cache and schedule background FTP fetch for notifications
+                    # Reset header cache and schedule background FTP fetch for notifications.
+                    # Use the deployment path resolved above so we fetch the correct file,
+                    # not whichever deployment happens to be newest at fetch time.
                     self._active_run_nc_header = None
-                    asyncio.create_task(self._fetch_and_cache_nc_header(program_name))
+                    fetch_path = deployment.deployed_path if deployment else f"{program_name}.NC"
+                    asyncio.create_task(self._fetch_and_cache_nc_header(fetch_path))
 
             # End active production run
             elif current_status in ["stopped", "standby", "error"] and active_run:

@@ -376,3 +376,72 @@ def test_extract_nc_program_header_file_label_stripped():
     result = extract_nc_program_header(content)
     assert result["file_label"] == "PADDED NAME"
 
+
+# ---------------------------------------------------------------------------
+# Deployment sub-folder preference heuristic
+#
+# The production-run startup logic prefers a deployment NOT in a sub-program
+# folder (/subs/, /subprg/, /subroutine/) when multiple current deployments
+# exist for the same O-number filename.  The heuristic is extracted here as a
+# pure function so it can be tested without the full poller.
+# ---------------------------------------------------------------------------
+
+_SUB_FOLDER_PATTERNS = {"/subs/", "/subprg/", "/subroutine/"}
+
+
+def _pick_best_deployment(candidates: list):
+    """Mirror of the heuristic in _log_production_run."""
+    non_sub = [
+        d for d in candidates
+        if not any(pat in d.deployed_path.lower() for pat in _SUB_FOLDER_PATTERNS)
+    ]
+    return (non_sub or candidates or [None])[0]
+
+
+def _make_dep(path: str):
+    d = MagicMock()
+    d.deployed_path = path
+    return d
+
+
+def test_deployment_pick_prefers_non_subs_when_multiple_candidates():
+    """When SUBS and a job folder both have O0004, the job folder wins."""
+    subs = _make_dep("/PROGRAM/SUBS/O0004.NC")
+    main = _make_dep("/PROGRAM/250HDFP/O0004.NC")
+    assert _pick_best_deployment([subs, main]) is main
+
+
+def test_deployment_pick_prefers_non_subs_regardless_of_order():
+    """Order of candidates does not affect the outcome."""
+    subs = _make_dep("/PROGRAM/SUBS/O0004.NC")
+    main = _make_dep("/PROGRAM/250HDFP/O0004.NC")
+    assert _pick_best_deployment([main, subs]) is main
+
+
+def test_deployment_pick_falls_back_to_subs_when_all_are_subs():
+    """If every candidate is a sub-program folder, return the first one."""
+    a = _make_dep("/PROGRAM/SUBS/O0004.NC")
+    b = _make_dep("/PROGRAM/SUBPRG/O0004.NC")
+    assert _pick_best_deployment([a, b]) is a
+
+
+def test_deployment_pick_single_non_sub_candidate():
+    main = _make_dep("/PROGRAM/FIX1/O0004.NC")
+    assert _pick_best_deployment([main]) is main
+
+
+def test_deployment_pick_single_subs_candidate():
+    subs = _make_dep("/PROGRAM/SUBS/O0004.NC")
+    assert _pick_best_deployment([subs]) is subs
+
+
+def test_deployment_pick_empty_candidates_returns_none():
+    assert _pick_best_deployment([]) is None
+
+
+def test_deployment_pick_case_insensitive_path_matching():
+    """Pattern matching is case-insensitive (uppercase /SUBS/ should still be excluded)."""
+    subs = _make_dep("/PROGRAM/SUBS/O0004.NC")   # uppercase
+    main = _make_dep("/PROGRAM/LPPTSLIDER/O0004.NC")
+    assert _pick_best_deployment([subs, main]) is main
+
