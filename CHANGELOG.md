@@ -1,3 +1,10 @@
+## [0.20.2](https://github.com/roblockwood/Shatter-NC/compare/v0.20.1...v0.20.2) (2026-04-26)
+
+
+### Bug Fixes
+
+* **frontend:** add web app manifest ([d8307a6](https://github.com/roblockwood/Shatter-NC/commit/d8307a66167312c2e3730f3f694ab6b7fe3be978))
+
 ## [0.20.1](https://github.com/roblockwood/Shatter-NC/compare/v0.20.0...v0.20.1) (2026-04-26)
 
 
