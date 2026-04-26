@@ -5,6 +5,12 @@ import { FileBrowser } from './pages/FileBrowser';
 import { ToolManagement } from './pages/ToolManagement';
 import { SyncConfig } from './pages/SyncConfig';
 import { NotificationSettings } from './pages/NotificationSettings';
+import { TabletEntry } from './pages/tablet/TabletEntry';
+import { TabletSetupPage } from './pages/tablet/TabletSetupPage';
+import { TabletMachineShell } from './pages/tablet/TabletMachineShell';
+import { TabletRedirectToDefaultPane } from './pages/tablet/TabletRedirectToDefaultPane';
+import { TabletCompressorShell } from './pages/tablet/TabletCompressorShell';
+import { TabletCompressorRedirectToDefaultPane } from './pages/tablet/TabletCompressorRedirectToDefaultPane';
 import { useBetaMode, useBetaModeActivator } from './hooks/useBetaMode';
 import { BetaRoute } from './components/BetaRoute';
 import { WebSocketProvider } from './contexts/WebSocketContext';
@@ -20,6 +26,11 @@ function Navigation() {
   const handleLogoClick = useBetaModeActivator(isBetaMode, activateBetaMode, deactivateBetaMode);
 
   const isActive = (path: string) => location.pathname === path;
+
+  // Tablet kiosk routes are fullscreen and should not show the standard header/nav chrome.
+  if (location.pathname.startsWith('/tablet')) {
+    return null;
+  }
 
   return (
     <>
@@ -99,6 +110,13 @@ function App() {
                 <Route path="/files" element={<FileBrowser />} />
                 <Route path="/sync" element={<SyncConfig />} />
                 <Route path="/notifications" element={<NotificationSettings />} />
+                {/* Tablet kiosk routes */}
+                <Route path="/tablet" element={<TabletEntry />} />
+                <Route path="/tablet/setup" element={<TabletSetupPage />} />
+                <Route path="/tablet/:machineId" element={<TabletRedirectToDefaultPane />} />
+                <Route path="/tablet/:machineId/:paneSlug" element={<TabletMachineShell />} />
+                <Route path="/tablet/compressor/:compressorId" element={<TabletCompressorRedirectToDefaultPane />} />
+                <Route path="/tablet/compressor/:compressorId/:paneSlug" element={<TabletCompressorShell />} />
                 <Route
                   path="/tools"
                   element={
