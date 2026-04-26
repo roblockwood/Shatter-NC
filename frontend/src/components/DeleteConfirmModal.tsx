@@ -14,7 +14,7 @@ const ASCII_ART_OPTIONS = [
         _--                  --_
        <                        >)
        |                         |
-        \._                   _./
+        ._                   _./
            \`\`\`--. . , ; .--'''
                  | |   |
               .-=||  | |=-.
@@ -105,15 +105,13 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
   onConfirm,
   machineName
 }) => {
-  const [selectedArt, setSelectedArt] = useState<string>(ASCII_ART_OPTIONS[0]);
-
-  useEffect(() => {
-    if (isOpen) {
-      // Select a random ASCII art when modal opens
-      const randomIndex = Math.floor(Math.random() * ASCII_ART_OPTIONS.length);
-      setSelectedArt(ASCII_ART_OPTIONS[randomIndex]);
-    }
-  }, [isOpen]);
+  const [openCount, setOpenCount] = useState(0);
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (prevIsOpen !== isOpen) {
+    setPrevIsOpen(isOpen);
+    if (isOpen) setOpenCount(c => c + 1);
+  }
+  const selectedArt = ASCII_ART_OPTIONS[openCount % ASCII_ART_OPTIONS.length];
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {

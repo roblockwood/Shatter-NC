@@ -91,16 +91,16 @@ export const PollingStatusLight: React.FC<PollingStatusLightProps> = ({
   /** Tighter refresh while hover tooltip is open so “Ns ago” feels live */
   useEffect(() => {
     if (!hoverOpen) return;
-    recompute();
+    const raf = window.requestAnimationFrame(() => recompute());
     const id = window.setInterval(() => recompute(), 1000);
-    return () => window.clearInterval(id);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearInterval(id);
+    };
   }, [hoverOpen, recompute]);
 
   useLayoutEffect(() => {
-    if (!hoverOpen) {
-      setTipPos(null);
-      return;
-    }
+    if (!hoverOpen) return;
     const update = () => {
       const el = anchorRef.current;
       if (!el) return;
@@ -163,17 +163,18 @@ export const PollingStatusLight: React.FC<PollingStatusLightProps> = ({
 
   const t = parseTime(lastUpdatedAt);
   const describedById = useId();
+  const displayTipPos = hoverOpen ? tipPos : null;
 
   const tooltipEl =
-    hoverOpen && tipPos != null ? (
+    hoverOpen && displayTipPos != null ? (
       <div
         id={describedById}
         role="tooltip"
         className="polling-status-light-tooltip"
         style={{
           position: 'fixed',
-          top: tipPos.top,
-          left: tipPos.left,
+          top: displayTipPos.top,
+          left: displayTipPos.left,
           transform: 'translate(-50%, calc(-100% - 8px))',
         }}
       >
@@ -209,7 +210,7 @@ export const PollingStatusLight: React.FC<PollingStatusLightProps> = ({
         onMouseLeave={handleLeave}
         role="img"
         aria-label={`${ariaLabel}: ${freshness}`}
-        aria-describedby={hoverOpen && tipPos != null ? describedById : undefined}
+        aria-describedby={hoverOpen && displayTipPos != null ? describedById : undefined}
       >
         <span className={cls} aria-hidden />
       </span>
