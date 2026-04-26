@@ -464,9 +464,22 @@ class FtpSyncService:
                     .all()
                 )
 
+                run_tool_data: dict | None = None
+                if config.auto_validate:
+                    run_tool_data = await self._prefetch_tool_data(machine.id)
+
                 for item in items:
                     try:
-                        await self._process_item(db, config, machine, run, item, ftp_client, remote_name_set)
+                        await self._process_item(
+                            db,
+                            config,
+                            machine,
+                            run,
+                            item,
+                            ftp_client,
+                            remote_name_set,
+                            run_tool_data,
+                        )
                         db.commit()
                     except Exception as item_exc:
                         # Keep long runs moving even if one item poisons the transaction state.
@@ -514,6 +527,7 @@ class FtpSyncService:
         item: FtpSyncRunItem,
         ftp_client: CNCFtpClient,
         remote_name_set: set[str],
+        run_tool_data: dict | None = None,
     ):
         """Run validation + upload + registration for a single file."""
         sync_direction = (config.sync_direction or "upload").lower()
@@ -573,7 +587,10 @@ class FtpSyncService:
 
                 validation_result = await validate_program(
                     machine_id=machine.id,
-                    request=ProgramValidateRequest(gcode_content=gcode_content),
+                    request=ProgramValidateRequest(
+                        gcode_content=gcode_content,
+                        prefetched_tool_data=run_tool_data,
+                    ),
                     db=db,
                 )
                 validation_payload = jsonable_encoder(validation_result.model_dump())
@@ -804,3 +821,43 @@ class FtpSyncService:
         if not normalized_folder:
             return f"/{normalized_rel}"
         return f"{normalized_folder}/{normalized_rel}"
+
+    async def _prefetch_tool_data(self, machine_id: int) -> dict:
+        """Fetch machine tool data once for a sync run (best-effort)."""
+        from app.api import status as status_api
+
+        # Fast path: WebSocket cache already has tool data.
+        if self.websocket_manager:
+            try:
+                cached = self.websocket_manager.get_machine_status(machine_id) or {}
+                if cached.get("tools"):
+                    logger.debug(
+                        "Machine %d - sync prefetch: %d tools from WebSocket cache",
+                        machine_id,
+                        len(cached["tools"]),
+                    )
+                    return {"tools": cached["tools"]}
+            except Exception:
+                pass
+
+        # Trigger a single polling-service refresh to populate the cache.
+        if status_api.polling_service:
+            try:
+                tool_data = await status_api.polling_service.refresh_tool_data(machine_id)
+                tools = (tool_data or {}).get("tools", [])
+                if tools:
+                    logger.info(
+                        "Machine %d - sync prefetch: %d tools loaded via polling service",
+                        machine_id,
+                        len(tools),
+                    )
+                    return {"tools": tools}
+                logger.warning(
+                    "Machine %d - sync prefetch: polling service returned no tools; "
+                    "validation will proceed without tool data",
+                    machine_id,
+                )
+            except Exception as exc:
+                logger.warning("Machine %d - sync prefetch: polling service error: %s", machine_id, exc)
+
+        return {"tools": []}
