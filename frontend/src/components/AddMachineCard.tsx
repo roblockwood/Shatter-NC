@@ -3,6 +3,7 @@ import './AddMachineCard.css';
 import { MachineCardAsciiDivider } from './MachineCardAsciiDivider';
 import { API_BASE } from '../config/api';
 import { Select } from './ui/Select';
+import { useBetaMode } from '../hooks/useBetaMode';
 
 interface MachineData {
   name: string;
@@ -38,6 +39,7 @@ interface AddMachineCardProps {
 }
 
 export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel: onCancelProp, fullWidth = false, onActiveChange }) => {
+  const { isBetaMode } = useBetaMode();
   const [isActive, setIsActive] = useState(false);
 
   // Reset state when component unmounts (user navigates away)
@@ -289,7 +291,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
                 }
                 disabled={isSaving}
                 options={[
-                  { value: 'AUTO', label: 'AUTO DETECT' },
+                  ...(isBetaMode ? [{ value: 'AUTO', label: 'AUTO DETECT (beta)' }] : []),
                   { value: 'C00', label: 'C00' },
                   { value: 'D00', label: 'D00' },
                 ]}

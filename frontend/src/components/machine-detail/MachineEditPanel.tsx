@@ -3,6 +3,7 @@ import { SaveConfirmModal } from '../SaveConfirmModal';
 import { Select } from '../ui/Select';
 import { API_BASE_URL } from '../../config/api';
 import type { MachineStatus, ConnectionTestResult } from '../MachineCardTypes';
+import { useBetaMode } from '../../hooks/useBetaMode';
 
 interface MachineEditPanelProps {
   machine: MachineStatus;
@@ -73,6 +74,7 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
   onCancelCollapse,
   onDelete,
 }) => {
+  const { isBetaMode } = useBetaMode();
   const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [editSuccess, setEditSuccess] = useState(false);
@@ -337,7 +339,9 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
               }
               disabled={isEditSaving}
               options={[
-                { value: 'AUTO', label: 'AUTO DETECT' },
+                ...((isBetaMode || editFormData.control_version === 'AUTO')
+                  ? [{ value: 'AUTO', label: 'AUTO DETECT (beta)' }]
+                  : []),
                 { value: 'C00', label: 'C00' },
                 { value: 'D00', label: 'D00' },
               ]}
