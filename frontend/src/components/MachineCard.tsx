@@ -12,6 +12,7 @@ import { StatusHistoryPane } from './machine-detail/StatusHistoryPane';
 import { PanelPane } from './machine-detail/PanelPane';
 import { FileManagerPane } from './machine-detail/FileManagerPane';
 import { LayoutManager } from './machine-detail/LayoutManager';
+import { MachineSyncPanel } from './MachineSyncPanel';
 import { PANE_IDS } from '../types/layout';
 import { useExpandedMachine } from '../contexts/ExpandedMachineContext';
 import './MachineCard.css';
@@ -95,6 +96,7 @@ interface MachineStatus {
   poll_interval_seconds?: number;
   tool_poll_interval_seconds?: number;
   part_display_mode?: 'cycle' | 'parts';
+  ftp_sync_enabled?: boolean;
   enabled?: boolean;
   units?: 'in' | 'mm';
   control_version?: 'C00' | 'D00' | null;
@@ -378,6 +380,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     tool_poll_interval_seconds: machine.tool_poll_interval_seconds || 30,
     enabled: machine.enabled !== false,
     part_display_mode: machine.part_display_mode || 'parts',
+    ftp_sync_enabled: machine.ftp_sync_enabled === true,
     diameter_tolerance: machine.diameter_tolerance || 0.010,
     length_tolerance_plus: machine.length_tolerance_plus || 0.02,
     length_tolerance_minus: machine.length_tolerance_minus || 0.0,
@@ -416,6 +419,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             tool_poll_interval_seconds: fullMachineData.tool_poll_interval_seconds || 30,
             enabled: fullMachineData.enabled !== false,
             part_display_mode: fullMachineData.part_display_mode || 'parts',
+            ftp_sync_enabled: fullMachineData.ftp_sync_enabled === true,
             diameter_tolerance: fullMachineData.diameter_tolerance || 0.010,
             length_tolerance_plus: fullMachineData.length_tolerance_plus || 0.02,
             length_tolerance_minus: fullMachineData.length_tolerance_minus || 0.0,
@@ -520,6 +524,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         tool_poll_interval_seconds: machine.tool_poll_interval_seconds || 30,
         enabled: machine.enabled !== false,
         part_display_mode: machine.part_display_mode || 'parts',
+        ftp_sync_enabled: machine.ftp_sync_enabled === true,
         diameter_tolerance: machine.diameter_tolerance || 0.010,
         length_tolerance_plus: machine.length_tolerance_plus || 0.02,
         length_tolerance_minus: machine.length_tolerance_minus || 0.0,
@@ -1142,6 +1147,19 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 </div>
               </div>
             </div>
+
+            {isBetaMode && (
+              <div className="form-checkbox sync-enable-checkbox">
+                <input
+                  type="checkbox"
+                  id={`ftp-sync-enabled-${machine.machine_id}`}
+                  checked={editFormData.ftp_sync_enabled}
+                  onChange={(e) => setEditFormData({ ...editFormData, ftp_sync_enabled: e.target.checked })}
+                  disabled={isEditSaving}
+                />
+                <label htmlFor={`ftp-sync-enabled-${machine.machine_id}`}>ENABLE FTP SYNC</label>
+              </div>
+            )}
             </div>
 
             {/* Tolerances Section */}
@@ -1302,6 +1320,13 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             </div>
           </div>
           </div>
+
+          {isBetaMode && editFormData.ftp_sync_enabled && (
+            <div className="machine-sync-section">
+              <div className="machine-sync-header">FTP SYNC</div>
+              <MachineSyncPanel machineId={machine.machine_id} />
+            </div>
+          )}
 
           {editTestResult && (
             <div className="form-success text-success">

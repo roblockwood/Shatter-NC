@@ -31,6 +31,11 @@ def set_ftp_sync_service(service):
     ftp_sync_service = service
 
 
+def _require_ftp_sync_enabled(machine: Machine) -> None:
+    if not machine.ftp_sync_enabled:
+        raise HTTPException(status_code=403, detail="FTP sync is not enabled for this machine")
+
+
 def _resolve_local_browse_path(path: str | None) -> Path:
     """Resolve and validate requested browse path under configured root."""
     browse_root = Path(settings.FTP_SYNC_LOCAL_BROWSE_ROOT).expanduser().resolve()
@@ -134,6 +139,7 @@ async def create_sync_config(
     machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not machine:
         raise HTTPException(status_code=404, detail="Machine not found")
+    _require_ftp_sync_enabled(machine)
 
     config = FtpSyncConfig(machine_id=machine_id, **payload.model_dump())
     db.add(config)
@@ -150,6 +156,11 @@ async def update_sync_config(
     db: Session = Depends(get_db),
 ):
     """Update FTP sync configuration."""
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    _require_ftp_sync_enabled(machine)
+
     config = (
         db.query(FtpSyncConfig)
         .filter(FtpSyncConfig.id == config_id, FtpSyncConfig.machine_id == machine_id)
@@ -169,6 +180,11 @@ async def update_sync_config(
 @router.delete("/machines/{machine_id}/ftp-sync/configs/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_sync_config(machine_id: int, config_id: int, db: Session = Depends(get_db)):
     """Delete FTP sync configuration."""
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    _require_ftp_sync_enabled(machine)
+
     config = (
         db.query(FtpSyncConfig)
         .filter(FtpSyncConfig.id == config_id, FtpSyncConfig.machine_id == machine_id)
@@ -193,6 +209,11 @@ async def trigger_sync_run(
     db: Session = Depends(get_db),
 ):
     """Trigger a manual sync run for one configuration."""
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    _require_ftp_sync_enabled(machine)
+
     config = (
         db.query(FtpSyncConfig)
         .filter(FtpSyncConfig.id == config_id, FtpSyncConfig.machine_id == machine_id)
