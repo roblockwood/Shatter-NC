@@ -3,19 +3,22 @@ import type { TouchEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TABLET_NAV_ITEMS, type TabletPaneSlug } from './tabletPaneConfig';
 
-/** Same order as bottom nav */
-const SLUG_ORDER: TabletPaneSlug[] = TABLET_NAV_ITEMS.map((n) => n.slug);
-
 /** Ignore small movements; avoid fighting vertical scroll */
 const MIN_SWIPE_PX = 72;
 const HORIZONTAL_DOMINANCE = 1.25;
 
 /**
  * Horizontal swipe on the pane area: left → next pane, right → previous (wraps).
+ * Nav order follows filtered `navItems` when provided.
  */
-export function useTabletPaneSwipe(machineId: number, currentSlug: TabletPaneSlug) {
+export function useTabletPaneSwipe(
+  machineId: number,
+  currentSlug: TabletPaneSlug,
+  navItems: { slug: TabletPaneSlug }[] = TABLET_NAV_ITEMS,
+) {
   const navigate = useNavigate();
   const startRef = useRef<{ x: number; y: number } | null>(null);
+  const slugOrder: TabletPaneSlug[] = navItems.map((n) => n.slug);
 
   const onTouchStart = useCallback((e: TouchEvent) => {
     if (e.touches.length !== 1) {
@@ -44,20 +47,20 @@ export function useTabletPaneSwipe(machineId: number, currentSlug: TabletPaneSlu
         return;
       }
 
-      const idx = SLUG_ORDER.indexOf(currentSlug);
+      const idx = slugOrder.indexOf(currentSlug);
       if (idx < 0) {
         return;
       }
 
       if (dx < 0) {
-        const next = SLUG_ORDER[(idx + 1) % SLUG_ORDER.length];
+        const next = slugOrder[(idx + 1) % slugOrder.length];
         navigate(`/tablet/${machineId}/${next}`);
       } else {
-        const prev = SLUG_ORDER[(idx - 1 + SLUG_ORDER.length) % SLUG_ORDER.length];
+        const prev = slugOrder[(idx - 1 + slugOrder.length) % slugOrder.length];
         navigate(`/tablet/${machineId}/${prev}`);
       }
     },
-    [currentSlug, machineId, navigate]
+    [currentSlug, machineId, navigate, slugOrder]
   );
 
   const onTouchCancel = useCallback(() => {

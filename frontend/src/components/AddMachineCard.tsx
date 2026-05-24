@@ -4,10 +4,13 @@ import { MachineCardAsciiDivider } from './MachineCardAsciiDivider';
 import { API_BASE } from '../config/api';
 import { Select } from './ui/Select';
 import { useBetaMode } from '../hooks/useBetaMode';
+import type { ControllerType } from '../types/machine';
+import { defaultModelForController } from '../types/machine';
 
 interface MachineData {
   name: string;
   ip_address: string;
+  controller_type: ControllerType;
   ftp_username: string;
   ftp_password: string;
   ftp_port?: number;
@@ -17,6 +20,10 @@ interface MachineData {
   tool_poll_interval_seconds?: number;
   enabled?: boolean;
   model?: string;
+  opcua_port?: number;
+  opcua_username?: string;
+  opcua_password?: string;
+  opcua_channel?: string;
   diameter_tolerance?: number;
   length_tolerance_plus?: number;
   length_tolerance_minus?: number;
@@ -69,6 +76,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
   const [formData, setFormData] = useState<MachineData>({
     name: '',
     ip_address: '',
+    controller_type: 'brother',
     ftp_username: 'anonymous',
     ftp_password: 'anonymous',
     ftp_port: 21,
@@ -90,9 +98,20 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
     validate_tool_length: true,
     units: 'in',
     control_version: 'AUTO',
+    opcua_port: 4840,
+    opcua_username: '',
+    opcua_password: '',
+    opcua_channel: '0',
   });
 
-  const isFormValid = formData.name && formData.ip_address && formData.ftp_username && formData.ftp_password;
+  const isHeidenhain = formData.controller_type === 'heidenhain';
+
+  const isFormValid =
+    formData.name &&
+    formData.ip_address &&
+    (isHeidenhain
+      ? formData.opcua_username && formData.opcua_password
+      : formData.ftp_username && formData.ftp_password);
 
   const handleSave = async () => {
     if (!isFormValid) {
@@ -103,10 +122,44 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
     setIsSaving(true);
     setError(null);
     try {
-      const payload = {
-        ...formData,
-        control_version: formData.control_version === 'AUTO' ? null : formData.control_version,
+      const payload: Record<string, unknown> = {
+        name: formData.name,
+        ip_address: formData.ip_address,
+        controller_type: formData.controller_type,
+        model: defaultModelForController(formData.controller_type),
+        poll_interval_seconds: formData.poll_interval_seconds,
+        enabled: formData.enabled,
+        units: formData.units,
+        diameter_tolerance: formData.diameter_tolerance,
+        length_tolerance_plus: formData.length_tolerance_plus,
+        length_tolerance_minus: formData.length_tolerance_minus,
+        tolerance_x: formData.tolerance_x,
+        tolerance_y: formData.tolerance_y,
+        tolerance_z: formData.tolerance_z,
+        use_machine_tool_tolerances: formData.use_machine_tool_tolerances,
+        use_machine_wcs_tolerances: formData.use_machine_wcs_tolerances,
+        validate_tool_diameter: formData.validate_tool_diameter,
+        validate_tool_length: formData.validate_tool_length,
       };
+
+      if (isHeidenhain) {
+        payload.controller_config = {
+          opcua_port: formData.opcua_port ?? 4840,
+          opcua_username: formData.opcua_username,
+          opcua_password: formData.opcua_password,
+          channel: formData.opcua_channel ?? '0',
+        };
+      } else {
+        Object.assign(payload, {
+          ftp_username: formData.ftp_username,
+          ftp_password: formData.ftp_password,
+          ftp_port: formData.ftp_port,
+          http_port: formData.http_port,
+          path: formData.path,
+          tool_poll_interval_seconds: formData.tool_poll_interval_seconds,
+          control_version: formData.control_version === 'AUTO' ? null : formData.control_version,
+        });
+      }
       const response = await fetch(`${API_BASE}/machines/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -119,6 +172,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
         setFormData({
           name: '',
           ip_address: '',
+          controller_type: 'brother',
           ftp_username: 'anonymous',
           ftp_password: 'anonymous',
           ftp_port: 21,
@@ -140,6 +194,10 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
           validate_tool_length: true,
           units: 'in',
           control_version: 'AUTO',
+          opcua_port: 4840,
+          opcua_username: '',
+          opcua_password: '',
+          opcua_channel: '0',
         });
         // Notify parent that machine was added
         if (onAdd) {
@@ -174,6 +232,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
     setFormData({
       name: '',
       ip_address: '',
+      controller_type: 'brother',
       ftp_username: 'anonymous',
       ftp_password: 'anonymous',
       ftp_port: 21,
@@ -195,6 +254,10 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
       validate_tool_length: true,
       units: 'in',
       control_version: 'AUTO',
+      opcua_port: 4840,
+      opcua_username: '',
+      opcua_password: '',
+      opcua_channel: '0',
     });
     setError(null);
     if (onCancelProp) {
@@ -290,6 +353,24 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
 
           {/* Basic Settings */}
           <div className="form-row-inline">
+            <div style={{ flex: '0 0 auto', minWidth: '220px' }}>
+              <label>CONTROLLER:</label>
+              <Select
+                value={formData.controller_type}
+                onChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    controller_type: value as ControllerType,
+                    model: defaultModelForController(value as ControllerType),
+                  })
+                }
+                disabled={isSaving}
+                options={[
+                  { value: 'brother', label: 'Brother CNC' },
+                  { value: 'heidenhain', label: 'Heidenhain TNC (OPC UA)' },
+                ]}
+              />
+            </div>
             <div style={{ flex: '0 0 auto', minWidth: '200px' }}>
               <label>UNITS:</label>
               <Select
@@ -302,24 +383,26 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
                 ]}
               />
             </div>
-            <div style={{ flex: '0 0 auto', minWidth: '220px' }}>
-              <label>CONTROL TYPE:</label>
-              <Select
-                value={formData.control_version || 'AUTO'}
-                onChange={(value) =>
-                  setFormData({
-                    ...formData,
-                    control_version: value as 'AUTO' | 'C00' | 'D00',
-                  })
-                }
-                disabled={isSaving}
-                options={[
-                  ...(isBetaMode ? [{ value: 'AUTO', label: 'AUTO DETECT (beta)' }] : []),
-                  { value: 'C00', label: 'C00' },
-                  { value: 'D00', label: 'D00' },
-                ]}
-              />
-            </div>
+            {!isHeidenhain && (
+              <div style={{ flex: '0 0 auto', minWidth: '220px' }}>
+                <label>CONTROL TYPE:</label>
+                <Select
+                  value={formData.control_version || 'AUTO'}
+                  onChange={(value) =>
+                    setFormData({
+                      ...formData,
+                      control_version: value as 'AUTO' | 'C00' | 'D00',
+                    })
+                  }
+                  disabled={isSaving}
+                  options={[
+                    ...(isBetaMode ? [{ value: 'AUTO', label: 'AUTO DETECT (beta)' }] : []),
+                    { value: 'C00', label: 'C00' },
+                    { value: 'D00', label: 'D00' },
+                  ]}
+                />
+              </div>
+            )}
           </div>
 
           <div className="form-row">
@@ -333,6 +416,53 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
             />
           </div>
 
+          {isHeidenhain ? (
+            <>
+              <div className="form-row-inline">
+                <div>
+                  <label>OPC UA PORT:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="65535"
+                    value={formData.opcua_port ?? 4840}
+                    onChange={(e) =>
+                      setFormData({ ...formData, opcua_port: parseInt(e.target.value, 10) })
+                    }
+                    disabled={isSaving}
+                  />
+                </div>
+                <div>
+                  <label>CHANNEL:</label>
+                  <input
+                    type="text"
+                    value={formData.opcua_channel ?? '0'}
+                    onChange={(e) => setFormData({ ...formData, opcua_channel: e.target.value })}
+                    disabled={isSaving}
+                  />
+                </div>
+              </div>
+              <div className="form-row">
+                <label>OPC UA USER:</label>
+                <input
+                  type="text"
+                  value={formData.opcua_username ?? ''}
+                  onChange={(e) => setFormData({ ...formData, opcua_username: e.target.value })}
+                  disabled={isSaving}
+                />
+              </div>
+              <div className="form-row">
+                <label>OPC UA PASS:</label>
+                <input
+                  type="password"
+                  value={formData.opcua_password ?? ''}
+                  onChange={(e) => setFormData({ ...formData, opcua_password: e.target.value })}
+                  disabled={isSaving}
+                />
+              </div>
+            </>
+          ) : (
+            <>
           <div className="form-row">
             <label>FTP USER:</label>
             <input
@@ -390,6 +520,8 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
               />
             </div>
           </div>
+            </>
+          )}
 
           <div className="form-row-inline">
             <div>
@@ -403,6 +535,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
                 disabled={isSaving}
               />
             </div>
+            {!isHeidenhain && (
             <div>
               <label>TOOL POLL INTERVAL (s):</label>
               <input
@@ -414,6 +547,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
                 disabled={isSaving}
               />
             </div>
+            )}
           </div>
 
         </div>

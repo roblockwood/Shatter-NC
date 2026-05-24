@@ -87,6 +87,15 @@ def test_machine_poller_has_poll_tool_data_method():
     assert inspect.iscoroutinefunction(MachinePoller.poll_tool_data)
 
 
+def test_machine_poller_has_refresh_machine():
+    assert hasattr(MachinePoller, "refresh_machine")
+
+
+def test_machine_poller_has_close_adapter():
+    assert hasattr(MachinePoller, "close_adapter")
+    assert inspect.iscoroutinefunction(MachinePoller.close_adapter)
+
+
 def test_machine_poller_has_fetch_program_name_method():
     """MachinePoller must have an async fetch_program_name() method."""
     assert hasattr(MachinePoller, "fetch_program_name")

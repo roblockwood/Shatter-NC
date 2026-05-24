@@ -40,7 +40,11 @@ class Machine(Base):
 
     # Measurement units
     units = Column(String(2), default='in')  # 'in' for inches, 'mm' for millimeters
-    # Control platform version
+    # Controller family and per-vendor connection settings
+    controller_type = Column(String(32), nullable=False, default="brother")
+    controller_config = Column(JSON, nullable=True)
+
+    # Control platform version (Brother only)
     control_version = Column(String(3), nullable=True)  # 'C00', 'D00', or NULL for auto-detect
 
     # UI layout configuration (JSON)

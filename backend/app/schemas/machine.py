@@ -1,7 +1,9 @@
 """Pydantic schemas for Machine API endpoints."""
-from pydantic import BaseModel, Field, IPvAnyAddress
+from pydantic import BaseModel, Field, computed_field, model_validator
 from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
+
+from app.controllers.base import capabilities_as_list
 
 
 class MachineBase(BaseModel):
@@ -32,6 +34,14 @@ class MachineBase(BaseModel):
     validate_tool_length: bool = Field(default=True, description="Whether to validate tool length")
     # Measurement units
     units: str = Field(default='in', description="Measurement units: 'in' for inches, 'mm' for millimeters")
+    controller_type: Literal['brother', 'heidenhain'] = Field(
+        default='brother',
+        description="CNC controller family",
+    )
+    controller_config: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Controller-specific connection settings (e.g. OPC UA port/credentials)",
+    )
     control_version: Optional[Literal['C00', 'D00']] = Field(default=None, description="Control version override. Set to C00 or D00 to disable auto-detection")
     layout_config: Optional[Dict[str, Any]] = Field(default=None, description="Custom pane layout configuration")
     part_display_mode: str = Field(default="parts", description="Compact machine card count label: 'parts' or 'cycle'")
@@ -72,6 +82,8 @@ class MachineUpdate(BaseModel):
     validate_tool_length: Optional[bool] = Field(None, description="Whether to validate tool length")
     # Measurement units
     units: Optional[str] = Field(None, description="Measurement units: 'in' for inches, 'mm' for millimeters")
+    controller_type: Optional[Literal['brother', 'heidenhain']] = Field(None, description="CNC controller family")
+    controller_config: Optional[Dict[str, Any]] = Field(None, description="Controller-specific connection settings")
     control_version: Optional[Literal['C00', 'D00']] = Field(None, description="Control version override. Set to C00 or D00 to disable auto-detection")
     layout_config: Optional[Dict[str, Any]] = Field(None, description="Custom pane layout configuration")
     part_display_mode: Optional[str] = Field(None, description="Compact machine card count label: 'parts' or 'cycle'")
@@ -85,6 +97,19 @@ class MachineResponse(MachineBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     last_seen_at: Optional[datetime] = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def capabilities(self) -> List[str]:
+        return capabilities_as_list(self.controller_type)
+
+    @model_validator(mode='after')
+    def strip_secrets(self) -> "MachineResponse":
+        if self.controller_config and "opcua_password" in self.controller_config:
+            self.controller_config = {
+                k: v for k, v in self.controller_config.items() if k != "opcua_password"
+            }
+        return self
 
     class Config:
         from_attributes = True

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from app.db.base import get_db
 from app.models.machine import Machine
+from app.controllers.base import CONTROLLER_TYPE_BROTHER
 from app.clients.http_client import CNCHttpClient
 from app.utils.time_utils import format_cnc_time
 import logging
@@ -19,6 +20,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _require_brother_controller(db_machine: Machine) -> None:
+    controller_type = getattr(db_machine, "controller_type", CONTROLLER_TYPE_BROTHER)
+    if controller_type != CONTROLLER_TYPE_BROTHER:
+        raise HTTPException(
+            status_code=http_status.HTTP_501_NOT_IMPLEMENTED,
+            detail=f"Endpoint not supported for controller type '{controller_type}'",
+        )
 
 
 @router.get("/{machine_id}/status")
@@ -42,6 +52,8 @@ async def get_machine_status(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Machine with id {machine_id} not found",
         )
+
+    _require_brother_controller(db_machine)
 
     telnet_client = None
     try:
@@ -176,6 +188,8 @@ async def get_running_log(machine_id: int, db: Session = Depends(get_db)):
             detail=f"Machine with id {machine_id} not found",
         )
 
+    _require_brother_controller(db_machine)
+
     telnet_client = None
     try:
         from app.clients.telnet_client import create_fresh_connection
@@ -231,6 +245,8 @@ async def get_work_counters(machine_id: int, db: Session = Depends(get_db)):
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Machine with id {machine_id} not found",
         )
+
+    _require_brother_controller(db_machine)
 
     telnet_client = None
     try:
@@ -292,6 +308,8 @@ async def get_alarms(machine_id: int, db: Session = Depends(get_db)):
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Machine with id {machine_id} not found",
         )
+
+    _require_brother_controller(db_machine)
 
     telnet_client = None
     try:
@@ -361,6 +379,8 @@ async def get_tools(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Machine with id {machine_id} not found",
         )
+
+    _require_brother_controller(db_machine)
 
     telnet_client = None
     try:

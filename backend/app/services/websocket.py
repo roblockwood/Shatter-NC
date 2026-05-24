@@ -23,6 +23,7 @@ from fastapi.encoders import jsonable_encoder
 from datetime import datetime
 from app.db.base import SessionLocal
 from app.models.machine import Machine
+from app.controllers.base import CONTROLLER_TYPE_BROTHER, capabilities_as_list
 from app.models.compressor import Compressor
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,7 @@ class WebSocketManager:
                 machines_data = []
 
                 for machine in all_machines:
+                    controller_type = getattr(machine, "controller_type", CONTROLLER_TYPE_BROTHER)
                     # Start with database info
                     machine_info = {
                         "machine_id": machine.id,
@@ -73,6 +75,8 @@ class WebSocketManager:
                         "ip_address": machine.ip_address,
                         "enabled": machine.enabled,
                         "part_display_mode": getattr(machine, "part_display_mode", "parts"),
+                        "controller_type": controller_type,
+                        "capabilities": capabilities_as_list(controller_type),
                         "poll_timestamp": datetime.utcnow().isoformat(),
                         "is_online": False,  # Default to offline
                         "program_name": None,  # Default program name

@@ -17,7 +17,7 @@ import { fastPollLastSuccessAt } from '../../utils/machinePollFreshness';
 import {
   isTabletPaneSlug,
   TABLET_DEFAULT_PANE,
-  TABLET_NAV_ITEMS,
+  getTabletNavItemsForMachine,
   type TabletPaneSlug,
 } from './tabletPaneConfig';
 import { writeStoredTabletMachineId } from './tabletMachineStorage';
@@ -154,8 +154,14 @@ function TabletMachineShellLoaded({
 }) {
   const [screensaver, setScreensaver] = useState(false);
   const screensaverIdleMs = useTabletScreensaverIdleMs();
-  const swipeNav = useTabletPaneSwipe(machine.machine_id, slug);
+  const navItems = getTabletNavItemsForMachine(machine);
+  const swipeNav = useTabletPaneSwipe(machine.machine_id, slug, navItems);
   const base = `/tablet/${machine.machine_id}`;
+
+  const paneAllowed = navItems.some((item) => item.slug === slug);
+  if (!paneAllowed) {
+    return <Navigate to={`${base}/${TABLET_DEFAULT_PANE}`} replace />;
+  }
 
   return (
     <>
@@ -194,7 +200,7 @@ function TabletMachineShellLoaded({
       </div>
 
       <nav className="tablet-bottom-nav" aria-label="Machine detail panes">
-        {TABLET_NAV_ITEMS.map(({ slug: navSlug, label }) => (
+        {navItems.map(({ slug: navSlug, label }) => (
           <NavLink
             key={navSlug}
             to={`${base}/${navSlug}`}

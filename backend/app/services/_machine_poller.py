@@ -1,6 +1,9 @@
 """Single-machine poller extracted from polling.py."""
 import asyncio
 from app.clients.telnet_client import create_fresh_connection, CNCTelnetClient
+from app.controllers.base import CAP_TOOLS, CONTROLLER_TYPE_BROTHER, capabilities_as_list
+from app.controllers.brother_adapter import BrotherAdapter, strip_internal_poll_keys
+from app.controllers.registry import get_adapter_for_machine
 from app.parsers.prd3_parser_v2 import parse_prd3_v2
 from app.parsers.alarm_parser_v2 import parse_alarm_v2
 from app.parsers.tolni_parser_v2 import parse_tolni_v2
@@ -74,6 +77,28 @@ class MachinePoller:
         self.last_tool_table_log_time: Optional[datetime] = None
         self.last_panel_log_time: Optional[datetime] = None
         self.last_counter_log_time: Optional[datetime] = None
+
+        self._adapter = get_adapter_for_machine(machine)
+
+    def refresh_machine(self, machine: Machine) -> None:
+        """Update machine reference and recreate adapter when connection identity changes."""
+        old_type = getattr(self.machine, "controller_type", CONTROLLER_TYPE_BROTHER)
+        old_ip = self.machine.ip_address
+        old_config = getattr(self.machine, "controller_config", None)
+        self.machine = machine
+        new_type = getattr(machine, "controller_type", CONTROLLER_TYPE_BROTHER)
+        new_config = getattr(machine, "controller_config", None)
+        if old_type != new_type or old_ip != machine.ip_address or old_config != new_config:
+            asyncio.create_task(self._adapter.close())
+            self._adapter = get_adapter_for_machine(
+                machine, last_known_prd3_status=self.last_known_prd3_status
+            )
+        elif isinstance(self._adapter, BrotherAdapter):
+            self._adapter.machine = machine
+            self._adapter._last_known_prd3_status = self.last_known_prd3_status
+
+    async def close_adapter(self) -> None:
+        await self._adapter.close()
 
     def seed_last_status_from_db(self) -> None:
         """Populate last_status from the most recent status event in the DB.
@@ -313,191 +338,24 @@ class MachinePoller:
             )
 
     async def poll_tool_data(self) -> Dict[str, Any]:
-        """
-        Poll tool table and ATC magazine data (slow polling operation).
-        
-        Returns:
-            Dictionary containing tool data:
-            - tools: List of merged ATC tools
-            - tool_table: List of tool table entries
-            - current_tool: Current tool in spindle
-            - tools_timestamp: ISO timestamp of when data was fetched
-            - tool_table_timestamp: ISO timestamp of when data was fetched
-        """
-        # Skip tool poll while the machine is actively running a program.
-        # TOLNI1 can take 10-30 s to transfer; holding the machine lock that long blocks
-        # the fast poll and can stress the controller's TC slave during cutting.
-        # Tool offsets and ATC configuration don't change mid-cycle, so skipping here
-        # is safe — the cached data remains valid until the next standby window.
-        if self.last_known_prd3_status == "operating":
-            logger.debug(
-                f"[TOOL_POLL] Machine {self.machine.id} ({self.machine.name}) - "
-                "skipping tool poll: machine is operating"
-            )
+        """Poll tool table and ATC magazine data (Brother only, slow polling)."""
+        if CAP_TOOLS not in self._adapter.capabilities():
             return {}
 
-        poll_start_time = time.time()
-        poll_timestamp = datetime.utcnow()
-        tool_data = {}
-        step_times = {}
-        
-        telnet_client = None
-        try:
-            logger.debug(f"[TOOL_POLL] Machine {self.machine.id} ({self.machine.name}) - Starting tool data poll")
+        if isinstance(self._adapter, BrotherAdapter):
+            self._adapter._last_known_prd3_status = self.last_known_prd3_status
 
+        tool_data = await self._adapter.poll_slow(
+            skip_if_operating=self.last_known_prd3_status == "operating"
+        )
+        if not tool_data:
+            return {}
 
-            # Create an unconnected client (lazy-connect inside machine lock; see poll() for rationale).
-            step_start = time.time()
-            telnet_client = CNCTelnetClient(
-                ip_address=self.machine.ip_address,
-                port=10000,
-                timeout=10,
-            )
-            step_times['get_connection'] = time.time() - step_start
-            
-            # Get tool table data first (needed for both ATC merge and TABLE display)
-            step_start = time.time()
-            tool_table_content = await telnet_client.get_tool_table_data(units=self.machine.units, verbose=False)
-            step_times['get_tool_table'] = time.time() - step_start
-            
-            if tool_table_content:
-                step_start = time.time()
-                tool_table_parsed = parse_tolni_v2(
-                    tool_table_content.encode('utf-8'),
-                    units=self.machine.units,
-                    control_version=self.machine.control_version
-                )
-                step_times['parse_tool_table'] = time.time() - step_start
-                
-                # Get ATC magazine data (pot/tool mappings) for merging
-                step_start = time.time()
-                atc_data = await telnet_client.get_atc_magazine_data(control_version=self.machine.control_version, verbose=False)
-                step_times['get_atc'] = time.time() - step_start
-                
-                # Start with pure TOLN (table) data
-                tool_table_tools = tool_table_parsed.get("tools", [])
-                
-                if atc_data:
-                    step_start = time.time()
-                    atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=self.machine.control_version)
-                    step_times['parse_atc'] = time.time() - step_start
-                    
-                    step_start = time.time()
-                    # Create reverse lookup: tool_number -> ATCTL data (for TABLE view)
-                    # This includes: pot_number, group, tool_type, color
-                    atc_lookup = {}
-                    current_tool = None
-                    
-                    for atc_tool in atc_parsed.get("tools", []):
-                        tool_num = atc_tool.get("tool_number")
-                        pot_number = atc_tool.get("pot_number")
-                        
-                        # Extract current_tool from spindle
-                        if pot_number and (str(pot_number).upper() == "SPINDLE" or pot_number == 0):
-                            if tool_num and tool_num > 0 and tool_num != 255:
-                                current_tool = tool_num
-                        
-                        # Build lookup for ATCTL data (skip spindle and invalid tools)
-                        if tool_num and tool_num > 0 and tool_num != 255:
-                            if pot_number and str(pot_number).upper() != "SPINDLE":
-                                atc_lookup[tool_num] = {
-                                    "pot_number": pot_number,
-                                    "group": atc_tool.get("group"),
-                                    "tool_type": atc_tool.get("tool_type"),
-                                    "color": atc_tool.get("color"),
-                                }
-                    
-                    if current_tool:
-                        tool_data["current_tool"] = current_tool
-                    
-                    # Merge ATCTL data into TABLE tools (reverse merge: TOLN -> ATCTL)
-                    # This adds: pot_number, group, tool_type, color
-                    for tool in tool_table_tools:
-                        tool_num = tool.get("tool_number")
-                        if tool_num and tool_num in atc_lookup:
-                            atc_info = atc_lookup[tool_num]
-                            tool["pot_number"] = atc_info["pot_number"]
-                            if atc_info.get("group") is not None:
-                                tool["group"] = atc_info["group"]
-                            if atc_info.get("tool_type") is not None:
-                                tool["tool_type"] = atc_info["tool_type"]
-                            if atc_info.get("color") is not None:
-                                tool["color"] = atc_info["color"]
-                    
-                    # Merge ATC positions with tool details (forward merge: ATCTL -> TOLN)
-                    tools = []
-                    tool_lookup = {}
-                    
-                    # Create lookup by tool number from TOLN data
-                    for tool in tool_table_tools:
-                        tool_num = tool.get("tool_number")
-                        if tool_num:
-                            tool_lookup[tool_num] = tool
-                    
-                    # Merge ATC tools with tool details from TOLN
-                    # Match by tool_number to correlate pot position with tool data
-                    # Only include tools that have valid TOLN data
-                    for atc_tool in atc_parsed.get("tools", []):
-                        tool_num = atc_tool.get("tool_number")
-                        pot_number = atc_tool.get("pot_number")
-                        
-                        if tool_num and tool_num > 0 and tool_num != 255:  # Skip "not set" and "cap setting"
-                            if tool_num in tool_lookup:
-                                tol_tool = tool_lookup[tool_num]
-                                merged_tool = {
-                                    "pot_number": pot_number,
-                                    "tool_number": tool_num,
-                                    "tool_name": tol_tool.get("tool_name"),
-                                    "diameter": tol_tool.get("diameter"),
-                                    "length": tol_tool.get("length"),
-                                    "group": atc_tool.get("group"),
-                                    "life": None,  # Not in ATCTL
-                                    "tool_type": atc_tool.get("tool_type"),
-                                    "color": atc_tool.get("color"),
-                                }
-                                tools.append(merged_tool)
-                    
-                    tool_data["tools"] = tools
-                    tool_data["tools_timestamp"] = poll_timestamp.isoformat()
-                    step_times['merge_tools'] = time.time() - step_start
-                    logger.debug(f"Machine {self.machine.id} - Fetched {len(tools)} ATC tools and {len(tool_table_tools)} table tools via Telnet (slow poll)")
-                else:
-                    logger.warning(f"Machine {self.machine.id} - No ATC data available via Telnet")
-                    # ATC magazine file absent (status 07) — leave tools empty so the
-                    # frontend can show a proper "ATC unavailable" message rather than
-                    # displaying tool table data in the ATC pot view.
-                    tool_data["tools"] = []
-                    tool_data["tools_timestamp"] = poll_timestamp.isoformat()
-                
-                # Store TABLE data with pot numbers merged (if ATC data was available)
-                tool_data["tool_table"] = tool_table_tools
-                tool_data["tool_table_timestamp"] = poll_timestamp.isoformat()
-                
-                # Update websocket manager cache with tool data so fast poll can use it
-                step_start = time.time()
-                if self.websocket_manager:
-                    current = self.websocket_manager.get_machine_status(self.machine.id) or {}
-                    merged = {**current, **tool_data, "machine_id": self.machine.id}
-                    merged["is_online"] = self.display_online()
-                    await self.websocket_manager.broadcast_status(merged)
-                step_times['update_cache'] = time.time() - step_start
-                
-                # Log timing summary
-                total_time = time.time() - poll_start_time
-                total_time_ms = int(total_time * 1000)
-                tool_data["tool_response_time_ms"] = total_time_ms
-                step_summary = ", ".join([f"{step}: {time_ms * 1000:.1f}ms" for step, time_ms in 
-                                         sorted(step_times.items(), key=lambda x: x[1], reverse=True) 
-                                         if time_ms > 0.001])  # Only show steps > 1ms
-                logger.debug(f"[TOOL_POLL] Machine {self.machine.id} ({self.machine.name}) - Tool poll completed in {total_time_ms}ms | Steps: {step_summary}")
-            else:
-                logger.warning(f"Machine {self.machine.id} - No tool table data available via Telnet")
-        except Exception as e:
-            logger.warning(f"Machine {self.machine.id} - Failed to fetch tool data via Telnet: {e}")
-            # Return empty dict on failure
-        finally:
-            if telnet_client:
-                await telnet_client.disconnect()
+        if self.websocket_manager:
+            current = self.websocket_manager.get_machine_status(self.machine.id) or {}
+            merged = {**current, **tool_data, "machine_id": self.machine.id}
+            merged["is_online"] = self.display_online()
+            await self.websocket_manager.broadcast_status(merged)
 
         return tool_data
 
@@ -505,290 +363,87 @@ class MachinePoller:
         """Poll machine status and return data."""
         poll_start_time = time.time()
         poll_timestamp = datetime.utcnow()
-        step_times = {}
 
-        telnet_client = None
+        if isinstance(self._adapter, BrotherAdapter):
+            self._adapter._last_known_prd3_status = self.last_known_prd3_status
+
         try:
-            logger.debug(f"[POLL] Machine {self.machine.id} ({self.machine.name}) - Starting fast poll")
-
-            # Phase 5: Migrate to Telnet for MONTR and PRD3 data (replaces HTTP get_status_overview)
-
-            # Create an unconnected client (lazy-connect inside machine lock; see fetch_program_name for rationale).
-            step_start = time.time()
-            telnet_client = CNCTelnetClient(
-                ip_address=self.machine.ip_address,
-                port=10000,
-                timeout=10,
+            logger.debug(
+                f"[POLL] Machine {self.machine.id} ({self.machine.name}) - Starting fast poll"
             )
-            step_times['get_connection'] = time.time() - step_start
-            
-            control_version = self.machine.control_version
 
-            # Get MONTR data (replaces HTTP /running_log and /work_counter)
-            step_start = time.time()
-            montr_data = await telnet_client.get_monitor_data(verbose=False)
-            step_times['get_montr'] = time.time() - step_start
-            if not montr_data:
-                raise ConnectionError("Failed to fetch MONTR data - machine may be unreachable")
-            
-            step_start = time.time()
-            parsed = parse_montr_v2(montr_data.encode('utf-8'), control_version=control_version)
-            step_times['parse_montr'] = time.time() - step_start
-            
-            # Get PRD3 data (contains current status and status history)
-            step_start = time.time()
-            prd3_data = await telnet_client.get_prd3_data(control_version=control_version, verbose=False)
-            step_times['get_prd3'] = time.time() - step_start
-            prd3_parsed = None
-            if prd3_data:
-                step_start = time.time()
-                prd3_parsed = parse_prd3_v2(prd3_data.encode('utf-8'), control_version=control_version)
-                step_times['parse_prd3'] = time.time() - step_start
-                # Ingest PRD3 history asynchronously (non-blocking)
+            ws_status = (
+                self.websocket_manager.get_machine_status(self.machine.id)
+                if self.websocket_manager
+                else {}
+            )
+            ws_tool_cache = ws_status if CAP_TOOLS in self._adapter.capabilities() else None
+
+            raw_status = await self._adapter.poll_fast(ws_tool_cache=ws_tool_cache)
+
+            prd3_parsed = raw_status.pop("_prd3_parsed", None)
+            last_prd3 = raw_status.pop("_last_known_prd3_status", None)
+            if last_prd3 is not None:
+                self.last_known_prd3_status = last_prd3
+            elif raw_status.get("status"):
+                self.last_known_prd3_status = raw_status.get("status")
+
+            status_data = strip_internal_poll_keys(raw_status)
+
+            controller_type = getattr(self.machine, "controller_type", CONTROLLER_TYPE_BROTHER)
+            if prd3_parsed and controller_type == CONTROLLER_TYPE_BROTHER:
                 try:
                     asyncio.create_task(self._log_prd3_history(prd3_parsed))
                 except Exception as e:
-                    logger.warning(f"Machine {self.machine.id} - Failed to schedule PRD3 history logging: {e}")
-            
-            # Get MEM data to check mode and operation_status (needed for frontend validation)
-            mem_parsed = None
-            try:
-                step_start = time.time()
-                mem_data = await telnet_client.get_memory_data(verbose=False)
-                step_times['get_mem'] = time.time() - step_start
-                if mem_data:
-                    step_start = time.time()
-                    mem_parsed = parse_mem_v2(mem_data.encode('utf-8'), control_version=control_version)
-                    step_times['parse_mem'] = time.time() - step_start
-            except Exception as e:
-                logger.warning(f"Machine {self.machine.id} - Failed to fetch MEM data: {e}")
-                # Continue without MEM data - frontend will handle gracefully
-            
-            # Format response to match HTTP client format
-            program_info = parsed.get("program_info", {})
-            time_info = parsed.get("time_info", {})
-            counters = parsed.get("counters", [])
-            
-            # Get status from PRD3 (more accurate than inferring from program presence)
-            # PRD3 status codes: 1=off, 2=standby, 3=operating, 4=stopped, 5=error
-            if prd3_parsed and prd3_parsed.get("current_status"):
-                current_status_data = prd3_parsed["current_status"]
-                status_code = current_status_data.get("current_status")  # Raw integer code (1-5)
-                machine_status = current_status_data.get("status")  # Mapped string
-                
-                logger.debug(f"Machine {self.machine.id} - PRD3 status_code={status_code}, mapped_status={machine_status}")
-                
-                # If status is "off" (code 1), but machine is responding to Telnet, it's likely in standby
-                # A truly powered-off machine wouldn't respond to Telnet requests
-                if machine_status == "off":
-                    # Check if machine is actually active (has power-on time, program info, etc.)
-                    has_power_on_time = time_info.get("power_on_time", "000000000") != "000000000"
-                    has_program = bool(program_info.get("operation_program_no"))
-                    
-                    if has_power_on_time or has_program:
-                        logger.info(f"Machine {self.machine.id} - PRD3 reports 'off' but machine appears active (power_on_time={has_power_on_time}, program={has_program}), using 'standby'")
-                        machine_status = "standby"
-                
-                # Update last known PRD3 status (used when PRD3 is missing on a later poll); do not set last_status here
-                self.last_known_prd3_status = machine_status
-            else:
-                # PRD3 data not available - use last known PRD3 status instead of defaulting to "operating"
-                if self.last_known_prd3_status:
-                    machine_status = self.last_known_prd3_status
-                    logger.warning(f"Machine {self.machine.id} - PRD3 data not available, using last known status: {machine_status}")
-                else:
-                    # No last status available - default to standby (safer than "operating")
-                    machine_status = "standby"
-                    logger.warning(f"Machine {self.machine.id} - PRD3 data not available and no last status, defaulting to: {machine_status}")
-            
-            # Format time strings (MONTR format: HHMMSSMMM, HTTP format: HHMM:SS.MMM)
+                    logger.warning(
+                        f"Machine {self.machine.id} - Failed to schedule PRD3 history logging: {e}"
+                    )
 
-            # is_online for clients is set after last_successful_fast_poll_at (debounced display_online)
-            
-            # Prefer MONTR's operation_program_no (actively running program).
-            # When MONTR has no active program (machine idle/standby), fall back
-            # to MEM's program_name (currently selected program in memory mode).
-            _montr_program = program_info.get("operation_program_no")
-            _mem_program = mem_parsed.get("program_name") if mem_parsed else None
-            _resolved_program_name = _montr_program or _mem_program or "----"
+            response_time_ms = status_data.get("response_time_ms")
+            if response_time_ms is None:
+                response_time_ms = int((time.time() - poll_start_time) * 1000)
+                status_data["response_time_ms"] = response_time_ms
 
-            status_data = {
-                "ip_address": self.machine.ip_address,
-                "timestamp": datetime.now().isoformat(),
-                "units": self.machine.units,
-                "program_name": _resolved_program_name,
-                "cycle_time": format_cnc_time(time_info.get("total_operation_time", "000000000")),
-                "cutting_time": format_cnc_time(time_info.get("operation_time", "000000000")),
-                "non_cutting_time": "000000:00.0",  # Not in MONTR
-                "power_on_hours": format_cnc_time(time_info.get("power_on_time", "000000000")),
-                "operation_time": format_cnc_time(time_info.get("operation_time", "000000000")),
-                "status": machine_status,  # From PRD3: off, standby, operating, stopped, error
-                "counters": [
-                    {
-                        "counter_number": c.get("counter_number", i + 1),
-                        "count": c.get("count", 0),
-                        "current": c.get("current", 0),
-                        "end": c.get("end", 0),
-                        "end_warning": c.get("end_warning", 0),
-                    }
-                    for i, c in enumerate(counters)
-                ],
-            }
-            
-            # Get alarms from Telnet (Phase 5: Migrate to Telnet)
-            try:
-                step_start = time.time()
-                
-                alarm_data_raw = await telnet_client.get_alarm_data(verbose=False)
-                step_times['get_alarms'] = time.time() - step_start
-                if alarm_data_raw:
-                    step_start = time.time()
-                    alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=control_version)
-                    # Convert to format expected by frontend (combine alarms and loading_alarms)
-                    all_alarms = alarm_parsed.get("alarms", []) + alarm_parsed.get("loading_alarms", [])
-                    # Enrich with lookup data (description, cause, solution, stop_level, reset_level)
-                    enriched_alarms = [enrich_alarm_with_lookup(alarm, control_version) for alarm in all_alarms]
-                    step_times['parse_enrich_alarms'] = time.time() - step_start
-                    status_data["alarms"] = enriched_alarms
-                else:
-                    status_data["alarms"] = []
-            except Exception as e:
-                logger.warning(f"Machine {self.machine.id} - Failed to fetch alarms: {e}")
-                status_data["alarms"] = []
-            
-            # Get panel data from Telnet
-            try:
-                step_start = time.time()
-                
-                panel_data_raw = await telnet_client.get_panel_data(verbose=False)
-                step_times['get_panel'] = time.time() - step_start
-                if panel_data_raw:
-                    step_start = time.time()
-                    panel_parsed = parse_panel_v2(panel_data_raw.encode('utf-8'), control_version=control_version)
-                    step_times['parse_panel'] = time.time() - step_start
-                    status_data["panel"] = panel_parsed
-                else:
-                    status_data["panel"] = None
-            except Exception as e:
-                logger.warning(f"Machine {self.machine.id} - Failed to fetch panel data: {e}")
-                status_data["panel"] = None
-            
-            # Get macro variables from Telnet (macros #500-999)
-            try:
-                step_start = time.time()
-                macro_values = await telnet_client.get_macro_variable_range(500, 500, verbose=False)
-                step_times['get_macros'] = time.time() - step_start
-                if macro_values:
-                    # Convert list to dictionary mapping macro number to value
-                    macros_dict = {}
-                    for i, value in enumerate(macro_values):
-                        macro_num = 500 + i
-                        macros_dict[str(macro_num)] = value
+            status_data.update(
+                {
+                    "machine_id": self.machine.id,
+                    "machine_name": self.machine.name,
+                    "poll_timestamp": poll_timestamp.isoformat(),
+                    "part_display_mode": getattr(self.machine, "part_display_mode", "parts"),
+                    "controller_type": controller_type,
+                    "capabilities": capabilities_as_list(controller_type),
+                }
+            )
 
-                    status_data["macros"] = macros_dict
-                    status_data["macros_timestamp"] = poll_timestamp.isoformat()
-                    logger.debug(f"Machine {self.machine.id} - Fetched {len(macro_values)} macro variables (#500-999) via Telnet")
-                else:
-                    status_data["macros"] = {}
-                    status_data["macros_timestamp"] = None
-            except Exception as e:
-                logger.warning(f"Machine {self.machine.id} - Failed to fetch macro variables: {e}")
-                status_data["macros"] = {}
-                status_data["macros_timestamp"] = None
-            
-            # Override status to 'error' only for machine-halting alarms (stop_level >= 4).
-            # stop_level 1-3 are informational/soft (e.g., CM7522 = stop_level 1, machine keeps running).
-            # stop_level 4-5 are feed-hold/E-stop events that actually halt the machine.
-            # Also: never override 'operating' — if PRD3 reports code 3, the machine IS running.
-            def _is_halting_alarm(alarm: Dict[str, Any]) -> bool:
-                try:
-                    return int(alarm.get("stop_level") or 0) >= 4
-                except (ValueError, TypeError):
-                    return False
-
-            halting_alarms = [a for a in status_data.get("alarms", []) if _is_halting_alarm(a)]
-            if halting_alarms and machine_status not in ("off", "operating"):
-                machine_status = "error"
-                status_data["status"] = "error"
-            
-            # Add MEM mode and operation_status for frontend validation
-            if mem_parsed:
-                mode = mem_parsed.get("mode")
-                operation_status = mem_parsed.get("operation_status")
-                if mode is not None:
-                    status_data["mem_mode"] = mode
-                if operation_status is not None:
-                    status_data["mem_operation_status"] = operation_status
-
-            # Load tool data from websocket manager cache (fetched by slow polling or immediate refresh)
-            step_start = time.time()
-            ws_status = self.websocket_manager.get_machine_status(self.machine.id) if self.websocket_manager else {}
-            step_times['load_tool_cache'] = time.time() - step_start
-            if ws_status:
-                if "tools" in ws_status:
-                    status_data["tools"] = ws_status["tools"]
-                if "tool_table" in ws_status:
-                    status_data["tool_table"] = ws_status["tool_table"]
-                if "current_tool" in ws_status:
-                    status_data["current_tool"] = ws_status["current_tool"]
-                if "tools_timestamp" in ws_status:
-                    status_data["tools_timestamp"] = ws_status["tools_timestamp"]
-                    status_data["tool_data_timestamp"] = ws_status["tools_timestamp"]
-                if "tool_table_timestamp" in ws_status:
-                    status_data["tool_table_timestamp"] = ws_status["tool_table_timestamp"]
-                if "tool_response_time_ms" in ws_status:
-                    status_data["tool_response_time_ms"] = ws_status["tool_response_time_ms"]
-
-            # Program name is already set from MONTR data (operation_program_no)
-            # No need to fetch from MEM separately - MONTR is more reliable
-
-            # Calculate response time
-            total_time = time.time() - poll_start_time
-            response_time_ms = int(total_time * 1000)
-
-            # Log step timing summary
-            step_summary = ", ".join([f"{step}: {time_ms * 1000:.1f}ms" for step, time_ms in 
-                                     sorted(step_times.items(), key=lambda x: x[1], reverse=True) 
-                                     if time_ms > 0.001])  # Only show steps > 1ms
-            logger.debug(f"[POLL] Machine {self.machine.id} ({self.machine.name}) - Fast poll completed in {response_time_ms}ms | Steps: {step_summary}")
-
-            # Add metadata
-            status_data.update({
-                "machine_id": self.machine.id,
-                "machine_name": self.machine.name,
-                "poll_timestamp": poll_timestamp.isoformat(),
-                "response_time_ms": response_time_ms,
-                "part_display_mode": getattr(self.machine, "part_display_mode", "parts"),
-            })
-            
-            # Ensure program_name is explicitly included (even if None)
             if "program_name" not in status_data:
                 status_data["program_name"] = None
 
             was_offline = not self.is_online or self.logged_offline_status
             self.consecutive_failures = 0
             self.last_poll_time = poll_timestamp
-            self.last_fast_poll_time = poll_timestamp  # Track fast poll time for per-machine intervals
+            self.last_fast_poll_time = poll_timestamp
             self.last_successful_fast_poll_at = poll_timestamp
             status_data["last_successful_poll_at"] = self.last_successful_fast_poll_at.isoformat()
             self.is_online = self.display_online()
             status_data["is_online"] = self.is_online
 
-            # Log events to database (non-blocking, in background)
-            # Only log status events if we have a status (machine is online)
             if status_data.get("status"):
-                # If we were previously offline and now recovered, ensure we log the transition back online
                 if was_offline:
                     self.logged_offline_status = False
-                asyncio.create_task(self._log_events_async(status_data, poll_timestamp, response_time_ms, success=True))
+                asyncio.create_task(
+                    self._log_events_async(
+                        status_data, poll_timestamp, response_time_ms, success=True
+                    )
+                )
 
+            logger.debug(
+                f"[POLL] Machine {self.machine.id} ({self.machine.name}) - "
+                f"Fast poll completed in {response_time_ms}ms"
+            )
             return status_data
 
         except Exception as e:
             return self._finalize_poll_failure(e, poll_timestamp, poll_start_time)
-        finally:
-            if telnet_client:
-                await telnet_client.disconnect()
 
     async def _log_prd3_history(self, prd3_parsed: Dict[str, Any]):
         """

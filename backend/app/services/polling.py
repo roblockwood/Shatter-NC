@@ -125,10 +125,8 @@ class PollingService:
                     self.pollers[machine.id] = poller
                     logger.info(f"Added poller for machine {machine.id} ({machine.name})")
                 else:
-                    # Always update machine reference with fresh DB data to catch config changes
-                    # (e.g., IP address updates)
                     old_ip = self.pollers[machine.id].machine.ip_address
-                    self.pollers[machine.id].machine = machine
+                    self.pollers[machine.id].refresh_machine(machine)
                     if old_ip != machine.ip_address:
                         logger.info(f"Updated machine {machine.id} ({machine.name}) IP: {old_ip} -> {machine.ip_address}")
 
@@ -209,7 +207,18 @@ class PollingService:
                 try:
                     machines = db.query(Machine).filter(Machine.enabled == True).all()
                     if machines:
-                        min_interval = min(m.tool_poll_interval_seconds for m in machines)
+                        from app.controllers.base import CONTROLLER_TYPE_BROTHER
+
+                        brother_machines = [
+                            m
+                            for m in machines
+                            if getattr(m, "controller_type", CONTROLLER_TYPE_BROTHER) == CONTROLLER_TYPE_BROTHER
+                        ]
+                        min_interval = (
+                            min(m.tool_poll_interval_seconds for m in brother_machines)
+                            if brother_machines
+                            else 30
+                        )
                     else:
                         min_interval = 30  # Default if no machines
                 finally:
@@ -250,15 +259,18 @@ class PollingService:
                     poller.seed_last_status_from_db()
                     self.pollers[machine.id] = poller
                 else:
-                    # Always update machine reference with fresh DB data to catch config changes
-                    self.pollers[machine.id].machine = machine
+                    self.pollers[machine.id].refresh_machine(machine)
 
             # Poll machines whose tool poll interval has elapsed
             now = datetime.utcnow()
             machines_to_poll = []
+            from app.controllers.base import CAP_TOOLS
+
             for machine in machines:
                 poller = self.pollers.get(machine.id)
                 if not poller:
+                    continue
+                if CAP_TOOLS not in poller._adapter.capabilities():
                     continue
                 
                 # Check if machine's tool poll interval has elapsed
@@ -376,8 +388,21 @@ class PollingService:
             if not machines:
                 logger.debug("No enabled machines to pre-populate control versions for")
                 return
-            
-            logger.info(f"Pre-populating control version cache for {len(machines)} enabled machine(s)...")
+
+            from app.controllers.base import CONTROLLER_TYPE_BROTHER
+
+            brother_machines = [
+                m
+                for m in machines
+                if getattr(m, "controller_type", CONTROLLER_TYPE_BROTHER) == CONTROLLER_TYPE_BROTHER
+            ]
+            if not brother_machines:
+                logger.debug("No Brother machines to pre-populate control versions for")
+                return
+
+            logger.info(
+                f"Pre-populating control version cache for {len(brother_machines)} Brother machine(s)..."
+            )
             
             from app.clients.telnet_client import create_fresh_connection
 
@@ -404,7 +429,7 @@ class PollingService:
             
             # Create tasks with proper closure (use default argument to capture machine)
             tasks = []
-            for machine in machines:
+            for machine in brother_machines:
                 async def detect(m=machine):  # Default argument captures current value
                     await detect_for_machine(m)
                 tasks.append(detect())

@@ -32,6 +32,9 @@ passlib[bcrypt]==1.7.4
 python-dateutil==2.8.2
 pytz==2023.3
 
+# OPC UA (Heidenhain TNC)
+asyncua==1.1.5
+
 # MQTT (optional telemetry publisher)
 aiomqtt==2.3.0
 

@@ -1,3 +1,6 @@
+import type { MachineCapability, ControllerType } from '../../types/machine';
+import { hasCapability } from '../../types/machine';
+
 export const TABLET_PANE_SLUGS = [
   'overview',
   'panel',
@@ -30,6 +33,31 @@ export const TABLET_NAV_ITEMS: { slug: TabletPaneSlug; label: string }[] = [
   { slug: 'history', label: 'HISTORY' },
   { slug: 'files', label: 'FILES' },
 ];
+
+const TABLET_PANE_CAPABILITY: Partial<Record<TabletPaneSlug, MachineCapability>> = {
+  panel: 'panel',
+  status: 'statusTimeline',
+  alarms: 'alarms',
+  program: 'program',
+  tools: 'tools',
+  runs: 'productionRuns',
+  history: 'statusTimeline',
+  files: 'fileManager',
+};
+
+/** Filter bottom nav items by machine controller capabilities. Overview is always shown. */
+export function getTabletNavItemsForMachine(machine: {
+  capabilities?: MachineCapability[];
+  controller_type?: ControllerType;
+}): { slug: TabletPaneSlug; label: string }[] {
+  return TABLET_NAV_ITEMS.filter(({ slug }) => {
+    const cap = TABLET_PANE_CAPABILITY[slug];
+    if (!cap) {
+      return true;
+    }
+    return hasCapability(machine, cap);
+  });
+}
 
 /** Default pane when opening /tablet/:id */
 export const TABLET_DEFAULT_PANE: TabletPaneSlug = 'overview';

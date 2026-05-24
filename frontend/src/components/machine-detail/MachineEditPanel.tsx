@@ -3,6 +3,8 @@ import { SaveConfirmModal } from '../SaveConfirmModal';
 import { Select } from '../ui/Select';
 import { API_BASE_URL } from '../../config/api';
 import type { MachineStatus, ConnectionTestResult } from '../MachineCardTypes';
+import type { ControllerType } from '../../types/machine';
+import { defaultModelForController } from '../../types/machine';
 import { useBetaMode } from '../../hooks/useBetaMode';
 
 interface MachineEditPanelProps {
@@ -16,6 +18,7 @@ interface MachineEditPanelProps {
 }
 
 type EditFormData = {
+  controller_type: ControllerType;
   ip_address: string;
   ftp_username: string;
   ftp_password: string;
@@ -37,10 +40,16 @@ type EditFormData = {
   validate_tool_length: boolean;
   units: string;
   control_version: 'AUTO' | 'C00' | 'D00';
+  opcua_port: number;
+  opcua_username: string;
+  opcua_password: string;
+  opcua_channel: string;
 };
 
 function makeFormDataFromMachine(m: MachineStatus): EditFormData {
+  const cfg = m.controller_config;
   return {
+    controller_type: (m.controller_type ?? 'brother') as ControllerType,
     ip_address: m.ip_address || '',
     ftp_username: m.ftp_username || '',
     ftp_password: m.ftp_password || '',
@@ -62,6 +71,42 @@ function makeFormDataFromMachine(m: MachineStatus): EditFormData {
     validate_tool_length: m.validate_tool_length !== false,
     units: m.units || 'in',
     control_version: (m.control_version ?? 'AUTO') as 'AUTO' | 'C00' | 'D00',
+    opcua_port: cfg?.opcua_port ?? 4840,
+    opcua_username: cfg?.opcua_username ?? '',
+    opcua_password: '',
+    opcua_channel: cfg?.channel ?? '0',
+  };
+}
+
+function makeFormDataFromApi(d: Record<string, unknown>): EditFormData {
+  const cfg = (d.controller_config ?? {}) as Record<string, unknown>;
+  return {
+    controller_type: (d.controller_type ?? 'brother') as ControllerType,
+    ip_address: (d.ip_address as string) || '',
+    ftp_username: (d.ftp_username as string) || '',
+    ftp_password: (d.ftp_password as string) || '',
+    ftp_port: (d.ftp_port as number) || 21,
+    path: d.path !== undefined && d.path !== null ? (d.path as string) : '/',
+    poll_interval_seconds: (d.poll_interval_seconds as number) || 5,
+    tool_poll_interval_seconds: (d.tool_poll_interval_seconds as number) || 30,
+    enabled: d.enabled !== false,
+    part_display_mode: (d.part_display_mode as string) || 'parts',
+    diameter_tolerance: (d.diameter_tolerance as number) || 0.010,
+    length_tolerance_plus: (d.length_tolerance_plus as number) || 0.02,
+    length_tolerance_minus: (d.length_tolerance_minus as number) || 0.0,
+    tolerance_x: (d.tolerance_x as number) || 0.0394,
+    tolerance_y: (d.tolerance_y as number) || 0.0394,
+    tolerance_z: (d.tolerance_z as number) || 0.0394,
+    use_machine_tool_tolerances: (d.use_machine_tool_tolerances as boolean) || false,
+    use_machine_wcs_tolerances: (d.use_machine_wcs_tolerances as boolean) || false,
+    validate_tool_diameter: d.validate_tool_diameter !== false,
+    validate_tool_length: d.validate_tool_length !== false,
+    units: (d.units as string) || 'in',
+    control_version: ((d.control_version as string) || 'AUTO') as 'AUTO' | 'C00' | 'D00',
+    opcua_port: (cfg.opcua_port as number) ?? 4840,
+    opcua_username: (cfg.opcua_username as string) ?? '',
+    opcua_password: '',
+    opcua_channel: (cfg.channel as string) ?? '0',
   };
 }
 
@@ -87,36 +132,15 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
   const [originalFormData, setOriginalFormData] = useState<EditFormData | null>(null);
   const [originalMachineName, setOriginalMachineName] = useState<string | null>(null);
 
-  // Fetch full machine configuration data on mount
+  const isHeidenhain = editFormData.controller_type === 'heidenhain';
+
   useEffect(() => {
     const fetchMachineConfig = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/machines/${machine.machine_id}`);
         if (response.ok) {
           const d = await response.json();
-          const fetched: EditFormData = {
-            ip_address: d.ip_address || '',
-            ftp_username: d.ftp_username || '',
-            ftp_password: d.ftp_password || '',
-            ftp_port: d.ftp_port || 21,
-            path: d.path !== undefined && d.path !== null ? d.path : '/',
-            poll_interval_seconds: d.poll_interval_seconds || 5,
-            tool_poll_interval_seconds: d.tool_poll_interval_seconds || 30,
-            enabled: d.enabled !== false,
-            part_display_mode: d.part_display_mode || 'parts',
-            diameter_tolerance: d.diameter_tolerance || 0.010,
-            length_tolerance_plus: d.length_tolerance_plus || 0.02,
-            length_tolerance_minus: d.length_tolerance_minus || 0.0,
-            tolerance_x: d.tolerance_x || 0.0394,
-            tolerance_y: d.tolerance_y || 0.0394,
-            tolerance_z: d.tolerance_z || 0.0394,
-            use_machine_tool_tolerances: d.use_machine_tool_tolerances || false,
-            use_machine_wcs_tolerances: d.use_machine_wcs_tolerances || false,
-            validate_tool_diameter: d.validate_tool_diameter !== false,
-            validate_tool_length: d.validate_tool_length !== false,
-            units: d.units || 'in',
-            control_version: (d.control_version || 'AUTO') as 'AUTO' | 'C00' | 'D00',
-          };
+          const fetched = makeFormDataFromApi(d);
           setOriginalFormData(fetched);
           setOriginalMachineName(d.name || '');
           setEditMachineName(d.name || '');
@@ -129,7 +153,6 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
     fetchMachineConfig();
   }, [machine.machine_id]);
 
-  // Escape key → cancel edit
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -140,7 +163,12 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
     return () => document.removeEventListener('keydown', handleEscape);
   });
 
-  const editFormValid = editMachineName && editFormData.ip_address && editFormData.ftp_username && editFormData.ftp_password;
+  const editFormValid =
+    editMachineName &&
+    editFormData.ip_address &&
+    (isHeidenhain
+      ? editFormData.opcua_username
+      : editFormData.ftp_username && editFormData.ftp_password);
 
   const hasUnsavedChanges = () => {
     if (!originalFormData || originalMachineName === null) return false;
@@ -181,10 +209,44 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
     setEditSuccess(false);
 
     try {
-      const payload = {
-        ...editFormData,
-        control_version: editFormData.control_version === 'AUTO' ? null : editFormData.control_version,
+      const payload: Record<string, unknown> = {
+        controller_type: editFormData.controller_type,
+        model: defaultModelForController(editFormData.controller_type),
+        ip_address: editFormData.ip_address,
+        poll_interval_seconds: editFormData.poll_interval_seconds,
+        enabled: editFormData.enabled,
+        units: editFormData.units,
+        diameter_tolerance: editFormData.diameter_tolerance,
+        length_tolerance_plus: editFormData.length_tolerance_plus,
+        length_tolerance_minus: editFormData.length_tolerance_minus,
+        tolerance_x: editFormData.tolerance_x,
+        tolerance_y: editFormData.tolerance_y,
+        tolerance_z: editFormData.tolerance_z,
+        use_machine_tool_tolerances: editFormData.use_machine_tool_tolerances,
+        use_machine_wcs_tolerances: editFormData.use_machine_wcs_tolerances,
+        validate_tool_diameter: editFormData.validate_tool_diameter,
+        validate_tool_length: editFormData.validate_tool_length,
       };
+
+      if (isHeidenhain) {
+        payload.controller_config = {
+          opcua_port: editFormData.opcua_port,
+          opcua_username: editFormData.opcua_username,
+          ...(editFormData.opcua_password ? { opcua_password: editFormData.opcua_password } : {}),
+          channel: editFormData.opcua_channel,
+        };
+      } else {
+        Object.assign(payload, {
+          ftp_username: editFormData.ftp_username,
+          ftp_password: editFormData.ftp_password,
+          ftp_port: editFormData.ftp_port,
+          path: editFormData.path,
+          tool_poll_interval_seconds: editFormData.tool_poll_interval_seconds,
+          part_display_mode: editFormData.part_display_mode,
+          control_version: editFormData.control_version === 'AUTO' ? null : editFormData.control_version,
+        });
+      }
+
       const response = await fetch(`${API_BASE_URL}/api/machines/${machine.machine_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -228,6 +290,9 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
           setEditTestResult(result);
         } else {
           const errors = [];
+          if (!result.opcua?.success) {
+            errors.push(`OPC UA: ${result.opcua?.error || 'Connection failed'}`);
+          }
           if (!result.telnet?.success) {
             errors.push(`Telnet: ${result.telnet?.error || 'Connection failed'}`);
           }
@@ -247,7 +312,6 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
     }
   };
 
-  // Trigger save confirmation when edit switch is pending
   useEffect(() => {
     if (!pendingEditSwitch) return;
     if (hasUnsavedChanges()) {
@@ -258,7 +322,6 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingEditSwitch]);
 
-  // Trigger save confirmation when collapse is pending
   useEffect(() => {
     if (!pendingCollapse) return;
     if (hasUnsavedChanges()) {
@@ -313,8 +376,24 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
           </div>
         )}
 
-        {/* Basic Settings */}
         <div className="form-row-inline">
+          <div style={{ flex: '0 0 auto', minWidth: '220px' }}>
+            <label>CONTROLLER:</label>
+            <Select
+              value={editFormData.controller_type}
+              onChange={(value) =>
+                setEditFormData({
+                  ...editFormData,
+                  controller_type: value as ControllerType,
+                })
+              }
+              disabled={isEditSaving}
+              options={[
+                { value: 'brother', label: 'Brother CNC' },
+                { value: 'heidenhain', label: 'Heidenhain TNC (OPC UA)' },
+              ]}
+            />
+          </div>
           <div style={{ flex: '0 0 auto', minWidth: '200px' }}>
             <label>UNITS:</label>
             <Select
@@ -327,48 +406,50 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
               ]}
             />
           </div>
-          <div style={{ flex: '0 0 auto', minWidth: '260px' }}>
-            <label>CONTROL TYPE:</label>
-            <Select
-              value={editFormData.control_version}
-              onChange={(value) =>
-                setEditFormData({
-                  ...editFormData,
-                  control_version: value as 'AUTO' | 'C00' | 'D00',
-                })
-              }
-              disabled={isEditSaving}
-              options={[
-                ...((isBetaMode || editFormData.control_version === 'AUTO')
-                  ? [{ value: 'AUTO', label: 'AUTO DETECT (beta)' }]
-                  : []),
-                { value: 'C00', label: 'C00' },
-                { value: 'D00', label: 'D00' },
-              ]}
-            />
-          </div>
-          <div style={{ flex: '0 0 auto', minWidth: '260px' }}>
-            <label>PARTS DISPLAY:</label>
-            <Select
-              value={editFormData.part_display_mode}
-              onChange={(value) =>
-                setEditFormData({
-                  ...editFormData,
-                  part_display_mode: value as 'cycle' | 'parts',
-                })
-              }
-              disabled={isEditSaving}
-              options={[
-                { value: 'parts', label: 'PARTS COUNTER' },
-                { value: 'cycle', label: 'CYCLE COUNT' },
-              ]}
-            />
-          </div>
+          {!isHeidenhain && (
+            <>
+              <div style={{ flex: '0 0 auto', minWidth: '260px' }}>
+                <label>CONTROL TYPE:</label>
+                <Select
+                  value={editFormData.control_version}
+                  onChange={(value) =>
+                    setEditFormData({
+                      ...editFormData,
+                      control_version: value as 'AUTO' | 'C00' | 'D00',
+                    })
+                  }
+                  disabled={isEditSaving}
+                  options={[
+                    ...((isBetaMode || editFormData.control_version === 'AUTO')
+                      ? [{ value: 'AUTO', label: 'AUTO DETECT (beta)' }]
+                      : []),
+                    { value: 'C00', label: 'C00' },
+                    { value: 'D00', label: 'D00' },
+                  ]}
+                />
+              </div>
+              <div style={{ flex: '0 0 auto', minWidth: '260px' }}>
+                <label>PARTS DISPLAY:</label>
+                <Select
+                  value={editFormData.part_display_mode}
+                  onChange={(value) =>
+                    setEditFormData({
+                      ...editFormData,
+                      part_display_mode: value as 'cycle' | 'parts',
+                    })
+                  }
+                  disabled={isEditSaving}
+                  options={[
+                    { value: 'parts', label: 'PARTS COUNTER' },
+                    { value: 'cycle', label: 'CYCLE COUNT' },
+                  ]}
+                />
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Horizontal Form Sections */}
         <div className="form-sections-horizontal">
-          {/* Network Configuration Section */}
           <div className="network-config-section">
             <div className="network-config-header">NETWORK CONFIGURATION</div>
 
@@ -383,65 +464,110 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
               />
             </div>
 
-            <div className="form-row">
-              <label>FTP USER:</label>
-              <input
-                type="text"
-                value={editFormData.ftp_username}
-                onChange={(e) => setEditFormData({ ...editFormData, ftp_username: e.target.value })}
-                placeholder="anonymous"
-                disabled={isEditSaving}
-              />
-            </div>
+            {isHeidenhain ? (
+              <>
+                <div className="form-row-inline">
+                  <div>
+                    <label>OPC UA PORT:</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="65535"
+                      value={editFormData.opcua_port}
+                      onChange={(e) => setEditFormData({ ...editFormData, opcua_port: parseInt(e.target.value) })}
+                      disabled={isEditSaving}
+                    />
+                  </div>
+                  <div>
+                    <label>CHANNEL:</label>
+                    <input
+                      type="text"
+                      value={editFormData.opcua_channel}
+                      onChange={(e) => setEditFormData({ ...editFormData, opcua_channel: e.target.value })}
+                      placeholder="0"
+                      disabled={isEditSaving}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label>OPC UA USER:</label>
+                  <input
+                    type="text"
+                    value={editFormData.opcua_username}
+                    onChange={(e) => setEditFormData({ ...editFormData, opcua_username: e.target.value })}
+                    disabled={isEditSaving}
+                  />
+                </div>
+                <div className="form-row">
+                  <label>OPC UA PASS:</label>
+                  <input
+                    type="password"
+                    value={editFormData.opcua_password}
+                    onChange={(e) => setEditFormData({ ...editFormData, opcua_password: e.target.value })}
+                    placeholder="Leave blank to keep existing"
+                    disabled={isEditSaving}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="form-row">
+                  <label>FTP USER:</label>
+                  <input
+                    type="text"
+                    value={editFormData.ftp_username}
+                    onChange={(e) => setEditFormData({ ...editFormData, ftp_username: e.target.value })}
+                    placeholder="anonymous"
+                    disabled={isEditSaving}
+                  />
+                </div>
+                <div className="form-row">
+                  <label>FTP PASS:</label>
+                  <input
+                    type="password"
+                    value={editFormData.ftp_password}
+                    onChange={(e) => setEditFormData({ ...editFormData, ftp_password: e.target.value })}
+                    placeholder="anonymous"
+                    disabled={isEditSaving}
+                  />
+                </div>
+                <div className="form-row">
+                  <label>FTP PATH:</label>
+                  <input
+                    type="text"
+                    value={editFormData.path}
+                    onChange={(e) => setEditFormData({ ...editFormData, path: e.target.value })}
+                    placeholder="/"
+                    disabled={isEditSaving}
+                  />
+                </div>
+                <div className="form-row-inline">
+                  <div>
+                    <label>FTP PORT:</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="65535"
+                      value={editFormData.ftp_port}
+                      onChange={(e) => setEditFormData({ ...editFormData, ftp_port: parseInt(e.target.value) })}
+                      disabled={isEditSaving}
+                    />
+                  </div>
+                  <div>
+                    <label>COM PORT:</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="65535"
+                      value={10000}
+                      disabled={true}
+                      title="Telnet communication port (fixed at 10000)"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
-            <div className="form-row">
-              <label>FTP PASS:</label>
-              <input
-                type="password"
-                value={editFormData.ftp_password}
-                onChange={(e) => setEditFormData({ ...editFormData, ftp_password: e.target.value })}
-                placeholder="anonymous"
-                disabled={isEditSaving}
-              />
-            </div>
-
-            <div className="form-row">
-              <label>FTP PATH:</label>
-              <input
-                type="text"
-                value={editFormData.path}
-                onChange={(e) => setEditFormData({ ...editFormData, path: e.target.value })}
-                placeholder="/"
-                disabled={isEditSaving}
-              />
-            </div>
-
-            <div className="form-row-inline">
-              <div>
-                <label>FTP PORT:</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="65535"
-                  value={editFormData.ftp_port}
-                  onChange={(e) => setEditFormData({ ...editFormData, ftp_port: parseInt(e.target.value) })}
-                  disabled={isEditSaving}
-                />
-              </div>
-              <div>
-                <label>COM PORT:</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="65535"
-                  value={10000}
-                  disabled={true}
-                  title="Telnet communication port (fixed at 10000)"
-                />
-              </div>
-            </div>
-
-            {/* Polling Intervals - Network Settings */}
             <div className="form-row-inline">
               <div>
                 <label>POLL INTERVAL (s):</label>
@@ -459,30 +585,31 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
                   )}
                 </div>
               </div>
-              <div>
-                <label>TOOL POLL INTERVAL (s):</label>
-                <div className="input-with-metric">
-                  <input
-                    type="number"
-                    min="1"
-                    max="600"
-                    value={editFormData.tool_poll_interval_seconds}
-                    onChange={(e) => setEditFormData({ ...editFormData, tool_poll_interval_seconds: parseInt(e.target.value) })}
-                    disabled={isEditSaving}
-                  />
-                  {machine.tool_response_time_ms !== undefined && (
-                    <span className="input-metric">{(machine.tool_response_time_ms / 1000).toFixed(1)}s</span>
-                  )}
+              {!isHeidenhain && (
+                <div>
+                  <label>TOOL POLL INTERVAL (s):</label>
+                  <div className="input-with-metric">
+                    <input
+                      type="number"
+                      min="1"
+                      max="600"
+                      value={editFormData.tool_poll_interval_seconds}
+                      onChange={(e) => setEditFormData({ ...editFormData, tool_poll_interval_seconds: parseInt(e.target.value) })}
+                      disabled={isEditSaving}
+                    />
+                    {machine.tool_response_time_ms !== undefined && (
+                      <span className="input-metric">{(machine.tool_response_time_ms / 1000).toFixed(1)}s</span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
-          {/* Tolerances Section */}
+          {!isHeidenhain && (
           <div className="tolerances-section">
             <div className="tolerances-header">VALIDATION TOLERANCES ({editFormData.units === 'mm' ? 'mm' : 'inches'})</div>
-
-            {/* Tool Tolerances Group */}
+            {/* Tool and WCS tolerance groups unchanged from original */}
             <div className="tolerance-group">
               <div className="tolerance-group-header">
                 <div className="tolerance-group-label">TOOL TOLERANCES</div>
@@ -525,9 +652,7 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
                   </label>
                 </div>
               </div>
-
               <div className={`tolerance-group-content ${!editFormData.use_machine_tool_tolerances ? 'disabled' : ''}`}>
-                {/* Tool Diameter Group */}
                 <div className="tolerance-subgroup">
                   <div className="tolerance-group-label">TOOL DIAMETER</div>
                   <div className="tolerance-field tolerance-field-inline">
@@ -541,8 +666,6 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
                     />
                   </div>
                 </div>
-
-                {/* Tool Length Group */}
                 <div className="tolerance-subgroup">
                   <div className="tolerance-group-label">TOOL LENGTH</div>
                   <div className="tolerance-group-row">
@@ -569,14 +692,7 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
                   </div>
                 </div>
               </div>
-              {!editFormData.use_machine_tool_tolerances && (
-                <div className="tolerance-hint">
-                  Using G-code defaults: diameter must match exactly, length must be &ge; required
-                </div>
-              )}
             </div>
-
-            {/* WCS Offset Group */}
             <div className="tolerance-group">
               <div className="tolerance-group-header">
                 <div className="tolerance-group-label">WCS OFFSET</div>
@@ -593,7 +709,6 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
                   </label>
                 </div>
               </div>
-
               <div className={`tolerance-group-content ${!editFormData.use_machine_wcs_tolerances ? 'disabled' : ''}`}>
                 <div className="tolerance-group-row">
                   <div className="tolerance-field tolerance-field-inline">
@@ -628,13 +743,9 @@ export const MachineEditPanel: React.FC<MachineEditPanelProps> = ({
                   </div>
                 </div>
               </div>
-              {!editFormData.use_machine_wcs_tolerances && (
-                <div className="tolerance-hint">
-                  Using G-code E parameter if present in WCS validation macro
-                </div>
-              )}
             </div>
           </div>
+          )}
         </div>
 
         {editTestResult && (

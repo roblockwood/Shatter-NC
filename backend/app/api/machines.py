@@ -7,7 +7,8 @@ from app.models.machine import Machine
 from app.schemas.machine import MachineCreate, MachineUpdate, MachineResponse
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
-from app.utils.protocol_detector import detect_protocols
+from app.controllers.base import CONTROLLER_TYPE_BROTHER, CONTROLLER_TYPE_HEIDENHAIN
+from app.controllers.registry import get_adapter_for_machine
 import logging
 
 logger = logging.getLogger(__name__)
@@ -83,6 +84,16 @@ async def update_machine(
 
     # Update fields
     update_data = machine_update.model_dump(exclude_unset=True)
+
+    # Preserve OPC UA password when not sent in partial controller_config update
+    if "controller_config" in update_data and update_data["controller_config"] is not None:
+        incoming = dict(update_data["controller_config"])
+        existing = getattr(db_machine, "controller_config", None) or {}
+        if isinstance(existing, dict) and incoming.get("opcua_password") in (None, ""):
+            if existing.get("opcua_password"):
+                incoming["opcua_password"] = existing["opcua_password"]
+        update_data["controller_config"] = incoming
+
     for field, value in update_data.items():
         setattr(db_machine, field, value)
 
@@ -93,16 +104,15 @@ async def update_machine(
     try:
         if polling_service and machine_id in getattr(polling_service, "pollers", {}):
             poller = polling_service.pollers[machine_id]
-            if getattr(poller, "machine", None):
-                poller.machine.part_display_mode = getattr(db_machine, "part_display_mode", "parts")
-                poller.machine.control_version = getattr(db_machine, "control_version", None)
-                poller.machine.units = getattr(db_machine, "units", "in")
+            poller.refresh_machine(db_machine)
     except Exception as e:
         logger.warning(f"Failed to update poller config for machine {machine_id}: {e}")
 
     # Update websocket cached status so connected dashboards reflect config changes immediately
     try:
         if polling_service and getattr(polling_service, "websocket_manager", None):
+            from app.controllers.base import capabilities_as_list
+
             cached = polling_service.websocket_manager.get_machine_status(machine_id) or {}
             merged = {
                 **cached,
@@ -111,6 +121,10 @@ async def update_machine(
                 "part_display_mode": getattr(db_machine, "part_display_mode", "parts"),
                 "control_version": getattr(db_machine, "control_version", None),
                 "units": getattr(db_machine, "units", "in"),
+                "controller_type": getattr(db_machine, "controller_type", CONTROLLER_TYPE_BROTHER),
+                "capabilities": capabilities_as_list(
+                    getattr(db_machine, "controller_type", CONTROLLER_TYPE_BROTHER)
+                ),
             }
             await polling_service.websocket_manager.broadcast_status(merged)
     except Exception as e:
@@ -136,7 +150,7 @@ async def delete_machine(machine_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{machine_id}/test")
 async def test_connection(machine_id: int, db: Session = Depends(get_db)):
-    """Test connection to a machine (Telnet and FTP)."""
+    """Test connection to a machine (controller-specific primary protocol + FTP for Brother)."""
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not db_machine:
         raise HTTPException(
@@ -144,75 +158,57 @@ async def test_connection(machine_id: int, db: Session = Depends(get_db)):
             detail=f"Machine with id {machine_id} not found",
         )
 
+    controller_type = getattr(db_machine, "controller_type", CONTROLLER_TYPE_BROTHER)
+
     results = {
         "machine_id": machine_id,
         "machine_name": db_machine.name,
         "ip_address": db_machine.ip_address,
+        "controller_type": controller_type,
     }
 
-    # Test Telnet connection (primary communication protocol)
+    adapter = get_adapter_for_machine(db_machine)
     try:
-        from datetime import datetime
-        from app.clients.telnet_client import CNCTelnetClient
-        telnet_client = CNCTelnetClient(
-            db_machine.ip_address,
-            port=10000,  # Telnet port is always 10000
-            timeout=5,
-        )
-        # Use LOD MEM (with built-in retry/reconnect in load_data) as health check.
-        # This mirrors the same read path used by polling and is more reliable than a
-        # single-shot command check under transient contention.
-        start_time = datetime.now()
-        mem_data = await telnet_client.load_data("MEM", verbose=False, max_retries=2)
-        end_time = datetime.now()
-        latency = (end_time - start_time).total_seconds() * 1000
-
-        if mem_data:
-            results["telnet"] = {
-                "success": True,
-                "latency_ms": round(latency, 2),
-                "status_code": "00",
-                "timestamp": datetime.now().isoformat(),
-            }
+        primary = await adapter.test_connection()
+        if controller_type == CONTROLLER_TYPE_HEIDENHAIN:
+            results["opcua"] = primary
         else:
-            results["telnet"] = {
-                "success": False,
-                "latency_ms": round(latency, 2),
-                "status_code": None,
-                "timestamp": datetime.now().isoformat(),
-            }
-        # Clean up test connection
-        await telnet_client.disconnect()
+            results["telnet"] = primary
     except Exception as e:
-        logger.error(f"Telnet test error for machine {machine_id}: {e}")
-        results["telnet"] = {"success": False, "error": str(e)}
+        logger.error(f"Primary connection test error for machine {machine_id}: {e}")
+        key = "opcua" if controller_type == CONTROLLER_TYPE_HEIDENHAIN else "telnet"
+        results[key] = {"success": False, "error": str(e)}
+    finally:
+        await adapter.close()
 
-    # Test FTP connection (for file operations)
-    try:
-        ftp_client = CNCFtpClient(
-            db_machine.ip_address,
-            port=db_machine.ftp_port,
-            username=db_machine.ftp_username,
-            password=db_machine.ftp_password,
-            timeout=5,
-        )
-        results["ftp"] = await ftp_client.test_connection()
-    except Exception as e:
-        logger.error(f"FTP test error for machine {machine_id}: {e}")
-        results["ftp"] = {"success": False, "error": str(e)}
+    if controller_type == CONTROLLER_TYPE_BROTHER:
+        try:
+            ftp_client = CNCFtpClient(
+                db_machine.ip_address,
+                port=db_machine.ftp_port,
+                username=db_machine.ftp_username,
+                password=db_machine.ftp_password,
+                timeout=5,
+            )
+            results["ftp"] = await ftp_client.test_connection()
+        except Exception as e:
+            logger.error(f"FTP test error for machine {machine_id}: {e}")
+            results["ftp"] = {"success": False, "error": str(e)}
 
-    # Determine overall status (Telnet is primary, FTP is secondary)
-    telnet_ok = results.get("telnet", {}).get("success", False)
-    ftp_ok = results.get("ftp", {}).get("success", False)
-
-    if telnet_ok and ftp_ok:
-        results["overall_status"] = "online"
-    elif telnet_ok:
-        results["overall_status"] = "online"  # Telnet is sufficient for data operations
-    elif ftp_ok:
-        results["overall_status"] = "partial"  # FTP only (can do file ops but not data reads)
+    if controller_type == CONTROLLER_TYPE_HEIDENHAIN:
+        opcua_ok = results.get("opcua", {}).get("success", False)
+        results["overall_status"] = "online" if opcua_ok else "offline"
     else:
-        results["overall_status"] = "offline"
+        telnet_ok = results.get("telnet", {}).get("success", False)
+        ftp_ok = results.get("ftp", {}).get("success", False)
+        if telnet_ok and ftp_ok:
+            results["overall_status"] = "online"
+        elif telnet_ok:
+            results["overall_status"] = "online"
+        elif ftp_ok:
+            results["overall_status"] = "partial"
+        else:
+            results["overall_status"] = "offline"
 
     return results
 

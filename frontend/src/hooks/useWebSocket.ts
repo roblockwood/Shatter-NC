@@ -1,50 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import type { MachineStatusBase } from '../types/machine';
 
-export interface MachineStatus {
-  machine_id: number;
-  machine_name: string;
-  is_online: boolean;
-  status?: string;
-  program_name?: string;
-  mem_mode?: number;
-  mem_operation_status?: number;
-  cycle_time?: string;
-  power_on_hours?: string;
-  counters?: Array<{ counter_number: number; count: number }>;
-  tools?: Array<{ tool_number: number; tool_name?: string; diameter?: number; length?: number; pot_number?: string | number }>;
-  tool_table?: Array<{ tool_number: number; tool_name?: string; diameter?: number; length?: number; pot_number?: string | number }>;
-  current_tool?: number;
-  alarms?: Array<{
-    code: string;
-    message: string;
-    description?: string;
-    severity?: string;
-    level_class?: string;
-    stop_level?: string;
-    reset_level?: string;
-    cause?: string;
-    solution?: string;
-  }>;
-  units?: 'in' | 'mm';
-  control_version?: 'C00' | 'D00' | null;
-  error?: string;
-  poll_timestamp: string;
-  last_successful_poll_at?: string | null;
-  tools_timestamp?: string | null;
-  tool_table_timestamp?: string | null;
-  macros_timestamp?: string | null;
-  ip_address?: string;
-  ftp_username?: string;
-  ftp_password?: string;
-  ftp_port?: number;
-  http_port?: number;
-  location?: string;
-  poll_interval_seconds?: number;
-  tool_poll_interval_seconds?: number;
-  enabled?: boolean;
-  part_display_mode?: 'cycle' | 'parts';
-  layout_config?: Record<string, unknown> | null;
-}
+export type MachineStatus = MachineStatusBase;
 
 /** Kaeser compressor live status (backend-direct SC2/Connect polling). */
 export interface CompressorStatus {

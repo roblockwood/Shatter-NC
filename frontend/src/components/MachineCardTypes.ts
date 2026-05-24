@@ -1,5 +1,10 @@
 // Shared types for MachineCard and its sub-components (MachineEditPanel, etc.)
 
+import type { MachineStatusBase } from '../types/machine';
+
+export type { MachineCapability, ControllerType } from '../types/machine';
+export { getCapabilities, hasCapability, isBrotherMachine, isHeidenhainMachine } from '../types/machine';
+
 export interface Tool {
   tool_number: number;
   tool_name?: string;
@@ -41,55 +46,14 @@ export interface ConnectionTestResult {
   overall_status: string;
   telnet?: { success: boolean; error?: string };
   ftp?: { success: boolean; error?: string };
+  opcua?: { success: boolean; error?: string; nc_state?: string };
 }
 
-export interface MachineStatus {
-  machine_id: number;
-  machine_name: string;
-  is_online: boolean;
-  status?: string;
-  program_name?: string;  // Active program O-number from machine (e.g., "O2045")
-  mem_mode?: number;  // MEM mode: 0=Manual, 1=MDI, 2=Memory, 3=Edit, 4=MDI manual, 5=Memory edit
-  mem_operation_status?: number;  // MEM operation_status: 0=Reset, 1=Operation, 2=Temporary stop, 3=Block stop
-  cycle_time?: string;
-  power_on_hours?: string;
-  counters?: Array<{ counter_number: number; count: number }>;
-  tools?: Tool[];  // ATC data
-  tool_table?: Tool[];  // TABLE data (TOLN)
-  current_tool?: number;
+export interface MachineStatus extends MachineStatusBase {
+  tools?: Tool[];
+  tool_table?: Tool[];
   alarms?: Alarm[];
-  panel?: PanelData;  // Panel data (doors, mode, overrides)
-  error?: string;
-  poll_timestamp: string;
-  /** When the last successful fast (status) poll completed; does not advance on failed attempts. */
-  last_successful_poll_at?: string | null;
-  tools_timestamp?: string | null;
-  tool_table_timestamp?: string | null;
-  macros_timestamp?: string | null;
-  response_time_ms?: number;
-  tool_response_time_ms?: number;
-  ip_address?: string;
-  ftp_username?: string;
-  ftp_password?: string;
-  ftp_port?: number;
-  http_port?: number;
-  path?: string;
-  poll_interval_seconds?: number;
-  tool_poll_interval_seconds?: number;
-  part_display_mode?: 'cycle' | 'parts';
-  enabled?: boolean;
-  units?: 'in' | 'mm';
-  control_version?: 'C00' | 'D00' | null;
-  diameter_tolerance?: number;
-  length_tolerance_plus?: number;
-  length_tolerance_minus?: number;
-  tolerance_x?: number;
-  tolerance_y?: number;
-  tolerance_z?: number;
-  use_machine_tool_tolerances?: boolean;
-  use_machine_wcs_tolerances?: boolean;
-  validate_tool_diameter?: boolean;
-  validate_tool_length?: boolean;
+  panel?: PanelData;
 }
 
 export interface MachineCardProps {
