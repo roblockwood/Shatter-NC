@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import './SyncConfig.css';
-import { API_BASE_URL } from '../config/api';
-import { SyncRunProgress } from '../components/SyncRunProgress';
-import { Select } from '../components/ui/Select';
+import React, { useEffect, useState } from 'react';
+import './MachineSyncPanel.css';
+import { SyncRunProgress } from './SyncRunProgress';
+import { Select } from './ui/Select';
 import {
   browseLocalFolders,
   createSyncConfig,
@@ -21,12 +20,6 @@ import type {
   LocalFolderBrowseResponse,
 } from '../api/ftpSync';
 
-interface Machine {
-  id: number;
-  name: string;
-  ip_address: string;
-}
-
 const DEFAULT_FORM: FtpSyncConfigCreate = {
   name: 'Sync Job',
   sync_direction: 'upload',
@@ -43,9 +36,14 @@ const DEFAULT_FORM: FtpSyncConfigCreate = {
   debounce_seconds: 3,
 };
 
-export const SyncConfig: React.FC = () => {
-  const [machines, setMachines] = useState<Machine[]>([]);
-  const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
+type SyncTab = 'create' | 'configs' | 'runs' | 'details';
+
+interface MachineSyncPanelProps {
+  machineId: number;
+}
+
+export const MachineSyncPanel: React.FC<MachineSyncPanelProps> = ({ machineId }) => {
+  const [tab, setTab] = useState<SyncTab>('create');
   const [configs, setConfigs] = useState<FtpSyncConfig[]>([]);
   const [runs, setRuns] = useState<FtpSyncRun[]>([]);
   const [selectedRun, setSelectedRun] = useState<FtpSyncRunDetail | null>(null);
@@ -58,74 +56,44 @@ export const SyncConfig: React.FC = () => {
   const [folderLoading, setFolderLoading] = useState(false);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
 
-  const selectedMachine = useMemo(
-    () => machines.find((m) => m.id === selectedMachineId) || null,
-    [machines, selectedMachineId],
-  );
+  useEffect(() => {
+    refreshMachineData(machineId);
+  }, [machineId]);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/machines`)
-      .then((res) => res.json())
-      .then((data: Machine[]) => {
-        setMachines(data);
-        if (data.length > 0) {
-          setSelectedMachineId(data[0].id);
-        }
-      })
-      .catch((err) => {
-        setErrorMessage(`Failed to load machines: ${String(err)}`);
-      });
-  }, []);
-
-  useEffect(() => {
-    if (!selectedMachineId) {
-      return;
-    }
-    refreshMachineData(selectedMachineId);
-  }, [selectedMachineId]);
-
-  // Auto-refresh active runs every 3 seconds
-  useEffect(() => {
-    if (!selectedMachineId) {
-      return;
-    }
-
-    // Check if any run is active
     const hasActiveRun = runs.some((run) => {
       const activeStatuses = ['queued', 'in_progress', 'processing'];
       return activeStatuses.includes(run.status);
     });
 
     if (!hasActiveRun) {
-      return; // No active runs, don't poll
+      return;
     }
 
-    // Poll every 3 seconds
     const pollInterval = setInterval(() => {
-      // Only refresh the runs list (lighter weight than refreshMachineData)
-      listSyncRuns(selectedMachineId)
+      listSyncRuns(machineId)
         .then((machineRuns) => {
           setRuns(machineRuns);
         })
         .catch(() => {
-          // Silent fail on poll error - don't show errors for background polling
+          // Silent fail on poll error
         });
     }, 3000);
 
     return () => clearInterval(pollInterval);
-  }, [selectedMachineId, runs]);
+  }, [machineId, runs]);
 
-  async function refreshMachineData(machineId: number) {
+  async function refreshMachineData(id: number) {
     setLoading(true);
     setErrorMessage('');
     try {
       const [cfg, machineRuns] = await Promise.all([
-        listSyncConfigs(machineId),
-        listSyncRuns(machineId),
+        listSyncConfigs(id),
+        listSyncRuns(id),
       ]);
       setConfigs(cfg);
       setRuns(machineRuns);
-      if (selectedRun && selectedRun.machine_id !== machineId) {
+      if (selectedRun && selectedRun.machine_id !== id) {
         setSelectedRun(null);
       }
     } catch (err) {
@@ -136,13 +104,10 @@ export const SyncConfig: React.FC = () => {
   }
 
   async function loadFolderBrowser(path?: string) {
-    if (!selectedMachineId) {
-      return;
-    }
     setFolderLoading(true);
     setErrorMessage('');
     try {
-      const data = await browseLocalFolders(selectedMachineId, path);
+      const data = await browseLocalFolders(machineId, path);
       setFolderBrowser(data);
     } catch (err) {
       setErrorMessage(`Failed to browse local folders: ${String(err)}`);
@@ -177,6 +142,7 @@ export const SyncConfig: React.FC = () => {
       auto_register: config.auto_register,
       debounce_seconds: config.debounce_seconds,
     });
+    setTab('create');
     setStatusMessage(`Editing config #${config.id}`);
     setErrorMessage('');
   }
@@ -190,18 +156,16 @@ export const SyncConfig: React.FC = () => {
 
   async function onCreateConfig(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedMachineId) {
-      return;
-    }
 
     setLoading(true);
     setErrorMessage('');
     setStatusMessage('');
     try {
-      const created = await createSyncConfig(selectedMachineId, form);
+      const created = await createSyncConfig(machineId, form);
       setStatusMessage(`Created sync config #${created.id}`);
       setForm({ ...DEFAULT_FORM, name: `Sync Job ${created.id + 1}` });
-      await refreshMachineData(selectedMachineId);
+      await refreshMachineData(machineId);
+      setTab('configs');
     } catch (err) {
       setErrorMessage(`Create failed: ${String(err)}`);
     } finally {
@@ -211,7 +175,7 @@ export const SyncConfig: React.FC = () => {
 
   async function onSaveConfig(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedMachineId || !editingConfigId) {
+    if (!editingConfigId) {
       return;
     }
 
@@ -219,11 +183,12 @@ export const SyncConfig: React.FC = () => {
     setErrorMessage('');
     setStatusMessage('');
     try {
-      const updated = await updateSyncConfig(selectedMachineId, editingConfigId, form);
+      const updated = await updateSyncConfig(machineId, editingConfigId, form);
       setStatusMessage(`Updated sync config #${updated.id}`);
       setEditingConfigId(null);
       setForm(DEFAULT_FORM);
-      await refreshMachineData(selectedMachineId);
+      await refreshMachineData(machineId);
+      setTab('configs');
     } catch (err) {
       setErrorMessage(`Update failed: ${String(err)}`);
     } finally {
@@ -232,16 +197,13 @@ export const SyncConfig: React.FC = () => {
   }
 
   async function onToggleConfig(config: FtpSyncConfig) {
-    if (!selectedMachineId) {
-      return;
-    }
     setLoading(true);
     setErrorMessage('');
     setStatusMessage('');
     try {
-      const updated = await updateSyncConfig(selectedMachineId, config.id, { enabled: !config.enabled });
+      const updated = await updateSyncConfig(machineId, config.id, { enabled: !config.enabled });
       setStatusMessage(`Config ${updated.id} ${updated.enabled ? 'enabled' : 'disabled'}`);
-      await refreshMachineData(selectedMachineId);
+      await refreshMachineData(machineId);
     } catch (err) {
       setErrorMessage(`Update failed: ${String(err)}`);
     } finally {
@@ -250,9 +212,6 @@ export const SyncConfig: React.FC = () => {
   }
 
   async function onDeleteConfig(configId: number) {
-    if (!selectedMachineId) {
-      return;
-    }
     if (!window.confirm(`Delete sync config ${configId}?`)) {
       return;
     }
@@ -261,9 +220,9 @@ export const SyncConfig: React.FC = () => {
     setErrorMessage('');
     setStatusMessage('');
     try {
-      await deleteSyncConfig(selectedMachineId, configId);
+      await deleteSyncConfig(machineId, configId);
       setStatusMessage(`Deleted config ${configId}`);
-      await refreshMachineData(selectedMachineId);
+      await refreshMachineData(machineId);
     } catch (err) {
       setErrorMessage(`Delete failed: ${String(err)}`);
     } finally {
@@ -272,17 +231,14 @@ export const SyncConfig: React.FC = () => {
   }
 
   async function onTriggerConfig(configId: number) {
-    if (!selectedMachineId) {
-      return;
-    }
-
     setLoading(true);
     setErrorMessage('');
     setStatusMessage('');
     try {
-      const result = await triggerSyncConfig(selectedMachineId, configId);
+      const result = await triggerSyncConfig(machineId, configId);
       setStatusMessage(`Triggered run ${result.run_id} for config ${configId}`);
-      await refreshMachineData(selectedMachineId);
+      await refreshMachineData(machineId);
+      setTab('runs');
     } catch (err) {
       setErrorMessage(`Trigger failed: ${String(err)}`);
     } finally {
@@ -291,16 +247,13 @@ export const SyncConfig: React.FC = () => {
   }
 
   async function onOpenRun(runId: number) {
-    if (!selectedMachineId) {
-      return;
-    }
-
     setLoading(true);
     setErrorMessage('');
     setStatusMessage('');
     try {
-      const detail = await getSyncRun(selectedMachineId, runId);
+      const detail = await getSyncRun(machineId, runId);
       setSelectedRun(detail);
+      setTab('details');
       setStatusMessage(`Loaded run ${runId}`);
     } catch (err) {
       setErrorMessage(`Failed to load run detail: ${String(err)}`);
@@ -309,46 +262,57 @@ export const SyncConfig: React.FC = () => {
     }
   }
 
+  const createTabLabel = editingConfigId ? `EDIT CONFIG #${editingConfigId}` : 'CREATE CONFIG';
+
   return (
-    <div className="sync-page">
-      <div className="sync-header">
-        <div className="sync-title">SYNC CONFIGURATION</div>
-        <div className="sync-subtitle">Configure upload/download sync jobs and run them from UI</div>
-      </div>
-
-      <div className="sync-divider">╠{'═'.repeat(120)}╣</div>
-
-      <div className="sync-machine-row">
-        <label className="sync-label">MACHINE</label>
-        <Select
-          className="sync-select"
-          value={selectedMachineId != null ? String(selectedMachineId) : ''}
-          onChange={(value) => setSelectedMachineId(Number(value))}
-          options={machines.map((machine) => ({
-            value: String(machine.id),
-            label: `${machine.name} (${machine.ip_address})`,
-          }))}
-        />
+    <div className="machine-sync-panel">
+      <div className="sync-toolbar">
         <button
           className="terminal-button"
           type="button"
-          onClick={() => selectedMachineId && refreshMachineData(selectedMachineId)}
-          disabled={loading || !selectedMachineId}
+          onClick={() => refreshMachineData(machineId)}
+          disabled={loading}
         >
           [ REFRESH ]
         </button>
       </div>
 
-      {selectedMachine && (
-        <div className="sync-machine-meta">Active: {selectedMachine.name} @ {selectedMachine.ip_address}</div>
-      )}
-
       {statusMessage && <div className="sync-status">[ OK ] {statusMessage}</div>}
       {errorMessage && <div className="sync-error">[ ERROR ] {errorMessage}</div>}
 
-      <div className="sync-grid">
-        <section className="sync-panel">
-          <div className="panel-title">{editingConfigId ? `EDIT CONFIG #${editingConfigId}` : 'CREATE CONFIG'}</div>
+      <div className="sync-tabs">
+        <button
+          type="button"
+          className={`sync-tab${tab === 'create' ? ' active' : ''}`}
+          onClick={() => setTab('create')}
+        >
+          [ {createTabLabel} ]
+        </button>
+        <button
+          type="button"
+          className={`sync-tab${tab === 'configs' ? ' active' : ''}`}
+          onClick={() => setTab('configs')}
+        >
+          [ CONFIGS ]
+        </button>
+        <button
+          type="button"
+          className={`sync-tab${tab === 'runs' ? ' active' : ''}`}
+          onClick={() => setTab('runs')}
+        >
+          [ RECENT RUNS ]
+        </button>
+        <button
+          type="button"
+          className={`sync-tab${tab === 'details' ? ' active' : ''}`}
+          onClick={() => setTab('details')}
+        >
+          [ RUN DETAILS ]
+        </button>
+      </div>
+
+      {tab === 'create' && (
+        <section className="sync-panel sync-panel-full">
           <form className="sync-form" onSubmit={editingConfigId ? onSaveConfig : onCreateConfig}>
             <label>
               Name
@@ -374,7 +338,6 @@ export const SyncConfig: React.FC = () => {
                 <button
                   className="terminal-button-sm"
                   type="button"
-                  disabled={!selectedMachineId}
                   onClick={openFolderPicker}
                 >
                   [ SELECT FOLDER ]
@@ -430,7 +393,7 @@ export const SyncConfig: React.FC = () => {
             </div>
 
             <div className="sync-form-actions">
-              <button className="terminal-button primary" type="submit" disabled={loading || !selectedMachineId}>
+              <button className="terminal-button primary" type="submit" disabled={loading}>
                 {editingConfigId ? '[ SAVE CHANGES ]' : '[ CREATE CONFIG ]'}
               </button>
               {editingConfigId && (
@@ -441,9 +404,10 @@ export const SyncConfig: React.FC = () => {
             </div>
           </form>
         </section>
+      )}
 
-        <section className="sync-panel">
-          <div className="panel-title">CONFIGS</div>
+      {tab === 'configs' && (
+        <section className="sync-panel sync-panel-full">
           <div className="config-list">
             {configs.length === 0 && <div className="sync-empty">No configs for this machine yet.</div>}
             {configs.map((config) => (
@@ -463,11 +427,10 @@ export const SyncConfig: React.FC = () => {
             ))}
           </div>
         </section>
-      </div>
+      )}
 
-      <div className="sync-grid">
-        <section className="sync-panel">
-          <div className="panel-title">RECENT RUNS</div>
+      {tab === 'runs' && (
+        <section className="sync-panel sync-panel-full">
           <div className="run-list">
             {runs.length === 0 && <div className="sync-empty">No runs found.</div>}
             {runs.map((run) => (
@@ -481,10 +444,11 @@ export const SyncConfig: React.FC = () => {
             ))}
           </div>
         </section>
+      )}
 
-        <section className="sync-panel">
-          <div className="panel-title">RUN DETAILS</div>
-          {!selectedRun && <div className="sync-empty">Select a run to inspect per-file results.</div>}
+      {tab === 'details' && (
+        <section className="sync-panel sync-panel-full">
+          {!selectedRun && <div className="sync-empty">Select a run from Recent Runs to inspect per-file results.</div>}
           {selectedRun && (
             <div className="run-detail">
               <div className="run-summary">RUN #{selectedRun.id} | {selectedRun.status}</div>
@@ -506,7 +470,7 @@ export const SyncConfig: React.FC = () => {
             </div>
           )}
         </section>
-      </div>
+      )}
 
       {showFolderPicker && (
         <div className="sync-modal-backdrop" onClick={() => setShowFolderPicker(false)}>
@@ -523,7 +487,7 @@ export const SyncConfig: React.FC = () => {
               <button
                 className="terminal-button-sm"
                 type="button"
-                disabled={folderLoading || !selectedMachineId || !folderBrowser?.parent_path}
+                disabled={folderLoading || !folderBrowser?.parent_path}
                 onClick={() => loadFolderBrowser(folderBrowser?.parent_path || undefined)}
               >
                 [ UP ]
@@ -531,7 +495,7 @@ export const SyncConfig: React.FC = () => {
               <button
                 className="terminal-button-sm"
                 type="button"
-                disabled={folderLoading || !selectedMachineId}
+                disabled={folderLoading}
                 onClick={() => loadFolderBrowser()}
               >
                 [ ROOT ]
@@ -539,7 +503,7 @@ export const SyncConfig: React.FC = () => {
               <button
                 className="terminal-button-sm"
                 type="button"
-                disabled={folderLoading || !selectedMachineId}
+                disabled={folderLoading}
                 onClick={() => {
                   if (!folderBrowser) {
                     return;
