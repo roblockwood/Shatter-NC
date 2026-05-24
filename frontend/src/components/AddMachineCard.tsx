@@ -36,9 +36,18 @@ interface AddMachineCardProps {
   onAdd?: (machine: Record<string, unknown>) => void;
   fullWidth?: boolean;
   onActiveChange?: (active: boolean) => void;
+  showCompressorOption?: boolean;
+  onStartAddCompressor?: () => void;
 }
 
-export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel: onCancelProp, fullWidth = false, onActiveChange }) => {
+export const AddMachineCard: React.FC<AddMachineCardProps> = ({
+  onAdd,
+  onCancel: onCancelProp,
+  fullWidth = false,
+  onActiveChange,
+  showCompressorOption = false,
+  onStartAddCompressor,
+}) => {
   const { isBetaMode } = useBetaMode();
   const [isActive, setIsActive] = useState(false);
 
@@ -196,14 +205,28 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({ onAdd, onCancel:
   if (!isActive) {
     return (
       <div className={`add-machine-card ${fullWidth ? 'full-width' : ''}`}>
-        <div 
-          className="add-machine-content clickable-content"
-          onClick={() => setIsActive(true)}
-        >
-          <div className="add-icon clickable-icon">
-            +
+        <div className="add-machine-content">
+          <div
+            className="add-machine-primary clickable-content"
+            onClick={() => setIsActive(true)}
+          >
+            <div className="add-icon clickable-icon">
+              +
+            </div>
+            <div className="add-text">[ ADD MACHINE ]</div>
           </div>
-          <div className="add-text">[ ADD MACHINE ]</div>
+          {showCompressorOption && onStartAddCompressor && (
+            <button
+              type="button"
+              className="add-secondary-action"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartAddCompressor();
+              }}
+            >
+              [ ADD COMPRESSOR ]
+            </button>
+          )}
         </div>
       </div>
     );
