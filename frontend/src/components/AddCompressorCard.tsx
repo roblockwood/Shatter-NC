@@ -19,6 +19,7 @@ interface AddCompressorCardProps {
   onAdd?: (compressor: CompressorStatus) => void;
   fullWidth?: boolean;
   onActiveChange?: (active: boolean) => void;
+  startActive?: boolean;
 }
 
 function emptyForm(): CompressorForm {
@@ -38,8 +39,9 @@ export const AddCompressorCard: React.FC<AddCompressorCardProps> = ({
   onCancel: onCancelProp,
   fullWidth = false,
   onActiveChange,
+  startActive = false,
 }) => {
-  const [isActive, setIsActive] = useState(false);
+  const [isActive, setIsActive] = useState(startActive);
 
   React.useEffect(() => {
     return () => {
