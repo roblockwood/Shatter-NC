@@ -8,10 +8,10 @@ Shatter is an open-source web platform for monitoring and managing multiple Brot
 
 - 🔴 **Real-time Monitoring** - Live status, cycle times, alarms, and counters for all machines
 - 📁 **Smart File Transfer** - G-code validation, tool verification, and multi-machine deployment
-- 🔁 **Folder Sync (Upload/Download)** - Configure repeatable FTP sync jobs with run history (`/sync`)
+- 🔁 **Folder Sync (Upload/Download)** (beta) - Configure repeatable FTP sync jobs per machine from the Dashboard machine edit form
 - 📊 **Production Analytics** - Historical data, cycle time trends, and fleet-wide statistics
 - 🔧 **Tool Management** - Track tool usage across programs with detailed speed/feed analysis
-- 🔔 **Notifications** - Email/SMS alerts for status changes, alarms, offline, and cycle complete (`/notifications`)
+- 🔔 **Notifications** (beta) - Email/SMS alerts for status changes, alarms, offline, and cycle complete
 - 🔄 **Version Control** - Git-like versioning for NC programs with deployment tracking
 - 🏭 **Multi-Machine** - Monitor and manage multiple CNCs from a single interface
 - 🐳 **Easy Deployment** - Docker-based, runs on isolated networks
@@ -32,9 +32,9 @@ Open http://localhost:3000 and add your CNC machines through the web UI.
 
 ## Sync & Notifications
 
-Shatter includes two operator-facing workflows that live in the main navigation:
+Shatter includes two operator-facing workflows (both require **beta mode** — rapid-click the logo to enable):
 
-- **Sync (`/sync`)**: Create per-machine FTP sync configs for **upload** (local folder → CNC) or **download** (CNC → local folder), browse local folders (restricted by `FTP_SYNC_LOCAL_BROWSE_ROOT`), and trigger runs with progress + run item details. Exclusion rules and filename validation are enforced during candidate selection. See `docs/FTP_SYNC_EXCLUSION_RULES.md`.
+- **Sync (Dashboard → machine edit)**: Enable **FTP SYNC** on a Brother machine, then use the sync tabs to create per-machine FTP sync configs for **upload** (local folder → CNC) or **download** (CNC → local folder), browse local folders (restricted by `FTP_SYNC_LOCAL_BROWSE_ROOT`), and trigger runs with progress + run item details. Exclusion rules and filename validation are enforced during candidate selection. See `docs/FTP_SYNC_EXCLUSION_RULES.md`.
 - **Notify (`/notifications`)**: Create notification **channels** (SMTP email or Twilio SMS) and **rules** that fire on status transitions (including error/offline) and cycle completion, with a delivery log and a “send test” action per channel.
 
 ### Configuration knobs (high-level)
