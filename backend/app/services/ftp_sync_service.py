@@ -129,6 +129,8 @@ class FtpSyncService:
             machine = db.query(Machine).filter(Machine.id == config.machine_id).first()
             if not machine:
                 raise ValueError(f"Machine {config.machine_id} not found")
+            if not machine.ftp_sync_enabled:
+                raise ValueError(f"FTP sync is not enabled for machine {config.machine_id}")
 
             sync_direction = (config.sync_direction or "upload").lower()
             if sync_direction == "download":
@@ -360,7 +362,8 @@ class FtpSyncService:
             try:
                 configs = (
                     db.query(FtpSyncConfig)
-                    .filter(FtpSyncConfig.enabled == True)
+                    .join(Machine, FtpSyncConfig.machine_id == Machine.id)
+                    .filter(FtpSyncConfig.enabled == True, Machine.ftp_sync_enabled == True)
                     .all()
                 )
             finally:

@@ -484,10 +484,21 @@ export const Dashboard = () => {
               editingCompressorId === null && (
                 <>
                   {!isAddingCompressor && (
-                    <AddMachineCard onCancel={() => {}} onAdd={(m) => addMachine(m as never)} onActiveChange={setIsAddingMachine} />
+                    <AddMachineCard
+                      onCancel={() => {}}
+                      onAdd={(m) => addMachine(m as never)}
+                      onActiveChange={setIsAddingMachine}
+                      showCompressorOption={showCompressorUi && !isAddingMachine}
+                      onStartAddCompressor={() => setIsAddingCompressor(true)}
+                    />
                   )}
-                  {showCompressorUi && !isAddingMachine && (
-                    <AddCompressorCard onCancel={() => {}} onAdd={addCompressor} onActiveChange={setIsAddingCompressor} />
+                  {isAddingCompressor && (
+                    <AddCompressorCard
+                      startActive
+                      onCancel={() => setIsAddingCompressor(false)}
+                      onAdd={addCompressor}
+                      onActiveChange={setIsAddingCompressor}
+                    />
                   )}
                 </>
               )}

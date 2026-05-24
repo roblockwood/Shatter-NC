@@ -35,6 +35,7 @@ class MachineBase(BaseModel):
     control_version: Optional[Literal['C00', 'D00']] = Field(default=None, description="Control version override. Set to C00 or D00 to disable auto-detection")
     layout_config: Optional[Dict[str, Any]] = Field(default=None, description="Custom pane layout configuration")
     part_display_mode: str = Field(default="parts", description="Compact machine card count label: 'parts' or 'cycle'")
+    ftp_sync_enabled: bool = Field(default=False, description="Enable FTP sync configuration and runs for this machine")
 
 
 class MachineCreate(MachineBase):
@@ -74,6 +75,7 @@ class MachineUpdate(BaseModel):
     control_version: Optional[Literal['C00', 'D00']] = Field(None, description="Control version override. Set to C00 or D00 to disable auto-detection")
     layout_config: Optional[Dict[str, Any]] = Field(None, description="Custom pane layout configuration")
     part_display_mode: Optional[str] = Field(None, description="Compact machine card count label: 'parts' or 'cycle'")
+    ftp_sync_enabled: Optional[bool] = Field(None, description="Enable FTP sync configuration and runs for this machine")
 
 
 class MachineResponse(MachineBase):
