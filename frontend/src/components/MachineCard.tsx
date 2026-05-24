@@ -524,6 +524,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         tool_poll_interval_seconds: machine.tool_poll_interval_seconds || 30,
         enabled: machine.enabled !== false,
         part_display_mode: machine.part_display_mode || 'parts',
+        ftp_sync_enabled: machine.ftp_sync_enabled === true,
         diameter_tolerance: machine.diameter_tolerance || 0.010,
         length_tolerance_plus: machine.length_tolerance_plus || 0.02,
         length_tolerance_minus: machine.length_tolerance_minus || 0.0,
