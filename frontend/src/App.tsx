@@ -1,9 +1,8 @@
 import { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
 import { FileBrowser } from './pages/FileBrowser';
 import { ToolManagement } from './pages/ToolManagement';
-import { SyncConfig } from './pages/SyncConfig';
 import { NotificationSettings } from './pages/NotificationSettings';
 import { TabletEntry } from './pages/tablet/TabletEntry';
 import { TabletSetupPage } from './pages/tablet/TabletSetupPage';
@@ -42,8 +41,8 @@ function Navigation() {
             style={{ cursor: 'pointer', userSelect: 'none' }}
             title={
               isBetaMode
-                ? 'BETA: Tools + Kaeser compressors — click rapidly to disable'
-                : 'Click rapidly to enable beta (Tools + compressors)'
+                ? 'BETA: Tools, Notify, Sync + Kaeser compressors — click rapidly to disable'
+                : 'Click rapidly to enable beta (Tools, Notify, Sync + compressors)'
             }
           >
             SHATTER v{APP_VERSION}
@@ -62,18 +61,14 @@ function Navigation() {
           >
             [ FILES ]
           </Link>
-          <Link
-            to="/sync"
-            className={`nav-link ${isActive('/sync') ? 'active' : ''}`}
-          >
-            [ SYNC ]
-          </Link>
-          <Link
-            to="/notifications"
-            className={`nav-link ${isActive('/notifications') ? 'active' : ''}`}
-          >
-            [ NOTIFY ]
-          </Link>
+          {isBetaMode && (
+            <Link
+              to="/notifications"
+              className={`nav-link ${isActive('/notifications') ? 'active' : ''}`}
+            >
+              [ NOTIFY ]
+            </Link>
+          )}
           {isBetaMode && (
             <Link
               to="/tools"
@@ -108,8 +103,15 @@ function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/files" element={<FileBrowser />} />
-                <Route path="/sync" element={<SyncConfig />} />
-                <Route path="/notifications" element={<NotificationSettings />} />
+                <Route path="/sync" element={<Navigate to="/" replace />} />
+                <Route
+                  path="/notifications"
+                  element={
+                    <BetaRoute>
+                      <NotificationSettings />
+                    </BetaRoute>
+                  }
+                />
                 {/* Tablet kiosk routes */}
                 <Route path="/tablet" element={<TabletEntry />} />
                 <Route path="/tablet/setup" element={<TabletSetupPage />} />
