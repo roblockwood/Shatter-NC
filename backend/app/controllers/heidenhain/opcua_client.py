@@ -6,6 +6,11 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from app.controllers.heidenhain import browse_paths as bp
+from app.controllers.heidenhain.endpoint import (
+    DEFAULT_HEIDENHAIN_ENDPOINT_PATH,
+    build_endpoint_url,
+    resolve_endpoint_url,
+)
 from app.controllers.heidenhain.status_mapping import derive_status
 
 logger = logging.getLogger(__name__)
@@ -29,6 +34,9 @@ class HeidenhainOpcUaClient:
         password: Optional[str] = None,
         channel: str = "0",
         timeout: float = 10.0,
+        endpoint_url: Optional[str] = None,
+        endpoint_path: Optional[str] = None,
+        auto_discover_endpoint: bool = True,
     ):
         self.ip_address = ip_address
         self.port = port
@@ -36,13 +44,39 @@ class HeidenhainOpcUaClient:
         self.password = password
         self.channel = str(channel)
         self.timeout = timeout
+        self._endpoint_url_config = endpoint_url
+        self._endpoint_path_config = endpoint_path
+        self._auto_discover_endpoint = auto_discover_endpoint
+        self._resolved_endpoint_url: Optional[str] = None
         self._client = None
         self._machine_node = None
         self._ns_index: Optional[int] = None
 
     @property
     def endpoint_url(self) -> str:
-        return f"opc.tcp://{self.ip_address}:{self.port}"
+        if self._resolved_endpoint_url:
+            return self._resolved_endpoint_url
+        if self._endpoint_url_config:
+            return self._endpoint_url_config.strip()
+        path = (
+            self._endpoint_path_config
+            if self._endpoint_path_config is not None
+            else DEFAULT_HEIDENHAIN_ENDPOINT_PATH
+        )
+        return build_endpoint_url(self.ip_address, self.port, path)
+
+    async def _ensure_endpoint_url(self) -> str:
+        if self._resolved_endpoint_url:
+            return self._resolved_endpoint_url
+        self._resolved_endpoint_url = await resolve_endpoint_url(
+            self.ip_address,
+            self.port,
+            endpoint_url=self._endpoint_url_config,
+            endpoint_path=self._endpoint_path_config,
+            auto_discover=self._auto_discover_endpoint,
+            timeout=self.timeout,
+        )
+        return self._resolved_endpoint_url
 
     async def connect(self) -> None:
         from asyncua import Client
@@ -50,15 +84,17 @@ class HeidenhainOpcUaClient:
         if self._client is not None:
             return
 
+        connect_url = await self._ensure_endpoint_url()
+
         logger.info(
             "OPC UA connecting to %s (user=%s, channel=%s, timeout=%ss)",
-            self.endpoint_url,
+            connect_url,
             self.username or "(anonymous)",
             self.channel,
             self.timeout,
         )
 
-        client = Client(url=self.endpoint_url, timeout=self.timeout)
+        client = Client(url=connect_url, timeout=self.timeout)
         if self.username:
             client.set_user(self.username)
         if self.password:
@@ -68,12 +104,12 @@ class HeidenhainOpcUaClient:
             await client.connect()
         except asyncio.TimeoutError as exc:
             raise ConnectionError(
-                f"OPC UA connect timed out after {self.timeout}s at {self.endpoint_url}"
+                f"OPC UA connect timed out after {self.timeout}s at {connect_url}"
             ) from exc
         except Exception as exc:
             logger.warning(
                 "OPC UA connect failed for %s: %s: %s",
-                self.endpoint_url,
+                connect_url,
                 type(exc).__name__,
                 exc or "(no message)",
             )
@@ -84,10 +120,10 @@ class HeidenhainOpcUaClient:
         if self._machine_node is None:
             await self.disconnect()
             raise ConnectionError(
-                f"Could not find Machine object on OPC UA server at {self.endpoint_url}"
+                f"Could not find Machine object on OPC UA server at {connect_url}"
             )
 
-        logger.info("OPC UA connected to %s (Machine node resolved)", self.endpoint_url)
+        logger.info("OPC UA connected to %s (Machine node resolved)", connect_url)
 
     async def disconnect(self) -> None:
         if self._client is not None:
@@ -98,6 +134,7 @@ class HeidenhainOpcUaClient:
         self._client = None
         self._machine_node = None
         self._ns_index = None
+        self._resolved_endpoint_url = None
 
     async def _resolve_machine_node(self):
         client = self._client
@@ -279,6 +316,7 @@ class HeidenhainOpcUaClient:
                 "success": True,
                 "latency_ms": round(latency_ms, 2),
                 "nc_state": nc_state,
+                "endpoint_url": self.endpoint_url,
                 "timestamp": datetime.now().isoformat(),
             }
         except Exception as exc:
@@ -294,5 +332,6 @@ class HeidenhainOpcUaClient:
                 "latency_ms": round(latency_ms, 2),
                 "error": error,
                 "error_type": type(exc).__name__,
+                "endpoint_url": self.endpoint_url,
                 "timestamp": datetime.now().isoformat(),
             }

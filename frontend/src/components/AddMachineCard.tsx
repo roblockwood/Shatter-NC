@@ -23,6 +23,7 @@ interface MachineData {
   opcua_port?: number;
   opcua_username?: string;
   opcua_password?: string;
+  opcua_endpoint_path?: string;
   opcua_channel?: string;
   diameter_tolerance?: number;
   length_tolerance_plus?: number;
@@ -101,6 +102,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
     opcua_port: 4840,
     opcua_username: '',
     opcua_password: '',
+    opcua_endpoint_path: '/HEIDENHAIN/NC',
     opcua_channel: '0',
   });
 
@@ -147,6 +149,8 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
           opcua_port: formData.opcua_port ?? 4840,
           opcua_username: formData.opcua_username,
           opcua_password: formData.opcua_password,
+          opcua_endpoint_path: formData.opcua_endpoint_path ?? '/HEIDENHAIN/NC',
+          opcua_auto_discover: true,
           channel: formData.opcua_channel ?? '0',
         };
       } else {
@@ -197,6 +201,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
           opcua_port: 4840,
           opcua_username: '',
           opcua_password: '',
+          opcua_endpoint_path: '/HEIDENHAIN/NC',
           opcua_channel: '0',
         });
         // Notify parent that machine was added
@@ -257,6 +262,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
       opcua_port: 4840,
       opcua_username: '',
       opcua_password: '',
+      opcua_endpoint_path: '/HEIDENHAIN/NC',
       opcua_channel: '0',
     });
     setError(null);
@@ -441,6 +447,16 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
                     disabled={isSaving}
                   />
                 </div>
+              </div>
+              <div className="form-row">
+                <label>ENDPOINT PATH:</label>
+                <input
+                  type="text"
+                  value={formData.opcua_endpoint_path ?? '/HEIDENHAIN/NC'}
+                  onChange={(e) => setFormData({ ...formData, opcua_endpoint_path: e.target.value })}
+                  placeholder="/HEIDENHAIN/NC"
+                  disabled={isSaving}
+                />
               </div>
               <div className="form-row">
                 <label>OPC UA USER:</label>

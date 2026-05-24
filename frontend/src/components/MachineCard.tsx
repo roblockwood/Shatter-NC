@@ -61,6 +61,7 @@ type EditFormData = {
   opcua_port: number;
   opcua_username: string;
   opcua_password: string;
+  opcua_endpoint_path: string;
   opcua_channel: string;
 };
 
@@ -93,6 +94,7 @@ function editFormFromMachine(m: MachineStatus): EditFormData {
     opcua_port: cfg?.opcua_port ?? 4840,
     opcua_username: cfg?.opcua_username ?? '',
     opcua_password: '',
+    opcua_endpoint_path: cfg?.opcua_endpoint_path ?? '/HEIDENHAIN/NC',
     opcua_channel: cfg?.channel ?? '0',
   };
 }
@@ -126,6 +128,7 @@ function editFormFromApi(d: Record<string, unknown>): EditFormData {
     opcua_port: (cfg.opcua_port as number) ?? 4840,
     opcua_username: (cfg.opcua_username as string) ?? '',
     opcua_password: '',
+    opcua_endpoint_path: (cfg.opcua_endpoint_path as string) ?? '/HEIDENHAIN/NC',
     opcua_channel: (cfg.channel as string) ?? '0',
   };
 }
@@ -454,6 +457,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           opcua_port: editFormData.opcua_port,
           opcua_username: editFormData.opcua_username,
           ...(editFormData.opcua_password ? { opcua_password: editFormData.opcua_password } : {}),
+          opcua_endpoint_path: editFormData.opcua_endpoint_path,
+          opcua_auto_discover: true,
           channel: editFormData.opcua_channel,
         };
       } else {
@@ -1073,6 +1078,16 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                       disabled={isEditSaving}
                     />
                   </div>
+                </div>
+                <div className="form-row">
+                  <label>ENDPOINT PATH:</label>
+                  <input
+                    type="text"
+                    value={editFormData.opcua_endpoint_path}
+                    onChange={(e) => setEditFormData({ ...editFormData, opcua_endpoint_path: e.target.value })}
+                    placeholder="/HEIDENHAIN/NC"
+                    disabled={isEditSaving}
+                  />
                 </div>
                 <div className="form-row">
                   <label>OPC UA USER:</label>

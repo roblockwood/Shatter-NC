@@ -40,6 +40,9 @@ export interface HeidenhainControllerConfig {
   opcua_port?: number;
   opcua_username?: string;
   opcua_password?: string;
+  opcua_endpoint_path?: string;
+  opcua_endpoint_url?: string;
+  opcua_auto_discover?: boolean;
   channel?: string;
 }
 

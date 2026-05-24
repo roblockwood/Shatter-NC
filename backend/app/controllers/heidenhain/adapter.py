@@ -37,6 +37,9 @@ class HeidenhainOpcUaAdapter:
             password=_config_value(self.machine, "opcua_password"),
             channel=str(_config_value(self.machine, "channel", "0")),
             timeout=10.0,
+            endpoint_url=_config_value(self.machine, "opcua_endpoint_url"),
+            endpoint_path=_config_value(self.machine, "opcua_endpoint_path"),
+            auto_discover_endpoint=_config_value(self.machine, "opcua_auto_discover", True),
         )
 
     async def _ensure_client(self) -> HeidenhainOpcUaClient:
