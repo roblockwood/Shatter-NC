@@ -44,7 +44,13 @@ class HeidenhainOpcUaAdapter:
             self._client = self._build_client()
         try:
             await self._client.connect()
-        except Exception:
+        except Exception as first_exc:
+            logger.warning(
+                "Heidenhain OPC UA connect failed for machine %s (%s), retrying: %s",
+                self.machine.id,
+                self.machine.name,
+                first_exc or type(first_exc).__name__,
+            )
             await self.close()
             self._client = self._build_client()
             await self._client.connect()

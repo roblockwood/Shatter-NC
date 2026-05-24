@@ -38,6 +38,15 @@ from app.db.base import SessionLocal
 logger = logging.getLogger(__name__)
 
 
+def _format_poll_exception(exc: BaseException) -> str:
+    """Human-readable poll error; many asyncio/asyncua exceptions have empty str()."""
+    message = str(exc).strip()
+    if message:
+        return f"{type(exc).__name__}: {message}"
+    return type(exc).__name__
+
+
+
 class MachinePoller:
     """Handles polling for a single machine."""
 
@@ -178,8 +187,12 @@ class MachinePoller:
         response_time_ms = int((time.time() - poll_start_time) * 1000)
 
         logger.error(
-            f"Error polling machine {self.machine.id} ({self.machine.name}): {exc} "
-            f"(failures: {self.consecutive_failures})"
+            "Error polling machine %s (%s): %s (failures: %s)",
+            self.machine.id,
+            self.machine.name,
+            _format_poll_exception(exc),
+            self.consecutive_failures,
+            exc_info=True,
         )
 
         asyncio.create_task(
@@ -187,7 +200,7 @@ class MachinePoller:
                 poll_timestamp,
                 success=False,
                 response_time_ms=response_time_ms,
-                error_message=str(exc),
+                error_message=_format_poll_exception(exc),
             )
         )
 
@@ -231,7 +244,7 @@ class MachinePoller:
             "tool_response_time_ms": cached_status.get("tool_response_time_ms"),
         }
         if not display:
-            offline_status_data["error"] = str(exc)
+            offline_status_data["error"] = _format_poll_exception(exc)
 
         self.is_online = display
 

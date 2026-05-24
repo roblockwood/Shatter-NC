@@ -1,6 +1,7 @@
 """Heidenhain TNC OPC UA client (Core Information Model)."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -49,13 +50,35 @@ class HeidenhainOpcUaClient:
         if self._client is not None:
             return
 
+        logger.info(
+            "OPC UA connecting to %s (user=%s, channel=%s, timeout=%ss)",
+            self.endpoint_url,
+            self.username or "(anonymous)",
+            self.channel,
+            self.timeout,
+        )
+
         client = Client(url=self.endpoint_url, timeout=self.timeout)
         if self.username:
             client.set_user(self.username)
         if self.password:
             client.set_password(self.password)
 
-        await client.connect()
+        try:
+            await client.connect()
+        except asyncio.TimeoutError as exc:
+            raise ConnectionError(
+                f"OPC UA connect timed out after {self.timeout}s at {self.endpoint_url}"
+            ) from exc
+        except Exception as exc:
+            logger.warning(
+                "OPC UA connect failed for %s: %s: %s",
+                self.endpoint_url,
+                type(exc).__name__,
+                exc or "(no message)",
+            )
+            raise
+
         self._client = client
         self._machine_node = await self._resolve_machine_node()
         if self._machine_node is None:
@@ -63,6 +86,8 @@ class HeidenhainOpcUaClient:
             raise ConnectionError(
                 f"Could not find Machine object on OPC UA server at {self.endpoint_url}"
             )
+
+        logger.info("OPC UA connected to %s (Machine node resolved)", self.endpoint_url)
 
     async def disconnect(self) -> None:
         if self._client is not None:
@@ -83,8 +108,10 @@ class HeidenhainOpcUaClient:
                 ns = await client.get_namespace_index(uri)
                 self._ns_index = ns
                 node = await client.nodes.objects.get_child([f"{ns}:{bp.MACHINE}"])
+                logger.debug("Resolved Machine node via namespace %s (index %s)", uri, ns)
                 return node
-            except Exception:
+            except Exception as exc:
+                logger.debug("Namespace %s failed for Machine node: %s: %s", uri, type(exc).__name__, exc)
                 continue
 
         # Fallback: search Objects children by BrowseName
@@ -201,33 +228,43 @@ class HeidenhainOpcUaClient:
         if self._machine_node is None:
             await self.connect()
 
-        nc_state_node = await self._get_child(self._machine_node, bp.NC_STATE)
-        nc_state = await self._read_state_name(nc_state_node)
+        try:
+            nc_state_node = await self._get_child(self._machine_node, bp.NC_STATE)
+            nc_state = await self._read_state_name(nc_state_node)
 
-        channels = await self._get_child(self._machine_node, bp.CHANNELS)
-        channel_node = await self._get_child(channels, self.channel)
+            channels = await self._get_child(self._machine_node, bp.CHANNELS)
+            channel_node = await self._get_child(channels, self.channel)
 
-        program = await self._get_child(channel_node, bp.PROGRAM)
-        exec_state_node = await self._get_child(program, bp.EXECUTION_STATE)
-        exec_state = await self._read_state_name(exec_state_node)
+            program = await self._get_child(channel_node, bp.PROGRAM)
+            exec_state_node = await self._get_child(program, bp.EXECUTION_STATE)
+            exec_state = await self._read_state_name(exec_state_node)
 
-        program_name = await self._read_program_name(channel_node)
-        operating_mode = await self._read_operating_mode(channel_node)
-        alarms = await self._read_alarms()
+            program_name = await self._read_program_name(channel_node)
+            operating_mode = await self._read_operating_mode(channel_node)
+            alarms = await self._read_alarms()
 
-        has_errors = len(alarms) > 0
-        status = derive_status(nc_state, exec_state, has_errors=has_errors)
+            has_errors = len(alarms) > 0
+            status = derive_status(nc_state, exec_state, has_errors=has_errors)
 
-        return {
-            "status": status,
-            "program_name": program_name,
-            "alarms": alarms,
-            "vendor_data": {
-                "nc_state": nc_state,
-                "exec_state": exec_state,
-                "operating_mode": operating_mode,
-            },
-        }
+            return {
+                "status": status,
+                "program_name": program_name,
+                "alarms": alarms,
+                "vendor_data": {
+                    "nc_state": nc_state,
+                    "exec_state": exec_state,
+                    "operating_mode": operating_mode,
+                },
+            }
+        except Exception as exc:
+            logger.warning(
+                "OPC UA read failed for %s channel %s: %s: %s",
+                self.endpoint_url,
+                self.channel,
+                type(exc).__name__,
+                exc or "(no message)",
+            )
+            raise
 
     async def test_connection(self) -> Dict[str, Any]:
         from datetime import datetime
@@ -246,9 +283,16 @@ class HeidenhainOpcUaClient:
             }
         except Exception as exc:
             latency_ms = (datetime.now() - start).total_seconds() * 1000
+            error = str(exc).strip() or type(exc).__name__
+            logger.warning(
+                "OPC UA test_connection failed for %s: %s",
+                self.endpoint_url,
+                error,
+            )
             return {
                 "success": False,
                 "latency_ms": round(latency_ms, 2),
-                "error": str(exc),
+                "error": error,
+                "error_type": type(exc).__name__,
                 "timestamp": datetime.now().isoformat(),
             }
