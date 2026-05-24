@@ -1,3 +1,16 @@
+# [0.22.0](https://github.com/roblockwood/Shatter-NC/compare/v0.21.0...v0.22.0) (2026-05-24)
+
+
+### Bug Fixes
+
+* include ftp_sync_enabled in MachineCard edit cancel fallback ([0e01051](https://github.com/roblockwood/Shatter-NC/commit/0e0105149599bf752dd6ee3119d1c766633ad2ba))
+
+
+### Features
+
+* merge add machine and add compressor cards on dashboard ([a0ad377](https://github.com/roblockwood/Shatter-NC/commit/a0ad377d5e10eb7d9897f1444114af38ef62419c))
+* move FTP sync to machine edit with beta gating ([33d9606](https://github.com/roblockwood/Shatter-NC/commit/33d960695e52e074f116399bfdcb740339cf4c25))
+
 # [0.21.0](https://github.com/roblockwood/Shatter-NC/compare/v0.20.3...v0.21.0) (2026-04-26)
 
 
