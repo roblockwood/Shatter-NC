@@ -48,6 +48,7 @@ class Machine(Base):
 
     # UI preferences
     part_display_mode = Column(String(20), default="parts")  # 'parts' | 'cycle'
+    ftp_sync_enabled = Column(Boolean, default=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
