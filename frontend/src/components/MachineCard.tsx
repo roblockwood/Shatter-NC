@@ -863,6 +863,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             isEditMode={layoutEditMode}
             onEditModeChange={setLayoutEditMode}
             panes={expandedPanes}
+          />
         </div>
 
 
