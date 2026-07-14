@@ -41,8 +41,8 @@ function Navigation() {
             style={{ cursor: 'pointer', userSelect: 'none' }}
             title={
               isBetaMode
-                ? 'BETA: Tools, Notify, Sync + Kaeser compressors — click rapidly to disable'
-                : 'Click rapidly to enable beta (Tools, Notify, Sync + compressors)'
+                ? 'BETA: Tools, Notify, Sync — click rapidly to disable'
+                : 'Click rapidly to enable beta (Tools, Notify, Sync)'
             }
           >
             SHATTER v{APP_VERSION}
