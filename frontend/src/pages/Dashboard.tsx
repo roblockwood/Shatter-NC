@@ -9,7 +9,6 @@ import { SummaryModal } from '../components/modals/SummaryModal';
 import { SummaryPopup } from '../components/modals/SummaryPopup';
 import { AsciiLoadingScreen } from '../components/AsciiLoadingScreen';
 import { useExpandedMachine } from '../contexts/ExpandedMachineContext';
-import { useBetaMode } from '../hooks/useBetaMode';
 import './Dashboard.css';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { API_BASE, getApiErrorMessage } from '../config/api';
@@ -20,9 +19,6 @@ type DeleteTarget =
   | { kind: 'compressor'; data: CompressorStatus };
 
 export const Dashboard = () => {
-  const { isBetaMode } = useBetaMode();
-  /** Kaeser compressors: same beta gate as [ TOOLS ] (logo rapid-click). Backend API/polling always available if compressors exist in DB. */
-  const showCompressorUi = isBetaMode;
   const { machines, compressors, isConnected, removeMachine, addMachine, removeCompressor, addCompressor } =
     useWebSocketContext();
   const [editMode, setEditMode] = useState(false);
@@ -69,18 +65,6 @@ export const Dashboard = () => {
     setExpandedAssetKind(null);
     setLayoutEditMode(false);
   }, [setExpandedAssetKind, setExpandedMachine, setLayoutEditMode]);
-
-  const [prevShowCompressorUi, setPrevShowCompressorUi] = useState(showCompressorUi);
-  if (prevShowCompressorUi !== showCompressorUi) {
-    setPrevShowCompressorUi(showCompressorUi);
-    if (!showCompressorUi) {
-      setExpandedCompressorId(null);
-      setEditingCompressorId(null);
-      setPendingCollapseCompressorId(null);
-    }
-  }
-
-  const fleetCompressors = showCompressorUi ? compressors : [];
 
   const isAnyAssetEditing =
     editingMachineId !== null || editingCompressorId !== null || isAddingMachine || isAddingCompressor;
@@ -129,9 +113,9 @@ export const Dashboard = () => {
   const runningCount = machines.filter(
     (m) => m.is_online === true && (m.status?.toLowerCase() === 'operating' || m.status?.toLowerCase().includes('running'))
   ).length;
-  const compressorsOnlineCount = fleetCompressors.filter((c) => c.is_online === true).length;
-  /** Fleet totals: compressors count as machines when beta UI is on (RUNNING stays CNC-only). */
-  const fleetAssetCount = machines.length + fleetCompressors.length;
+  const compressorsOnlineCount = compressors.filter((c) => c.is_online === true).length;
+  /** Fleet totals: compressors count toward machine/online totals (RUNNING stays CNC-only). */
+  const fleetAssetCount = machines.length + compressors.length;
   const fleetOnlineCount = onlineCount + compressorsOnlineCount;
 
   const handleDeleteMachine = (machine: { machine_id: number; machine_name: string }) => {
@@ -290,7 +274,7 @@ export const Dashboard = () => {
       </div>
 
       <div className="machine-grid">
-        {machines.length === 0 && fleetCompressors.length === 0 && !isConnected && <AsciiLoadingScreen />}
+        {machines.length === 0 && compressors.length === 0 && !isConnected && <AsciiLoadingScreen />}
 
         {expandedMachineId !== null ? (
           machines
@@ -346,8 +330,8 @@ export const Dashboard = () => {
                 scrollToStatus={scrollToStatusMachineId === machine.machine_id}
               />
             ))
-        ) : expandedCompressorId !== null && showCompressorUi ? (
-          fleetCompressors
+        ) : expandedCompressorId !== null ? (
+          compressors
             .filter((c) => c.compressor_id === expandedCompressorId)
             .map((c) => (
               <CompressorCard
@@ -440,46 +424,45 @@ export const Dashboard = () => {
                 scrollToStatus={scrollToStatusMachineId === machine.machine_id}
               />
             ))}
-            {showCompressorUi &&
-              fleetCompressors.map((c) => (
-                <CompressorCard
-                  key={c.compressor_id}
-                  compressor={c}
-                  editMode={editMode}
-                  isExpanded={false}
-                  isEditing={editingCompressorId === c.compressor_id}
-                  canEdit={
-                    editingMachineId === null &&
-                    (editingCompressorId === null || editingCompressorId === c.compressor_id)
-                  }
-                  isAnyAssetEditing={isAnyAssetEditing}
-                  onExpand={() => {
-                    setExpandedCompressorId(c.compressor_id);
-                    setExpandedMachineId(null);
-                  }}
-                  onCollapse={() => {
-                    setExpandedCompressorId(null);
-                    clearExpansionChrome();
-                  }}
-                  onEditStart={() => {
-                    setEditingCompressorId(c.compressor_id);
-                    setEditingMachineId(null);
-                  }}
-                  onEditEnd={() => {
-                    setEditingCompressorId(null);
-                    if (pendingCollapseCompressorId === c.compressor_id) {
-                      collapseAllExpanded();
-                      setPendingCollapseCompressorId(null);
-                    }
-                  }}
-                  pendingCollapse={pendingCollapseCompressorId === c.compressor_id}
-                  onCancelCollapse={() => {
+            {compressors.map((c) => (
+              <CompressorCard
+                key={c.compressor_id}
+                compressor={c}
+                editMode={editMode}
+                isExpanded={false}
+                isEditing={editingCompressorId === c.compressor_id}
+                canEdit={
+                  editingMachineId === null &&
+                  (editingCompressorId === null || editingCompressorId === c.compressor_id)
+                }
+                isAnyAssetEditing={isAnyAssetEditing}
+                onExpand={() => {
+                  setExpandedCompressorId(c.compressor_id);
+                  setExpandedMachineId(null);
+                }}
+                onCollapse={() => {
+                  setExpandedCompressorId(null);
+                  clearExpansionChrome();
+                }}
+                onEditStart={() => {
+                  setEditingCompressorId(c.compressor_id);
+                  setEditingMachineId(null);
+                }}
+                onEditEnd={() => {
+                  setEditingCompressorId(null);
+                  if (pendingCollapseCompressorId === c.compressor_id) {
+                    collapseAllExpanded();
                     setPendingCollapseCompressorId(null);
-                  }}
-                  onDelete={handleDeleteCompressor}
-                />
-              ))}
-            {(machines.length > 0 || fleetCompressors.length > 0 || isConnected) &&
+                  }
+                }}
+                pendingCollapse={pendingCollapseCompressorId === c.compressor_id}
+                onCancelCollapse={() => {
+                  setPendingCollapseCompressorId(null);
+                }}
+                onDelete={handleDeleteCompressor}
+              />
+            ))}
+            {(machines.length > 0 || compressors.length > 0 || isConnected) &&
               editingMachineId === null &&
               editingCompressorId === null && (
                 <>
@@ -488,7 +471,7 @@ export const Dashboard = () => {
                       onCancel={() => {}}
                       onAdd={(m) => addMachine(m as never)}
                       onActiveChange={setIsAddingMachine}
-                      showCompressorOption={showCompressorUi && !isAddingMachine}
+                      showCompressorOption={!isAddingMachine}
                       onStartAddCompressor={() => setIsAddingCompressor(true)}
                     />
                   )}
