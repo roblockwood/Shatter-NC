@@ -2,9 +2,9 @@
 
 Shatter polls Kaeser compressors **directly** via the SC2 / Kaeser Connect web interface using a backend-native client (`backend/app/integrations/kaeser_sc2/client.py`). There is **no sidecar** and no compressor MQTT subscriber path.
 
-## UI beta gate (dashboard)
+## Dashboard UI
 
-Compressor **cards and add flow** on the dashboard are hidden until **beta mode** is enabled (same as the **[ TOOLS ]** page: rapid clicks on the **SHATTER** logo). The backend still exposes `/api/compressors`, polling, and WebSocket updates whenever compressor rows exist.
+Compressor **cards and add flow** appear on the dashboard alongside CNC machines. Use **[ ADD COMPRESSOR ]** on the add card to register a Kaeser unit. Tablet kiosk routes (`/tablet/compressor/...`) work without beta mode.
 
 ## Data model
 
