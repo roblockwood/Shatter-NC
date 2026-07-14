@@ -1,3 +1,10 @@
+# [0.23.0](https://github.com/roblockwood/Shatter-NC/compare/v0.22.0...v0.23.0) (2026-07-14)
+
+
+### Features
+
+* expose Kaeser compressor dashboard UI outside beta mode ([3b0b45f](https://github.com/roblockwood/Shatter-NC/commit/3b0b45fbde74539d1be336176703690bce3e28e6))
+
 # [0.22.0](https://github.com/roblockwood/Shatter-NC/compare/v0.21.0...v0.22.0) (2026-05-24)
 
 
