@@ -22,11 +22,22 @@ import app.api.status as status_module
 # ---------------------------------------------------------------------------
 
 def _route_signatures(router: APIRouter) -> set:
-    """Return {(frozenset(methods), path)} for every route on the router."""
+    """Return {(frozenset(methods), path)} for every route on the router.
+
+    FastAPI 0.139+/Starlette 1.x stores nested ``include_router`` entries as
+    ``_IncludedRouter`` wrappers, so we walk ``original_router`` recursively.
+    """
     sigs = set()
-    for route in router.routes:
-        if hasattr(route, "methods") and hasattr(route, "path"):
-            sigs.add((frozenset(route.methods), route.path))
+
+    def walk(node) -> None:
+        for route in getattr(node, "routes", []) or []:
+            if hasattr(route, "methods") and hasattr(route, "path"):
+                sigs.add((frozenset(route.methods), route.path))
+            nested = getattr(route, "original_router", None)
+            if nested is not None:
+                walk(nested)
+
+    walk(router)
     return sigs
 
 
