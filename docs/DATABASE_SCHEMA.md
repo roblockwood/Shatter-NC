@@ -848,7 +848,7 @@ See [DATABASE_MIGRATIONS.md](DATABASE_MIGRATIONS.md).
 
 ### Alembic
 
-Alembic is listed in `requirements.txt` but **not used** for migrations today. A future migration to Alembic could add up/down migrations and autogenerate from models.
+Not used. Migrations are numbered SQL files plus `run_migrations.py`. A future switch to Alembic could add up/down migrations and autogenerate from models (see [DATABASE_MIGRATIONS.md](DATABASE_MIGRATIONS.md)).
 
 ---
 

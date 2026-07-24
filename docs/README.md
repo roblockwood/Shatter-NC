@@ -36,6 +36,4 @@ Curated docs for installing, operating, and contributing to Shatter.
 
 Update the smallest relevant doc in the same PR as code changes. REST API details live in OpenAPI (`/docs` when `LOG_LEVEL=DEBUG`), not a hand-maintained reference. Prefer deleting obsolete sections over duplicating.
 
-**Audit artifacts:** [CODEBASE_GROUND_TRUTH.md](./audit/CODEBASE_GROUND_TRUTH.md), [DOCUMENTATION_AUDIT_LOG.md](./audit/DOCUMENTATION_AUDIT_LOG.md)
-
 Parser schema template for agents: [`.cursor/templates/SCHEMA_DEFINITION_TEMPLATE.md`](../.cursor/templates/SCHEMA_DEFINITION_TEMPLATE.md)
