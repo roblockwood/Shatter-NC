@@ -89,7 +89,7 @@ interface MachineStatus {
   tool_response_time_ms?: number;
   ip_address?: string;
   ftp_username?: string;
-  ftp_password?: string;
+  ftp_credentials_configured?: boolean;
   ftp_port?: number;
   http_port?: number;
   path?: string;
@@ -372,7 +372,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   const [editFormData, setEditFormData] = useState({
     ip_address: machine.ip_address || '',
     ftp_username: machine.ftp_username || '',
-    ftp_password: machine.ftp_password || '',
+    ftp_password: '',
     ftp_port: machine.ftp_port || 21,
     // http_port removed - Telnet port is always 10000
     path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
@@ -398,6 +398,9 @@ export const MachineCard: React.FC<MachineCardProps> = ({
   // Store the original form data when editing starts (from fetched API data)
   const [originalFormData, setOriginalFormData] = useState<typeof editFormData | null>(null);
   const [originalMachineName, setOriginalMachineName] = useState<string | null>(null);
+  const [ftpCredentialsConfigured, setFtpCredentialsConfigured] = useState(
+    machine.ftp_credentials_configured === true
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch full machine configuration data on mount
@@ -411,7 +414,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           const fetchedFormData = {
             ip_address: fullMachineData.ip_address || '',
             ftp_username: fullMachineData.ftp_username || '',
-            ftp_password: fullMachineData.ftp_password || '',
+            ftp_password: '',
             ftp_port: fullMachineData.ftp_port || 21,
             // http_port removed - Telnet port is always 10000
             path: fullMachineData.path !== undefined && fullMachineData.path !== null ? fullMachineData.path : '/',
@@ -435,6 +438,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
           };
           setOriginalFormData(fetchedFormData);
           setOriginalMachineName(fullMachineData.name || '');
+          setFtpCredentialsConfigured(fullMachineData.ftp_credentials_configured === true);
           // Update form data with fetched configuration
           setEditMachineName(fullMachineData.name || '');
           setEditFormData(fetchedFormData);
@@ -447,7 +451,11 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     fetchMachineConfig();
   }, [machine.machine_id]);
 
-  const editFormValid = editMachineName && editFormData.ip_address && editFormData.ftp_username && editFormData.ftp_password;
+  const editFormValid =
+    editMachineName &&
+    editFormData.ip_address &&
+    editFormData.ftp_username &&
+    (editFormData.ftp_password.trim().length > 0 || ftpCredentialsConfigured);
 
   // Check if there are unsaved changes
   const hasUnsavedChanges = () => {
@@ -474,10 +482,13 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     setEditSuccess(false);
 
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         ...editFormData,
         control_version: editFormData.control_version === 'AUTO' ? null : editFormData.control_version,
       };
+      if (!editFormData.ftp_password.trim()) {
+        delete payload.ftp_password;
+      }
       const response = await fetch(`${API_BASE_URL}/api/machines/${machine.machine_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -516,7 +527,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
       setEditFormData({
         ip_address: machine.ip_address || '',
         ftp_username: machine.ftp_username || '',
-        ftp_password: machine.ftp_password || '',
+        ftp_password: '',
         ftp_port: machine.ftp_port || 21,
         // http_port removed - Telnet port is always 10000
         path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
@@ -1071,7 +1082,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                 type="password"
                 value={editFormData.ftp_password}
                 onChange={(e) => setEditFormData({ ...editFormData, ftp_password: e.target.value })}
-                placeholder="anonymous"
+                placeholder={ftpCredentialsConfigured ? '(unchanged if empty)' : 'anonymous'}
                 disabled={isEditSaving}
               />
             </div>
