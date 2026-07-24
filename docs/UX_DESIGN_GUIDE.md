@@ -699,7 +699,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, status }) => 
       <div className="terminal-box-content">
         <div>PROG: {status.program || '──────'}</div>
         <div>
-          CYCLE: <ProgressBar value={status.progress} />
+          CYCLE: {status.progress}% (inline bar in detail panes)
         </div>
         <div>PARTS: {status.parts}/{status.target}</div>
       </div>
@@ -733,3 +733,35 @@ IDLE:     ○  or  ─  or  ··
 ---
 
 This design system provides a unique, memorable identity while maintaining modern usability standards. The retro-terminal aesthetic differentiates Shatter from typical industrial dashboards while being highly functional for CNC monitoring.
+
+---
+
+## Branding
+
+### Application identity
+
+**Shatter** — CNC management platform for Brother machines. Version is shown in API metadata ([`config.py`](../backend/app/core/config.py)) and release tags (semantic-release).
+
+### Icon (favicon)
+
+Stack-light tower — manufacturing status colors:
+
+| Light | Hex | Meaning |
+|-------|-----|---------|
+| Red | `#e74c3c` | Alarm / error / offline |
+| Yellow | `#f39c12` | Warning |
+| Green | `#27ae60` | Running / online |
+
+**File:** [`frontend/public/favicon.svg`](../frontend/public/favicon.svg) (SVG, scales cleanly)
+
+```html
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+```
+
+### Logo usage
+
+- Use the ASCII logo block in this guide for docs/headers
+- Do not stretch the favicon; keep red-yellow-green vertical order
+- Match UI status colors to the palette above
+
+Version numbers are managed by semantic-release — do not hardcode in UI copy.

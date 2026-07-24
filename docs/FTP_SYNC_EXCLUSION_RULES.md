@@ -4,13 +4,7 @@ This document defines the file exclusion and filename validation policy used by 
 
 ## Manual References
 
-The sync rule set is derived from Brother manual constraints available in this repository:
-
-1. C00 control format: [docs/scrape/section_5_6_4_c00.json](docs/scrape/section_5_6_4_c00.json)
-2. D00 control format: [docs/scrape/section_3_6_5_d00.json](docs/scrape/section_3_6_5_d00.json)
-3. Source PDFs:
-1. [docs/brother-manuals/CNC-D00_Data bank & Alarm manual.pdf](docs/brother-manuals/CNC-D00_Data%20bank%20&%20Alarm%20manual.pdf)
-2. [docs/brother-manuals/CNC-D00_Operation manual II.pdf](docs/brother-manuals/CNC-D00_Operation%20manual%20II.pdf)
+Rules are implemented in [`backend/app/utils/ftp_sync_rules.py`](../backend/app/utils/ftp_sync_rules.py) and derived from Brother C00/D00 databank naming constraints documented in [`TELNET_REFERENCE.md`](TELNET_REFERENCE.md) (DRQALL directory formats).
 
 ## Constraints Applied
 

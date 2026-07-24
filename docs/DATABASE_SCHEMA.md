@@ -22,18 +22,7 @@ Complete database schema documentation for the Shatter CNC management platform.
 
 ### Database URL
 
-```python
-# From config.py
-database_url = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-```
-
-**Default Connection:**
-- Host: `localhost`
-- Port: `5432`
-- Database: `shatter`
-- User: `shatter_user`
-
-See [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) for configuration.
+Connection string is built from `POSTGRES_*` settings in [`config.py`](../backend/app/core/config.py). See [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md).
 
 ---
 
@@ -979,6 +968,6 @@ psql -h localhost -U shatter_user -d shatter -f create_hypertables.sql
 ## Related Documentation
 
 - [BACKEND_ARCHITECTURE.md](BACKEND_ARCHITECTURE.md) - Service layer and data flow
-- [API_REFERENCE.md](API_REFERENCE.md) - API endpoints and data models
+- [BACKEND_ARCHITECTURE.md](BACKEND_ARCHITECTURE.md) - Services using this schema
 - [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) - Database configuration
-- [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) - Database deployment with Docker
+- [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md) - Backup and volumes
