@@ -6,7 +6,7 @@
 **Status:** Inaccuracies below were **corrected in source docs** on 2026-03-20. Keep this log for traceability until the audit artifacts are archived.
 
 **Scope:** Active operator/contributor docs under `docs/`, plus root `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, and `frontend/README.md`.  
-**Excluded:** `docs/archive/`, `docs/scrape/` (vendor manuals), `brother_cnc_export/`, `.cursor/`.  
+**Excluded:** `docs/archive/`, `docs/scrape/` (vendor manuals), `brother_cnc_export/`, `.cursor/`.
 
 **Legend**
 
