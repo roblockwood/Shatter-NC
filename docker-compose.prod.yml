@@ -1,11 +1,12 @@
 
-# Production docker-compose pulling pre-built images from GitHub Packages
-# This file pulls pre-built images instead of building locally
+# Production docker-compose — pre-built images from GitHub Container Registry (ghcr.io).
+# No source checkout required: download this file + .env.production.example (see docs/INSTALLATION_GUIDE.md).
 #
 # Usage:
-#   1. Authenticate: echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
-#   2. Start services: docker compose -f docker-compose.prod.yml up -d
-#   3. To update: docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
+#   cp .env.production.example .env   # edit secrets first
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#   # Optional MQTT broker: docker compose -f docker-compose.prod.yml --profile mqtt up -d
 
 services:
   # PostgreSQL with TimescaleDB extension
@@ -19,9 +20,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/init:/docker-entrypoint-initdb.d
-    ports:
-      - "5432:5432"
+    # Schema is applied by backend migrations on startup (SQL is baked into the backend image).
+    # Database is reachable only on the internal Docker network (not exposed on the host).
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U shatter_user -d shatter"]
       interval: 10s
@@ -46,7 +46,8 @@ services:
       COMPRESSOR_STATUS_SAMPLE_MIN_INTERVAL_SECONDS: ${COMPRESSOR_STATUS_SAMPLE_MIN_INTERVAL_SECONDS:-1}
       COMPRESSOR_STATUS_SAMPLES_RAW_DAYS: ${COMPRESSOR_STATUS_SAMPLES_RAW_DAYS:-14}
       SECRET_KEY: ${SECRET_KEY}
-      CORS_ORIGINS: '["*"]'
+      # Set shop-specific browser origins, e.g. '["http://192.168.1.50","http://localhost"]'
+      CORS_ORIGINS: ${CORS_ORIGINS:-'["http://localhost:3000","http://localhost"]'}
       # Optional MQTT publishing (leave MQTT_PUBLISH_HOST empty to disable).
       MQTT_PUBLISH_HOST: ${MQTT_PUBLISH_HOST:-}
       MQTT_PUBLISH_PORT: ${MQTT_PUBLISH_PORT:-1883}
@@ -58,9 +59,8 @@ services:
       MIGRATIONS_DIR: /app/migrations
       FTP_SYNC_LOCAL_BROWSE_ROOT: /hostfs
     volumes:
-      - ./docker/generated:/docker/generated
+      - generated_data:/docker/generated
       - ${FTP_SYNC_LOCAL_BROWSE_HOST_PATH:-/Users}:/hostfs:rw
-      # Optional: - ./database/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
@@ -94,16 +94,21 @@ services:
 
   # Optional MQTT broker for telemetry fanout (CNC + compressors).
   mosquitto:
+    profiles: ["mqtt"]
     image: eclipse-mosquitto:2
     container_name: shatter-mosquitto-prod
     restart: always
-    ports:
-      - "1883:1883"
+    command: >
+      /bin/sh -c "printf 'listener 1883\nallow_anonymous true\n' > /tmp/mosquitto.conf
+      && exec mosquitto -c /tmp/mosquitto.conf"
+    # Internal-only; enable with --profile mqtt when MQTT_PUBLISH_HOST=mosquitto
     networks:
       - shatter-network
 
 volumes:
   postgres_data:
+    driver: local
+  generated_data:
     driver: local
 
 networks:
