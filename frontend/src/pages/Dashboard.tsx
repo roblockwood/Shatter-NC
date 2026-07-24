@@ -34,11 +34,11 @@ export const Dashboard = () => {
   const [deletingTarget, setDeletingTarget] = useState<DeleteTarget | null>(null);
   const [summaryModal, setSummaryModal] = useState<{
     isOpen: boolean;
-    type: 'running' | 'online' | 'offline' | null;
+    type: 'running' | null;
   }>({ isOpen: false, type: null });
   const [summaryPopup, setSummaryPopup] = useState<{
     isOpen: boolean;
-    type: 'online' | 'offline' | 'running' | 'machines' | null;
+    type: 'running' | 'machines' | null;
   }>({ isOpen: false, type: null });
   const [isAddingMachine, setIsAddingMachine] = useState(false);
   const [isAddingCompressor, setIsAddingCompressor] = useState(false);

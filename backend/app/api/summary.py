@@ -51,37 +51,6 @@ class RunningSummary(BaseModel):
     total_machines: int
     machines: List[RunningSummaryMachine]
 
-class OnlineSummaryMachine(BaseModel):
-    machine_id: int
-    machine_name: str
-    is_online: bool
-    online_since: Optional[datetime] = None
-    online_duration_seconds: int
-    online_duration_formatted: str
-    last_seen_at: Optional[datetime] = None
-    connection_health: str
-    polling_history_8h: List[PollingDataPoint]
-
-class OnlineSummary(BaseModel):
-    total_online: int
-    machines: List[OnlineSummaryMachine]
-
-class OfflineSummaryMachine(BaseModel):
-    machine_id: int
-    machine_name: str
-    is_online: bool
-    offline_since: Optional[datetime] = None
-    offline_duration_seconds: int
-    offline_duration_formatted: str
-    last_seen_at: Optional[datetime] = None
-    last_known_status: Optional[str] = None
-    enabled: bool
-    polling_history_8h: List[PollingDataPoint]
-
-class OfflineSummary(BaseModel):
-    total_offline: int
-    machines: List[OfflineSummaryMachine]
-
 class PollingStatsSummary(BaseModel):
     """Summary statistics for polling history."""
     total_polls: int
@@ -332,7 +301,7 @@ def get_running_summary(
         total_run_time = float(row.total_run_time_seconds)
         run_percentage = (total_run_time / time_range_seconds * 100) if time_range_seconds > 0 else 0.0
 
-        # Get current status from Redis cache (with fallback to in-memory cache)
+        # Get current status from in-memory cache
         cached_status = websocket_api.websocket_manager.get_machine_status_from_cache(row.machine_id) if websocket_api.websocket_manager else {}
         current_status = cached_status.get("status") if cached_status else None
 
@@ -370,168 +339,6 @@ def get_running_summary(
         time_range=time_range,
         total_machines=len(machines),
         machines=machines
-    )
-
-@router.get("/summary/online", response_model=OnlineSummary)
-def get_online_summary(
-    db: Session = Depends(get_db),
-    time_range: str = Query("8h", description="Time range for polling history: 1h, 8h, 24h, 7d")
-):
-    """
-    DEPRECATED: Use /summary/machines instead for unified machine status view.
-
-    Get online summary showing all currently online machines with connection health and service status.
-
-    Returns machines with online duration, connection health indicators, and service availability.
-    Uses the polling service as the source of truth for online status.
-    """
-    # Parse time range to hours
-    hours_map = {
-        '1h': 1,
-        '8h': 8,
-        '24h': 24,
-        '7d': 168,  # 7 days = 168 hours
-    }
-    hours = hours_map.get(time_range, 8)
-    # Get all enabled machines
-    machines_query = db.query(Machine).filter(Machine.enabled == True).all()
-
-    online_machines = []
-    
-    # Check if backend is healthy - only show online machines if backend is running
-    backend_healthy = is_backend_healthy()
-
-    for machine in machines_query:
-        # Use polling service as source of truth for online status
-        is_online = False
-        if polling_service:
-            poller_status = polling_service.get_machine_status(machine.id)
-            is_online = poller_status.get("is_online", False) if poller_status else False
-
-        # Only include online machines, and only if backend is healthy
-        # If backend just started, don't show machines as online until we've polled
-        if not is_online or not backend_healthy:
-            continue
-
-        # Calculate online duration
-        # Find most recent status change to online in machine_status_events
-        online_since_query = db.query(MachineStatusEvent.time).filter(
-            MachineStatusEvent.machine_id == machine.id,
-            MachineStatusEvent.status.notin_(['error', 'alarm'])
-        ).order_by(MachineStatusEvent.time.desc()).first()
-
-        online_since = online_since_query.time if online_since_query else machine.last_seen_at
-
-        # Calculate duration
-        now = datetime.utcnow()
-        if online_since:
-            online_since_naive = online_since.replace(tzinfo=None) if online_since.tzinfo else online_since
-            duration_seconds = int((now - online_since_naive).total_seconds())
-        else:
-            duration_seconds = 0
-
-        # Get connection health
-        connection_health = get_connection_health(machine.last_seen_at)
-
-        # Get polling history for the specified time range
-        polling_history = get_polling_history(machine.id, db, hours=hours)
-
-        online_machines.append(OnlineSummaryMachine(
-            machine_id=machine.id,
-            machine_name=machine.name,
-            is_online=True,
-            online_since=online_since,
-            online_duration_seconds=duration_seconds,
-            online_duration_formatted=format_duration(duration_seconds),
-            last_seen_at=machine.last_seen_at,
-            connection_health=connection_health,
-            polling_history_8h=polling_history
-        ))
-
-    # Sort by online duration descending
-    online_machines.sort(key=lambda x: x.online_duration_seconds, reverse=True)
-
-    return OnlineSummary(
-        total_online=len(online_machines),
-        machines=online_machines
-    )
-
-@router.get("/summary/offline", response_model=OfflineSummary)
-def get_offline_summary(db: Session = Depends(get_db)):
-    """
-    DEPRECATED: Use /summary/machines instead for unified machine status view.
-
-    Get offline summary showing all currently offline machines with downtime and service errors.
-
-    Returns machines that are offline with offline duration, service failure reasons,
-    and last known status.
-    Uses the polling service as the source of truth for online status.
-    """
-    # Get all enabled machines
-    machines_query = db.query(Machine).filter(Machine.enabled == True).all()
-
-    offline_machines = []
-
-    # Check if backend is healthy before marking machines as offline
-    backend_healthy = is_backend_healthy()
-    
-    for machine in machines_query:
-        # Use polling service as source of truth for online status
-        is_online = False
-        if polling_service:
-            poller_status = polling_service.get_machine_status(machine.id)
-            is_online = poller_status.get("is_online", False) if poller_status else False
-
-        # Only include offline machines, and only if backend is healthy
-        # If backend was down, we can't know machine status, so don't mark as offline
-        if is_online:
-            continue
-        
-        # Skip if backend is not healthy - can't determine if machine is truly offline
-        if not backend_healthy:
-            continue
-
-        # Get last known status from machine_status_events
-        last_status_query = db.query(
-            MachineStatusEvent.time,
-            MachineStatusEvent.status
-        ).filter(
-            MachineStatusEvent.machine_id == machine.id
-        ).order_by(MachineStatusEvent.time.desc()).first()
-
-        offline_since = last_status_query.time if last_status_query else machine.last_seen_at
-        last_known_status = last_status_query.status if last_status_query else None
-
-        # Calculate offline duration
-        now = datetime.utcnow()
-        if offline_since:
-            offline_since_naive = offline_since.replace(tzinfo=None) if offline_since.tzinfo else offline_since
-            duration_seconds = int((now - offline_since_naive).total_seconds())
-        else:
-            duration_seconds = 0
-
-        # Get polling history for the trailing 8 hours
-        polling_history = get_polling_history(machine.id, db, hours=8)
-
-        offline_machines.append(OfflineSummaryMachine(
-            machine_id=machine.id,
-            machine_name=machine.name,
-            is_online=False,
-            offline_since=offline_since,
-            offline_duration_seconds=duration_seconds,
-            offline_duration_formatted=format_duration(duration_seconds),
-            last_seen_at=machine.last_seen_at,
-            last_known_status=last_known_status,
-            enabled=machine.enabled,
-            polling_history_8h=polling_history
-        ))
-
-    # Sort by offline duration descending
-    offline_machines.sort(key=lambda x: x.offline_duration_seconds, reverse=True)
-
-    return OfflineSummary(
-        total_offline=len(offline_machines),
-        machines=offline_machines
     )
 
 @router.get("/summary/machines", response_model=MachinesSummary)
