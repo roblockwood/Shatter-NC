@@ -100,8 +100,8 @@ frontend/src/
 ## Testing
 
 ```bash
-# Backend (from repo root; CI enforces 25% coverage floor)
-PYTHONPATH=backend pytest backend/tests/
+# Backend (from repo root; CI enforces coverage floor via --cov-fail-under)
+PYTHONPATH=backend pytest backend/tests/ --cov=app --cov-report=term-missing
 
 # Frontend
 cd frontend && npm test
@@ -110,7 +110,7 @@ cd frontend && npm test
 cd frontend && npm run build
 ```
 
-Document test commands in PR descriptions.
+CI coverage floor is currently **60%** (`--cov-fail-under=60` in [`.github/workflows/test.yml`](../.github/workflows/test.yml)). Document test commands in PR descriptions.
 
 ---
 

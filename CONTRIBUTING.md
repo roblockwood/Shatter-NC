@@ -551,19 +551,23 @@ Before submitting a PR with UI changes:
 
 ### Testing Requirements
 
-**Current Status:** Backend and frontend unit tests exist; expand coverage for new features.
+**Current Status:** Backend (`pytest` + `pytest-cov`) and frontend (`vitest`) unit tests exist. CI runs backend tests with `--cov-fail-under=60` (see [`.github/workflows/test.yml`](.github/workflows/test.yml)); raise that floor as measured coverage grows. Long-term backend target is ~80% once API/DB integration tests land.
+
+When adding tests, document commands in the PR description (`pytest backend/tests/`, `npm test` in `frontend/`). Prefer behavioral unit tests (parsers, protocol seams, pure services) over import/seam-only checks.
 
 #### Manual Testing Checklist
 
-Until automated tests are in place, perform manual testing:
+Automated tests do not replace integration checks for machine I/O and UI:
 
 **Backend:**
-- [ ] Test API endpoints using Swagger UI (`http://localhost:8000/docs`)
-- [ ] Verify database changes using `psql` or database client
+- [ ] Test API endpoints using Swagger UI (`http://localhost:8000/docs`) when changing routers
+- [ ] Verify database changes using `psql` or database client when changing models/migrations
 - [ ] Check logs for errors: `docker compose logs -f backend`
 - [ ] Test error handling with invalid inputs
+- [ ] Run `PYTHONPATH=backend pytest backend/tests/` (coverage enforced in CI)
 
 **Frontend:**
+- [ ] Run `npm test` for touched components/utils
 - [ ] Test in development mode: `npm run dev`
 - [ ] Test production build: `npm run build && npm run preview`
 - [ ] Test in multiple browsers (Chrome, Firefox, Safari)
@@ -576,19 +580,17 @@ Until automated tests are in place, perform manual testing:
 - [ ] Verify all services are healthy: `docker compose ps`
 - [ ] Test workflows end-to-end (e.g., add machine → poll status → deploy program)
 
-#### Future Testing (Planned)
-
-When adding tests, document commands in the PR description (`pytest backend/tests/`, `npm test` in `frontend/`).
+#### Test Stack
 
 **Backend:**
-- Unit tests with `pytest`
-- Integration tests with `pytest-asyncio`
-- API endpoint tests with `httpx.AsyncClient`
-- Test coverage minimum: 80%
+- Unit tests with `pytest` / `pytest-asyncio`
+- Coverage via `pytest-cov` (CI floor in workflow; raise with meaningful new tests)
+- API endpoint tests with `TestClient` / `httpx` (expand as needed)
+- Long-term coverage goal: 80% (with DB-backed integration tests)
 
 **Frontend:**
 - Component tests with Vitest + React Testing Library
-- Integration tests with Mock Service Worker (MSW)
+- Integration tests with Mock Service Worker (MSW) (planned)
 - E2E tests with Playwright (planned)
 
 ---
@@ -758,7 +760,7 @@ A: Look for issues labeled `good first issue`. These are beginner-friendly tasks
 A: See [DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) for detailed setup instructions. We recommend Option 1 (Full Docker) for beginners.
 
 **Q: Do I need to write tests for my contribution?**
-A: Automated tests are not yet implemented. Perform thorough manual testing and document your test process in the PR description.
+A: Yes for backend logic and non-trivial frontend behavior. Add or extend tests under `backend/tests/` or `frontend/src/test/`, run them locally, and document the commands in the PR. Manual integration checks still matter for machine I/O and UI.
 
 **Q: My PR hasn't been reviewed yet. What should I do?**
 A: Reviews typically happen within 1-3 days. If it's been longer, add a polite comment asking for status update.
