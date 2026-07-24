@@ -627,31 +627,28 @@ Despite retro aesthetic:
 
 ---
 
-## Tech Stack Recommendations
+## Tech Stack
 
 ### Framework
 - **React** with TypeScript
-- **Vite** for fast builds
+- **Vite** for builds and Vitest for tests
 
-### Libraries
+### Libraries (actual frontend dependencies)
 ```json
 {
-  "react": "^18.x",
-  "typescript": "^5.x",
-  "@tanstack/react-query": "^5.x",    // Data fetching
-  "zustand": "^4.x",                   // State management
-  "react-router-dom": "^6.x",          // Routing
-  "framer-motion": "^10.x",            // Animations (optional)
-  "ascii-progress": "^2.x",            // ASCII progress bars
-  "blessed": "^0.1.x",                 // Terminal UI components
-  "xterm": "^5.x"                      // Terminal emulator (if needed)
+  "react": "^19.x",
+  "react-dom": "^19.x",
+  "react-router-dom": "^7.x",
+  "react-grid-layout": "^1.x",
+  "typescript": "~5.9"
 }
 ```
 
+Data fetching and layout state use React hooks and local component state (no React Query or Zustand). ASCII progress and terminal chrome are custom CSS/components in-repo.
+
 ### CSS Approach
-- **CSS Modules** or **Styled Components**
-- CSS custom properties for theming
-- No UI framework (build custom components for full control)
+- Plain CSS (+ CSS modules where used) with custom properties for theming
+- No UI framework (custom components for full control)
 
 ---
 
