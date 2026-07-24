@@ -12,6 +12,15 @@ import { earlierIsoTimestamp } from '../ui/pollingFreshness';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import '../ui/TerminalBox.css';
 import { TERMINAL_RULE_FILL } from '../../utils/terminalAsciiRule';
+import { StatusPieChart } from './StatusPieChart';
+import {
+  computeStatusDurations,
+  getTimeRangeBounds,
+  loadTimelineDisplayMode,
+  saveTimelineDisplayMode,
+  toggleTimelineDisplayMode,
+  type TimelineDisplayMode,
+} from '../../utils/statusTimelineUtils';
 import './StatusTimeline.css';
 
 interface StatusEvent {
@@ -89,9 +98,25 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
     () => earlierIsoTimestamp(lastFetchSuccessAt, machineLastSuccessfulPollAt),
     [lastFetchSuccessAt, machineLastSuccessfulPollAt],
   );
+  const [displayMode, setDisplayMode] = useState<TimelineDisplayMode>(() =>
+    loadTimelineDisplayMode()
+  );
   const oscilloscopeRef = React.useRef<HTMLDivElement>(null);
   const oscilloscopeDataRef = React.useRef<HTMLDivElement>(null);
-  
+
+  useEffect(() => {
+    saveTimelineDisplayMode(displayMode);
+  }, [displayMode]);
+
+  const durationSlices = useMemo(() => {
+    const bounds = getTimeRangeBounds(timeRange);
+    return computeStatusDurations(events, bounds, currentStatus, isOnline);
+  }, [events, timeRange, currentStatus, isOnline]);
+
+  const handleTogglePieView = () => {
+    setDisplayMode((prev) => toggleTimelineDisplayMode(prev));
+  };
+
   // Persist trace mode (single source of truth).
   useEffect(() => {
     localStorage.setItem('oscilloscopeTraceMode', traceMode);
@@ -335,8 +360,10 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
     return () => clearInterval(interval);
   }, [machineId, timeRange]);
 
-  // Calculate oscilloscope scale based on container size
+  // Calculate oscilloscope scale based on container size (oscilloscope only)
   useEffect(() => {
+    if (displayMode === 'pie') return;
+
     const updateScale = () => {
       // Use requestAnimationFrame to ensure DOM is updated
       requestAnimationFrame(() => {
@@ -391,7 +418,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
       resizeObserver.disconnect();
       window.removeEventListener('resize', updateScale);
     };
-  }, [oscilloscopeWidth]); // Recalculate when width changes
+  }, [oscilloscopeWidth, displayMode]);
 
   // Build oscilloscope data points
   const buildOscilloscopeData = () => {
@@ -692,15 +719,29 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
           [7D]
         </button>
         <button
-          className={`time-range-btn ${(colorMode || oscillationMode) ? 'active' : ''}`}
+          className={`time-range-btn ${displayMode === 'oscilloscope' && (colorMode || oscillationMode) ? 'active' : ''}`}
           onClick={cycleTraceMode}
+          disabled={displayMode === 'pie'}
           title="Cycle trace: mono → osc → color → color+osc"
         >
           [{traceMode === 'mono' ? 'MONO' : traceMode === 'osc' ? 'OSC' : traceMode === 'color' ? 'COLOR' : 'C+OSC'}]
         </button>
+        <button
+          className={`time-range-btn view-mode-btn ${displayMode === 'pie' ? 'active' : ''}`}
+          onClick={handleTogglePieView}
+          title="Toggle duration pie chart view"
+        >
+          [PIE]
+        </button>
       </div>
       <div className="status-timeline-content">
-        {loading ? (
+        {displayMode === 'pie' ? (
+          <StatusPieChart
+            slices={durationSlices}
+            timeRange={timeRange}
+            loading={loading}
+          />
+        ) : loading ? (
           <div className="timeline-loading">LOADING...</div>
         ) : oscilloscopeData.length === 0 ? (
           <div className="timeline-empty">NO STATUS DATA</div>

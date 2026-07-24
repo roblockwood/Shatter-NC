@@ -287,9 +287,15 @@ The component normalizes machine status strings to standard values:
 - `error`, `error occurred` → `ERROR`
 - `off`, `offline` → `OFF`
 
+**Display modes:**
+- **Oscilloscope** (default): existing trace style cycler (`[MONO]` → `[OSC]` → `[COLOR]` → `[C+OSC]`) for the SVG timeline
+- **Pie** (`[PIE]` toggle): duration-weighted donut chart for the selected 1H/8H/24H/7D window; persisted as `statusTimelineViewMode` = `pie`
+- Pie legend lists all five statuses with percent and duration (e.g. `OPERATING  42.1%  (5h 03m)`); slice colors match trace status colors
+- Trace style button is disabled while pie view is active
+
 **Usage Guidelines:**
 - **Primary Use**: Machine detail view status timeline pane
-- **Hover Behavior**: Shows tooltip with status and timestamp at data points
+- **Hover Behavior**: Shows tooltip with status and timestamp at data points (oscilloscope mode only)
 - **Click Behavior**: Does not expand (content always fits within pane)
 - **Time Range Selection**: User can switch between 1H, 8H, 24H, 7D via buttons
 - **Data Source**: Fetches from `/api/machines/{machine_id}/status-history` endpoint
@@ -307,6 +313,8 @@ interface StatusTimelineProps {
 
 **CSS Classes:**
 - `.status-timeline` - Main container
+- `.status-pie-chart` / `.status-pie-legend` - Pie view (see `StatusPieChart.css`)
+- `.view-mode-btn` - `[PIE]` toggle
 - `.oscilloscope-display` - SVG container
 - `.oscilloscope-svg` - SVG element
 - `.oscilloscope-trace` - Main path element
