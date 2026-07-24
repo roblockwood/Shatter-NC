@@ -114,7 +114,9 @@ async def get_alarm_history(
     db: Session = Depends(get_db)
 ):
     """
-    Get alarm history for a machine.
+    Get alarm event history for a machine (stored in PostgreSQL).
+
+    For live controller alarms via telnet, use ``GET /api/machines/{machine_id}/alarms/live``.
 
     Query params:
     - start_time: Filter from this datetime (ISO format)
@@ -163,7 +165,7 @@ async def get_active_alarms(
 
 # ========== Production History ==========
 
-@router.get("/machines/{machine_id}/production-runs", response_model=List[ProductionRunResponse])
+@router.get("/machines/{machine_id}/production-runs", response_model=List[ProductionRunResponse], deprecated=True)
 async def get_production_runs(
     machine_id: int,
     start_time: Optional[datetime] = Query(None),
@@ -175,6 +177,9 @@ async def get_production_runs(
 ):
     """
     Get production run history for a machine.
+
+    .. deprecated::
+        Prefer ``GET /api/machines/{machine_id}/production-runs-timeline`` for UI timelines.
 
     Query params:
     - start_time: Filter from this datetime (ISO format)
@@ -202,7 +207,7 @@ async def get_production_runs(
     return runs
 
 
-@router.get("/programs/{program_id}/production-runs", response_model=List[ProductionRunResponse])
+@router.get("/programs/{program_id}/production-runs", response_model=List[ProductionRunResponse], deprecated=True)
 async def get_program_production_history(
     program_id: int,
     limit: int = Query(100, le=1000),
@@ -210,6 +215,9 @@ async def get_program_production_history(
 ):
     """
     Get production history for a specific program (across all machines).
+
+    .. deprecated::
+        No current UI consumer; may be removed in a future release.
 
     Shows where and when this program has been run.
 

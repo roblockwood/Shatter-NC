@@ -4,7 +4,7 @@ Complete database schema documentation for the Shatter CNC management platform.
 
 ## Overview
 
-**Database:** PostgreSQL 14+ with TimescaleDB extension
+**Database:** PostgreSQL 15+ with TimescaleDB extension (`timescale/timescaledb:latest-pg15` in Docker compose)
 
 **ORM:** SQLAlchemy 2.0
 
@@ -14,7 +14,7 @@ Complete database schema documentation for the Shatter CNC management platform.
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **RDBMS** | PostgreSQL 14+ | Relational data storage |
+| **RDBMS** | PostgreSQL 15+ | Relational data storage |
 | **Time-Series** | TimescaleDB | Efficient time-series data storage and queries |
 | **ORM** | SQLAlchemy 2.0 | Database abstraction and migrations |
 | **Connection Pool** | SQLAlchemy pooling | Connection reuse and management |
@@ -22,18 +22,7 @@ Complete database schema documentation for the Shatter CNC management platform.
 
 ### Database URL
 
-```python
-# From config.py
-database_url = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-```
-
-**Default Connection:**
-- Host: `localhost`
-- Port: `5432`
-- Database: `shatter`
-- User: `shatter_user`
-
-See [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) for configuration.
+Connection string is built from `POSTGRES_*` settings in [`config.py`](../backend/app/core/config.py). See [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md).
 
 ---
 
@@ -54,6 +43,7 @@ machines (Machine Configuration)
 ├── path
 ├── tags (JSON)
 ├── poll_interval_seconds
+├── tool_poll_interval_seconds
 ├── enabled
 ├── units (in/mm)
 ├── diameter_tolerance
@@ -61,6 +51,10 @@ machines (Machine Configuration)
 ├── tolerance_x, tolerance_y, tolerance_z
 ├── use_machine_tool_tolerances (boolean)
 ├── use_machine_wcs_tolerances (boolean)
+├── validate_tool_diameter, validate_tool_length (boolean)
+├── control_version (C00/D00, nullable)
+├── part_display_mode ('parts' | 'cycle')
+├── ftp_sync_enabled (boolean)
 ├── layout_config (JSON, nullable) - UI pane layout configuration
 ├── created_at, updated_at
 └── last_seen_at
@@ -165,6 +159,22 @@ polling_events (Hypertable)
 ├── success
 ├── response_time_ms
 └── error_message
+
+compressors (Compressor Configuration)
+├── id (PK), name, ip_address, kaeser_connect_base_url, kaeser_username, kaeser_password
+├── poll_interval_seconds, enabled, tags, layout_config, last_seen_at, timestamps
+
+compressor_status_events (Hypertable) — status transitions
+compressor_status_samples (Hypertable) — high-frequency telemetry
+compressor_status_samples_1min (continuous aggregate)
+
+ftp_sync_configs, ftp_sync_runs, ftp_sync_run_items, ftp_sync_file_states
+
+notification_channels, notification_rules, notification_log
+
+prd3_status_history, macro_history, tool_table_history, panel_history, counter_history (Hypertables)
+
+schema_migrations — applied SQL migration filenames
 ```
 
 ---
@@ -177,7 +187,7 @@ Machine configuration and metadata.
 
 **Table:** `machines`
 
-**Location:** [machine.py:8-42](../backend/app/models/machine.py#L8-L42)
+**Location:** [machine.py](../backend/app/models/machine.py)
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
@@ -189,9 +199,10 @@ Machine configuration and metadata.
 | `http_port` | Integer | No | 80 | HTTP port |
 | `ftp_username` | String(255) | No | "anonymous" | FTP username |
 | `ftp_password` | String(255) | No | "anonymous" | FTP password |
-| `path` | String(255) | No | "/PROGRAM" | Default FTP path |
+| `path` | String(255) | No | `/` (SQL init default `/program`) | Default FTP path |
 | `tags` | JSON | Yes | NULL | Machine tags (e.g., ["production", "floor-a"]) |
-| `poll_interval_seconds` | Integer | No | 5 | Polling interval |
+| `poll_interval_seconds` | Integer | No | 5 | Fast status polling interval (seconds) |
+| `tool_poll_interval_seconds` | Integer | No | 30 | Tool table / ATC polling interval |
 | `enabled` | Boolean | No | TRUE | Enable/disable polling |
 | `units` | String(2) | No | "in" | Units of measurement (in/mm) |
 | `diameter_tolerance` | Float | No | 0.010 | Tool diameter tolerance (±inches) |
@@ -202,7 +213,11 @@ Machine configuration and metadata.
 | `tolerance_z` | Float | No | 0.0394 | WCS Z tolerance (±inches, ±1mm) |
 | `use_machine_tool_tolerances` | Boolean | No | FALSE | When TRUE, use machine-defined tool tolerances. When FALSE, use G-code defaults (exact diameter match, length ≥ required) |
 | `use_machine_wcs_tolerances` | Boolean | No | FALSE | When TRUE, use machine-defined WCS tolerances. When FALSE, use E parameter from G-code if present |
-| `units` | String(2) | No | 'in' | Measurement units: 'in' for inches, 'mm' for millimeters |
+| `validate_tool_diameter` | Boolean | No | TRUE | Include diameter in tool validation |
+| `validate_tool_length` | Boolean | No | TRUE | Include length in tool validation |
+| `control_version` | String(3) | Yes | NULL | `C00`, `D00`, or NULL (auto-detect) |
+| `part_display_mode` | String(20) | No | "parts" | UI counter display: `parts` or `cycle` |
+| `ftp_sync_enabled` | Boolean | No | FALSE | Enable FTP sync UI/jobs for this machine |
 | `layout_config` | JSON | Yes | NULL | UI pane layout configuration (custom layout for machine detail view) |
 | `created_at` | DateTime(TZ) | No | NOW() | Record creation time |
 | `updated_at` | DateTime(TZ) | Yes | - | Last update time |
@@ -451,7 +466,7 @@ Machine status change events (running, stopped, idle, alarm).
 |--------|------|----------|---------|-------------|
 | `time` | DateTime(TZ) | No (PK) | - | Event timestamp (partition key) |
 | `machine_id` | Integer | No (PK) | - | FK → machines.id |
-| `status` | String(50) | No | - | Status value ("running", "stopped", "idle", "alarm") |
+| `status` | String(50) | No | - | Status value (`off`, `standby`, `operating`, `stopped`, `error`, etc.) |
 | `previous_status` | String(50) | Yes | - | Previous status (for transitions) |
 | `program_name` | String(500) | Yes | - | Program name at time of event |
 | `o_number` | String(50) | Yes | - | O-number at time of event |
@@ -460,7 +475,7 @@ Machine status change events (running, stopped, idle, alarm).
 **TimescaleDB Partitioning:**
 - **Partition Key:** `time`
 - **Chunk Interval:** 7 days
-- **Retention:** 90 days (automatic compression and deletion)
+- **Retention:** 1 year (see `database/init/02-add-program-tracking.sql`)
 
 **Composite Primary Key:**
 ```sql
@@ -508,8 +523,8 @@ ALTER TABLE machine_status_events SET (
   timescaledb.compress_orderby = 'time DESC'
 );
 
--- Add retention policy (90 days)
-SELECT add_retention_policy('machine_status_events', INTERVAL '90 days');
+-- Add retention policy (1 year — see database/init/02-add-program-tracking.sql)
+SELECT add_retention_policy('machine_status_events', INTERVAL '1 year');
 ```
 
 ---
@@ -652,7 +667,7 @@ WHERE program_id = 1
 
 ### polling_events
 
-HTTP polling attempt tracking (success/failure, response time).
+Telnet poll attempt tracking (success/failure, response time).
 
 **Table:** `polling_events` (Hypertable)
 
@@ -696,7 +711,7 @@ WHERE machine_id = 1
 ORDER BY time ASC;
 ```
 
-**Retention:** 30 days
+**Retention:** 1 year (see `database/init/05-add-polling-events.sql`)
 
 ---
 
@@ -746,17 +761,17 @@ program_deployments (1) ──┬─< (N) production_runs
 
 ### TimescaleDB Retention
 
+Applied in `database/init/*.sql` (representative values):
+
 ```sql
--- Status events: 90 days
-SELECT add_retention_policy('machine_status_events', INTERVAL '90 days');
-
--- Alarm events: 1 year
-SELECT add_retention_policy('alarm_events', INTERVAL '1 year');
-
--- Production runs: Indefinite (no policy)
-
--- Polling events: 30 days
-SELECT add_retention_policy('polling_events', INTERVAL '30 days');
+-- machine_status_events: 1 year (02-add-program-tracking.sql)
+-- alarm_events: 2 years (02-add-program-tracking.sql)
+-- production_runs: 5 years (02-add-program-tracking.sql)
+-- polling_events: 1 year (05-add-polling-events.sql)
+-- prd3_status_history, macro/tool/panel/counter history: 1 year (11–12)
+-- compressor_status_events: 1 year (15-add-compressors.sql)
+-- compressor_status_samples raw: 14 days (19-compressor-samples-rollup.sql)
+-- compressor_status_samples_1min: 400 days (19-compressor-samples-rollup.sql)
 ```
 
 ### Compression Policies
@@ -802,25 +817,23 @@ SELECT set_chunk_time_interval('polling_events', INTERVAL '1 day');
 - ~52 chunks per year for status events (with compression)
 - Allows efficient retention policy application
 
-### Continuous Aggregates (Future)
+### Continuous Aggregates
+
+**Implemented:** `compressor_status_samples_1min` — 1-minute rollup of compressor telemetry (migration 19). Chart API uses raw samples for recent windows and the aggregate for longer spans.
+
+Example pattern for future CNC aggregates:
 
 ```sql
--- Example: Hourly machine utilization
+-- Example (not deployed): hourly machine utilization
 CREATE MATERIALIZED VIEW machine_utilization_hourly
 WITH (timescaledb.continuous) AS
 SELECT
   time_bucket('1 hour', time) AS bucket,
   machine_id,
-  COUNT(*) FILTER (WHERE status = 'running') AS running_count,
+  COUNT(*) FILTER (WHERE status = 'operating') AS operating_count,
   COUNT(*) AS total_count
 FROM machine_status_events
 GROUP BY bucket, machine_id;
-
--- Refresh policy
-SELECT add_continuous_aggregate_policy('machine_utilization_hourly',
-  start_offset => INTERVAL '3 hours',
-  end_offset => INTERVAL '1 hour',
-  schedule_interval => INTERVAL '1 hour');
 ```
 
 ---
@@ -829,48 +842,13 @@ SELECT add_continuous_aggregate_policy('machine_utilization_hourly',
 
 ### Current Approach
 
-**Manual SQL scripts** - Database schema created manually via SQL.
+**Numbered SQL files** in [`database/init/`](../database/init/) applied on every backend startup by [`run_migrations.py`](../backend/scripts/run_migrations.py). Applied filenames are recorded in **`schema_migrations`**.
 
-**Location:** Schema creation scripts (not currently version-controlled)
+See [DATABASE_MIGRATIONS.md](DATABASE_MIGRATIONS.md).
 
-### Future Approach (Alembic)
+### Alembic
 
-**Alembic** - Database migration framework for SQLAlchemy
-
-**Setup:**
-```bash
-# Initialize Alembic
-alembic init alembic
-
-# Create migration
-alembic revision --autogenerate -m "Initial schema"
-
-# Apply migration
-alembic upgrade head
-```
-
-**Migration Example:**
-```python
-# alembic/versions/001_initial_schema.py
-def upgrade():
-    op.create_table(
-        'machines',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('name', sa.String(length=255), nullable=False),
-        # ...
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('name')
-    )
-
-def downgrade():
-    op.drop_table('machines')
-```
-
-**Benefits:**
-- Version-controlled schema changes
-- Automatic schema generation from models
-- Rollback capability
-- Team collaboration
+Alembic is listed in `requirements.txt` but **not used** for migrations today. A future migration to Alembic could add up/down migrations and autogenerate from models.
 
 ---
 
@@ -979,6 +957,6 @@ psql -h localhost -U shatter_user -d shatter -f create_hypertables.sql
 ## Related Documentation
 
 - [BACKEND_ARCHITECTURE.md](BACKEND_ARCHITECTURE.md) - Service layer and data flow
-- [API_REFERENCE.md](API_REFERENCE.md) - API endpoints and data models
+- [BACKEND_ARCHITECTURE.md](BACKEND_ARCHITECTURE.md) - Services using this schema
 - [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) - Database configuration
-- [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) - Database deployment with Docker
+- [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md) - Backup and volumes

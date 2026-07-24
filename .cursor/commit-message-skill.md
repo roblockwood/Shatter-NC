@@ -306,4 +306,4 @@ When helping with commits:
 
 - [Conventional Commits Specification](https://www.conventionalcommits.org/)
 - [Semantic Versioning](https://semver.org/)
-- Project docs: `docs/VERSIONING.md`
+- Project docs: [CONTRIBUTING.md](../CONTRIBUTING.md#versioning)

@@ -20,9 +20,10 @@ We've implemented an **automatic migration system** that runs on every backend c
 ### How It Works
 
 1. **Startup Scripts**
-   - **Production**: [`backend/scripts/start.sh`](../backend/scripts/start.sh) - Runs migrations then starts the app
-   - **Development**: [`backend/scripts/start-dev.sh`](../backend/scripts/start-dev.sh) - Runs migrations then starts the app with hot-reload
-   - Both scripts:
+   - **Production**: [`backend/scripts/start.sh`](../backend/scripts/start.sh) — runs migrations then starts uvicorn
+   - **Development (Docker)**: [`backend/Dockerfile`](../backend/Dockerfile) development target uses an **inline bash CMD** (wait for Postgres → migrations → uvicorn with reload). This avoids CRLF issues when mounting scripts from Windows hosts.
+   - **Development (hybrid local)**: [`backend/scripts/start-dev.sh`](../backend/scripts/start-dev.sh) — same migration flow for a local venv
+   - All paths:
      - Run before the FastAPI application starts
      - Wait for PostgreSQL to be ready
      - Execute the migration runner
@@ -35,9 +36,9 @@ We've implemented an **automatic migration system** that runs on every backend c
    - Records successful migrations to prevent re-running
 
 3. **Docker Integration**
-   - Dockerfile copies migration scripts and makes them executable
-   - docker-compose.dev.yml mounts migration files into the container
-   - Backend command changed from direct `uvicorn` to startup script
+   - Dockerfile copies migration SQL into the image at `/app/migrations`
+   - `docker-compose.dev.yml` mounts `database/init` for both Postgres first-boot and backend migration runner
+   - Production backend runs migrations via `start.sh`; dev container uses inline CMD (see above)
 
 ### Migration Tracking
 
@@ -91,7 +92,7 @@ Applying migration: 06-add-new-feature.sql
 
 ```bash
 # View applied migrations
-docker exec shatter-db psql -U shatter_user -d shatter -c "SELECT * FROM schema_migrations ORDER BY applied_at;"
+docker exec shatter-db-prod psql -U shatter_user -d shatter -c "SELECT * FROM schema_migrations ORDER BY applied_at;"
 
 # View pending migrations (if migration script shows them)
 docker logs shatter-backend | grep "pending migration"
@@ -101,7 +102,7 @@ docker logs shatter-backend | grep "pending migration"
 
 **Migration fails with SQL syntax error:**
 - Check your SQL file for syntax errors
-- Test manually: `docker exec shatter-db psql -U shatter_user -d shatter -f /docker-entrypoint-initdb.d/YOUR_FILE.sql`
+- Test manually: `docker exec shatter-db-prod psql -U shatter_user -d shatter -f /path/to/migration.sql`
 - PostgreSQL-specific syntax (DO blocks, functions) is fully supported
 
 **Backend won't start after adding migration:**
@@ -113,7 +114,7 @@ docker logs shatter-backend | grep "pending migration"
 **Need to re-run a migration:**
 ```bash
 # Remove from tracking table
-docker exec shatter-db psql -U shatter_user -d shatter -c "DELETE FROM schema_migrations WHERE filename = '06-my-migration.sql';"
+docker exec shatter-db-prod psql -U shatter_user -d shatter -c "DELETE FROM schema_migrations WHERE filename = '06-my-migration.sql';"
 
 # Restart backend to re-run
 docker compose -f docker-compose.dev.yml restart backend
@@ -136,8 +137,8 @@ docker compose -f docker-compose.dev.yml up -d
 - [`backend/scripts/run_migrations.py`](../backend/scripts/run_migrations.py) - Migration runner script
 - [`backend/scripts/start.sh`](../backend/scripts/start.sh) - Production startup script (runs migrations, starts app)
 - [`backend/scripts/start-dev.sh`](../backend/scripts/start-dev.sh) - Development startup script (runs migrations, starts app with hot-reload)
-- [`backend/Dockerfile`](../backend/Dockerfile) - Updated to use startup scripts (start-dev.sh for development, start.sh for production)
-- [`docker-compose.dev.yml`](../docker-compose.dev.yml) - Mounts migration files, uses startup script
+- [`backend/Dockerfile`](../backend/Dockerfile) - Production uses `start.sh`; development uses inline migration + uvicorn CMD
+- [`docker-compose.dev.yml`](../docker-compose.dev.yml) - Mounts migration files, optional mosquitto service
 
 ## Benefits
 

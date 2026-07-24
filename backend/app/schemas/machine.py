@@ -1,5 +1,5 @@
 """Pydantic schemas for Machine API endpoints."""
-from pydantic import BaseModel, Field, IPvAnyAddress
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 
@@ -85,9 +85,16 @@ class MachineResponse(MachineBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     last_seen_at: Optional[datetime] = None
+    ftp_password: str = Field(default="anonymous", exclude=True)
+    ftp_credentials_configured: bool = False
 
     class Config:
         from_attributes = True
+
+    @model_validator(mode="after")
+    def set_ftp_credentials_configured(self) -> "MachineResponse":
+        self.ftp_credentials_configured = bool(self.ftp_password)
+        return self
 
 
 class MachineStatus(BaseModel):

@@ -30,60 +30,25 @@ export type RunningSummary = {
   machines: RunningSummaryMachine[];
 };
 
-export type OnlineSummaryMachine = {
-  machine_id: number;
-  machine_name: string;
-  is_online: boolean;
-  online_since?: string;
-  online_duration_seconds: number;
-  online_duration_formatted: string;
-  last_seen_at?: string;
-  connection_health: string;
-  polling_history_8h: PollingDataPoint[];
-};
-
-export type OnlineSummary = {
-  total_online: number;
-  machines: OnlineSummaryMachine[];
-};
-
-export type OfflineSummaryMachine = {
-  machine_id: number;
-  machine_name: string;
-  is_online: boolean;
-  offline_since?: string;
-  offline_duration_seconds: number;
-  offline_duration_formatted: string;
-  last_seen_at?: string;
-  last_known_status?: string;
-  enabled: boolean;
-  polling_history_8h: PollingDataPoint[];
-};
-
-export type OfflineSummary = {
-  total_offline: number;
-  machines: OfflineSummaryMachine[];
-};
-
 export type PollingStatsSummary = {
   total_polls: number;
   successful_polls: number;
   failed_polls: number;
-  success_rate: number; // 0-100%
+  success_rate: number;
   avg_response_time_ms?: number;
-  current_streak: number; // positive = successes, negative = failures
+  current_streak: number;
 };
 
 export type MachineStatusSummary = {
   machine_id: number;
   machine_name: string;
   is_online: boolean;
-  uptime_8h_percent: number; // % of successful polls in 8h
-  current_status?: string; // "running", "idle", "alarm", etc.
-  connection_health: string; // "healthy", "degraded", "stale"
-  online_duration_formatted: string; // If online
-  offline_duration_formatted: string; // If offline
-  status_changed_at?: string; // When status last changed
+  uptime_8h_percent: number;
+  current_status?: string;
+  connection_health: string;
+  online_duration_formatted: string;
+  offline_duration_formatted: string;
+  status_changed_at?: string;
   polling_history_8h: PollingDataPoint[];
   polling_summary: PollingStatsSummary;
 };
@@ -100,22 +65,6 @@ export const summaryApi = {
     const response = await fetch(`${API_BASE_URL}/api/summary/running?time_range=${timeRange}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch running summary: ${response.statusText}`);
-    }
-    return response.json();
-  },
-
-  getOnline: async (timeRange: string = '8h'): Promise<OnlineSummary> => {
-    const response = await fetch(`${API_BASE_URL}/api/summary/online?time_range=${timeRange}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch online summary: ${response.statusText}`);
-    }
-    return response.json();
-  },
-
-  getOffline: async (): Promise<OfflineSummary> => {
-    const response = await fetch(`${API_BASE_URL}/api/summary/offline`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch offline summary: ${response.statusText}`);
     }
     return response.json();
   },

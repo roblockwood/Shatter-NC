@@ -71,4 +71,4 @@ git commit -m "chore: update dependencies"
 git commit -m "docs: update README"
 ```
 
-**Reference**: See `.cursor/commit-message-skill.md` for detailed commit message guidelines and `docs/VERSIONING.md` for complete versioning documentation.
+**Reference**: See `.cursor/commit-message-skill.md` and [CONTRIBUTING.md](CONTRIBUTING.md#versioning) for complete versioning documentation.

@@ -8,7 +8,7 @@
 - Dark mode only (no light theme)
 - Monospace typography throughout
 - ASCII art for graphics, progress bars, and UI elements
-- **NO EMOJI** - Use ASCII characters only (/, -, |, *, etc.) to maintain terminal aesthetic
+- **NO EMOJI in UI** — Use ASCII characters only (/, -, |, *, etc.) to maintain terminal aesthetic. Marketing docs (e.g. root README) may use emoji; application UI must not.
 - CRT/terminal visual effects (optional scanlines, glow)
 - Command-line inspired interactions
 - Information density - pack data like a terminal
@@ -36,12 +36,9 @@ Success:        #00ff00 (green)
 Warning:        #ffaa00 (amber)
 ```
 
-### Alternative Schemes
-Users could switch between phosphor colors:
-- **Green Phosphor** (default): `#00ff00`
-- **Amber Phosphor**: `#ffb000`
-- **White Phosphor**: `#f0f0f0`
-- **Cyan Phosphor**: `#00ffff`
+### Alternative Schemes (not implemented)
+
+A future theme switcher could offer phosphor variants; the current UI uses the **green phosphor** default with component-level amber/red/cyan accents (alarms, compressor LEDs, warnings).
 
 ---
 
@@ -89,7 +86,7 @@ Users could switch between phosphor colors:
 ### Terminal Window Structure
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ SHATTER v0.1.0 │ MACHINE MONITOR │ [CONNECTION: ●●●●○ 4/5]  │ ← Status bar
+│ SHATTER v{version} │ MACHINE MONITOR │ [CONNECTION: ●●●●○ 4/5]  │ ← Status bar
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │  ┌────────────────┐  ┌────────────────┐  ┌──────────────┐  │
@@ -699,7 +696,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({ machine, status }) => 
       <div className="terminal-box-content">
         <div>PROG: {status.program || '──────'}</div>
         <div>
-          CYCLE: <ProgressBar value={status.progress} />
+          CYCLE: {status.progress}% (inline bar in detail panes)
         </div>
         <div>PARTS: {status.parts}/{status.target}</div>
       </div>
@@ -733,3 +730,35 @@ IDLE:     ○  or  ─  or  ··
 ---
 
 This design system provides a unique, memorable identity while maintaining modern usability standards. The retro-terminal aesthetic differentiates Shatter from typical industrial dashboards while being highly functional for CNC monitoring.
+
+---
+
+## Branding
+
+### Application identity
+
+**Shatter** — CNC management platform for Brother machines. Version is shown in API metadata ([`config.py`](../backend/app/core/config.py)) and release tags (semantic-release).
+
+### Icon (favicon)
+
+Stack-light tower — manufacturing status colors:
+
+| Light | Hex | Meaning |
+|-------|-----|---------|
+| Red | `#e74c3c` | Alarm / error / offline |
+| Yellow | `#f39c12` | Warning |
+| Green | `#27ae60` | Running / online |
+
+**File:** [`frontend/public/favicon.svg`](../frontend/public/favicon.svg) (SVG, scales cleanly)
+
+```html
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+```
+
+### Logo usage
+
+- Use the ASCII logo block in this guide for docs/headers
+- Do not stretch the favicon; keep red-yellow-green vertical order
+- Match UI status colors to the palette above
+
+Version numbers are managed by semantic-release — do not hardcode in UI copy.

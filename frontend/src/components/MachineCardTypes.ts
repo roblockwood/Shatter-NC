@@ -1,4 +1,4 @@
-// Shared types for MachineCard and its sub-components (MachineEditPanel, etc.)
+// Shared types for MachineCard and its sub-components
 
 export interface Tool {
   tool_number: number;
@@ -70,7 +70,7 @@ export interface MachineStatus {
   tool_response_time_ms?: number;
   ip_address?: string;
   ftp_username?: string;
-  ftp_password?: string;
+  ftp_credentials_configured?: boolean;
   ftp_port?: number;
   http_port?: number;
   path?: string;

@@ -29,7 +29,7 @@ See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community standards and enforce
 Before contributing, ensure you have:
 
 - **Git** installed and basic familiarity with version control
-- **Python 3.11+** for backend development
+- **Python 3.11+** for backend development (Docker image uses 3.11; CI tests on 3.12)
 - **Node.js 18+** for frontend development
 - **Docker** and **Docker Compose** for local testing (recommended)
 - Read the [DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) for setup instructions
@@ -44,7 +44,7 @@ Before contributing, ensure you have:
    - `enhancement` - New features or improvements
    - `documentation` - Documentation improvements
 3. **Ask Questions**: If you're unsure about an issue, comment and ask for clarification
-4. **Check Roadmap**: Review [FUTURE_DOCUMENTATION.md](docs/roadmap/FUTURE_DOCUMENTATION.md) for planned features
+4. **Check open issues**: Review [GitHub Issues](https://github.com/roblockwood/Shatter-NC/issues) for planned work
 
 ---
 
@@ -323,23 +323,20 @@ export const MachineCard: React.FC<MachineCardProps> = ({
 
 ### Documentation Requirements
 
-**MANDATORY**: All contributions must include appropriate documentation updates.
-
-See [.claude/rules.md](.claude/rules.md) for complete documentation standards.
+**MANDATORY**: All contributions must include appropriate documentation updates (see **Documentation Standards** below).
 
 #### When Documentation is Required
 
 1. **New Features**: Document in:
-   - Relevant workflow docs ([DASHBOARD_WORKFLOWS.md](docs/DASHBOARD_WORKFLOWS.md) or [FILE_BROWSER_WORKFLOWS.md](docs/FILE_BROWSER_WORKFLOWS.md))
-   - [API_REFERENCE.md](docs/API_REFERENCE.md) for new endpoints
-   - [FRONTEND_ARCHITECTURE.md](docs/FRONTEND_ARCHITECTURE.md) for new components
+   - [USER_GUIDE.md](docs/USER_GUIDE.md) for operator-visible workflows
    - [BACKEND_ARCHITECTURE.md](docs/BACKEND_ARCHITECTURE.md) for new services
+   - [WEBSOCKET_PROTOCOL.md](docs/WEBSOCKET_PROTOCOL.md) for new real-time message types
+   - [TELNET_REFERENCE.md](docs/TELNET_REFERENCE.md) for new CNC protocol commands
 
-2. **API Changes**: Update [API_REFERENCE.md](docs/API_REFERENCE.md) with:
-   - Endpoint path and method
-   - Request/response schemas with JSON examples
-   - Error responses
-   - Code references: `[file.py:123-145](path/to/file.py#L123-L145)`
+2. **API Changes**: Do **not** maintain a hand-written REST encyclopedia. Instead:
+   - Add route docstrings and Pydantic schema descriptions
+   - Verify OpenAPI at `http://localhost:8000/docs` with `LOG_LEVEL=DEBUG`
+   - Describe endpoints in the PR body (path, request/response, errors)
 
 3. **Database Changes**: Update [DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) with:
    - New tables or columns
@@ -347,20 +344,19 @@ See [.claude/rules.md](.claude/rules.md) for complete documentation standards.
    - Indexes
    - Data retention policies
 
-4. **Configuration Changes**: Update [ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md):
+4. **Configuration Changes**: Update [ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) and [`config.py`](backend/app/core/config.py):
    - New environment variables
    - Default values
-   - Validation rules
    - Security implications
 
-5. **Deployment Changes**: Update [DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md):
+5. **Deployment Changes**: Update [INSTALLATION_GUIDE.md](docs/INSTALLATION_GUIDE.md):
    - New Docker services
    - Volume changes
    - Health check modifications
 
 #### Documentation Standards
 
-From [.claude/rules.md](.claude/rules.md), all documentation must include:
+All documentation must include:
 
 1. **Code References**: Include file paths and line numbers
    - Format: `[file.py:123-145](path/to/file.py#L123-L145)`
@@ -423,14 +419,11 @@ If you add a new alarm notification feature:
 - Stopped during graceful shutdown
 ```
 
-**2. Update [API_REFERENCE.md](docs/API_REFERENCE.md):**
+**2. Describe API in PR** (OpenAPI is generated from code when `LOG_LEVEL=DEBUG`):
 ```markdown
-## Alarms API
-
-### Configure Alarm Notifications
-**Method:** POST
-**Path:** `/api/alarms/configure`
-...
+### POST /api/alarms/configure
+Request: { "machine_id": 1, "email": "ops@shop.com" }
+Response: { "configured": true }
 ```
 
 **3. Update [DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md):**
@@ -554,11 +547,11 @@ Before submitting a PR with UI changes:
 - [ ] No emoji used (except approved exceptions)
 - [ ] Uses existing UI components where possible
 - [ ] Screenshots included in PR
-- [ ] Documented in [FRONTEND_ARCHITECTURE.md](docs/FRONTEND_ARCHITECTURE.md) if new component
+- [ ] Documented in [USER_GUIDE.md](docs/USER_GUIDE.md) if operator-facing
 
 ### Testing Requirements
 
-**Current Status:** Automated tests not yet implemented (see [FUTURE_DOCUMENTATION.md](docs/roadmap/FUTURE_DOCUMENTATION.md))
+**Current Status:** Backend and frontend unit tests exist; expand coverage for new features.
 
 #### Manual Testing Checklist
 
@@ -585,7 +578,7 @@ Until automated tests are in place, perform manual testing:
 
 #### Future Testing (Planned)
 
-When TESTING_GUIDE.md is implemented (see [FUTURE_DOCUMENTATION.md](docs/roadmap/FUTURE_DOCUMENTATION.md)):
+When adding tests, document commands in the PR description (`pytest backend/tests/`, `npm test` in `frontend/`).
 
 **Backend:**
 - Unit tests with `pytest`
@@ -638,7 +631,7 @@ Thanks for the feedback! I've made the following changes:
 
 1. Updated API endpoint to use POST instead of GET (security concern)
 2. Added error handling for invalid machine IDs
-3. Updated API_REFERENCE.md with new endpoint documentation
+3. Documented new endpoints in PR and verified OpenAPI at `/docs`
 
 Ready for re-review!
 ```
@@ -655,19 +648,12 @@ Ready for re-review!
 - Create TESTING_GUIDE.md documentation
 - Write initial test suite for critical paths
 
-**Authentication System**
-- Implement user authentication with JWT
-- Add role-based access control (RBAC)
-- Create user management API endpoints
-- Update database schema with users table
-- Document in BACKEND_ARCHITECTURE.md and API_REFERENCE.md
-
 **Alarm Notifications**
 - Monitor machine alarms in real-time
 - Email notifications for critical alarms
 - Alarm history tracking with TimescaleDB
 - Alarm configuration per machine
-- Document in BACKEND_ARCHITECTURE.md and DASHBOARD_WORKFLOWS.md
+- Document in [USER_GUIDE.md](docs/USER_GUIDE.md) and [BACKEND_ARCHITECTURE.md](docs/BACKEND_ARCHITECTURE.md)
 
 ### Medium Priority
 
@@ -675,20 +661,20 @@ Ready for re-review!
 - Track program versions over time
 - Compare program versions (diff view)
 - Rollback to previous versions
-- Document in FILE_BROWSER_WORKFLOWS.md
+- Document in [USER_GUIDE.md](docs/USER_GUIDE.md)
 
 **Advanced Reporting**
 - Machine utilization reports
 - Production run analytics
 - Alarm frequency analysis
 - Export reports to PDF/CSV
-- Document in DASHBOARD_WORKFLOWS.md
+- Document in [USER_GUIDE.md](docs/USER_GUIDE.md)
 
 **Multi-Machine Deployment**
 - Deploy program to multiple machines simultaneously
 - Progress tracking for batch deployments
 - Rollback failed deployments
-- Document in FILE_BROWSER_WORKFLOWS.md
+- Document in [USER_GUIDE.md](docs/USER_GUIDE.md)
 
 ### Low Priority
 
@@ -708,12 +694,37 @@ Ready for re-review!
 
 ### Documentation Contributions
 
-See [FUTURE_DOCUMENTATION.md](docs/roadmap/FUTURE_DOCUMENTATION.md) for planned documentation:
+Keep docs in sync with code changes. Key references:
 
-- **WEBSOCKET_PROTOCOL.md**: WebSocket message protocol specification
-- **TESTING_GUIDE.md**: Comprehensive testing strategy (HIGH PRIORITY)
-- **COMPONENT_LIBRARY.md**: Complete UI component reference
-- **PARSERS.md**: G-code and POSNI parser details
+- [USER_GUIDE.md](docs/USER_GUIDE.md) — operator workflows
+- [WEBSOCKET_PROTOCOL.md](docs/WEBSOCKET_PROTOCOL.md) — real-time protocol
+- [BACKEND_ARCHITECTURE.md](docs/BACKEND_ARCHITECTURE.md) — services
+- [DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) — contributor setup
+
+---
+
+## Versioning
+
+Shatter uses **semantic-release** with **conventional commits**. Version bumps happen automatically when PRs merge to `main` — do not manually edit version tags or CHANGELOG for releases.
+
+### Commit format
+
+```
+<type>: <subject>
+
+[optional body]
+
+[optional footer with BREAKING CHANGE:]
+```
+
+| Type | Version bump | Example |
+|------|--------------|---------|
+| `feat:` | Minor | `feat: add fleet summary export` |
+| `fix:` | Patch | `fix: correct WCS tolerance display` |
+| `feat!:` or `BREAKING CHANGE:` | Major | `feat!: remove legacy summary endpoints` |
+| `chore:`, `docs:`, `refactor:`, `style:`, `test:` | None | `docs: consolidate user guide` |
+
+See [`.cursor/commit-message-skill.md`](.cursor/commit-message-skill.md) for detailed guidelines.
 
 ---
 
@@ -724,11 +735,11 @@ See [FUTURE_DOCUMENTATION.md](docs/roadmap/FUTURE_DOCUMENTATION.md) for planned 
 If you need help with contribution:
 
 1. **Check Existing Docs**:
-   - [DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) - Setup and development
-   - [BACKEND_ARCHITECTURE.md](docs/BACKEND_ARCHITECTURE.md) - Backend architecture
-   - [FRONTEND_ARCHITECTURE.md](docs/FRONTEND_ARCHITECTURE.md) - Frontend architecture
-   - [API_REFERENCE.md](docs/API_REFERENCE.md) - API endpoints
-   - [UX_DESIGN_GUIDE.md](docs/UX_DESIGN_GUIDE.md) - UI/UX guidelines
+   - [INSTALLATION_GUIDE.md](docs/INSTALLATION_GUIDE.md) — Install and operations
+   - [DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) — Setup and development
+   - [BACKEND_ARCHITECTURE.md](docs/BACKEND_ARCHITECTURE.md) — Backend services
+   - [USER_GUIDE.md](docs/USER_GUIDE.md) — Operator workflows
+   - [UX_DESIGN_GUIDE.md](docs/UX_DESIGN_GUIDE.md) — UI/UX guidelines
 
 2. **Search Existing Issues**: Check if your question has been asked before
 
@@ -775,7 +786,7 @@ Thank you for contributing to the Shatter CNC Management Platform! Your contribu
 
 **Remember:**
 - Follow the [Code of Conduct](CODE_OF_CONDUCT.md)
-- Read and follow [rules.md](rules.md) for documentation standards
+- Read and follow the [Documentation Requirements](#documentation-requirements) section above
 - Follow [UX_DESIGN_GUIDE.md](docs/UX_DESIGN_GUIDE.md) for UI changes
 - Test thoroughly before submitting
 - Be patient and respectful during the review process
