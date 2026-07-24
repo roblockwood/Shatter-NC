@@ -247,7 +247,7 @@ def calculate_polling_stats(polling_history: List[PollingDataPoint]) -> PollingS
 
 @router.get("/summary/running", response_model=RunningSummary)
 def get_running_summary(
-    time_range: str = Query(default="24h", regex="^(1h|4h|8h|24h|7d|30d)$"),
+    time_range: str = Query(default="24h", pattern="^(1h|4h|8h|24h|7d|30d)$"),
     db: Session = Depends(get_db)
 ):
     """

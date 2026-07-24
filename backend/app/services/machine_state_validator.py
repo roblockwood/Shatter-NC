@@ -9,7 +9,6 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.models.machine import Machine
-from app.api.status import get_machine_status
 
 logger = logging.getLogger(__name__)
 

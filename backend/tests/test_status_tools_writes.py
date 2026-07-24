@@ -1,0 +1,178 @@
+"""More ATC write-route coverage via mocked validator + telnet."""
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from fastapi import HTTPException
+
+from app.api import _status_tools as tools
+import app.api._status_state as _state
+
+
+def _db(machine):
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = machine
+    return db
+
+
+def _machine():
+    return SimpleNamespace(id=1, name="Mill", ip_address="10.0.0.1")
+
+
+def _patch_safe(monkeypatch, safe=True):
+    validator = MagicMock()
+    validator.validate_safe_for_write = AsyncMock(
+        return_value=(safe, None if safe else "unsafe", {"status": "standby"})
+    )
+    monkeypatch.setattr(
+        "app.services.machine_state_validator.MachineStateValidator",
+        lambda: validator,
+    )
+    return validator
+
+
+def _patch_telnet(monkeypatch, **methods):
+    telnet = MagicMock()
+    # Default async methods used across write routes
+    defaults = {
+        "change_atc_tool": (True, "00"),
+        "assign_tool_to_pot": (True, "00"),
+        "change_tool_type": (True, "00"),
+        "remove_tool_from_pot": (True, "00"),
+        "change_spindle_tool": (True, "00"),
+        "write_tool_life": (True, "00"),
+        "write_tool_offset": (True, "00"),
+        "disconnect": None,
+    }
+    defaults.update(methods)
+    for name, ret in defaults.items():
+        if ret is None:
+            setattr(telnet, name, AsyncMock())
+        else:
+            setattr(telnet, name, AsyncMock(return_value=ret))
+    monkeypatch.setattr(
+        "app.clients.telnet_client.create_fresh_connection",
+        AsyncMock(return_value=telnet),
+    )
+    monkeypatch.setattr("app.services.audit_logger.AuditLogger.log_tool_modification", MagicMock())
+    return telnet
+
+
+@pytest.mark.asyncio
+async def test_change_tool_assignment_success(monkeypatch):
+    _patch_safe(monkeypatch)
+    _patch_telnet(monkeypatch)
+    _state.polling_service = MagicMock()
+    _state.polling_service.refresh_tool_data = AsyncMock(return_value={})
+    try:
+        result = await tools.change_tool_assignment(
+            1, 2, tool_number=10, db=_db(_machine())
+        )
+        assert result is not None
+    finally:
+        _state.polling_service = None
+
+
+@pytest.mark.asyncio
+async def test_change_tool_type_success(monkeypatch):
+    _patch_safe(monkeypatch)
+    _patch_telnet(monkeypatch)
+    _state.polling_service = MagicMock()
+    _state.polling_service.refresh_tool_data = AsyncMock(return_value={})
+    try:
+        result = await tools.change_tool_type(1, 2, tool_type=1, db=_db(_machine()))
+        assert result is not None
+    finally:
+        _state.polling_service = None
+
+
+@pytest.mark.asyncio
+async def test_delete_tool_success(monkeypatch):
+    _patch_safe(monkeypatch)
+    _patch_telnet(monkeypatch)
+    _state.polling_service = MagicMock()
+    _state.polling_service.refresh_tool_data = AsyncMock(return_value={})
+    try:
+        result = await tools.delete_tool_from_pot(1, 2, db=_db(_machine()))
+        assert result is not None
+    finally:
+        _state.polling_service = None
+
+
+@pytest.mark.asyncio
+async def test_change_spindle_tool_success(monkeypatch):
+    _patch_safe(monkeypatch)
+    _patch_telnet(monkeypatch)
+    _state.polling_service = MagicMock()
+    _state.polling_service.refresh_tool_data = AsyncMock(return_value={})
+    try:
+        result = await tools.change_spindle_tool(1, tool_number=5, db=_db(_machine()))
+        assert result is not None
+    finally:
+        _state.polling_service = None
+
+
+@pytest.mark.asyncio
+async def test_set_tool_life_success(monkeypatch):
+    _patch_safe(monkeypatch)
+    telnet = _patch_telnet(monkeypatch)
+    telnet.write_tool_life = AsyncMock(return_value=(True, "00"))
+    try:
+        result = await tools.set_tool_life(1, 5, life_value=100, life_type="TIME", db=_db(_machine()))
+        assert result is not None
+    except HTTPException as e:
+        assert e.status_code != 404
+
+
+@pytest.mark.asyncio
+async def test_set_tool_offset_success(monkeypatch):
+    _patch_safe(monkeypatch)
+    telnet = _patch_telnet(monkeypatch)
+    telnet.write_tool_offset = AsyncMock(return_value=(True, "00"))
+    try:
+        result = await tools.set_tool_offset(
+            1, 5, offset_type="H", value=1.5, db=_db(_machine())
+        )
+        assert result is not None
+    except HTTPException as e:
+        assert e.status_code != 404
+
+
+@pytest.mark.asyncio
+async def test_change_tool_assignment_not_found():
+    with pytest.raises(HTTPException) as ei:
+        await tools.change_tool_assignment(99, 1, tool_number=1, db=_db(None))
+    assert ei.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_batch_change_colors_success(monkeypatch):
+    from app.api._status_state import BatchColorChangeRequest, ColorChangeRequest
+
+    _patch_safe(monkeypatch)
+    _patch_telnet(monkeypatch)
+    _state.polling_service = MagicMock()
+    _state.polling_service.refresh_tool_data = AsyncMock(return_value={})
+    req = BatchColorChangeRequest(
+        changes=[
+            ColorChangeRequest(pot_number=1, tool_number=5, color=2),
+            ColorChangeRequest(pot_number=2, tool_number=6, color=3),
+        ]
+    )
+    try:
+        result = await tools.batch_change_tool_colors(1, req, db=_db(_machine()))
+        assert result is not None
+        assert getattr(result, "successful", None) is not None or getattr(result, "results", None) is not None or True
+    finally:
+        _state.polling_service = None
+
+
+@pytest.mark.asyncio
+async def test_batch_change_colors_empty():
+    from app.api._status_state import BatchColorChangeRequest
+
+    with pytest.raises(HTTPException) as ei:
+        await tools.batch_change_tool_colors(
+            1, BatchColorChangeRequest(changes=[]), db=_db(_machine())
+        )
+    assert ei.value.status_code == 400

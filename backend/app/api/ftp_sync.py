@@ -1,5 +1,6 @@
 """API endpoints for FTP folder sync configuration and run status."""
 from pathlib import Path
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -36,7 +37,7 @@ def _require_ftp_sync_enabled(machine: Machine) -> None:
         raise HTTPException(status_code=403, detail="FTP sync is not enabled for this machine")
 
 
-def _resolve_local_browse_path(path: str | None) -> Path:
+def _resolve_local_browse_path(path: Optional[str] = None) -> Path:
     """Resolve and validate requested browse path under configured root."""
     browse_root = Path(settings.FTP_SYNC_LOCAL_BROWSE_ROOT).expanduser().resolve()
 
@@ -69,7 +70,7 @@ def _resolve_local_browse_path(path: str | None) -> Path:
 )
 async def browse_local_folders(
     machine_id: int,
-    path: str | None = None,
+    path: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """Browse local directories for selecting sync source_folder."""
@@ -80,7 +81,7 @@ async def browse_local_folders(
     current = _resolve_local_browse_path(path)
     browse_root = Path(settings.FTP_SYNC_LOCAL_BROWSE_ROOT).expanduser().resolve()
 
-    directories: list[LocalFolderEntry] = []
+    directories: List[LocalFolderEntry] = []
     for child in sorted(current.iterdir(), key=lambda p: p.name.lower()):
         # Skip hidden entries first to avoid stat'ing paths like .Trash that may
         # raise PermissionError in containerized host mounts.
