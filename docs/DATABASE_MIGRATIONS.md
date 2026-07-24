@@ -91,7 +91,7 @@ Applying migration: 06-add-new-feature.sql
 
 ```bash
 # View applied migrations
-docker exec shatter-db psql -U shatter_user -d shatter -c "SELECT * FROM schema_migrations ORDER BY applied_at;"
+docker exec shatter-db-prod psql -U shatter_user -d shatter -c "SELECT * FROM schema_migrations ORDER BY applied_at;"
 
 # View pending migrations (if migration script shows them)
 docker logs shatter-backend | grep "pending migration"
@@ -101,7 +101,7 @@ docker logs shatter-backend | grep "pending migration"
 
 **Migration fails with SQL syntax error:**
 - Check your SQL file for syntax errors
-- Test manually: `docker exec shatter-db psql -U shatter_user -d shatter -f /docker-entrypoint-initdb.d/YOUR_FILE.sql`
+- Test manually: `docker exec shatter-db-prod psql -U shatter_user -d shatter -f /path/to/migration.sql`
 - PostgreSQL-specific syntax (DO blocks, functions) is fully supported
 
 **Backend won't start after adding migration:**
@@ -113,7 +113,7 @@ docker logs shatter-backend | grep "pending migration"
 **Need to re-run a migration:**
 ```bash
 # Remove from tracking table
-docker exec shatter-db psql -U shatter_user -d shatter -c "DELETE FROM schema_migrations WHERE filename = '06-my-migration.sql';"
+docker exec shatter-db-prod psql -U shatter_user -d shatter -c "DELETE FROM schema_migrations WHERE filename = '06-my-migration.sql';"
 
 # Restart backend to re-run
 docker compose -f docker-compose.dev.yml restart backend

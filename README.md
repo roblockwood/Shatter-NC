@@ -28,7 +28,7 @@ docker compose -f docker-compose.dev.yml up -d
 
 Open http://localhost:3000 and add your CNC machines through the web UI.
 
-**For detailed deployment options**, see [Docker Deployment Guide](docs/DOCKER_DEPLOYMENT.md).
+**For install, backup, and upgrade**, see [Installation Guide](docs/INSTALLATION_GUIDE.md).
 
 ## Sync & Notifications
 
@@ -55,43 +55,32 @@ Per-channel config stored in the database can override global defaults.
 - **Backend**: Python 3.11 + FastAPI (port 8000)
 - **Database**: PostgreSQL 14 + TimescaleDB (port 5432)
 
-**For complete architecture details**, see [Backend Architecture](docs/BACKEND_ARCHITECTURE.md) and [Frontend Architecture](docs/FRONTEND_ARCHITECTURE.md).
+**For architecture details**, see [Backend Architecture](docs/BACKEND_ARCHITECTURE.md) and [Development Guide](docs/DEVELOPMENT_GUIDE.md).
 
 ## Documentation
 
 ### Getting Started
 
-- **[Installation Guide](docs/INSTALLATION_GUIDE.md)** - Step-by-step install for Windows, macOS, Linux (Docker Desktop; machinist-friendly)
-- **[Docker Deployment Guide](docs/DOCKER_DEPLOYMENT.md)** - Production and development deployment
-- **[Migration: Remove Redis](docs/MIGRATION_REMOVE_REDIS.md)** - Upgrading from a Redis-based deployment
-- **[Development Guide](docs/DEVELOPMENT_GUIDE.md)** - Local development setup and workflows
-- **[Environment Variables](docs/ENVIRONMENT_VARIABLES.md)** - Configuration reference
-- **[Contributing Guidelines](CONTRIBUTING.md)** - How to contribute to the project
+- **[Installation Guide](docs/INSTALLATION_GUIDE.md)** — Shop install, backup, upgrade
+- **[User Guide](docs/USER_GUIDE.md)** — Dashboard, files, validation, tools
+- **[Development Guide](docs/DEVELOPMENT_GUIDE.md)** — Contributor setup and tests
+- **[Environment Variables](docs/ENVIRONMENT_VARIABLES.md)** — Configuration table
+- **[Contributing](CONTRIBUTING.md)** — PR process and versioning
 
-### Architecture & Technical Reference
+### Technical Reference
 
-- **[Backend Architecture](docs/BACKEND_ARCHITECTURE.md)** - Services, polling system, WebSocket management
-- **[Frontend Architecture](docs/FRONTEND_ARCHITECTURE.md)** - React components, hooks, state management
-- **[API Reference](docs/API_REFERENCE.md)** - Complete REST API documentation (50+ endpoints)
-- **[Database Schema](docs/DATABASE_SCHEMA.md)** - PostgreSQL + TimescaleDB schema and relationships
+- **[Backend Architecture](docs/BACKEND_ARCHITECTURE.md)** — Services and data flow
+- **[WebSocket Protocol](docs/WEBSOCKET_PROTOCOL.md)** — Real-time messages
+- **[Telnet Reference](docs/TELNET_REFERENCE.md)** — Brother port 10000
+- **[Database Schema](docs/DATABASE_SCHEMA.md)** — PostgreSQL + TimescaleDB
+- **[NC Parser Guide](docs/NC_PARSER_GUIDE.md)** — Fusion post-processor (CAM)
+- **[Compressor Integration](docs/COMPRESSOR_INTEGRATION.md)** — Kaeser SIGMA CONTROL 2
+- **[UX Design Guide](docs/UX_DESIGN_GUIDE.md)** — UI standards (+ branding)
+- **[Security](SECURITY.md)** — Deployment model
 
-### User Workflows
+REST API: OpenAPI at `/docs` when `LOG_LEVEL=DEBUG` (see Development Guide).
 
-- **[Dashboard Workflows](docs/DASHBOARD_WORKFLOWS.md)** - Fleet monitoring and machine management
-- **[File Browser Workflows](docs/FILE_BROWSER_WORKFLOWS.md)** - File management, validation, and deployment
-- **[Tool Management Workflows](docs/TOOL_MANAGEMENT_WORKFLOWS.md)** - Tool usage analysis and speed/feed tracking
-- **[Dashboard Summaries](docs/DASHBOARD_SUMMARIES.md)** - Summary feature guide
-
-### Specialized Topics
-
-- **[CNC Clients](docs/CNC_CLIENTS.md)** - HTTP/FTP client libraries for Brother CNCs
-- **[Program Validation](docs/PROGRAM_VALIDATION.md)** - Validation algorithm and workflow
-- **[UX Design Guide](docs/UX_DESIGN_GUIDE.md)** - Terminal aesthetic design system
-- **[Branding](docs/BRANDING.md)** - Brand identity and logo usage
-
-### Future Documentation
-
-- **[Future Documentation Plan](docs/roadmap/FUTURE_DOCUMENTATION.md)** - Planned advanced topics (WebSocket protocol, testing, parsers)
+Full index: **[docs/README.md](docs/README.md)**
 
 ## Development Status
 
@@ -107,9 +96,14 @@ Per-channel config stored in the database can override global defaults.
 - ✅ File browser with FTP integration
 - ✅ Folder sync (upload/download) with run history UI
 - ✅ Email/SMS notifications with channels, rules, and delivery log
-- 🚧 Automated testing (in progress)
-- 📋 User authentication (planned)
-- 📋 Per-operation runtime tracking (planned)
+
+## Acknowledgments
+
+Thanks to the early testers who ran Shatter on real shop floors and helped shape it through feedback, bug reports, and patience with rough edges:
+
+- **Matt Blackwell**
+- **Dennis Rathi**
+- **Justin Gray**
 
 ## License
 
@@ -122,10 +116,10 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 - Code of conduct
 - Development process and branch naming
 - Code style guidelines (Python PEP 8, TypeScript standards)
-- **MANDATORY**: Documentation requirements ([.claude/rules.md](.claude/rules.md))
+- **MANDATORY**: Documentation requirements ([CONTRIBUTING.md](CONTRIBUTING.md#documentation-requirements))
 - **MANDATORY**: UX design compliance ([UX Design Guide](docs/UX_DESIGN_GUIDE.md))
 - Review process and expectations
 
-**Areas needing contribution**: Testing infrastructure, authentication, alarm notifications, advanced reporting
+**Areas needing contribution**: Testing infrastructure, alarm notifications, advanced reporting
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for full details.
