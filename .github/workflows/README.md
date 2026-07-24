@@ -98,27 +98,27 @@ docker pull ghcr.io/roblockwood/shatter-nc/frontend:2025-12-15-abc1234
 
 ### Updating docker-compose files
 
-To use the images from GitHub Packages instead of building locally, use `docker-compose.prod-auto.yml`:
+To use pre-built images from GitHub Container Registry, use `docker-compose.prod.yml`:
 
 ```yaml
 backend:
   image: ghcr.io/roblockwood/shatter-nc/backend:latest  # or specific tag
-  # Remove the 'build:' section
 
 frontend:
   image: ghcr.io/roblockwood/shatter-nc/frontend:latest  # or specific tag
-  # Remove the 'build:' section
 ```
 
-Or set environment variables:
+Or set environment variables in `.env`:
+
 ```bash
-export GITHUB_OWNER=roblockwood
-export GITHUB_REPO=shatter-nc  # Note: lowercase
-export IMAGE_TAG=latest  # or specific tag like abc1234
-docker compose -f docker-compose.prod-auto.yml up -d
+GITHUB_OWNER=roblockwood
+GITHUB_REPO=shatter-nc
+IMAGE_TAG=latest  # or v1.2.3, commit SHA, etc.
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-**Note:** `docker-compose.prod-auto.yml` includes Watchtower labels for automatic updates. If you don't want auto-updates, simply don't start Watchtower - the labels are harmless if Watchtower isn't running.
+See [docs/INSTALLATION_GUIDE.md](../docs/INSTALLATION_GUIDE.md) for the full operator install flow (no git clone required).
 
 ### Package Visibility
 
