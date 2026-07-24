@@ -656,7 +656,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
                 onChange={(e) =>
                   setEditFormData({ ...editFormData, kaeser_connect_base_url: e.target.value })
                 }
-                placeholder="https://192.168.86.101"
+                placeholder="https://192.168.1.102"
                 disabled={isEditSaving}
               />
             </div>

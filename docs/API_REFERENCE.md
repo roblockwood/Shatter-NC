@@ -69,7 +69,7 @@ Get list of all configured machines.
     "id": 1,
     "name": "Mill 1",
     "model": "Brother CNC",
-    "ip_address": "192.168.86.89",
+    "ip_address": "192.168.1.100",
     "ftp_port": 21,
     "http_port": 80,
     "ftp_username": "anonymous",
@@ -136,7 +136,7 @@ Add a new machine configuration.
 {
   "name": "Mill 2",
   "model": "Brother CNC",
-  "ip_address": "192.168.86.90",
+  "ip_address": "192.168.1.110",
   "ftp_port": 21,
   "http_port": 80,
   "ftp_username": "anonymous",
@@ -163,7 +163,7 @@ Add a new machine configuration.
 {
   "id": 2,
   "name": "Mill 2",
-  "ip_address": "192.168.86.90",
+  "ip_address": "192.168.1.110",
   ...
 }
 ```
@@ -177,7 +177,7 @@ curl -X POST http://localhost:8000/api/machines \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Mill 2",
-    "ip_address": "192.168.86.90",
+    "ip_address": "192.168.1.110",
     "enabled": true
   }'
 ```
@@ -199,7 +199,7 @@ Update an existing machine configuration.
 ```json
 {
   "name": "Mill 1 (Updated)",
-  "ip_address": "192.168.86.91",
+  "ip_address": "192.168.1.111",
   "enabled": false
 }
 ```
@@ -259,7 +259,7 @@ Test HTTP and FTP connectivity to a machine.
 {
   "machine_id": 1,
   "machine_name": "Mill 1",
-  "ip_address": "192.168.86.89",
+  "ip_address": "192.168.1.100",
   "http": {
     "success": true,
     "latency_ms": 45.2,
@@ -306,7 +306,7 @@ Close FTP connection to a machine.
 ```json
 {
   "status": "success",
-  "message": "Disconnected from Mill 1 (192.168.86.89)"
+  "message": "Disconnected from Mill 1 (192.168.1.100)"
 }
 ```
 
@@ -532,7 +532,7 @@ Get real-time comprehensive status including running log, counters, alarms, and 
 {
   "machine_id": 1,
   "machine_name": "Mill 1",
-  "ip_address": "192.168.86.89",
+  "ip_address": "192.168.1.100",
   "timestamp": "2025-01-15T14:30:00Z",
   "program_name": "O2045",
   "cycle_time": "0001:23:45.0",
@@ -2411,7 +2411,7 @@ ws.onclose = () => {
     {
       "machine_id": 1,
       "machine_name": "Mill 1",
-      "ip_address": "192.168.86.89",
+      "ip_address": "192.168.1.100",
       "enabled": true,
       "is_online": true,
       "program_name": "O2045",

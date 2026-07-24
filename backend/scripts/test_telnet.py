@@ -92,7 +92,7 @@ if __name__ == "__main__":
         ip_address = sys.argv[1]
     else:
         # Use default IP from reference implementation
-        ip_address = "192.168.86.89"
+        ip_address = "192.168.1.100"
         print(f"No IP provided, using default: {ip_address}")
     
     # Get port from command line or use default

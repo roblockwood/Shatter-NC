@@ -1,9 +1,9 @@
 # Brother CNC Webserver API Endpoints
 
 ## Overview
-- **IP Address**: 192.168.86.89
+- **IP Address**: 192.168.1.100 (example Brother CNC on shop network)
 - **Server**: NC HTTPD (Custom HTTP server)
-- **Model**: SX2
+- **Model**: Brother Speedio (example)
 - **Content-Type**: text/html; charset=ISO-8859-1
 
 ## Available Communication Protocols
@@ -12,7 +12,7 @@
 Custom HTTP server with non-standard HTTP/1.1 implementation
 
 ### 2. FTP (Port 21)
-- **URL**: ftp://192.168.86.89:21/
+- **URL**: ftp://192.168.1.100:21/
 - **Purpose**: Data I/O (file transfer for G-code programs, etc.)
 
 ## Discovered HTTP Endpoints
@@ -80,14 +80,14 @@ All endpoints respond to simple HTTP/1.0 GET requests:
 import socket
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.connect(('192.168.86.89', 80))
+sock.connect(('192.168.1.100', 80))
 sock.send(b'GET /endpoint HTTP/1.0\r\n\r\n')
 response = sock.recv(8192)
 ```
 
 ### 2. FTP Access
 For file transfers (G-code programs, etc.)
-- URL: `ftp://192.168.86.89:21/`
+- URL: `ftp://192.168.1.100:21/`
 
 ### 3. Potential Additional Protocols
 Based on manual documentation, may also support:

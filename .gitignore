@@ -1,9 +1,11 @@
 # Environment
 .env
+.env.bak
 docker/kaeser-sc2-api.env
 .env.local
 .env.production
 .env.*.local
+*.bak
 
 # Python
 __pycache__/
@@ -32,6 +34,7 @@ yarn-error.log*
 .pnpm-debug.log*
 dist/
 .cache/
+frontend/.vite/
 
 # IDEs
 .vscode/
