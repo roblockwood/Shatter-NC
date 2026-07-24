@@ -12,8 +12,9 @@ from app.db.base import get_db
 from app.models.machine import Machine
 from app.models.program import Program, ProgramDeployment
 from app.parsers.gcode_parser import parse_gcode
-# Note: get_work_offset from posni_parser is deprecated - use parse_posni_v2 instead
+# Note: use parse_posni_v2 for work offset parsing
 from app.clients.ftp_client import CNCFtpClient
+from app.utils.api_errors import public_error_detail
 from app.api import websocket as websocket_api
 from app.schemas.program import (
     ProgramUploadRequest,
@@ -560,7 +561,7 @@ async def validate_file_on_machine(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to download file from machine: {str(e)}"
+            detail=public_error_detail(e, context="Failed to download file from machine")
         )
 
     # Call existing validate_program logic to ensure identical validation
@@ -948,9 +949,9 @@ async def upload_program(
             validation_results=result["validation_results"]
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=public_error_detail(e, context="Upload failed"))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=public_error_detail(e, context="Upload failed"))
 
 
 @router.post("/machines/{machine_id}/programs/deploy-validated")
@@ -989,14 +990,14 @@ async def deploy_validated_program(
 
         return result["deployment"]
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=public_error_detail(e, context="Deployment failed"))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Deployment failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=public_error_detail(e, context="Deployment failed"))
 
 
 # ========== DEPLOYMENT MANAGEMENT ==========
 
-@router.post("/{program_id}/deploy", response_model=ProgramDeploymentResponse)
+@router.post("/{program_id}/deploy", response_model=ProgramDeploymentResponse, deprecated=True)
 async def deploy_program(
     program_id: int,
     request: ProgramDeploymentCreate,
@@ -1004,6 +1005,10 @@ async def deploy_program(
 ):
     """
     Deploy an existing program to a machine.
+
+    .. deprecated::
+        Prefer ``POST /api/programs/machines/{machine_id}/programs/deploy-validated``
+        after validation. May be removed in a future release.
 
     This creates a deployment record linking the program to the machine with the specified O-number.
     """
@@ -1017,9 +1022,9 @@ async def deploy_program(
         )
         return deployment
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=public_error_detail(e, context="Deployment failed"))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Deployment failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=public_error_detail(e, context="Deployment failed"))
 
 
 @router.get("/machines/{machine_id}/deployments", response_model=List[ProgramDeploymentResponse])

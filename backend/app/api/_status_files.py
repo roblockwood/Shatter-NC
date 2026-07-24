@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.db.base import get_db
 from app.models.machine import Machine
+from app.utils.api_errors import public_error_detail
 from app.clients.ftp_client import CNCFtpClient
 from app.parsers.gcode_parser import parse_gcode
 import logging
@@ -62,7 +63,7 @@ async def list_programs(
         logger.error(f"Error listing programs for machine {machine_id} at path {path}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
+            detail=public_error_detail(e),
         )
 
 
@@ -120,7 +121,7 @@ async def get_position(machine_id: int, db: Session = Depends(get_db)):
         logger.error(f"Error fetching position for machine {machine_id}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
+            detail=public_error_detail(e),
         )
 
 
@@ -173,7 +174,7 @@ async def download_file(
         logger.error(f"Error downloading file from machine {machine_id}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
+            detail=public_error_detail(e),
         )
 
 
@@ -234,7 +235,7 @@ async def get_file_metadata(
         logger.error(f"Error getting file metadata from machine {machine_id}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
+            detail=public_error_detail(e),
         )
 
 
@@ -300,7 +301,7 @@ async def view_file(
         logger.error(f"Error viewing file from machine {machine_id}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
+            detail=public_error_detail(e),
         )
 
 
@@ -354,5 +355,5 @@ async def upload_file(
         logger.error(f"Error uploading file to machine {machine_id}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
+            detail=public_error_detail(e),
         )

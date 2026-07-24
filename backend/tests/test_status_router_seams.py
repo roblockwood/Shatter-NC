@@ -74,7 +74,7 @@ def test_counters_route_registered():
 
 def test_alarms_route_registered():
     sigs = _route_signatures(status_module.router)
-    assert (frozenset({"GET"}), "/{machine_id}/alarms") in sigs
+    assert (frozenset({"GET"}), "/{machine_id}/alarms/live") in sigs
 
 
 def test_position_route_registered():
