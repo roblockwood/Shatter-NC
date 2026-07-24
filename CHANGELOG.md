@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/roblockwood/Shatter-NC/compare/v1.0.1...v1.0.2) (2026-07-24)
+
+
+### Bug Fixes
+
+* clear pip-audit findings for FastAPI stack ([86ad3c5](https://github.com/roblockwood/Shatter-NC/commit/86ad3c5d1d5e9ce473f9897861c07e12d221e847))
+
 ## [1.0.1](https://github.com/roblockwood/Shatter-NC/compare/v1.0.0...v1.0.1) (2026-07-24)
 
 
