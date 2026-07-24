@@ -8,7 +8,7 @@
 - Dark mode only (no light theme)
 - Monospace typography throughout
 - ASCII art for graphics, progress bars, and UI elements
-- **NO EMOJI** - Use ASCII characters only (/, -, |, *, etc.) to maintain terminal aesthetic
+- **NO EMOJI in UI** — Use ASCII characters only (/, -, |, *, etc.) to maintain terminal aesthetic. Marketing docs (e.g. root README) may use emoji; application UI must not.
 - CRT/terminal visual effects (optional scanlines, glow)
 - Command-line inspired interactions
 - Information density - pack data like a terminal
@@ -36,12 +36,9 @@ Success:        #00ff00 (green)
 Warning:        #ffaa00 (amber)
 ```
 
-### Alternative Schemes
-Users could switch between phosphor colors:
-- **Green Phosphor** (default): `#00ff00`
-- **Amber Phosphor**: `#ffb000`
-- **White Phosphor**: `#f0f0f0`
-- **Cyan Phosphor**: `#00ffff`
+### Alternative Schemes (not implemented)
+
+A future theme switcher could offer phosphor variants; the current UI uses the **green phosphor** default with component-level amber/red/cyan accents (alarms, compressor LEDs, warnings).
 
 ---
 
@@ -89,7 +86,7 @@ Users could switch between phosphor colors:
 ### Terminal Window Structure
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ SHATTER v0.1.0 │ MACHINE MONITOR │ [CONNECTION: ●●●●○ 4/5]  │ ← Status bar
+│ SHATTER v{version} │ MACHINE MONITOR │ [CONNECTION: ●●●●○ 4/5]  │ ← Status bar
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │  ┌────────────────┐  ┌────────────────┐  ┌──────────────┐  │

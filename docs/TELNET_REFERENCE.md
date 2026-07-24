@@ -17,7 +17,7 @@ Protocol reference for Shatter's telnet client ([`telnet_client.py`](../backend/
 | `get_memory_data()` | MEM | Active program |
 | `get_tool_table_data()` | TOLNI1 / TOLNM1 | Tool table |
 | `get_position_data()` | POSNI1 / POSNM1 | Work offsets |
-| `get_atc_magazine_data()` | ATCTL / ATCTLD | ATC magazine |
+| `get_atc_magazine_data()` | ATCTL (C00) / ATDTL (D00) | ATC magazine |
 | `load_data(name)` | arbitrary | Generic LOD |
 
 ### DRQALL — directory listing

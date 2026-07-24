@@ -59,16 +59,23 @@ Shatter uses [12-factor](https://12factor.net/config) configuration via `.env` f
 | `TWILIO_ACCOUNT_SID` | unset | No | SMS channel default |
 | `TWILIO_AUTH_TOKEN` | unset | No | SMS channel default |
 | `TWILIO_FROM_NUMBER` | unset | No | SMS sender E.164 |
-| `SECRET_KEY` | unset | **Yes** | Random secret per deployment |
+| `SECRET_KEY` | unset | **Yes** | Required in prod compose; loaded by config but **not used** by app logic today |
 | `ENABLE_AUTH` | `false` | No | **Legacy — no effect** |
 | `CORS_ORIGINS` | localhost list | **Yes** | JSON array of allowed browser origins |
 | `LOCAL_TIMEZONE` | `America/Los_Angeles` | No | CNC timestamp interpretation |
+| `MIGRATIONS_DIR` | auto-detect | No | SQL migration directory (`run_migrations.py`; set in compose) |
+| `SHATTER_TELNET_PROXY_HOST` | unset | No | Dev-only telnet proxy host (Docker Desktop → CNC) |
+| `SHATTER_TELNET_PROXY_PORT` | `10000` | No | Dev-only telnet proxy port |
 
 ### Frontend (Vite)
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `VITE_API_URL` | auto-detect | Override API base URL (rare; see `.env.example`) |
+| `VITE_APP_VERSION` | from build | Display version in UI header (CI/Docker build arg) |
+| `VITE_TABLET_MACHINE_ID` | unset | Default CNC id for `/tablet` kiosk entry |
+| `VITE_TABLET_COMPRESSOR_ID` | unset | Default compressor id for tablet entry |
+| `VITE_PWA_START_URL` | unset | Optional PWA manifest override (Docker build arg) |
 
 ---
 
@@ -83,6 +90,14 @@ ENABLE_AUTH=false
 ```
 
 Restrict `FTP_SYNC_LOCAL_BROWSE_HOST_PATH` to directories operators should see. See [SECURITY.md](../SECURITY.md#ftp-sync-local-browse).
+
+### Production compose passthrough
+
+`docker-compose.prod.yml` lists explicit `environment:` keys for the backend. Variables in `.env` used only for `${...}` substitution are **not** automatically visible inside the container unless listed under `environment:` or passed via `env_file`.
+
+**Currently passed in prod compose:** database, `LOG_LEVEL`, poll/compressor settings, `SECRET_KEY`, `CORS_ORIGINS`, MQTT, Twilio, SMTP, `LOCAL_TIMEZONE`, `FTP_SYNC_ENABLED`, `MIGRATIONS_DIR`, FTP browse root.
+
+**Dev compose** uses `env_file: .env`, so any variable in `.env` reaches the backend without listing each key explicitly.
 
 ---
 

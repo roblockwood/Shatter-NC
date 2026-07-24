@@ -4,6 +4,19 @@ Operator-facing overview of the Shatter web UI: fleet dashboard, program files, 
 
 ---
 
+## Beta mode
+
+Several features require **beta mode**: rapid-click the **SHATTER v{version}** title in the header (10 clicks within 5 seconds). When active, nav shows **[ NOTIFY ]** and **[ TOOLS ]**, and machine edit exposes FTP sync and AUTO DETECT control version.
+
+| Feature | Route / location | Beta required |
+|---------|------------------|---------------|
+| Tool Management | `/tools` | Yes |
+| Notifications | `/notifications` | Yes |
+| FTP sync (machine edit) | Dashboard → edit machine | Yes |
+| Compressors, tablet kiosk | Dashboard, `/tablet/*` | No |
+
+---
+
 ## Dashboard
 
 ### Fleet header
@@ -17,18 +30,18 @@ MACHINES: 5  │  RUNNING: 3  │  ONLINE: 4/5  │  WS CONNECTED
 | **MACHINES** | Collapse expanded machine/compressor cards |
 | **RUNNING** | Click opens **Running Summary** modal; hover shows quick popup |
 | **ONLINE: n/total** | Hover shows **Machine Status** popup (duration + polling graph) |
-| **WS CONNECTED** | WebSocket link to backend (live updates) |
+| **WS CONNECTED** | WebSocket link to backend (live updates); shows **WS DISCONNECTED** when down |
 
-Live updates use WebSocket ([WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md)). If disconnected, the UI falls back to REST polling.
+Live fleet updates use WebSocket ([WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md)). If the socket disconnects, the dashboard does **not** poll REST for machine status — you may see a loading screen (no data yet) or stale cached values until the socket reconnects. Running/online summary popups poll REST on their own while open.
 
 ### Machine cards
 
 Each card shows:
 
-- Connection status (online/offline) and run state (operating, idle, alarm, etc.)
+- Connection status (online/offline) and run state from PRD3: `off`, `standby` (shown as **IDLE**), `operating`, `stopped`, `error`
 - Active program name, cycle/cutting times when available
-- Alarm indicators and recent polling success graph
-- Actions: expand panes (tools, files, sync), edit machine, test connection
+- Alarm indicators (separate from run state) and recent polling success graph
+- Actions: expand panes (tools, files, sync in beta), edit machine, test connection
 
 ### Add / edit machines
 
@@ -37,7 +50,7 @@ From the dashboard add card or inline edit:
 - **Required:** name, IP address
 - **Common:** FTP username/password, poll interval, units (in/mm)
 - **Validation tolerances:** diameter/length for tools; X/Y/Z for WCS — or use G-code defaults
-- **FTP sync:** per-machine upload/download configs (see [FTP_SYNC_EXCLUSION_RULES.md](FTP_SYNC_EXCLUSION_RULES.md))
+- **FTP sync (beta):** enable **FTP SYNC** in edit form, then configure upload/download jobs (see [FTP_SYNC_EXCLUSION_RULES.md](FTP_SYNC_EXCLUSION_RULES.md))
 
 Use **Test Connection** before saving. Telnet (port 10000) is used for status; FTP for files.
 
@@ -61,7 +74,7 @@ If summaries are empty: confirm machines ran programs in the range, polling is e
 
 ## Programs and Files
 
-Open **File Browser** from a machine card.
+Open **File Browser** from the nav (**`/files`**) or from a machine card / file manager pane. Deep links: `?machine=&file=&file_path=&path=`.
 
 ### Browse and transfer
 
@@ -75,7 +88,7 @@ Open **File Browser** from a machine card.
 2. Backend downloads the file via FTP and runs the same checks as upload validation
 3. Results show in the details panel: tool table, WCS offsets, pass/fail status
 
-Validation compares **program metadata** (from G-code comments) to **live machine data** (ATC tools via telnet, work offsets via POSNI).
+Validation compares **program metadata** (from G-code comments) to **live machine data** (ATC tools via telnet, work offsets via telnet POSNI).
 
 ### Deploy
 
@@ -94,7 +107,7 @@ Re-validation is useful when tools or offsets change on the machine since the la
 **Tools**
 
 - Each tool referenced in the program (T1, T2, …) vs ATC/tool table
-- Status: `found`, `missing`, `mismatch`, `not_in_nc` (on machine but not in program)
+- API fields: `available`, `diameter_match`, `length_sufficient` (UI shows **PASS** / **FAIL** per tool)
 - Diameter, length, description compared when metadata exists in the NC file
 
 **Tolerance source (per machine):**
@@ -104,8 +117,8 @@ Re-validation is useful when tools or offsets change on the machine since the la
 
 **Work coordinate systems (WCS)**
 
-- G54–G59 offsets from program metadata vs machine POSNI data
-- Status includes `found`, `mismatch`, or `xyz_not_parsed` when WCS not embedded in NC
+- G54–G59 offsets from program metadata vs machine POSNI data (telnet)
+- When WCS metadata is absent, UI shows **XYZ NOT PARSED** with machine G54 values for reference
 
 **WCS tolerance source:**
 
@@ -120,9 +133,9 @@ Implementation: [`programs.py`](../backend/app/api/programs.py), [`gcode_parser.
 
 ---
 
-## Tool Management
+## Tool Management (beta)
 
-The **Tools** page aggregates tool usage across deployed programs.
+The **Tools** page (`/tools`, beta mode required) aggregates tool usage across deployed programs.
 
 - Sortable tool list with usage counts
 - **Tool detail** modal: specs, programs/operations, related alarms
@@ -138,9 +151,9 @@ Kaeser SIGMA CONTROL 2 units appear as cards on the dashboard. Add via **[ ADD C
 
 ---
 
-## Notifications
+## Notifications (beta)
 
-Configure email/SMS channels and rules in Settings. Channel secrets are not shown after save. Delivery log shows send history.
+Configure email/SMS channels and rules at **`/notifications`** (beta mode required). Channel secrets are not shown after save. Delivery log shows send history.
 
 ---
 

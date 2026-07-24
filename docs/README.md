@@ -19,7 +19,7 @@ Curated docs for installing, operating, and contributing to Shatter.
 | [Development Guide](DEVELOPMENT_GUIDE.md) | Setup, tests, where to change code |
 | [Contributing](../CONTRIBUTING.md) | PR process, versioning, doc standards |
 | [UX Design Guide](UX_DESIGN_GUIDE.md) | Terminal UI system (+ branding) |
-| [Backend Architecture](BACKEND_ARCHITECTURE.md) | Services and data flow (~300 lines) |
+| [Backend Architecture](BACKEND_ARCHITECTURE.md) | Services and data flow |
 | [WebSocket Protocol](WEBSOCKET_PROTOCOL.md) | Real-time message format |
 | [Telnet Reference](TELNET_REFERENCE.md) | Brother port 10000 commands |
 | [Database Schema](DATABASE_SCHEMA.md) | PostgreSQL + TimescaleDB |
@@ -34,6 +34,8 @@ Curated docs for installing, operating, and contributing to Shatter.
 
 ## Maintaining docs
 
-Update the smallest relevant doc in the same PR as code changes. REST API details live in OpenAPI (`/docs` when `LOG_LEVEL=DEBUG`), not a hand-maintained reference. Prefer deleting obsolete sections over duplicating — git history retains removed content.
+Update the smallest relevant doc in the same PR as code changes. REST API details live in OpenAPI (`/docs` when `LOG_LEVEL=DEBUG`), not a hand-maintained reference. Prefer deleting obsolete sections over duplicating — git history retains removed content until a [history purge](./audit/GIT_HISTORY_PURGE.md) is performed.
+
+**Audit artifacts:** [CODEBASE_GROUND_TRUTH.md](./audit/CODEBASE_GROUND_TRUTH.md), [DOCUMENTATION_AUDIT_LOG.md](./audit/DOCUMENTATION_AUDIT_LOG.md), [GIT_HISTORY_PURGE.md](./audit/GIT_HISTORY_PURGE.md)
 
 Parser schema template for agents: [`.cursor/templates/SCHEMA_DEFINITION_TEMPLATE.md`](../.cursor/templates/SCHEMA_DEFINITION_TEMPLATE.md)

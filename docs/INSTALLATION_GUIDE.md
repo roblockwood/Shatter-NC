@@ -34,7 +34,7 @@ docker compose version
 | File | Use case | Services | UI |
 |------|----------|----------|-----|
 | `docker-compose.prod.yml` | Shop production | postgres, backend, frontend (nginx) | Port **80** |
-| `docker-compose.dev.yml` | Contributors (from source) | postgres, backend, frontend (Vite) | Port **3000** |
+| `docker-compose.dev.yml` | Contributors (from source) | postgres, backend, frontend (Vite), mosquitto | Port **3000** |
 
 **Production networking** (see [SECURITY.md](../SECURITY.md)):
 
@@ -93,8 +93,8 @@ To pin deploy files to a release, replace `main` with a tag (e.g. `v1.2.3`) in t
 Edit `.env` before first start. Set at minimum:
 
 - `POSTGRES_PASSWORD` — strong unique password
-- `SECRET_KEY` — run `openssl rand -hex 32`
-- `CORS_ORIGINS` — JSON array of shop browser origins, e.g. `'["http://192.168.1.50","http://localhost"]'`
+- `SECRET_KEY` — run `openssl rand -hex 32` (required by prod compose; reserved for future use — not consumed by app logic today)
+- `CORS_ORIGINS` — JSON array of shop browser origins, e.g. `'["http://192.168.1.50","http://localhost"]'`. Include the UI origin on **port 80**; the SPA also calls the API on **port 8000** directly unless `VITE_API_URL` was set at build time.
 
 Optional:
 
@@ -162,7 +162,8 @@ Windows/macOS shortcut `start.command` starts the **dev** stack — fine for tri
 
 1. Open the UI (prod: `http://<server-ip>`; dev: `http://localhost:3000`)
 2. Add Brother CNC machines (name, IP, FTP credentials)
-3. Optional: add Kaeser compressors, notification channels, FTP sync configs
+3. Optional: add Kaeser compressors (no beta required)
+4. Optional (beta): enable beta mode (rapid-click logo), then configure notification channels (`/notifications`) or FTP sync (machine edit form)
 
 Operator workflows: [USER_GUIDE.md](USER_GUIDE.md).
 

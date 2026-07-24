@@ -21,7 +21,7 @@ Shatter is designed for **trusted shop-floor LANs** where CNC machines, operator
 
 - Deploy behind a firewall; do not expose Shatter directly to the public internet without additional controls.
 - Restrict access to the Shatter UI (port 80/3000) to shop staff and known devices.
-- Use strong, unique values for `POSTGRES_PASSWORD` and `SECRET_KEY` in production.
+- Use strong, unique values for `POSTGRES_PASSWORD` and `SECRET_KEY` in production (`SECRET_KEY` is required by compose but not yet used by application logic).
 
 ## Access Control
 

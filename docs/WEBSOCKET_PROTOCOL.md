@@ -5,10 +5,12 @@ Real-time dashboard updates use a single WebSocket endpoint. There is **no authe
 ## Endpoint
 
 ```
-ws://<host>:8000/ws
+ws://<host>:8000/api/ws
 ```
 
-Production nginx proxies this path to the backend. The frontend connects via [useWebSocket.ts](../frontend/src/hooks/useWebSocket.ts).
+The FastAPI router is mounted at `/api` with route `/ws` ([`websocket.py`](../backend/app/api/websocket.py)). The frontend connects via [`useWebSocket.ts`](../frontend/src/hooks/useWebSocket.ts) and [`api.ts`](../frontend/src/config/api.ts) (`WS_URL`).
+
+**Production networking:** The SPA auto-detects the API at `{browser-hostname}:8000` unless `VITE_API_URL` was set at build time. Production nginx proxies **`/api/`** (including WebSocket upgrade) to the backend, but the current client connects directly to port **8000** for both REST and WebSocket. Ensure `CORS_ORIGINS` includes your shop UI origin (e.g. `http://<server-ip>` on port 80).
 
 ## Message envelope
 
@@ -71,7 +73,7 @@ Broadcast when a Kaeser compressor is polled. `data` includes `asset_kind: "comp
 
 - Server: [websocket.py](../backend/app/services/websocket.py) (`WebSocketManager`)
 - Client hook: [useWebSocket.ts](../frontend/src/hooks/useWebSocket.ts)
-- REST fallback: machine list and status APIs when WebSocket is disconnected
+- **Dashboard behavior when disconnected:** Fleet cards use WebSocket only. If disconnected with no cached data, the UI shows a loading screen; otherwise stale WS data remains visible. Summary modals poll REST (`/api/summary/*`) on their own interval — that is not a fleet-status fallback. The backend still updates its in-memory poll cache when no clients are connected.
 
 ## Related documentation
 
