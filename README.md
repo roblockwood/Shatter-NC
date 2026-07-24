@@ -16,17 +16,20 @@ Shatter is an open-source web platform for monitoring and managing multiple Brot
 - 🏭 **Multi-Machine** - Monitor and manage multiple CNCs from a single interface
 - 🐳 **Easy Deployment** - Docker-based, runs on isolated networks
 
+
+
 ## Quick Start
 
 **First-time or shop install:** See the **[Installation Guide](docs/INSTALLATION_GUIDE.md)** for production deployment with pre-built Docker images, or development setup from source.
 
 **Development (after cloning):**
+
 ```bash
 cp .env.example .env
 docker compose -f docker-compose.dev.yml up -d
 ```
 
-Open http://localhost:3000 and add your CNC machines through the web UI.
+Open [http://localhost:3000](http://localhost:3000) and add your CNC machines through the web UI.
 
 **For install, backup, and upgrade**, see [Installation Guide](docs/INSTALLATION_GUIDE.md).
 
@@ -35,7 +38,9 @@ Open http://localhost:3000 and add your CNC machines through the web UI.
 Shatter includes two operator-facing workflows (both require **beta mode** — rapid-click the logo to enable):
 
 - **Sync (Dashboard → machine edit)**: Enable **FTP SYNC** on a Brother machine, then use the sync tabs to create per-machine FTP sync configs for **upload** (local folder → CNC) or **download** (CNC → local folder), browse local folders (restricted by `FTP_SYNC_LOCAL_BROWSE_ROOT`), and trigger runs with progress + run item details. Exclusion rules and filename validation are enforced during candidate selection. See `docs/FTP_SYNC_EXCLUSION_RULES.md`.
-- **Notify (`/notifications`)**: Create notification **channels** (SMTP email or Twilio SMS) and **rules** that fire on status transitions (including error/offline) and cycle completion, with a delivery log and a “send test” action per channel.
+- **Notify (**`/notifications`**)**: Create notification **channels** (SMTP email or Twilio SMS) and **rules** that fire on status transitions (including error/offline) and cycle completion, with a delivery log and a “send test” action per channel.
+
+
 
 ### Configuration knobs (high-level)
 
@@ -59,6 +64,8 @@ Per-channel config stored in the database can override global defaults.
 
 ## Documentation
 
+
+
 ### Getting Started
 
 - **[Installation Guide](docs/INSTALLATION_GUIDE.md)** — Shop install, backup, upgrade
@@ -66,6 +73,8 @@ Per-channel config stored in the database can override global defaults.
 - **[Development Guide](docs/DEVELOPMENT_GUIDE.md)** — Contributor setup and tests
 - **[Environment Variables](docs/ENVIRONMENT_VARIABLES.md)** — Configuration table
 - **[Contributing](CONTRIBUTING.md)** — PR process and versioning
+
+
 
 ### Technical Reference
 
@@ -87,6 +96,7 @@ Full index: **[docs/README.md](docs/README.md)**
 🚧 **Active Development** - Core features implemented, testing infrastructure in progress
 
 **Current Features:**
+
 - ✅ Real-time machine monitoring with WebSocket updates
 - ✅ G-code validation and intelligent deployment
 - ✅ Multi-machine fleet management dashboard
@@ -97,13 +107,17 @@ Full index: **[docs/README.md](docs/README.md)**
 - ✅ Folder sync (upload/download) with run history UI
 - ✅ Email/SMS notifications with channels, rules, and delivery log
 
+
+
 ## Acknowledgments
 
 Thanks to the early testers who ran Shatter on real shop floors and helped shape it through feedback, bug reports, and patience with rough edges:
 
-- **Matt Blackwell**
-- **Dennis Rathi**
-- **Justin Gray**
+- **Matt Blackwell - Matt was the first external contributor, validated and repaired D00 schema, and added features like the ATC Optimizer, push notifications and file sync.**
+- **Dennis Rathi - Dennis was the first person to install Shatter, validating that it's deployable by humans. He would really appreciate Fanuc, Siemens, and Heidenhain support.** 
+- **Justin Gray - Justin gave some advise on architecture early on, which reinforced the path. He also plays the role of Ivan Drago, knowing he'll always be auditing.**
+
+
 
 ## License
 
