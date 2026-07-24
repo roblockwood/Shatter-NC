@@ -10,12 +10,12 @@ Sketch of the Shatter backend: how polling, API, WebSocket, and storage fit toge
 |-----------|------------|------|
 | API | FastAPI | REST + WebSocket |
 | ORM | SQLAlchemy 2.0 | PostgreSQL access |
-| Database | PostgreSQL 14 + TimescaleDB | Config + time-series |
+| Database | PostgreSQL 15 + TimescaleDB (`latest-pg15` in compose) | Config + time-series |
 | CNC primary | Telnet :10000 | Status, tools, offsets |
 | CNC files | FTP :21 | Upload/download/list |
 | Cache / locks | In-process (`asyncio`) | Per-machine telnet serialization, rate limit, WS cache |
 | Compressors | Kaeser SC2 HTTP client | Direct polling (no sidecar) |
-| Optional MQTT | Mosquitto publish | Compressor snapshot topics |
+| Optional MQTT | Mosquitto publish | CNC + compressor snapshot topics |
 
 ---
 
@@ -26,7 +26,7 @@ Sketch of the Shatter backend: how polling, API, WebSocket, and storage fit toge
 │   Frontend   │◄──────────────────►│  FastAPI (main.py)              │
 │   (React)    │                    │  ├── api routers                │
 └──────────────┘                    │  ├── RateLimitMiddleware        │
-                                    │  └── WebSocket /ws              │
+                                    │  └── WebSocket /api/ws          │
                                     └───────────┬─────────────────────┘
                                                 │
           ┌─────────────────────────────────────┼─────────────────────────┐
@@ -43,16 +43,16 @@ Sketch of the Shatter backend: how polling, API, WebSocket, and storage fit toge
               PostgreSQL + TimescaleDB
                      │
                      ▼
-              WebSocketManager.broadcast
+              WebSocketManager.broadcast_status
 ```
 
 ---
 
 ## Startup
 
-1. [`start-dev.sh`](../backend/scripts/start-dev.sh) / [`start.sh`](../backend/scripts/start.sh) runs [`run_migrations.py`](../backend/scripts/run_migrations.py)
+1. [`start.sh`](../backend/scripts/start.sh) (prod) or inline CMD in dev [`Dockerfile`](../backend/Dockerfile) runs [`run_migrations.py`](../backend/scripts/run_migrations.py). Hybrid local dev may use [`start-dev.sh`](../backend/scripts/start-dev.sh).
 2. FastAPI app loads settings from [`config.py`](../backend/app/core/config.py)
-3. `PollingService` and `CompressorPollingService` start background tasks
+3. **`startup` event** starts: `MqttPublisher`, `NotificationService`, `PollingService`, `CompressorPollingService`, `FtpSyncService`
 4. Routers receive injected service singletons (`summary`, `websocket`, etc.)
 
 See [DATABASE_MIGRATIONS.md](DATABASE_MIGRATIONS.md) for migration behavior.
@@ -67,11 +67,11 @@ See [DATABASE_MIGRATIONS.md](DATABASE_MIGRATIONS.md) for migration behavior.
 2. Fetch status, tools, program name, alarms (LOD/RED commands — see [TELNET_REFERENCE.md](TELNET_REFERENCE.md))
 3. Write time-series events (`machine_status_events`, `polling_events`, production data)
 4. Update in-memory cache used by WebSocket
-5. `WebSocketManager.broadcast_status_update(machine_id, payload)`
+5. `WebSocketManager.broadcast_status(payload)`
 
 **Locks:** [`_get_machine_lock`](../backend/app/clients/_telnet_state.py) serializes telnet reads/writes per `(ip, port)`.
 
-**Online detection:** Failed polls mark machine offline; successful polls refresh `last_seen_at`.
+**Online detection:** Debounced via `display_online()` — requires at least one successful fast poll and fewer than **3** consecutive failures before the UI shows offline.
 
 ---
 
@@ -96,7 +96,7 @@ Partial updates merge with cached fields so fast status polls do not wipe tool t
 [`ProgramService`](../backend/app/services/program_service.py) + [`programs.py`](../backend/app/api/programs.py):
 
 1. Parse G-code ([`gcode_parser.py`](../backend/app/parsers/gcode_parser.py)) for tool/WCS metadata
-2. Fetch live machine tools (telnet) and offsets (telnet/FTP POSNI)
+2. Fetch live machine tools (telnet) and offsets (telnet POSNI)
 3. Compare with tolerances from machine settings or G-code defaults
 4. Store programs by content hash; deployments track validation snapshots
 
@@ -115,7 +115,7 @@ User-facing flow: [USER_GUIDE.md](USER_GUIDE.md#validation-algorithm).
 
 ## Compressors
 
-[`CompressorPollingService`](../backend/app/services/compressor_polling.py) uses [`KaeserSc2Client`](../backend/app/integrations/kaeser_sc2/client.py). Optional MQTT publish via [`mqtt_publisher.py`](../backend/app/services/mqtt_publisher.py).
+[`CompressorPollingService`](../backend/app/services/compressor_polling.py) uses [`KaeserSc2Client`](../backend/app/integrations/kaeser_sc2/client.py). Optional MQTT publish via [`mqtt_publisher.py`](../backend/app/services/mqtt_publisher.py) to topics such as `shatter/compressors/{id}/poll` and `shatter/machines/{id}/poll`.
 
 See [COMPRESSOR_INTEGRATION.md](COMPRESSOR_INTEGRATION.md).
 
@@ -140,7 +140,7 @@ Rule engine evaluates machine/compressor events; channels send email (SMTP) or S
 
 REST routers under `/api/*` — use OpenAPI in dev (`LOG_LEVEL=DEBUG` → `/docs`). Do not maintain parallel manual REST docs.
 
-Key router modules: `machines`, `programs`, `summary`, `notifications`, `tools`, `status` (telnet reads/writes), `ftp_sync`.
+Key router modules: `machines`, `status`, `programs`, `history`, `summary`, `tools`, `compressors`, `notifications`, `ftp_sync`, `settings`.
 
 ---
 

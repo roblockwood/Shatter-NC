@@ -8,10 +8,10 @@ Rules are implemented in [`backend/app/utils/ftp_sync_rules.py`](../backend/app/
 
 ## Constraints Applied
 
-1. Extension restriction: only `.NC` files are eligible for sync upload.
+1. Extension restriction: only `.NC` files are eligible for sync (upload and download when rules are applied).
 2. ASCII restriction: non-ASCII filenames are excluded.
 3. Uppercase restriction: filenames must be uppercase.
-4. Reserved system file protection: names matching CNC system/data files are excluded (for example `ALARM*`, `MONTR*`, `POSN*`, `MEM*`, `TOLN*`, `ATCTL*`, `PRDC*`, `PRDD*`, `SYSC*`, `SYSD*`).
+4. Reserved system file protection: names matching CNC system/data files are excluded (for example `ALARM*`, `MONTR*`, `POSN*`, `MEM*`, `TOLN*`, `TLOAD*`, `ATCTL*`, `ATCTLD*`, `PRDC*`, `PRDD*`, `SYSC*`, `SYSD*`).
 5. O-number enforcement (default): filename stem must match `O####`.
 6. Character whitelist for non O-number names (when allowed): `A-Z`, `0-9`, `_` only.
 7. Length limits for non O-number names:
@@ -25,11 +25,11 @@ Rules are implemented in [`backend/app/utils/ftp_sync_rules.py`](../backend/app/
 ## Config Fields (ftp_sync_configs)
 
 1. `sync_direction` (`upload` or `download`)
-1. `include_pattern`
-2. `exclude_patterns` (comma-separated globs)
-3. `control_type` (`C00` or `D00`)
-4. `strict_brother_naming` (bool)
-5. `require_onumber_filename` (bool)
+2. `include_pattern` — glob for eligible files (default `*.NC` on new configs)
+3. `exclude_patterns` (comma-separated globs)
+4. `control_type` (`C00` or `D00`)
+5. `strict_brother_naming` (bool)
+6. `require_onumber_filename` (bool)
 
 `upload` means local folder -> CNC folder.
 `download` means CNC folder -> local folder.

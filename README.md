@@ -53,7 +53,7 @@ Per-channel config stored in the database can override global defaults.
 
 - **Frontend**: React 19 + TypeScript + Vite (port 3000)
 - **Backend**: Python 3.11 + FastAPI (port 8000)
-- **Database**: PostgreSQL 14 + TimescaleDB (port 5432)
+- **Database**: PostgreSQL 15 + TimescaleDB (port 5432 in dev; internal in prod)
 
 **For architecture details**, see [Backend Architecture](docs/BACKEND_ARCHITECTURE.md) and [Development Guide](docs/DEVELOPMENT_GUIDE.md).
 

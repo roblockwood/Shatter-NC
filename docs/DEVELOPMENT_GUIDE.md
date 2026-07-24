@@ -11,7 +11,7 @@ Contributor quickstart for the Shatter-NC monorepo. For shop install, see [INSTA
 | Git | 2.30+ | Clone and PR workflow |
 | Docker | 20.10+ | Default dev environment |
 | Node.js | 20+ | Local frontend (optional) |
-| Python | 3.11+ | Local backend (optional) |
+| Python | 3.11+ (Docker image); 3.12 (CI) | Local backend (optional) |
 
 ---
 
@@ -19,7 +19,7 @@ Contributor quickstart for the Shatter-NC monorepo. For shop install, see [INSTA
 
 | Option | Docker | Local processes | Best for |
 |--------|--------|-----------------|----------|
-| **1. Full Docker** | postgres + backend + frontend | — | Beginners, CI-like env |
+| **1. Full Docker** | postgres + backend + frontend + mosquitto | — | Beginners, CI-like env |
 | **2. Hybrid backend** | postgres (+ frontend optional) | backend in venv | Python debugging |
 | **3. Hybrid frontend** | postgres + backend | `npm run dev` | React HMR without frontend container |
 | **4. Fully local** | postgres only or external DB | backend + frontend | Advanced |
@@ -100,7 +100,7 @@ frontend/src/
 ## Testing
 
 ```bash
-# Backend (from repo root)
+# Backend (from repo root; CI enforces 25% coverage floor)
 PYTHONPATH=backend pytest backend/tests/
 
 # Frontend
@@ -149,7 +149,7 @@ After adding a migration file, restart the backend container — init scripts al
 | Issue | Check |
 |-------|-------|
 | Backend 500 on summaries | `polling_events` table exists; run migrations |
-| WebSocket disconnected | Backend up; nginx proxies `/ws` in prod |
+| WebSocket disconnected | Backend up; client uses `ws://<host>:8000/api/ws` (prod nginx also proxies `/api/` if using same-origin URLs) |
 | Telnet timeouts | Single connection per machine; stop duplicate backends polling same IP |
 | CORS errors | `CORS_ORIGINS` includes your browser origin |
 

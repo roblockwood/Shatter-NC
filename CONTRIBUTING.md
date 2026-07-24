@@ -29,7 +29,7 @@ See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community standards and enforce
 Before contributing, ensure you have:
 
 - **Git** installed and basic familiarity with version control
-- **Python 3.11+** for backend development
+- **Python 3.11+** for backend development (Docker image uses 3.11; CI tests on 3.12)
 - **Node.js 18+** for frontend development
 - **Docker** and **Docker Compose** for local testing (recommended)
 - Read the [DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) for setup instructions
