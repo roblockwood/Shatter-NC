@@ -111,6 +111,7 @@ export function NotificationSettings() {
 
   function openEditChannel(ch: NotificationChannel) {
     const cfg = ch.config as Record<string, unknown>;
+    const rawPassword = String(cfg.password ?? '');
     setChForm({
       name: ch.name,
       channelType: (ch.channel_type as 'email' | 'sms') ?? 'email',
@@ -118,7 +119,7 @@ export function NotificationSettings() {
       smtpHost: String(cfg.smtp_host ?? ''),
       smtpPort: String(cfg.smtp_port ?? '587'),
       username: String(cfg.username ?? ''),
-      password: String(cfg.password ?? ''),
+      password: rawPassword === '********' ? '' : rawPassword,
     });
     setEditingChannelId(ch.id);
   }
