@@ -2,7 +2,7 @@
 
 Shatter validates Brother Speedio programs by reading **metadata embedded in G-code comments**. Standard posts without these comments will upload but **cannot** run tool/WCS validation.
 
-Post processor: **Autodesk Fusion Brother Speedio** (`brother speedio.cps`). A reference copy lives in [`Samples/brother speedio.cps`](../Samples/brother%20speedio.cps) in this repo.
+Post processor: **Autodesk Fusion Brother Speedio** (`brother speedio.cps`). Install from Fusion's post library or your CAM team's shared post folder — sample NC files are not bundled in this repo.
 
 Operator validation flow: [USER_GUIDE.md](USER_GUIDE.md#validation-algorithm).
 
@@ -90,11 +90,7 @@ Configure per machine in the dashboard edit form.
 
 ## Sample Files
 
-| File | Purpose |
-|------|---------|
-| [`Samples/brother speedio.cps`](../Samples/brother%20speedio.cps) | Post processor source |
-| [`Samples/parametric_feed.NC`](../Samples/parametric_feed.NC) | Example parsed program |
-| [`Samples/O8901.NC`](../Samples/O8901.NC) | WCS verification macro example |
+Use your shop's validated Brother Speedio post and exported `.NC` programs for parser testing. Backend parser tests under `backend/tests/` include fixture G-code snippets.
 
 ---
 
