@@ -3,7 +3,9 @@ from datetime import datetime
 from typing import Any, Optional
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from app.utils.secret_redaction import merge_channel_config_update, sanitize_channel_config
 
 
 class NotificationChannelBase(BaseModel):
@@ -29,6 +31,24 @@ class NotificationChannelResponse(NotificationChannelBase):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def sanitize_config(cls, data: Any) -> Any:
+        if hasattr(data, "config"):
+            return {
+                "id": data.id,
+                "name": data.name,
+                "channel_type": data.channel_type,
+                "config": sanitize_channel_config(data.config or {}),
+                "enabled": data.enabled,
+                "created_at": data.created_at,
+            }
+        if isinstance(data, dict) and "config" in data:
+            sanitized = dict(data)
+            sanitized["config"] = sanitize_channel_config(data.get("config") or {})
+            return sanitized
+        return data
 
 
 class NotificationRuleBase(BaseModel):

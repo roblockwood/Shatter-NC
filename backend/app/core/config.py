@@ -77,7 +77,6 @@ class Settings(BaseSettings):
         "http://localhost:5173",      # Development - Vite alternative port
         "http://localhost",           # Production - Nginx on port 80
         "http://localhost:80",        # Production - Nginx explicit port
-        "*",                          # Allow all origins (for production with dynamic IPs)
     ]
 
     # Timezone for interpreting CNC timestamps (e.g., PRD3) and for
@@ -100,7 +99,7 @@ class Settings(BaseSettings):
         # Allow JSON parsing for list fields like CORS_ORIGINS
         json_schema_extra = {
             "example": {
-                "CORS_ORIGINS": '["http://localhost:3000","http://192.168.1.101","*"]'
+                "CORS_ORIGINS": '["http://localhost:3000","http://192.168.1.101"]'
             }
         }
 

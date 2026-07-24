@@ -46,37 +46,22 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="CNC Management Platform for Brother CNC Machines",
+    docs_url="/docs" if settings.LOG_LEVEL.upper() == "DEBUG" else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if settings.LOG_LEVEL.upper() == "DEBUG" else None,
 )
 
 # Configure CORS
-# Handle wildcard origin: if "*" is present, don't use credentials (browser restriction)
-# FastAPI's CORSMiddleware requires allow_credentials=False when using ["*"]
 cors_origins = settings.CORS_ORIGINS
 use_credentials = True
-
-# Debug: Log CORS configuration
-print(f"CORS_ORIGINS from settings: {cors_origins}")
-print(f"CORS_ORIGINS type: {type(cors_origins)}")
-
-# Check if wildcard is in the list (handle both string and list formats)
-has_wildcard = False
-if isinstance(cors_origins, list):
-    has_wildcard = "*" in cors_origins
-elif isinstance(cors_origins, str):
-    # Handle case where it might be a string representation
-    has_wildcard = "*" in cors_origins or cors_origins == "*"
+has_wildcard = isinstance(cors_origins, list) and "*" in cors_origins
 
 if has_wildcard:
-    # When wildcard is used, we can't use credentials - browser security restriction
-    # Use ["*"] explicitly for allow_origins (this allows ALL origins)
     use_credentials = False
     processed_origins = ["*"]
-    print("CORS: Using wildcard '*' - allowing ALL origins, credentials disabled")
+    logger.warning("CORS wildcard '*' enabled — credentials disabled")
 else:
     processed_origins = cors_origins if isinstance(cors_origins, list) else [cors_origins]
-    print(f"CORS: Using specific origins: {processed_origins}")
-
-print(f"CORS: allow_credentials={use_credentials}, allow_origins={processed_origins}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -104,21 +89,23 @@ async def root():
 @app.get("/health")
 async def health():
     """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "python_executable": sys.executable,
-        "polling_service": {
-            "running": polling_service.is_running,
-            "active_machines": len(polling_service.pollers),
-            "websocket_connections": websocket_manager.get_connection_count(),
-        },
-        "compressor_polling_service": {
-            "running": compressor_polling_service.is_running,
-            "active_compressors": len(compressor_polling_service.pollers),
-        },
-        "mqtt_publish": mqtt_publisher.status().__dict__,
-        "compressor_status_samples_table": _compressor_status_samples_table_ok(),
-    }
+    if settings.LOG_LEVEL.upper() == "DEBUG":
+        return {
+            "status": "healthy",
+            "python_executable": sys.executable,
+            "polling_service": {
+                "running": polling_service.is_running,
+                "active_machines": len(polling_service.pollers),
+                "websocket_connections": websocket_manager.get_connection_count(),
+            },
+            "compressor_polling_service": {
+                "running": compressor_polling_service.is_running,
+                "active_compressors": len(compressor_polling_service.pollers),
+            },
+            "mqtt_publish": mqtt_publisher.status().__dict__,
+            "compressor_status_samples_table": _compressor_status_samples_table_ok(),
+        }
+    return {"status": "healthy"}
 
 
 # Include routers

@@ -15,6 +15,7 @@ from app.schemas.notification import (
     NotificationRuleResponse,
     NotificationRuleUpdate,
 )
+from app.utils.secret_redaction import merge_channel_config_update
 
 router = APIRouter()
 
@@ -56,6 +57,8 @@ def update_channel(channel_id: int, payload: NotificationChannelUpdate, db: Sess
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
     for field, value in payload.model_dump(exclude_unset=True).items():
+        if field == "config" and value is not None:
+            value = merge_channel_config_update(channel.config, value)
         setattr(channel, field, value)
     db.commit()
     db.refresh(channel)
