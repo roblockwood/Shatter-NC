@@ -221,7 +221,7 @@ Machine configuration and metadata.
 **Example Record:**
 ```sql
 INSERT INTO machines (name, ip_address, enabled)
-VALUES ('Mill 1', '192.168.86.89', TRUE);
+VALUES ('Mill 1', '192.168.1.100', TRUE);
 ```
 
 ---

@@ -93,9 +93,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          # Cross-repo publishing (private source -> public package namespace) requires a PAT.
-          # Create repo secret GHCR_PUBLISH_TOKEN with write:packages.
-          password: ${{ secrets.GHCR_PUBLISH_TOKEN || secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate image tags
         id: tags
@@ -104,8 +102,8 @@ jobs:
           SHORT_SHA=$(git rev-parse --short HEAD)
           DATE_TAG=$(date +%Y-%m-%d)
           OWNER="${{ github.repository_owner }}"
-          # Publish to the public install repo namespace (not the private source repo name).
-          TARGET_REPO_LOWER="shatter-nc-install"
+          REPO_NAME="${{ github.event.repository.name }}"
+          TARGET_REPO_LOWER="$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]')"
           echo "SHORT_SHA=$SHORT_SHA" >> "$GITHUB_OUTPUT"
           echo "DATE_TAG=$DATE_TAG" >> "$GITHUB_OUTPUT"
           echo "BACKEND_IMAGE=ghcr.io/${OWNER}/${TARGET_REPO_LOWER}/backend" >> "$GITHUB_OUTPUT"
@@ -122,7 +120,7 @@ jobs:
           provenance: false
           push: true
           labels: |
-            org.opencontainers.image.source=https://github.com/roblockwood/shatter-nc-install
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
           tags: |
             ${{ steps.tags.outputs.BACKEND_IMAGE }}:latest
             ${{ steps.tags.outputs.BACKEND_IMAGE }}:v${{ steps.version.outputs.version }}
@@ -144,7 +142,7 @@ jobs:
           build-args: |
             VITE_APP_VERSION=${{ steps.version.outputs.version }}
           labels: |
-            org.opencontainers.image.source=https://github.com/roblockwood/shatter-nc-install
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
           tags: |
             ${{ steps.tags.outputs.FRONTEND_IMAGE }}:latest
             ${{ steps.tags.outputs.FRONTEND_IMAGE }}:v${{ steps.version.outputs.version }}
@@ -156,15 +154,12 @@ jobs:
       - name: Make published packages public
         if: steps.filter.outputs.need_docker == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GHCR_PUBLISH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "GHCR_PUBLISH_TOKEN is not set; skipping visibility update."
-            exit 0
-          fi
           owner="${{ github.repository_owner }}"
-          target_repo="shatter-nc-install"
+          repo_name="${{ github.event.repository.name }}"
+          target_repo="$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')"
           want_backend="${target_repo}/backend"
           want_frontend="${target_repo}/frontend"
 

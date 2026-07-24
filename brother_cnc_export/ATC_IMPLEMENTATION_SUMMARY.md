@@ -96,7 +96,7 @@ This was the critical insight you provided in your last message.
 ```
 Testing ATC Magazine Operations
 ============================================================
-✓ Connected to 192.168.86.89:10000
+✓ Connected to 192.168.1.100:10000
 
 [TEST 1] Reading full ATC magazine configuration...
 ✓ Successfully read 51 magazine positions

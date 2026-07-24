@@ -104,7 +104,7 @@ COMPLETION_CODES = {
 class BrotherCNCClient:
     """Client for Brother CNC machines using the actual working protocol"""
 
-    def __init__(self, host: str = "192.168.86.89", port: int = 10000, timeout: int = 10,
+    def __init__(self, host: str = "192.168.1.100", port: int = 10000, timeout: int = 10,
                  command_delay: float = 0.2):
         """
         Initialize Brother CNC client.

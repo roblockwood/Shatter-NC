@@ -100,7 +100,7 @@ class Settings(BaseSettings):
         # Allow JSON parsing for list fields like CORS_ORIGINS
         json_schema_extra = {
             "example": {
-                "CORS_ORIGINS": '["http://localhost:3000","http://192.168.86.60","*"]'
+                "CORS_ORIGINS": '["http://localhost:3000","http://192.168.1.101","*"]'
             }
         }
 

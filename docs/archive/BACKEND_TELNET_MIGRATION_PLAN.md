@@ -416,7 +416,7 @@ Response: %R[Command(7)][Arguments(8)][Status(2)]\n[Data]\n[Checksum]%\n
 
    **Testing**:
 
-   - ✅ Connection tested with real machine (192.168.86.89)
+   - ✅ Connection tested with real machine (192.168.1.100)
    - ✅ LOD commands tested (MEM, TOLNI1, POSNI1, ATCTL)
    - ✅ REDPRGN tested (program information retrieval)
    - ✅ REDPRG tested (program content retrieval)
@@ -464,7 +464,7 @@ Response: %R[Command(7)][Arguments(8)][Status(2)]\n[Data]\n[Checksum]%\n
 
    **Testing**:
 
-   - ✅ Tested on real machine (192.168.86.89) - Detected as C00 control
+   - ✅ Tested on real machine (192.168.1.100) - Detected as C00 control
    - ✅ Found 8 C00 indicators (7 SYSC files + 1 PRDC file) with high confidence
    - ✅ Verified catch-22 solution works correctly (parses both formats simultaneously)
 

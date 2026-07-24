@@ -46,7 +46,7 @@ Run the test with a fresh connection:
 from app.clients.telnet_client import get_or_create_connection
 
 # Get fresh connection for testing
-ip_address = "192.168.86.89"  # or from user request
+ip_address = "192.168.1.100"  # or from user request
 port = 10000
 
 client = await get_or_create_connection(
@@ -134,7 +134,7 @@ async def test_on_machine(ip_address: str, port: int = 10000):
 
 ## Example Usage
 
-**User Request**: "Test the MEM parser on machine 192.168.86.89"
+**User Request**: "Test the MEM parser on machine 192.168.1.100"
 
 **Assistant Action**:
 1. **Stop dev container**: `docker-compose -f docker-compose.dev.yml stop backend`

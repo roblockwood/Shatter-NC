@@ -3,7 +3,7 @@
 
 Usage:
     python detect_protocols.py <ip_address>
-    python detect_protocols.py 192.168.86.89
+    python detect_protocols.py 192.168.1.100
 """
 import sys
 import asyncio
@@ -21,7 +21,7 @@ from app.clients.ftp_client import CNCFtpClient
 async def main():
     if len(sys.argv) < 2:
         print("Usage: python detect_protocols.py <ip_address> [http_port] [ftp_port]")
-        print("Example: python detect_protocols.py 192.168.86.89 80 21")
+        print("Example: python detect_protocols.py 192.168.1.100 80 21")
         sys.exit(1)
 
     ip_address = sys.argv[1]

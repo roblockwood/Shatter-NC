@@ -11,7 +11,7 @@ from app.clients.telnet_client import CNCTelnetClient
 
 
 async def main():
-    ip = "192.168.86.89"
+    ip = "192.168.1.100"
     
     print(f"Testing DRQALL command on {ip}...")
     print("=" * 60)

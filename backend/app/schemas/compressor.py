@@ -17,7 +17,7 @@ class CompressorBase(BaseModel):
     kaeser_connect_base_url: Optional[str] = Field(
         None,
         max_length=512,
-        description="Kaeser SC2/Connect base URL (e.g. https://192.168.86.101)",
+        description="Kaeser SC2/Connect base URL (e.g. https://192.168.1.102)",
     )
     kaeser_username: Optional[str] = Field(None, max_length=255)
 

@@ -18,7 +18,7 @@ Shatter is an open-source web platform for monitoring and managing multiple Brot
 
 ## Quick Start
 
-**First-time or shop install:** See the **[Installation Guide](docs/INSTALLATION_GUIDE.md)** for step-by-step setup on Windows, macOS, or Linux using Docker Desktop (including private repo access and GitHub Desktop).
+**First-time or shop install:** See the **[Installation Guide](docs/INSTALLATION_GUIDE.md)** for production deployment with pre-built Docker images, or development setup from source.
 
 **Development (after cloning):**
 ```bash
@@ -110,7 +110,6 @@ Per-channel config stored in the database can override global defaults.
 - 🚧 Automated testing (in progress)
 - 📋 User authentication (planned)
 - 📋 Per-operation runtime tracking (planned)
-- reduce steps for upload (parallel upload and validate, auto issue O####, allow rename perhaps?)
 
 ## License
 

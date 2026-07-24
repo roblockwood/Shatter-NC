@@ -306,7 +306,7 @@ Before deploying to production:
 **Connection Issues:**
 - Verify machine is powered on
 - Check TCP/IP settings on machine
-- Verify network connectivity (ping 192.168.86.89)
+- Verify network connectivity (ping 192.168.1.100)
 - Confirm port 10000 is open
 
 **ATC Reading Issues:**

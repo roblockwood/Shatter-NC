@@ -23,7 +23,7 @@ Comparison of commands documented in section_5.5.9.3.json vs current implementat
       - C00 indicators: PRDC# files (e.g., PRDC1, PRDC89) and SYSC# files (e.g., SYSC89, SYSC94)
       - D00 indicators: PRDD# files (e.g., PRDD1, PRDD89) and SYSD# files (e.g., SYSD89, SYSD94)
     - Returns "C00" or "D00" with confidence levels (high: 2+ indicators, medium: 1 indicator)
-    - Tested on real machine (192.168.86.89) - correctly detected as C00 with 8 indicators
+    - Tested on real machine (192.168.1.100) - correctly detected as C00 with 8 indicators
 
 **Program Information:**
 - ✅ `REDPRGN` - Get currently executed program information

@@ -1,23 +1,26 @@
 # Shatter Installation Guide
 
-This guide walks you through installing Shatter on **Windows** or **macOS** using Docker Desktop. It’s written so a machinist or shop operator can follow it without prior Docker or development experience. You’ll use **GitHub Desktop** to get the project and run Shatter **from source** (Docker builds the app from the cloned code).
+This guide walks through installing Shatter on **Windows**, **macOS**, or **Linux** using Docker Desktop. Choose the path that fits your use case:
+
+- **Production / shop install** — run pre-built container images (recommended for operators)
+- **Development install** — clone the repo and build locally (for contributors and advanced users)
 
 ---
 
-## What You’ll Need
+## What You'll Need
 
-- A computer on the same network as your Brother CNC(s), or one that can reach them.
-- **At least 4 GB RAM** (8 GB recommended).
-- **About 10 GB free disk space** for Docker and Shatter.
-- **About 30 minutes** for first-time setup.
+- A computer on the same network as your Brother CNC(s), or one that can reach them
+- **At least 4 GB RAM** (8 GB recommended)
+- **About 10 GB free disk space** for Docker and Shatter
+- **About 30 minutes** for first-time setup
 
 ---
 
 ## Table of Contents
 
 1. [Install Docker Desktop](#1-install-docker-desktop)
-2. [Get the Project with GitHub Desktop](#2-get-the-project-with-github-desktop)
-3. [Start Shatter](#3-start-shatter)
+2. [Production Install (Pre-built Images)](#2-production-install-pre-built-images)
+3. [Development Install (From Source)](#3-development-install-from-source)
 4. [Open Shatter and Add Machines](#4-open-shatter-and-add-machines)
 5. [Stopping and Restarting](#5-stopping-and-restarting)
 6. [Troubleshooting](#6-troubleshooting)
@@ -33,10 +36,7 @@ Shatter runs inside **Docker**. Install **Docker Desktop** for your operating sy
 1. Download Docker Desktop: **[https://docs.docker.com/desktop/install/windows-install/](https://docs.docker.com/desktop/install/windows-install/)**
 2. Run the installer. If it offers **WSL 2** (Windows Subsystem for Linux), accept it—Docker needs it.
 3. Restart your PC when prompted.
-4. Start **Docker Desktop** from the Start menu. Wait until it says “Docker Desktop is running” (whale icon in the system tray).
-5. **Optional:** Sign in with a Docker Hub account, or skip—Shatter does not require it.
-
-**Tip:** If the installer says “WSL 2 installation is incomplete,” follow the link it gives to install/update WSL 2, then run the Docker installer again.
+4. Start **Docker Desktop** from the Start menu. Wait until it says “Docker Desktop is running”.
 
 ### macOS
 
@@ -44,65 +44,79 @@ Shatter runs inside **Docker**. Install **Docker Desktop** for your operating sy
    - **Apple Silicon (M1/M2/M3):** choose “Mac with Apple chip.”
    - **Intel:** choose “Mac with Intel chip.”
 2. Open the downloaded `.dmg`, drag **Docker** into **Applications**.
-3. Open **Docker** from Applications. Accept the terms and grant any requested permissions.
-4. Wait until the menu bar shows “Docker Desktop is running.”
+3. Open **Docker** from Applications and wait until Docker Desktop is running.
+
+### Linux
+
+Install Docker Engine and Docker Compose plugin for your distribution. See **[https://docs.docker.com/engine/install/](https://docs.docker.com/engine/install/)**.
 
 ---
 
-## 2. Get the Project with GitHub Desktop
+## 2. Production Install (Pre-built Images)
 
-Shatter’s code lives in a **private GitHub repository**. The repo owner must add your GitHub account as a collaborator (or give access via an organization). Then use GitHub Desktop to clone the project—no terminal or passwords to type.
+Use this path for shop-floor deployments. You need the compose file, environment template, and database init scripts—not a full development build.
 
-1. **Install GitHub Desktop**  
-   Download and install: **[https://desktop.github.com/](https://desktop.github.com/)**
+### Step 1: Get the project files
 
-2. **Sign in to GitHub**  
-   Open GitHub Desktop → **File** → **Options** → **Accounts** → **Sign in** to GitHub. Use your GitHub username and password (or sign in in the browser if it offers that).
+**Option A — Git clone (recommended):**
 
-3. **Clone the repo**  
-   - **File** → **Clone repository**.
-   - Choose the **GitHub.com** tab.
-   - Find **Shatter-NC** (or the repo name the owner gave you). Select it.
-   - Under “Local path,” pick a folder (e.g. `Documents` or `C:\Users\YourName\Documents`). Remember this path.
-   - Click **Clone**. Wait until it finishes; you’ll see the list of project files.
+```bash
+git clone https://github.com/roblockwood/Shatter-NC.git
+cd Shatter-NC
+```
 
-4. **Where is the project?**  
-   The project will be in a folder like:
-   - **Windows:** `C:\Users\YourName\Documents\Shatter-NC`
-   - **macOS:** `/Users/yourusername/Documents/Shatter-NC`
+**Option B — GitHub Desktop:** clone [roblockwood/Shatter-NC](https://github.com/roblockwood/Shatter-NC) to a folder you can find later.
 
-You’ll start Shatter from this folder in [Step 3](#3-start-shatter).
+### Step 2: Configure environment
 
-**To get updates later:** In GitHub Desktop, select the repo and click **Fetch origin** / **Pull origin** when the owner tells you there’s a new version.
+```bash
+cp .env.production.example .env
+```
+
+Edit `.env` and set at minimum:
+
+- `POSTGRES_PASSWORD` — strong database password
+- `SECRET_KEY` — random string for session signing
+- `CORS_ORIGINS` — JSON array of allowed browser origins (for example `["http://localhost:3000"]`)
+
+Generate random values on macOS/Linux:
+
+```bash
+openssl rand -hex 32   # use for POSTGRES_PASSWORD and SECRET_KEY
+```
+
+### Step 3: Start Shatter
+
+Pull pre-built images from GitHub Container Registry and start services:
+
+```bash
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Images are published as:
+
+- `ghcr.io/roblockwood/shatter-nc/backend`
+- `ghcr.io/roblockwood/shatter-nc/frontend`
+
+The first start may take a few minutes while containers initialize and the database runs migrations.
+
+**Windows / macOS shortcut:** you can also double-click **`start.bat`** (Windows) or **`start.command`** (macOS) after cloning. Those scripts create a `.env` from defaults and start the development compose stack—fine for trying Shatter locally, but production shops should prefer `docker-compose.prod.yml` as above.
 
 ---
 
-## 3. Start Shatter
+## 3. Development Install (From Source)
 
-Shatter includes a **Start** script that sets everything up and starts Docker. You don't need to use a terminal or generate any passwords—the script creates a `.env` file the first time (with a random database password) and starts the app.
+For contributors or anyone who wants to build and hot-reload from source:
 
-**Windows**
+```bash
+git clone https://github.com/roblockwood/Shatter-NC.git
+cd Shatter-NC
+cp .env.example .env
+docker compose -f docker-compose.dev.yml up -d
+```
 
-1. Open **File Explorer** and go to the `Shatter-NC` folder (where you cloned the project).
-2. Double-click **start.bat**.
-3. A window will open. The first time, it will say "Creating .env from defaults…" and create a `.env` file with a random database password. Then it runs Docker.
-4. Wait until the window says "Shatter is starting. Open http://localhost:3000…" (the first time can take several minutes while Docker downloads and builds).
-5. You can close the window after it finishes.
-
-**macOS**
-
-1. Open **Finder** and go to the `Shatter-NC` folder (where you cloned the project).
-2. Double-click **start.command**.
-3. If macOS says the file is from an unidentified developer: right-click **start.command** → **Open** → **Open** in the dialog. You only need to do that once.
-4. A Terminal window will open. The first time, it will say "Creating .env from defaults…" and create a `.env` file with a random database password. Then it runs Docker.
-5. Wait until it says "Shatter is starting. Open http://localhost:3000…" (the first time can take several minutes).
-6. Press any key to close the window, or leave it open.
-
-**Do I need to create or edit .env or generate passkeys?**  
-No. The script creates `.env` for you the first time and puts a random database password in it. You don't need to generate or type any passwords. If you ever want to change the database password or other settings, you can edit the `.env` file in the project folder with a text editor.
-
-**Check that everything is running**  
-Open **Docker Desktop** → **Containers**. You should see **shatter-db**, **shatter-backend**, and **shatter-frontend** running. If any show "Exited" or "Restarting," see [Troubleshooting](#6-troubleshooting).
+See **[Development Guide](DEVELOPMENT_GUIDE.md)** for backend/frontend workflows, testing, and debugging.
 
 ---
 
@@ -110,72 +124,63 @@ Open **Docker Desktop** → **Containers**. You should see **shatter-db**, **sha
 
 1. Open a web browser and go to: **http://localhost:3000**
 2. You should see the Shatter dashboard.
-3. Add your Brother CNC(s) using the on-screen instructions (name, IP address, and optional settings). Shatter will then poll and show status.
+3. Add your Brother CNC(s) using the on-screen instructions (name, IP address, and optional settings).
 
-**Optional – access from another device on your network:**  
+**Optional — access from another device on your network:**  
 Use this machine’s IP address instead of `localhost`, e.g. `http://192.168.1.50:3000`. If it doesn’t load, check your firewall allows port 3000.
 
 ---
 
 ## 5. Stopping and Restarting
 
-Use **Docker Desktop** to stop and start Shatter. Your data is kept when you stop.
+Use **Docker Desktop** or the terminal to stop and start Shatter. Your data is kept when you stop.
 
-**Stop Shatter**
+**Stop (production):**
 
-1. Open **Docker Desktop**.
-2. In the left sidebar, click **Containers**.
-3. Find the Shatter containers (**shatter-db**, **shatter-backend**, **shatter-frontend**). They may appear under a **shatter** group.
-4. Select the group (or each container). Click **Stop** (square icon) to stop them.
+```bash
+docker compose -f docker-compose.prod.yml down
+```
 
-**Start Shatter again**
+**Start again (production):**
 
-1. Open **Docker Desktop** → **Containers**.
-2. Find the stopped Shatter containers (shatter-db, shatter-backend, shatter-frontend).
-3. Select the group (or each container). Click **Start** (play icon) to start them again.
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
 
-**View logs (e.g. to diagnose issues)**
+**Development compose:** replace `docker-compose.prod.yml` with `docker-compose.dev.yml`.
 
-1. Open **Docker Desktop** → **Containers**.
-2. Click a container name (e.g. **shatter-backend** or **shatter-frontend**).
-3. Open the **Logs** tab to see its output.
+In Docker Desktop → **Containers**, you should see **shatter-db**, **shatter-backend**, and **shatter-frontend** (names may include `-prod` or `-dev` suffix depending on compose file).
 
 ---
 
 ## 6. Troubleshooting
 
 **Docker says “Docker is not running”**  
-Start Docker Desktop and wait until it’s fully up, then double-click **start.bat** (Windows) or **start.command** (macOS) again.
+Start Docker Desktop and wait until it’s fully up, then run the compose command again.
 
 **“Cannot connect to the Docker daemon”**  
-Ensure Docker Desktop is running. If it is, try quitting and reopening Docker Desktop, then run the Start script again.
+Ensure Docker Desktop is running. Try quitting and reopening Docker Desktop.
 
 **Port already in use (e.g. 3000 or 8000)**  
-Another program is using that port. Either close that program or change the port in `.env` (e.g. `BACKEND_PORT`, and frontend port in `docker-compose.dev.yml` if you need to).
+Another program is using that port. Change `BACKEND_PORT` in `.env` or adjust port mappings in the compose file.
 
 **Containers keep exiting**  
-In Docker Desktop → **Containers**, click the container that’s exiting (e.g. **shatter-backend**) and open the **Logs** tab. Check the end of the output for errors. Common causes: not enough memory, or a bad `.env` (e.g. typo in a variable). Fix the cause, then stop the Shatter containers and start them again (Section 5).
-
-
-**Backend logs show start-dev.sh: no such file or directory**  
-Pull the latest project (GitHub Desktop → **Pull origin**), then rebuild: in a terminal in the project folder run `docker compose -f docker-compose.dev.yml build backend --no-cache` then `docker compose -f docker-compose.dev.yml up -d`. After that, use the Start script or Docker Desktop as usual.
-
-**“Permission denied” or “Access denied” when cloning**  
-Your GitHub account doesn’t have access to the repo. Ask the repo owner to add you as a collaborator, then try cloning again in GitHub Desktop.
+In Docker Desktop → **Containers**, open **Logs** for the failing container. Common causes: not enough memory, or invalid `.env` values.
 
 **Browser shows “This site can’t be reached” at localhost:3000**  
-In Docker Desktop → **Containers**, check that **shatter-frontend** is running (not stopped). If it is running, try `http://127.0.0.1:3000` or stop and start the Shatter containers again and wait a minute for the dev server to start.
+Confirm **shatter-frontend** is running. Wait a minute after start, or try `http://127.0.0.1:3000`.
+
+**Production image pull fails**  
+Ensure you can reach `ghcr.io` and that images exist for the requested tag. See **[Docker Deployment Guide](DOCKER_DEPLOYMENT.md)** for registry authentication if needed.
 
 ---
 
 ## Summary
 
-| Step | Action |
+| Goal | Steps |
 |------|--------|
-| 1 | Install Docker Desktop (Windows or macOS). |
-| 2 | Install GitHub Desktop, sign in to GitHub, clone the Shatter repo. |
-| 3 | Double-click **start.bat** (Windows) or **start.command** (macOS) in the project folder. The script creates .env and starts Shatter; no passkeys to generate. |
-| 4 | Open **http://localhost:3000** and add your CNC machines. |
-| 5 | To stop: Docker Desktop → Containers → select Shatter containers → Stop. To start again: Containers → select them → Start. |
+| Shop / production | Clone repo → `cp .env.production.example .env` → edit secrets → `docker compose -f docker-compose.prod.yml up -d` |
+| Development | Clone repo → `cp .env.example .env` → `docker compose -f docker-compose.dev.yml up -d` |
+| Use Shatter | Open **http://localhost:3000** and add CNC machines |
 
-For production deployment or other compose options, see [Docker Deployment Guide](DOCKER_DEPLOYMENT.md). For development workflows and contributing, see [Development Guide](DEVELOPMENT_GUIDE.md).
+For advanced deployment options, see **[Docker Deployment Guide](DOCKER_DEPLOYMENT.md)**. For contributing, see **[Development Guide](DEVELOPMENT_GUIDE.md)** and **[CONTRIBUTING.md](../CONTRIBUTING.md)**.

@@ -23,7 +23,7 @@ from app.clients.http_client import CNCHttpClient
 
 # Initialize client
 client = CNCHttpClient(
-    ip_address="192.168.86.89",
+    ip_address="192.168.1.100",
     port=80,
     timeout=5
 )
@@ -86,7 +86,7 @@ import asyncio
 
 # Initialize client
 client = CNCFtpClient(
-    ip_address="192.168.86.89",
+    ip_address="192.168.1.100",
     port=21,
     username="anonymous",
     password="anonymous",
@@ -167,7 +167,7 @@ Tests both HTTP and FTP connectivity.
 {
   "machine_id": 1,
   "machine_name": "Mill 1",
-  "ip_address": "192.168.86.89",
+  "ip_address": "192.168.1.100",
   "http": {
     "success": true,
     "latency_ms": 45.2,
@@ -205,7 +205,7 @@ curl http://localhost:8000/api/machines/1/status
 {
   "machine_id": 1,
   "machine_name": "Mill 1",
-  "ip_address": "192.168.86.89",
+  "ip_address": "192.168.1.100",
   "program_name": "O2045",
   "cycle_time": "0001:23:45.0",
   "cutting_time": "0000:45:12.0",
@@ -300,7 +300,7 @@ from app.clients.telnet_client import create_fresh_connection
 
 # Create fresh connection for this operation
 telnet_client = await create_fresh_connection(
-    ip_address="192.168.86.89",
+    ip_address="192.168.1.100",
     port=10000,
     timeout=10
 )
@@ -421,7 +421,7 @@ Scans for:
 {
   "machine_id": 1,
   "machine_name": "Mill 1",
-  "ip_address": "192.168.86.89",
+  "ip_address": "192.168.1.100",
   "summary": {
     "focas_available": true,
     "other_protocols": []
@@ -438,8 +438,8 @@ Scans for:
 
 ```bash
 # From backend directory
-python scripts/detect_protocols.py 192.168.86.89
-python scripts/detect_protocols.py 192.168.86.89 80 21
+python scripts/detect_protocols.py 192.168.1.100
+python scripts/detect_protocols.py 192.168.1.100 80 21
 ```
 
 The script will:

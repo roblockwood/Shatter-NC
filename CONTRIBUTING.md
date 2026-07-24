@@ -18,25 +18,7 @@ Thank you for considering contributing to the Shatter CNC Management Platform! T
 
 ## Code of Conduct
 
-### Our Standards
-
-We are committed to providing a welcoming and inclusive environment for all contributors. We expect all participants to:
-
-- **Be Respectful**: Treat all contributors with respect and consideration
-- **Be Inclusive**: Welcome diverse perspectives and experiences
-- **Be Professional**: Focus on constructive feedback and technical discussions
-- **Be Collaborative**: Work together to improve the project
-
-### Unacceptable Behavior
-
-- Harassment, discrimination, or personal attacks
-- Trolling, insulting/derogatory comments
-- Publishing private information without permission
-- Other conduct that would be inappropriate in a professional setting
-
-### Enforcement
-
-Project maintainers have the right to remove, edit, or reject contributions that do not align with this Code of Conduct. Repeated violations may result in being banned from the project.
+See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community standards and enforcement expectations.
 
 ---
 
@@ -54,7 +36,7 @@ Before contributing, ensure you have:
 
 ### Finding Issues to Work On
 
-1. **Browse Issues**: Check the [GitHub Issues](https://github.com/yourusername/S700_nc/issues) page
+1. **Browse Issues**: Check the [GitHub Issues](https://github.com/roblockwood/Shatter-NC/issues) page
 2. **Look for Labels**:
    - `good first issue` - Beginner-friendly tasks
    - `help wanted` - Maintainers are seeking contributions
@@ -72,11 +54,11 @@ Before contributing, ensure you have:
 
 ```bash
 # Fork the repository on GitHub, then clone your fork
-git clone https://github.com/YOUR_USERNAME/S700_nc.git
-cd S700_nc
+git clone https://github.com/YOUR_USERNAME/Shatter-NC.git
+cd Shatter-NC
 
 # Add upstream remote to sync with main repository
-git remote add upstream https://github.com/ORIGINAL_OWNER/S700_nc.git
+git remote add upstream https://github.com/roblockwood/Shatter-NC.git
 ```
 
 ### 2. Create a Feature Branch
@@ -99,6 +81,8 @@ git checkout -b fix/bug-description
 - `docs/` - Documentation changes (e.g., `docs/api-examples`)
 - `refactor/` - Code refactoring (e.g., `refactor/polling-service`)
 - `test/` - Test additions (e.g., `test/program-validation`)
+
+Delete your feature branch after the pull request merges. Upstream maintainers should enable **Automatically delete head branches** in repository settings.
 
 ### 3. Set Up Development Environment
 
@@ -665,20 +649,20 @@ Ready for re-review!
 
 ### High Priority
 
-**Testing Infrastructure** (Issue #TODO)
+**Testing Infrastructure**
 - Set up pytest for backend unit and integration tests
 - Set up Vitest + React Testing Library for frontend component tests
 - Create TESTING_GUIDE.md documentation
 - Write initial test suite for critical paths
 
-**Authentication System** (Issue #TODO)
+**Authentication System**
 - Implement user authentication with JWT
 - Add role-based access control (RBAC)
 - Create user management API endpoints
 - Update database schema with users table
 - Document in BACKEND_ARCHITECTURE.md and API_REFERENCE.md
 
-**Alarm Notifications** (Issue #TODO)
+**Alarm Notifications**
 - Monitor machine alarms in real-time
 - Email notifications for critical alarms
 - Alarm history tracking with TimescaleDB
@@ -687,20 +671,20 @@ Ready for re-review!
 
 ### Medium Priority
 
-**Program Version Control** (Issue #TODO)
+**Program Version Control**
 - Track program versions over time
 - Compare program versions (diff view)
 - Rollback to previous versions
 - Document in FILE_BROWSER_WORKFLOWS.md
 
-**Advanced Reporting** (Issue #TODO)
+**Advanced Reporting**
 - Machine utilization reports
 - Production run analytics
 - Alarm frequency analysis
 - Export reports to PDF/CSV
 - Document in DASHBOARD_WORKFLOWS.md
 
-**Multi-Machine Deployment** (Issue #TODO)
+**Multi-Machine Deployment**
 - Deploy program to multiple machines simultaneously
 - Progress tracking for batch deployments
 - Rollback failed deployments
@@ -708,16 +692,16 @@ Ready for re-review!
 
 ### Low Priority
 
-**Search and Filtering** (Issue #TODO)
+**Search and Filtering**
 - Search machines by name, status, IP
 - Filter programs by filename, machine, date
 - Advanced filtering with multiple criteria
 
-**Dark Mode Toggle** (Issue #TODO)
+**Dark Mode Toggle**
 - User preference for dark/light terminal themes
 - Persistent theme storage in localStorage
 
-**Keyboard Shortcuts** (Issue #TODO)
+**Keyboard Shortcuts**
 - Global shortcuts for common actions (e.g., `/` to search)
 - Modal shortcuts (Escape to close - already implemented)
 - Document in UX_DESIGN_GUIDE.md
@@ -790,7 +774,7 @@ git push origin main
 Thank you for contributing to the Shatter CNC Management Platform! Your contributions help make this project better for everyone.
 
 **Remember:**
-- Follow the [Code of Conduct](#code-of-conduct)
+- Follow the [Code of Conduct](CODE_OF_CONDUCT.md)
 - Read and follow [rules.md](rules.md) for documentation standards
 - Follow [UX_DESIGN_GUIDE.md](docs/UX_DESIGN_GUIDE.md) for UI changes
 - Test thoroughly before submitting

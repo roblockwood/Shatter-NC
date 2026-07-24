@@ -213,7 +213,7 @@ export const AddCompressorCard: React.FC<AddCompressorCardProps> = ({
               type="text"
               value={formData.kaeser_connect_base_url}
               onChange={(e) => setFormData({ ...formData, kaeser_connect_base_url: e.target.value })}
-              placeholder="https://192.168.86.101"
+              placeholder="https://192.168.1.102"
               disabled={isSaving}
             />
           </div>
