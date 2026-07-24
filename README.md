@@ -10,7 +10,7 @@ Shatter is an open-source web platform for monitoring and managing multiple Brot
 - 📁 **Smart File Transfer** - G-code validation, tool verification, and multi-machine deployment
 - 🔁 **Folder Sync (Upload/Download)** (beta) - Configure repeatable FTP sync jobs per machine from the Dashboard machine edit form
 - 📊 **Production Analytics** - Historical data, cycle time trends, and fleet-wide statistics
-- 🔧 **Tool Management** - Track tool usage across programs with detailed speed/feed analysis
+- 🔧 **Tool Management** (beta) - Track tool usage across programs with detailed speed/feed analysis
 - 🔔 **Notifications** (beta) - Email/SMS alerts for status changes, alarms, offline, and cycle complete
 - 🔄 **Version Control** - Git-like versioning for NC programs with deployment tracking
 - 🏭 **Multi-Machine** - Monitor and manage multiple CNCs from a single interface
