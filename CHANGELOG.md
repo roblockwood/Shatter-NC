@@ -1,3 +1,12 @@
+## [1.0.1](https://github.com/roblockwood/Shatter-NC/compare/v1.0.0...v1.0.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* enable production install from ghcr.io without cloning ([5c7e92e](https://github.com/roblockwood/Shatter-NC/commit/5c7e92e6d127ff28d35174fd50e6479b2d56dd99))
+* harden production API surface and document security model ([cc1cdb9](https://github.com/roblockwood/Shatter-NC/commit/cc1cdb9bb517212666bfc53373fd77720f4b7045))
+* resolve alarm route collision and deprecate unused endpoints ([049bf2d](https://github.com/roblockwood/Shatter-NC/commit/049bf2d12a471639adcfed3834585c452c23bcb1))
+
 # 1.0.0 (2026-07-24)
 
 
