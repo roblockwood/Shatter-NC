@@ -8,6 +8,7 @@ from app.schemas.machine import MachineCreate, MachineUpdate, MachineResponse
 from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
 from app.utils.protocol_detector import detect_protocols
+from app.utils.api_errors import public_error_detail
 import logging
 
 logger = logging.getLogger(__name__)
@@ -83,6 +84,8 @@ async def update_machine(
 
     # Update fields
     update_data = machine_update.model_dump(exclude_unset=True)
+    if "ftp_password" in update_data and not update_data["ftp_password"]:
+        del update_data["ftp_password"]
     for field, value in update_data.items():
         setattr(db_machine, field, value)
 
@@ -217,11 +220,15 @@ async def test_connection(machine_id: int, db: Session = Depends(get_db)):
     return results
 
 
-@router.post("/{machine_id}/detect-protocols")
+@router.post("/{machine_id}/detect-protocols", deprecated=True)
 async def detect_machine_protocols(machine_id: int, db: Session = Depends(get_db)):
     """
     Detect available communication protocols on a machine.
-    
+
+    .. deprecated::
+        Legacy FOCAS/HTTP probe; Brother Speedio polling uses telnet. Unused by the UI.
+        May be removed in a future release.
+
     Scans for FOCAS and other control protocols that may be available.
     This can help identify additional functionality beyond HTTP/FTP.
     """
@@ -275,7 +282,7 @@ async def detect_machine_protocols(machine_id: int, db: Session = Depends(get_db
         logger.error(f"Protocol detection error for machine {machine_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Protocol detection failed: {str(e)}",
+            detail=public_error_detail(e, context="Protocol detection failed"),
         )
 
 
@@ -309,9 +316,14 @@ async def disconnect_machine(machine_id: int, db: Session = Depends(get_db)):
         }
 
 
-@router.get("/overview")
+@router.get("/overview", deprecated=True)
 async def get_machines_overview(db: Session = Depends(get_db)):
-    """Get overview status of all machines."""
+    """Get overview status of all machines.
+
+    .. deprecated::
+        Incomplete stub; fleet state is provided via WebSocket and summary APIs.
+        May be removed in a future release.
+    """
     machines = db.query(Machine).filter(Machine.enabled == True).all()
 
     # TODO: Fetch real-time status for each machine
@@ -367,11 +379,15 @@ async def update_machine_layout(
     return {"layout_config": machine.layout_config}
 
 
-@router.post("/{machine_id}/refresh-program-name")
+@router.post("/{machine_id}/refresh-program-name", deprecated=True)
 async def refresh_program_name(machine_id: int, db: Session = Depends(get_db)):
     """
     Manually refresh the active program name from MEM for a machine.
-    
+
+    .. deprecated::
+        Background polling updates program name automatically. Unused by the UI.
+        May be removed in a future release.
+
     Phase 5: Replace FTP reads - MEM now uses Telnet.
     This fetches the program_name from the machine via Telnet (MEM file)
     and updates the cached value, which will be included in the next status update.
@@ -437,7 +453,7 @@ async def refresh_program_name(machine_id: int, db: Session = Depends(get_db)):
         logger.error(f"Error refreshing program_name for machine {machine_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to refresh program name: {str(e)}",
+            detail=public_error_detail(e, context="Failed to refresh program name"),
         )
     finally:
         if telnet_client:

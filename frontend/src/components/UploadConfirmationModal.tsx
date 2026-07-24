@@ -305,7 +305,7 @@ export const UploadConfirmationModal: React.FC<UploadConfirmationModalProps> = (
 
   const handleClose = () => {
     // Optionally: Call API to explicitly close FTP connection
-    fetch(`${API_BASE_URL}/api/machines/${machineId}/close-ftp`, {
+    fetch(`${API_BASE_URL}/api/machines/${machineId}/disconnect`, {
       method: 'POST'
     }).catch(() => {/* Ignore errors */});
 

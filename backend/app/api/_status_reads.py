@@ -1,10 +1,10 @@
 """Read-only machine status routes.
 
 Routes:
-    GET /{machine_id}/status          — comprehensive real-time status
+    GET /{machine_id}/status          — comprehensive real-time status (deprecated; use WebSocket)
     GET /{machine_id}/running-log     — MONTR time display data
     GET /{machine_id}/counters        — workpiece counter data
-    GET /{machine_id}/alarms          — alarm log from ALARM command
+    GET /{machine_id}/alarms/live     — current alarms from ALARM telnet command
     GET /{machine_id}/tools           — tool data (ATC or table source)
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/{machine_id}/status")
+@router.get("/{machine_id}/status", deprecated=True)
 async def get_machine_status(
     machine_id: int,
     include_mem: bool = Query(False, description="Include MEM data (mode, operation_status)"),
@@ -29,6 +29,10 @@ async def get_machine_status(
 ):
     """
     Get comprehensive real-time status for a machine.
+
+    .. deprecated::
+        Prefer WebSocket ``status_update`` messages from the polling service.
+        This endpoint opens a telnet connection per request.
 
     Fetches data from Telnet including:
     - MONTR: Running log (program, cycle time, etc.) and work counters
@@ -283,9 +287,13 @@ async def get_work_counters(machine_id: int, db: Session = Depends(get_db)):
             await telnet_client.disconnect()
 
 
-@router.get("/{machine_id}/alarms")
-async def get_alarms(machine_id: int, db: Session = Depends(get_db)):
-    """Get alarm log data from ALARM via Telnet."""
+@router.get("/{machine_id}/alarms/live")
+async def get_alarms_live(machine_id: int, db: Session = Depends(get_db)):
+    """Get current alarm data from the machine via ALARM telnet command.
+
+    For stored alarm events (timelines, analytics), use
+    ``GET /api/machines/{machine_id}/alarms`` (database history).
+    """
     db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not db_machine:
         raise HTTPException(
@@ -439,11 +447,11 @@ async def get_tools(
             parsed["tool_response_time_ms"] = int((time.time() - start_time) * 1000)
 
             try:
-                from app.parsers.mem_parser import parse_mem
+                from app.parsers.mem_parser_v2 import parse_mem_v2
                 mem_data = await telnet_client.get_memory_data()
                 if mem_data:
                     logger.debug(f"Raw MEM content: {repr(mem_data)}")
-                    parsed_mem = parse_mem(mem_data.encode('utf-8'))
+                    parsed_mem = parse_mem_v2(mem_data.encode('utf-8'), control_version=None)
                     program_name = parsed_mem.get("program_name")
                     if program_name:
                         parsed["program_name"] = program_name
@@ -562,11 +570,11 @@ async def get_tools(
             logger.info(f"ATC data merged: {len(tools)} tools, TOLN source={data_name}, units={db_machine.units}")
 
             try:
-                from app.parsers.mem_parser import parse_mem
+                from app.parsers.mem_parser_v2 import parse_mem_v2
                 mem_data = await telnet_client.get_memory_data()
                 if mem_data:
                     logger.debug(f"Raw MEM content: {repr(mem_data)}")
-                    parsed_mem = parse_mem(mem_data.encode('utf-8'))
+                    parsed_mem = parse_mem_v2(mem_data.encode('utf-8'), control_version=None)
                     program_name = parsed_mem.get("program_name")
                     if program_name:
                         data["program_name"] = program_name
