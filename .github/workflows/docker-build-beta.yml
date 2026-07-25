@@ -1,97 +1,45 @@
-name: Release
+name: Build Beta Docker Images
 
-# Stable channel only: semantic-release and :latest / :vX.Y.Z images from main.
-# Integration builds for day-to-day work use the beta branch (docker-build-beta.yml).
+# Integration builds for the beta branch. Tags :beta and commit SHA only — never :latest or :vX.Y.Z.
+# Stable releases are built from main in release.yml after semantic-release.
 
 on:
   push:
     branches:
-      - main
+      - beta
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'database/**'
+      - 'docker/**'
+      - 'docker-compose.prod.yml'
+      - 'VERSION'
+      - '.github/workflows/docker-build-beta.yml'
+      - '.github/workflows/release.yml'
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: |
-          cd frontend
-          npm ci
-
-      - name: Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          npx --prefix frontend semantic-release
-
-  # Runs after semantic-release so VERSION / package.json / config match the GitHub Release.
-  # Checks out current main (includes chore(release) when semantic-release pushed).
-  build-docker:
-    needs: release
-    # Skip path diff on repository-initial push (before is all zeros).
-    if: github.event.before != '0000000000000000000000000000000000000000'
+  build-beta:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Checkout latest main
+      - name: Checkout beta
         uses: actions/checkout@v6
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Decide if Docker images need a rebuild
-        id: filter
-        run: |
-          mapfile -t files < <(git diff --name-only "${{ github.event.before }}" HEAD)
-          NEED=false
-          for f in "${files[@]}"; do
-            case "$f" in
-              backend/*|frontend/*|database/*|docker/*|docker-compose.prod.yml|VERSION|.github/workflows/docker-build-push.yml|.github/workflows/docker-build-beta.yml|.github/workflows/release.yml)
-                NEED=true
-                break ;;
-            esac
-          done
-          echo "need_docker=$NEED" >> "$GITHUB_OUTPUT"
-          echo "Docker rebuild needed: $NEED"
-          if [ "$NEED" = true ]; then
-            printf 'Changed files:\n'
-            printf '%s\n' "${files[@]}"
-          fi
 
       - name: Read version
         id: version
-        if: steps.filter.outputs.need_docker == 'true'
         run: |
           VERSION=$(cat VERSION)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Building version: $VERSION"
+          echo "Building beta (VERSION file): $VERSION"
 
       - name: Set up Docker Buildx
-        if: steps.filter.outputs.need_docker == 'true'
         uses: docker/setup-buildx-action@v3
         with:
           platforms: linux/amd64
 
       - name: Log in to GitHub Container Registry
-        if: steps.filter.outputs.need_docker == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -100,7 +48,6 @@ jobs:
 
       - name: Generate image tags
         id: tags
-        if: steps.filter.outputs.need_docker == 'true'
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
           DATE_TAG=$(date +%Y-%m-%d)
@@ -113,7 +60,6 @@ jobs:
           echo "FRONTEND_IMAGE=ghcr.io/${OWNER}/${TARGET_REPO_LOWER}/frontend" >> "$GITHUB_OUTPUT"
 
       - name: Build and push backend image
-        if: steps.filter.outputs.need_docker == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -125,15 +71,13 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
           tags: |
-            ${{ steps.tags.outputs.BACKEND_IMAGE }}:latest
-            ${{ steps.tags.outputs.BACKEND_IMAGE }}:v${{ steps.version.outputs.version }}
+            ${{ steps.tags.outputs.BACKEND_IMAGE }}:beta
             ${{ steps.tags.outputs.BACKEND_IMAGE }}:${{ steps.tags.outputs.SHORT_SHA }}
             ${{ steps.tags.outputs.BACKEND_IMAGE }}:${{ steps.tags.outputs.DATE_TAG }}-${{ steps.tags.outputs.SHORT_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Build and push frontend image
-        if: steps.filter.outputs.need_docker == 'true'
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
@@ -147,15 +91,13 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
           tags: |
-            ${{ steps.tags.outputs.FRONTEND_IMAGE }}:latest
-            ${{ steps.tags.outputs.FRONTEND_IMAGE }}:v${{ steps.version.outputs.version }}
+            ${{ steps.tags.outputs.FRONTEND_IMAGE }}:beta
             ${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.SHORT_SHA }}
             ${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.DATE_TAG }}-${{ steps.tags.outputs.SHORT_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Make published packages public
-        if: steps.filter.outputs.need_docker == 'true'
         env:
           GH_TOKEN: ${{ secrets.GHCR_PUBLISH_TOKEN }}
         run: |
@@ -170,19 +112,11 @@ jobs:
           want_backend="${target_repo}/backend"
           want_frontend="${target_repo}/frontend"
 
-          # Discover actual package names (avoids 404s due to name/encoding surprises).
-          # Requires PAT to include at least read:packages + write:packages.
           pkgs_json="$(gh api --paginate "users/${owner}/packages?package_type=container&per_page=100")"
-
-          # Preflight: validate JSON and extraction logic quickly (fail-fast, before long builds).
           echo "$pkgs_json" | jq -e 'type=="array"' >/dev/null
 
-          # Find the exact package "name" field that matches our target, or empty if missing.
           backend_pkg="$(printf '%s' "$pkgs_json" | jq -r --arg want "$want_backend" '.[] | select(.name==$want) | .name' | head -n 1)"
           frontend_pkg="$(printf '%s' "$pkgs_json" | jq -r --arg want "$want_frontend" '.[] | select(.name==$want) | .name' | head -n 1)"
-
-          echo "Discovered backend package: ${backend_pkg:-<none>}"
-          echo "Discovered frontend package: ${frontend_pkg:-<none>}"
 
           urlenc () { jq -sRr @uri <<<"$1"; }
 
@@ -198,30 +132,21 @@ jobs:
             return 1
           }
 
-          if ! set_public "$backend_pkg"; then
-            echo "Warning: backend package not found or visibility update failed (continuing)."
-          fi
-          if ! set_public "$frontend_pkg"; then
-            echo "Warning: frontend package not found or visibility update failed (continuing)."
-          fi
+          set_public "$backend_pkg" || echo "Warning: backend package visibility update failed (continuing)."
+          set_public "$frontend_pkg" || echo "Warning: frontend package visibility update failed (continuing)."
 
       - name: Build summary
-        if: steps.filter.outputs.need_docker == 'true'
         run: |
-          echo "## Stable Docker Images Built and Pushed to GitHub Packages 🐳" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Beta Docker Images Built and Pushed 🐳" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Channel:** stable (main — moves :latest and semver tags)" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Channel:** beta (integration — not a stable release)" >> "$GITHUB_STEP_SUMMARY"
           echo "**Registry:** GitHub Container Registry (ghcr.io)" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Version:** ${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
           echo "**Git SHA:** ${{ steps.tags.outputs.SHORT_SHA }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Architectures:** linux/amd64" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "### Backend" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ steps.tags.outputs.BACKEND_IMAGE }}:latest\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ steps.tags.outputs.BACKEND_IMAGE }}:v${{ steps.version.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ steps.tags.outputs.BACKEND_IMAGE }}:beta\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ steps.tags.outputs.BACKEND_IMAGE }}:${{ steps.tags.outputs.SHORT_SHA }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "### Frontend" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ steps.tags.outputs.FRONTEND_IMAGE }}:latest\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ steps.tags.outputs.FRONTEND_IMAGE }}:v${{ steps.version.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ steps.tags.outputs.FRONTEND_IMAGE }}:beta\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.SHORT_SHA }}\`" >> "$GITHUB_STEP_SUMMARY"

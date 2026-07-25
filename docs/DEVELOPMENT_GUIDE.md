@@ -116,12 +116,9 @@ CI coverage floor is currently **60%** (`--cov-fail-under=60` in [`.github/workf
 
 ## API Documentation
 
-REST endpoints are documented via **FastAPI OpenAPI** when enabled:
+REST endpoints are documented via **FastAPI OpenAPI** at `/docs` (Swagger UI), `/redoc`, and `/openapi.json` on the backend.
 
-- Set `LOG_LEVEL=DEBUG` in `.env`
-- Open http://localhost:8000/docs
-
-Production disables `/docs` and `/openapi.json` ([`main.py`](../backend/app/main.py)). For new endpoints: add route docstrings and describe behavior in the PR — do not maintain a separate REST encyclopedia.
+For new endpoints: add route docstrings and describe behavior in the PR — do not maintain a separate REST encyclopedia.
 
 WebSocket messages: [WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md).
 

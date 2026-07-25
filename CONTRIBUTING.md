@@ -64,10 +64,10 @@ git remote add upstream https://github.com/roblockwood/Shatter-NC.git
 ### 2. Create a Feature Branch
 
 ```bash
-# Sync with upstream main branch
+# Sync with upstream beta (integration branch)
 git fetch upstream
-git checkout main
-git merge upstream/main
+git checkout beta
+git merge upstream/beta
 
 # Create a new branch for your feature/fix
 git checkout -b feature/your-feature-name
@@ -181,7 +181,7 @@ git push origin feature/your-feature-name
 
 1. **Go to GitHub**: Navigate to your fork on GitHub
 2. **Click "Pull Request"**: GitHub will detect your recent push
-3. **Select Base Branch**: Usually `main` on the upstream repository
+3. **Select Base Branch**: **`beta`** on the upstream repository (integration). Maintainers promote stable releases via **`beta` → `main`** PRs — see [RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md).
 4. **Fill Out PR Template**:
    - **Title**: Clear, concise description
    - **Description**: What changed and why
@@ -707,7 +707,9 @@ Keep docs in sync with code changes. Key references:
 
 ## Versioning
 
-Shatter uses **semantic-release** with **conventional commits**. Version bumps happen automatically when PRs merge to `main` — do not manually edit version tags or CHANGELOG for releases.
+Shatter uses **semantic-release** with **conventional commits**. Version bumps, CHANGELOG updates, and GitHub Releases happen when changes are **promoted to `main`** (stable). Day-to-day merges to **`beta`** do not create releases.
+
+See [RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) for the beta/stable branch model and Docker image channels.
 
 ### Commit format
 
@@ -775,10 +777,11 @@ A: You can amend your last commit with `git commit --amend`, or create a new com
 A: Regularly sync with upstream:
 ```bash
 git fetch upstream
-git checkout main
-git merge upstream/main
-git push origin main
+git checkout beta
+git merge upstream/beta
+git push origin beta
 ```
+For stable-only tracking, also merge `upstream/main` into your fork's `main` when needed.
 
 ---
 

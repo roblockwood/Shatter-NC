@@ -59,11 +59,13 @@ Shop installs run **published container images**. The backend image includes app
 | `ghcr.io/roblockwood/shatter-nc/frontend` | Web UI (nginx) |
 | `timescale/timescaledb:latest-pg15` | PostgreSQL + TimescaleDB (pulled by compose) |
 
-**Tags:** `latest`, `vX.Y.Z` (matches [GitHub Releases](https://github.com/roblockwood/Shatter-NC/releases)), or a commit SHA. Pin a version in `.env`:
+**Tags (stable channel):** `vX.Y.Z` (matches [GitHub Releases](https://github.com/roblockwood/Shatter-NC/releases)), `latest` (latest stable on `main`), or a commit SHA. **Pin a release in `.env`:**
 
 ```bash
-IMAGE_TAG=v1.2.3   # optional; default is latest
+IMAGE_TAG=v1.2.3   # recommended for production shops
 ```
+
+`:latest` tracks the most recent **stable** release from `main`, not integration builds. Maintainers testing pre-release work use `IMAGE_TAG=beta` — see [Release Process](RELEASE_PROCESS.md).
 
 **Registry:** Packages are public — `docker pull` works without login. Private forks need `docker login ghcr.io`.
 
@@ -98,7 +100,7 @@ Edit `.env` before first start. Set at minimum:
 
 Optional:
 
-- `IMAGE_TAG` — pin backend/frontend to a release tag instead of `latest`
+- `IMAGE_TAG` — pin to a stable release (`v1.2.3`, recommended) or use `latest`; maintainers may use `beta`
 - `FTP_SYNC_LOCAL_BROWSE_HOST_PATH` — host folder exposed to the FTP sync folder picker (default `/Users` on macOS)
 
 See [Environment Variables](ENVIRONMENT_VARIABLES.md) for the full list.
@@ -226,7 +228,7 @@ docker compose -f docker-compose.prod.yml start backend
 Production upgrades are **image pulls** — no `git pull` required.
 
 1. **Backup** the database (above)
-2. **Optional:** set `IMAGE_TAG` in `.env` to a new release tag (e.g. `v1.3.0`)
+2. **Optional:** set `IMAGE_TAG` in `.env` to the new stable release tag (e.g. `v1.3.0`) from [GitHub Releases](https://github.com/roblockwood/Shatter-NC/releases)
 3. Pull and recreate containers:
 
 ```bash
@@ -266,6 +268,7 @@ Re-download `docker-compose.prod.yml` from GitHub only when [release notes](http
 ## Related
 
 - [USER_GUIDE.md](USER_GUIDE.md) — dashboard, files, validation
+- [RELEASE_PROCESS.md](RELEASE_PROCESS.md) — beta vs stable branches and image channels
 - [DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md) — contributor setup
 - [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) — configuration
 - [SECURITY.md](../SECURITY.md) — deployment security model

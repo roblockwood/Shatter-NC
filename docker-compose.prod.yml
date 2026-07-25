@@ -2,6 +2,10 @@
 # Production docker-compose — pre-built images from GitHub Container Registry (ghcr.io).
 # No source checkout required: download this file + .env.production.example (see docs/INSTALLATION_GUIDE.md).
 #
+# Image channels (see docs/RELEASE_PROCESS.md):
+#   Stable (recommended for shops): IMAGE_TAG=vX.Y.Z or latest (tracks latest stable on main)
+#   Beta (maintainers / early adopters): IMAGE_TAG=beta
+#
 # Usage:
 #   cp .env.production.example .env   # edit secrets first
 #   docker compose -f docker-compose.prod.yml pull
