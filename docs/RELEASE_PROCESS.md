@@ -40,7 +40,7 @@ Use conventional commits on PRs to `beta`. Version numbers and CHANGELOG are **n
 
 When `beta` is ready for public users:
 
-1. Open a PR **`beta` → `main`** (promote / release PR)
+1. Open a PR **`beta` → `main`** (promote / release PR). **Cursor maintainers:** follow [`.cursor/promote-release-skill.md`](../.cursor/promote-release-skill.md) to gather commits, draft release notes, and create the PR.
 2. Review and merge to `main`
 3. **`release.yml`** runs on push to `main`:
    - **semantic-release** analyzes commits since the last release tag
