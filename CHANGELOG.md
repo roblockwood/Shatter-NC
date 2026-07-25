@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/roblockwood/Shatter-NC/compare/v1.0.2...v1.1.0) (2026-07-25)
+
+
+### Features
+
+* always expose Swagger, ReDoc, and OpenAPI JSON ([14f4341](https://github.com/roblockwood/Shatter-NC/commit/14f43414c31ef87ee4d4bd88fcf17ded2f53a5b8))
+
 ## [1.0.2](https://github.com/roblockwood/Shatter-NC/compare/v1.0.1...v1.0.2) (2026-07-24)
 
 
