@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/roblockwood/Shatter-NC/compare/v1.2.0...v1.3.0) (2026-07-25)
+
+
+### Features
+
+* show [BETA] in UI for integration channel frontend builds ([7513330](https://github.com/roblockwood/Shatter-NC/commit/7513330c4726d67d3f910cc2ef12d1cd7a8fa9a8))
+
 # [1.2.0](https://github.com/roblockwood/Shatter-NC/compare/v1.1.1...v1.2.0) (2026-07-25)
 
 
