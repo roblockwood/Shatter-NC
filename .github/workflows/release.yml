@@ -152,9 +152,9 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Make published packages public
-        if: steps.filter.outputs.need_docker == 'true'
+        if: steps.filter.outputs.need_docker == 'true' && secrets.GHCR_PUBLISH_TOKEN != ''
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GHCR_PUBLISH_TOKEN }}
         run: |
           set -euo pipefail
           owner="${{ github.repository_owner }}"
@@ -197,6 +197,12 @@ jobs:
           if ! set_public "$frontend_pkg"; then
             echo "Warning: frontend package not found or visibility update failed (continuing)."
           fi
+
+      - name: Package visibility skipped
+        if: steps.filter.outputs.need_docker == 'true' && secrets.GHCR_PUBLISH_TOKEN == ''
+        run: |
+          echo "::warning::GHCR_PUBLISH_TOKEN is not set; images were pushed but package visibility was not updated."
+          echo "Create a PAT with read:packages + write:packages and add it as the GHCR_PUBLISH_TOKEN repository secret."
 
       - name: Build summary
         if: steps.filter.outputs.need_docker == 'true'
