@@ -48,7 +48,7 @@ Production [`docker-compose.prod.yml`](docker-compose.prod.yml) is hardened to k
 Additional guidance:
 
 - Set `CORS_ORIGINS` to explicit shop origins (avoid `"*"` unless you understand the tradeoff).
-- OpenAPI/Swagger (`/docs`) is disabled unless `LOG_LEVEL=DEBUG`.
+- OpenAPI is always available at `/docs` (Swagger UI), `/redoc` (ReDoc), and `/openapi.json`. Restrict port 8000 on untrusted networks like any other API surface.
 - Do not publish PostgreSQL or MQTT ports to the internet.
 
 ## Credential Handling
