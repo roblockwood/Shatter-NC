@@ -1,12 +1,13 @@
-name: Build and Push Docker Images
+name: Validate Docker Builds
 
-# Images for main are built in release.yml after semantic-release (correct VERSION in images).
-# This workflow only validates Docker builds on pull requests.
+# Stable images are built in release.yml (main). Beta images in docker-build-beta.yml.
+# This workflow only validates production Dockerfiles on pull requests.
 
 on:
   pull_request:
     branches:
       - main
+      - beta
     paths:
       - 'backend/**'
       - 'frontend/**'
@@ -15,6 +16,7 @@ on:
       - 'docker-compose.prod.yml'
       - 'VERSION'
       - '.github/workflows/docker-build-push.yml'
+      - '.github/workflows/docker-build-beta.yml'
       - '.github/workflows/release.yml'
 
 jobs:
@@ -23,7 +25,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -33,36 +35,23 @@ jobs:
         run: |
           VERSION=$(cat VERSION)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Building version: $VERSION"
+          echo "Validating Docker build for VERSION: $VERSION"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           platforms: linux/amd64
 
-      - name: Log in to GitHub Container Registry
-        if: github.event_name == 'push'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate image tags
+      - name: Generate image names
         id: tags
         run: |
-          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          DATE_TAG=$(date +%Y-%m-%d)
           OWNER="${{ github.repository_owner }}"
           REPO="${{ github.event.repository.name }}"
-          # Convert repository name to lowercase (Docker requirement)
           REPO_LOWER=$(echo "$REPO" | tr '[:upper:]' '[:lower:]')
-          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_OUTPUT
-          echo "DATE_TAG=$DATE_TAG" >> $GITHUB_OUTPUT
           echo "BACKEND_IMAGE=ghcr.io/${OWNER}/${REPO_LOWER}/backend" >> $GITHUB_OUTPUT
           echo "FRONTEND_IMAGE=ghcr.io/${OWNER}/${REPO_LOWER}/frontend" >> $GITHUB_OUTPUT
 
-      - name: Build and push backend image
+      - name: Build backend image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -70,16 +59,13 @@ jobs:
           target: production
           platforms: linux/amd64
           provenance: false
-          push: ${{ github.event_name == 'push' }}
+          push: false
           tags: |
-            ${{ steps.tags.outputs.BACKEND_IMAGE }}:latest
-            ${{ steps.tags.outputs.BACKEND_IMAGE }}:v${{ steps.version.outputs.version }}
-            ${{ steps.tags.outputs.BACKEND_IMAGE }}:${{ steps.tags.outputs.SHORT_SHA }}
-            ${{ steps.tags.outputs.BACKEND_IMAGE }}:${{ steps.tags.outputs.DATE_TAG }}-${{ steps.tags.outputs.SHORT_SHA }}
+            ${{ steps.tags.outputs.BACKEND_IMAGE }}:pr-validate
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push frontend image
+      - name: Build frontend image
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
@@ -87,45 +73,19 @@ jobs:
           target: production
           platforms: linux/amd64
           provenance: false
-          push: ${{ github.event_name == 'push' }}
+          push: false
           build-args: |
             VITE_APP_VERSION=${{ steps.version.outputs.version }}
           tags: |
-            ${{ steps.tags.outputs.FRONTEND_IMAGE }}:latest
-            ${{ steps.tags.outputs.FRONTEND_IMAGE }}:v${{ steps.version.outputs.version }}
-            ${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.SHORT_SHA }}
-            ${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.DATE_TAG }}-${{ steps.tags.outputs.SHORT_SHA }}
+            ${{ steps.tags.outputs.FRONTEND_IMAGE }}:pr-validate
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Build summary
         run: |
-          if [ "${{ github.event_name }}" == "push" ]; then
-            echo "## Docker Images Built and Pushed to GitHub Packages 🐳" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Registry:** GitHub Container Registry (ghcr.io)" >> $GITHUB_STEP_SUMMARY
-            echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "**Architectures:** linux/amd64" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Backend" >> $GITHUB_STEP_SUMMARY
-            echo "- \`${{ steps.tags.outputs.BACKEND_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
-            echo "- \`${{ steps.tags.outputs.BACKEND_IMAGE }}:v${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- \`${{ steps.tags.outputs.BACKEND_IMAGE }}:${{ steps.tags.outputs.SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- \`${{ steps.tags.outputs.BACKEND_IMAGE }}:${{ steps.tags.outputs.DATE_TAG }}-${{ steps.tags.outputs.SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Frontend" >> $GITHUB_STEP_SUMMARY
-            echo "- \`${{ steps.tags.outputs.FRONTEND_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
-            echo "- \`${{ steps.tags.outputs.FRONTEND_IMAGE }}:v${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- \`${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- \`${{ steps.tags.outputs.FRONTEND_IMAGE }}:${{ steps.tags.outputs.DATE_TAG }}-${{ steps.tags.outputs.SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**View packages:** https://github.com/${{ github.repository_owner }}?tab=packages" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "## Docker Images Built Successfully ✅" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Event:** Pull Request validation" >> $GITHUB_STEP_SUMMARY
-            echo "**Architectures:** linux/amd64" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Backend and frontend images built successfully. Ready to merge! 🚀" >> $GITHUB_STEP_SUMMARY
-          fi
-
+          echo "## Docker Images Built Successfully ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Event:** Pull request validation (images not pushed)" >> $GITHUB_STEP_SUMMARY
+          echo "**Architectures:** linux/amd64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Backend and frontend production images built successfully. Ready to merge!" >> $GITHUB_STEP_SUMMARY

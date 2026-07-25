@@ -210,24 +210,26 @@ Old endpoints /api/v1/auth are removed. Use /api/v2/auth instead."
 
 ## Automatic Versioning
 
-The project uses semantic-release which:
-- Analyzes commits since last tag
+The project uses semantic-release on **`main`** (stable releases only):
+
+- Analyzes commits since last release tag (on promote from `beta` → `main`)
 - Determines highest version bump needed
-- Creates git tag automatically
-- Updates VERSION file
-- Generates CHANGELOG.md
-- Creates GitHub release
+- Creates git tag, updates VERSION, CHANGELOG, and GitHub Release
+- Builds stable Docker images (`:latest`, `:vX.Y.Z`)
+
+Integration PRs merge to **`beta`** first; they do not bump semver or move `:latest`.
 
 **You don't need to:**
 - Manually update version numbers
 - Create git tags
 - Write changelog entries
-- Think about versioning
 
-**You just need to:**
+**You do need to:**
 - Write commits in conventional format
-- Merge PRs to main
-- Let semantic-release handle the rest
+- Merge feature PRs to **`beta`**
+- Let maintainers promote **`beta` → `main`** for stable releases
+
+See [docs/RELEASE_PROCESS.md](../docs/RELEASE_PROCESS.md).
 
 ## Examples by Change Type
 

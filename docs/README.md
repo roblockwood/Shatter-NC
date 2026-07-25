@@ -17,7 +17,8 @@ Curated docs for installing, operating, and contributing to Shatter.
 | Document | Contents |
 |----------|----------|
 | [Development Guide](DEVELOPMENT_GUIDE.md) | Setup, tests, where to change code |
-| [Contributing](../CONTRIBUTING.md) | PR process, versioning, doc standards |
+| [Contributing](../CONTRIBUTING.md) | PR process and versioning |
+| [Release Process](RELEASE_PROCESS.md) | Beta vs stable branches and ghcr.io tags |
 | [UX Design Guide](UX_DESIGN_GUIDE.md) | Terminal UI system (+ branding) |
 | [Backend Architecture](BACKEND_ARCHITECTURE.md) | Services and data flow |
 | [WebSocket Protocol](WEBSOCKET_PROTOCOL.md) | Real-time message format |
@@ -34,6 +35,6 @@ Curated docs for installing, operating, and contributing to Shatter.
 
 ## Maintaining docs
 
-Update the smallest relevant doc in the same PR as code changes. REST API details live in OpenAPI (`/docs` when `LOG_LEVEL=DEBUG`), not a hand-maintained reference. Prefer deleting obsolete sections over duplicating.
+Update the smallest relevant doc in the same PR as code changes. REST API details live in OpenAPI (`/docs`, `/redoc`), not a hand-maintained reference. Prefer deleting obsolete sections over duplicating.
 
 Parser schema template for agents: [`.cursor/templates/SCHEMA_DEFINITION_TEMPLATE.md`](../.cursor/templates/SCHEMA_DEFINITION_TEMPLATE.md)

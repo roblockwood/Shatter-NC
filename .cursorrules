@@ -41,7 +41,7 @@ async def test_on_machine(ip_address: str, port: int = 10000):
 
 ## Automatic Versioning
 
-The project uses **semantic-release** with **conventional commits** for automatic version management. Version bumps happen automatically based on commit messages when PRs are merged to `main`.
+The project uses **semantic-release** with **conventional commits** for stable releases on `main`. Integration work merges to **`beta`** first (Docker `:beta` tag); semver bumps happen when maintainers promote **`beta` → `main`**.
 
 **MANDATORY**: All commits MUST use conventional commit format:
 - `feat:` - New feature (minor version bump: 0.1.0 → 0.2.0)
@@ -71,4 +71,4 @@ git commit -m "chore: update dependencies"
 git commit -m "docs: update README"
 ```
 
-**Reference**: See `.cursor/commit-message-skill.md` and [CONTRIBUTING.md](CONTRIBUTING.md#versioning) for complete versioning documentation.
+**Reference**: See `.cursor/commit-message-skill.md`, [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md), and [CONTRIBUTING.md](CONTRIBUTING.md#versioning) for complete versioning documentation.

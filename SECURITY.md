@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Security fixes are applied to the latest release on the `main` branch. Older tagged releases may not receive backports unless noted in release notes.
+Security fixes are applied to the latest **stable release** on `main` (semver tags and `:latest` on ghcr.io). Integration builds on the `beta` branch are not supported release channels. Older tagged releases may not receive backports unless noted in release notes.
 
 ## Reporting a Vulnerability
 

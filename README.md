@@ -73,6 +73,7 @@ Per-channel config stored in the database can override global defaults.
 - **[Development Guide](docs/DEVELOPMENT_GUIDE.md)** — Contributor setup and tests
 - **[Environment Variables](docs/ENVIRONMENT_VARIABLES.md)** — Configuration table
 - **[Contributing](CONTRIBUTING.md)** — PR process and versioning
+- **[Release Process](docs/RELEASE_PROCESS.md)** — Beta vs stable Docker channels
 
 
 
@@ -87,7 +88,7 @@ Per-channel config stored in the database can override global defaults.
 - **[UX Design Guide](docs/UX_DESIGN_GUIDE.md)** — UI standards (+ branding)
 - **[Security](SECURITY.md)** — Deployment model
 
-REST API: OpenAPI at `/docs` when `LOG_LEVEL=DEBUG` (see Development Guide).
+REST API: OpenAPI at `/docs` (Swagger), `/redoc`, and `/openapi.json` on the backend (see Development Guide).
 
 Full index: **[docs/README.md](docs/README.md)**
 

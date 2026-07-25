@@ -1,129 +1,98 @@
 # GitHub Actions Workflows
 
-## Docker Build and Push
+Shatter publishes two Docker image channels on [GitHub Container Registry](https://github.com/roblockwood?tab=packages) (ghcr.io):
 
-The `docker-build-push.yml` workflow automatically builds and pushes Docker images to GitHub Packages (ghcr.io) when code is merged into the `main` branch.
+| Channel | Git branch | When images build | Tags pushed | Audience |
+|---------|------------|-------------------|-------------|----------|
+| **Beta** | `beta` | Push to `beta` (docker-related paths) | `:beta`, `:{sha}`, `:{date}-{sha}` | Maintainers / early adopters |
+| **Stable** | `main` | Push to `main` after semantic-release | `:latest`, `:vX.Y.Z`, `:{sha}`, `:{date}-{sha}` | Production shops |
 
-### Trigger
+**`:latest` always tracks the latest stable release from `main`**, never beta integration builds.
 
-- **When**: Push to `main` branch (after PR merge)
-- **What changes trigger it**: 
-  - Changes to `backend/` directory
-  - Changes to `frontend/` directory
-  - Changes to `docker-compose.prod.yml`
-  - Changes to the workflow file itself
+See [docs/RELEASE_PROCESS.md](../docs/RELEASE_PROCESS.md) for branch workflow and promotion steps.
 
-### Image Tags
+---
 
-Images are tagged with multiple tags for flexibility:
+## Workflows
 
-1. **`latest`** - Always points to the most recent build from main
-2. **`main-<short-sha>`** - Specific commit (e.g., `main-abc1234`)
-3. **`YYYY-MM-DD-<short-sha>`** - Date and commit (e.g., `2025-12-15-abc1234`)
+### `test.yml`
 
-### GitHub Packages Setup
+- **Triggers:** Push and PR to `main` or `beta`
+- **Purpose:** Backend pytest with coverage floor
 
-**No setup required!** GitHub Packages is automatically enabled for all repositories. You don't need to:
-- Enable it in settings
-- Create a separate account
-- Configure anything special
+### `docker-build-push.yml`
 
-The workflow uses the built-in `GITHUB_TOKEN` for authentication. No additional secrets are required! The workflow automatically has permissions to:
-- Read repository contents
-- Write to GitHub Packages
+- **Triggers:** PR to `main` or `beta` (docker-related paths)
+- **Purpose:** Validate production Dockerfiles build; **does not push** images
 
-**Note:** Packages will only appear after the first successful build. Until then, you won't see a "Packages" section in your repository.
+### `docker-build-beta.yml`
 
-### Image Names
+- **Triggers:** Push to `beta` (docker-related paths)
+- **Purpose:** Build and push **beta** channel images
+- **Tags:** `beta`, commit SHA, date-SHA — **never** `latest` or `vX.Y.Z`
 
-Images will be pushed to GitHub Container Registry (ghcr.io) as:
-- `ghcr.io/{OWNER}/{REPO}/backend:{tag}`
-- `ghcr.io/{OWNER}/{REPO}/frontend:{tag}`
+### `release.yml`
 
-For example, for repository `roblockwood/Shatter-NC` (note: repository name is converted to lowercase):
-- `ghcr.io/roblockwood/shatter-nc/backend:latest`
-- `ghcr.io/roblockwood/shatter-nc/backend:abc1234` (commit SHA)
-- `ghcr.io/roblockwood/shatter-nc/backend:2025-12-15-abc1234` (date + commit)
-- `ghcr.io/roblockwood/shatter-nc/frontend:latest`
-- `ghcr.io/roblockwood/shatter-nc/frontend:abc1234`
-- `ghcr.io/roblockwood/shatter-nc/frontend:2025-12-15-abc1234`
+- **Triggers:** Push to `main`
+- **Purpose:**
+  1. Run **semantic-release** (version bump, CHANGELOG, GitHub Release, git tag)
+  2. Build and push **stable** images when docker-related files changed
 
-### Viewing Packages
+---
 
-Packages will appear after the first successful build. To view them:
+## Image names
 
-**Option 1: From your profile/organization**
-- Go to: `https://github.com/{OWNER}?tab=packages`
-- This shows all packages across all your repositories
-
-**Option 2: From the repository (after packages exist)**
-- Go to your repository on GitHub
-- Look for a "Packages" section in the right sidebar (below "About")
-- Or navigate to: `https://github.com/{OWNER}/{REPO}/packages`
-
-**Option 3: Direct package link (after first build)**
-- Backend: `https://github.com/{OWNER}/{REPO}/pkgs/container/backend`
-- Frontend: `https://github.com/{OWNER}/{REPO}/pkgs/container/frontend`
-
-**Note:** Docker image names must be lowercase. The workflow automatically converts the repository name to lowercase (e.g., `Shatter-NC` becomes `shatter-nc` in image names).
-
-### Usage
-
-After images are pushed, you can pull them on your deployment server. First, authenticate with GitHub Packages:
-
-```bash
-# Create a Personal Access Token (PAT) with 'read:packages' permission
-# Then login:
-echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+```
+ghcr.io/{owner}/{repo}/backend:{tag}
+ghcr.io/{owner}/{repo}/frontend:{tag}
 ```
 
-Then pull images:
+Example (`roblockwood/shatter-nc`):
+
+| Tag | Meaning |
+|-----|---------|
+| `beta` | Latest integration build from `beta` branch |
+| `latest` | Latest stable release from `main` |
+| `v1.2.3` | Pinned stable release (matches GitHub Releases) |
+| `abc1234` | Specific commit (either channel) |
+
+---
+
+## Pulling images
+
+**Maintainer server (beta):**
 
 ```bash
-# Pull latest images (note: repository name is lowercase)
-docker pull ghcr.io/roblockwood/shatter-nc/backend:latest
-docker pull ghcr.io/roblockwood/shatter-nc/frontend:latest
-```
+# In .env
+IMAGE_TAG=beta
 
-Or use specific commit tags:
-```bash
-# Pull by commit SHA
-docker pull ghcr.io/roblockwood/shatter-nc/backend:abc1234
-docker pull ghcr.io/roblockwood/shatter-nc/frontend:abc1234
-
-# Pull by date + commit
-docker pull ghcr.io/roblockwood/shatter-nc/backend:2025-12-15-abc1234
-docker pull ghcr.io/roblockwood/shatter-nc/frontend:2025-12-15-abc1234
-```
-
-### Updating docker-compose files
-
-To use pre-built images from GitHub Container Registry, use `docker-compose.prod.yml`:
-
-```yaml
-backend:
-  image: ghcr.io/roblockwood/shatter-nc/backend:latest  # or specific tag
-
-frontend:
-  image: ghcr.io/roblockwood/shatter-nc/frontend:latest  # or specific tag
-```
-
-Or set environment variables in `.env`:
-
-```bash
-GITHUB_OWNER=roblockwood
-GITHUB_REPO=shatter-nc
-IMAGE_TAG=latest  # or v1.2.3, commit SHA, etc.
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-See [docs/INSTALLATION_GUIDE.md](../docs/INSTALLATION_GUIDE.md) for the full operator install flow (no git clone required).
+**Production shop (stable — recommended pin):**
 
-### Package Visibility
+```bash
+# In .env
+IMAGE_TAG=v1.2.3
 
-By default, packages are private to the repository. To make them public:
-1. Go to your repository → Packages
-2. Click on the package
-3. Go to Package settings → Change visibility → Make public
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
 
+Or pull directly:
+
+```bash
+docker pull ghcr.io/roblockwood/shatter-nc/backend:beta
+docker pull ghcr.io/roblockwood/shatter-nc/backend:v1.2.3
+```
+
+Packages are public for this project. Private forks may need `docker login ghcr.io`.
+
+---
+
+## Related docs
+
+- [INSTALLATION_GUIDE.md](../docs/INSTALLATION_GUIDE.md) — operator install
+- [RELEASE_PROCESS.md](../docs/RELEASE_PROCESS.md) — beta vs stable workflow
+- [ENVIRONMENT_VARIABLES.md](../docs/ENVIRONMENT_VARIABLES.md) — `IMAGE_TAG`
