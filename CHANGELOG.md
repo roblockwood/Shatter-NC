@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/roblockwood/Shatter-NC/compare/v1.1.1...v1.2.0) (2026-07-25)
+
+
+### Features
+
+* add beta/stable release channels for Docker images ([26f3fe9](https://github.com/roblockwood/Shatter-NC/commit/26f3fe9a0218e69c502402eca9d4d12b9fd7471d))
+
 ## [1.1.1](https://github.com/roblockwood/Shatter-NC/compare/v1.1.0...v1.1.1) (2026-07-25)
 
 
