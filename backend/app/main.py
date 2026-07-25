@@ -46,9 +46,9 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="CNC Management Platform for Brother CNC Machines",
-    docs_url="/docs" if settings.LOG_LEVEL.upper() == "DEBUG" else None,
-    redoc_url=None,
-    openapi_url="/openapi.json" if settings.LOG_LEVEL.upper() == "DEBUG" else None,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
 # Configure CORS
