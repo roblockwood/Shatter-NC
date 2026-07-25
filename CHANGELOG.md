@@ -1,3 +1,11 @@
+## [1.1.1](https://github.com/roblockwood/Shatter-NC/compare/v1.1.0...v1.1.1) (2026-07-25)
+
+
+### Bug Fixes
+
+* **ci:** avoid secrets in workflow if conditions for GHCR step ([4b5fcaf](https://github.com/roblockwood/Shatter-NC/commit/4b5fcaf082c2eb0ff5b6fbebb1020bb705c7bfac))
+* **ci:** restore GHCR_PUBLISH_TOKEN for GHCR visibility step ([1e2731a](https://github.com/roblockwood/Shatter-NC/commit/1e2731af1142447d7df2eabecebc6f3bfe90e7f5))
+
 # [1.1.0](https://github.com/roblockwood/Shatter-NC/compare/v1.0.2...v1.1.0) (2026-07-25)
 
 
