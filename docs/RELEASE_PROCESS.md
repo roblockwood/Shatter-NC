@@ -74,7 +74,7 @@ After merging to `main`, sync `beta` with `main` if needed (merge `main` back in
 - **semantic-release** runs **only on `main`**
 - Commit types (`feat:`, `fix:`, etc.) determine semver bumps — see [CONTRIBUTING.md](../CONTRIBUTING.md)
 - Do not manually edit `VERSION` or CHANGELOG for releases
-- Beta builds embed the current `VERSION` file in the UI build arg but do not create release tags
+- Beta builds embed `VITE_RELEASE_CHANNEL=beta` in the frontend image — the header shows **`SHATTER v1.1.1 [BETA]`** (semver unchanged; `[BETA]` is the integration channel marker). Stable builds omit the suffix.
 
 ---
 

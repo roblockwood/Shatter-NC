@@ -2,7 +2,6 @@ name: Build Beta Docker Images
 
 # Integration builds for the beta branch. Tags :beta and commit SHA only — never :latest or :vX.Y.Z.
 # Stable releases are built from main in release.yml after semantic-release.
-# CI smoke test: push to beta verifies :beta images on ghcr.io.
 
 on:
   push:
@@ -89,6 +88,7 @@ jobs:
           push: true
           build-args: |
             VITE_APP_VERSION=${{ steps.version.outputs.version }}
+            VITE_RELEASE_CHANNEL=beta
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
           tags: |

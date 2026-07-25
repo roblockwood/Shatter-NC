@@ -36,6 +36,10 @@ COPY . .
 ARG VITE_APP_VERSION=0.1.0
 ENV VITE_APP_VERSION=$VITE_APP_VERSION
 
+# Release channel baked into UI (beta workflow sets "beta"; stable builds leave empty)
+ARG VITE_RELEASE_CHANNEL=
+ENV VITE_RELEASE_CHANNEL=$VITE_RELEASE_CHANNEL
+
 # Optional lab default for tablet resolution when localStorage unset (prefer per-device setup UI)
 ARG VITE_TABLET_MACHINE_ID=
 ENV VITE_TABLET_MACHINE_ID=$VITE_TABLET_MACHINE_ID
