@@ -181,6 +181,14 @@
   }
 }
 
+.app-title .release-channel-beta {
+  color: var(--color-warning, #ffb000);
+  font-size: 0.85em;
+  letter-spacing: 0.05em;
+  -webkit-text-fill-color: var(--color-warning, #ffb000);
+  text-shadow: 0 0 8px rgba(255, 176, 0, 0.35);
+}
+
 .app-title .beta-mode {
   position: relative;
   background: linear-gradient(

@@ -18,6 +18,8 @@ import './App.css';
 
 // Get version from environment variable (set at build time via Vite)
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || '0.1.0';
+const RELEASE_CHANNEL = import.meta.env.VITE_RELEASE_CHANNEL || '';
+const IS_BETA_BUILD = RELEASE_CHANNEL === 'beta';
 
 function Navigation() {
   const location = useLocation();
@@ -46,6 +48,14 @@ function Navigation() {
             }
           >
             SHATTER v{APP_VERSION}
+            {IS_BETA_BUILD && (
+              <span
+                className="release-channel-beta"
+                title="Integration build (beta branch image — not a stable release)"
+              >
+                {' '}[BETA]
+              </span>
+            )}
           </span>
         </div>
         <nav className="app-nav">

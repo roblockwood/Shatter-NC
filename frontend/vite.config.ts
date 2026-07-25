@@ -60,11 +60,17 @@ function getVersion(): string {
 
 const version = getVersion()
 
+function getReleaseChannel(): string {
+  const channel = process.env.VITE_RELEASE_CHANNEL
+  return channel?.trim() ?? ''
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(version),
+    'import.meta.env.VITE_RELEASE_CHANNEL': JSON.stringify(getReleaseChannel()),
   },
   server: {
     host: '0.0.0.0',

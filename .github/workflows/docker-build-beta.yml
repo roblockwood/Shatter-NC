@@ -88,6 +88,7 @@ jobs:
           push: true
           build-args: |
             VITE_APP_VERSION=${{ steps.version.outputs.version }}
+            VITE_RELEASE_CHANNEL=beta
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
           tags: |

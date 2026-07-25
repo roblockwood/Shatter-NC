@@ -72,3 +72,7 @@ git commit -m "docs: update README"
 ```
 
 **Reference**: See `.cursor/commit-message-skill.md`, [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md), and [CONTRIBUTING.md](CONTRIBUTING.md#versioning) for complete versioning documentation.
+
+## Stable Release (Promote Beta to Main)
+
+When the user asks to **promote beta to main**, **cut a stable release**, **open a release PR**, or **ship to main**, follow [`.cursor/promote-release-skill.md`](.cursor/promote-release-skill.md). Do not manually bump `VERSION` or CHANGELOG — semantic-release runs on merge to `main`.

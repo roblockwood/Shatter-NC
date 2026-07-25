@@ -40,7 +40,7 @@ Use conventional commits on PRs to `beta`. Version numbers and CHANGELOG are **n
 
 When `beta` is ready for public users:
 
-1. Open a PR **`beta` → `main`** (promote / release PR)
+1. Open a PR **`beta` → `main`** (promote / release PR). **Cursor maintainers:** follow [`.cursor/promote-release-skill.md`](../.cursor/promote-release-skill.md) to gather commits, draft release notes, and create the PR.
 2. Review and merge to `main`
 3. **`release.yml`** runs on push to `main`:
    - **semantic-release** analyzes commits since the last release tag
@@ -74,7 +74,7 @@ After merging to `main`, sync `beta` with `main` if needed (merge `main` back in
 - **semantic-release** runs **only on `main`**
 - Commit types (`feat:`, `fix:`, etc.) determine semver bumps — see [CONTRIBUTING.md](../CONTRIBUTING.md)
 - Do not manually edit `VERSION` or CHANGELOG for releases
-- Beta builds embed the current `VERSION` file in the UI build arg but do not create release tags
+- Beta builds embed `VITE_RELEASE_CHANNEL=beta` in the frontend image — the header shows **`SHATTER v1.1.1 [BETA]`** (semver unchanged; `[BETA]` is the integration channel marker). Stable builds omit the suffix.
 
 ---
 
