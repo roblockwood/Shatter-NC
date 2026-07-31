@@ -179,5 +179,6 @@ After merge (if requested):
 ## Related
 
 - Feature PRs target **`beta`**, not `main` — see [CONTRIBUTING.md](../CONTRIBUTING.md)
+- Agents must not commit on `main`/`beta`; direct feature → `main` needs user confirmation — [branch-commit-policy](rules/branch-commit-policy.mdc)
 - PR template checkbox: `.github/pull_request_template.md`
 - Docker channels: [.github/workflows/README.md](../.github/workflows/README.md)
