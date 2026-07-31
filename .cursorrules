@@ -39,6 +39,14 @@ async def test_on_machine(ip_address: str, port: int = 10000):
 
 **Reference**: See `.cursor/machine-testing-skill.md` for detailed workflow.
 
+## Branch commits (hard ban)
+
+**Agents MUST NOT commit or push directly to `main` or `beta`.** Always cut a feature branch, commit there, then PR/merge into **`beta`**. Promote **`beta` → `main`** for stable releases.
+
+If the user asks to merge a feature branch **directly into `main`** (skipping `beta`), warn and get explicit confirmation before proceeding. Do not hard-ban that path — just verify intent.
+
+**Reference**: See `.cursor/rules/branch-commit-policy.mdc` and [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md).
+
 ## Automatic Versioning
 
 The project uses **semantic-release** with **conventional commits** for stable releases on `main`. Integration work merges to **`beta`** first (Docker `:beta` tag); semver bumps happen when maintainers promote **`beta` → `main`**.

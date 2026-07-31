@@ -225,7 +225,7 @@ Integration PRs merge to **`beta`** first; they do not bump semver or move `:lat
 - Write changelog entries
 
 **You do need to:**
-- Write commits in conventional format
+- Write commits in conventional format **on a feature branch** (never commit directly on `main` or `beta` — see [branch-commit-policy](rules/branch-commit-policy.mdc))
 - Merge feature PRs to **`beta`**
 - Let maintainers promote **`beta` → `main`** for stable releases
 
