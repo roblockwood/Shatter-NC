@@ -38,6 +38,11 @@ See [docs/RELEASE_PROCESS.md](../docs/RELEASE_PROCESS.md) for branch workflow an
   1. Run **semantic-release** (version bump, CHANGELOG, GitHub Release, git tag)
   2. Build and push **stable** images when docker-related files changed
 
+### `pages.yml`
+
+- **Triggers:** Push to `main` (`site/**` or workflow file), or manual dispatch
+- **Purpose:** Deploy the [Install Kit generator](https://roblockwood.github.io/Shatter-NC/) from `site/` to GitHub Pages
+
 ---
 
 ## Image names

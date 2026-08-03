@@ -7,6 +7,7 @@ Curated docs for installing, operating, and contributing to Shatter.
 | Document | Contents |
 |----------|----------|
 | [Installation Guide](INSTALLATION_GUIDE.md) | Docker install, backup, upgrade |
+| [Install Kit generator](https://roblockwood.github.io/Shatter-NC/) | Guided `.env` + compose for Komodo (GitHub Pages) |
 | [User Guide](USER_GUIDE.md) | Dashboard, files, validation, tools |
 | [NC Parser Guide](NC_PARSER_GUIDE.md) | Fusion post-processor requirements (CAM) |
 | [FTP Sync Exclusion Rules](FTP_SYNC_EXCLUSION_RULES.md) | Sync filename policy |
