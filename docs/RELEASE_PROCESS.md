@@ -18,11 +18,12 @@ Shatter uses two long-lived branches and two Docker image channels so maintainer
 ## Day-to-day development (maintainers)
 
 1. Create a feature branch from `beta`
-2. Open a PR **into `beta`**
-3. CI runs tests + Docker build validation
-4. Merge to `beta`
-5. CI builds and pushes **`ghcr.io/.../backend:beta`** (and frontend)
-6. On your server:
+2. Commit on the feature branch (**never commit directly on `main` or `beta`** — Cursor agents enforce this; see `.cursor/rules/branch-commit-policy.mdc`)
+3. Open a PR **into `beta`**
+4. CI runs tests + Docker build validation
+5. Merge to `beta`
+6. CI builds and pushes **`ghcr.io/.../backend:beta`** (and frontend)
+7. On your server:
 
 ```bash
 # .env
@@ -94,7 +95,8 @@ Set your server `.env` to `IMAGE_TAG=beta`.
 Optional GitHub settings:
 
 - Branch protection on `main` (require PR + passing CI)
-- Allow direct pushes to `beta` for maintainer speed (optional)
+- Branch protection on `beta` (require PR) recommended so feature work cannot land as direct pushes
+- Direct pushes to `beta` are discouraged; prefer feature branch → PR → `beta`
 
 ---
 

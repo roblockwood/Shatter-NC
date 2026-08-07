@@ -1,0 +1,47 @@
+---
+description: Hard ban on committing to main/beta; feature-branch workflow required
+alwaysApply: true
+---
+
+# Branch commit policy (agents)
+
+## Hard ban
+
+**NEVER commit, amend, or push commits directly onto `main` or `beta`.**
+
+Before any `git commit` / `git push`:
+
+1. Run `git branch --show-current` (or equivalent).
+2. If the current branch is `main` or `beta`, **stop**. Create or switch to a feature branch first, then commit there.
+3. Do not use `git checkout main` / `git checkout beta` followed by commit as a shortcut.
+
+Allowed commits on `main`/`beta` are only those produced by GitHub merges (PRs) or release automation — never agent-authored working-tree commits.
+
+## Required workflow
+
+1. Cut a feature branch from `beta` (e.g. `feat/…`, `fix/…`, `chore/…`).
+2. Commit on that feature branch (conventional commits).
+3. Open a PR **into `beta`** and merge there.
+4. Stable release: promote **`beta` → `main`** via [`.cursor/promote-release-skill.md`](../promote-release-skill.md) when the user asks.
+
+## Merging a feature branch to `main`
+
+Do **not** hard-ban PRs/merges from a feature branch directly into `main`, but **do not do it by default**.
+
+If the user asks to merge or open a PR from a feature branch → `main` (skipping `beta`):
+
+1. Warn that the normal path is feature → `beta`, then promote `beta` → `main`.
+2. Ask for explicit confirmation that they want a direct-to-`main` merge.
+3. Proceed only after they confirm.
+
+Promote PRs that are literally **`beta` → `main`** are the intended release path — those do not need this extra warning beyond the promote-release skill.
+
+## Examples
+
+```text
+❌ On beta, user says "commit this" → commit on beta
+✅ On beta, user says "commit this" → create feat/… branch, commit there, offer PR to beta
+
+❌ User says "merge my feature into main" → open PR to main immediately
+✅ User says "merge my feature into main" → confirm they want to skip beta; only then PR to main
+```

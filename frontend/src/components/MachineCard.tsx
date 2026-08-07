@@ -18,6 +18,7 @@ import { useExpandedMachine } from '../contexts/ExpandedMachineContext';
 import './MachineCard.css';
 import { API_BASE_URL } from '../config/api';
 import { useBetaMode } from '../hooks/useBetaMode';
+import { IS_DEMO_MODE } from '../config/demo';
 
 interface Tool {
   tool_number: number;
@@ -1873,6 +1874,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             {'─'.repeat(32)}
           </div>
 
+          {!IS_DEMO_MODE && (
           <div className="machine-actions">
             <button
               className="upload-button"
@@ -1882,13 +1884,16 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               {isValidating ? '[ VALIDATING... ]' : '[ UPLOAD ]'}
             </button>
           </div>
+          )}
 
+          {!IS_DEMO_MODE && (
           <div className="machine-card-divider-thin">
             {'─'.repeat(32)}
           </div>
+          )}
 
           <div className="machine-footer">
-            {!isEditing && (
+            {!isEditing && !IS_DEMO_MODE && (
               <button
                 className="machine-edit-footer-btn"
                 onClick={startEditing}

@@ -4,6 +4,7 @@ interface ImportMetaEnv {
   readonly VITE_APP_VERSION?: string;
   /** Docker build channel: "beta" for integration images; empty for stable/local dev */
   readonly VITE_RELEASE_CHANNEL?: string;
+  readonly VITE_DEMO_MODE?: string;
   readonly VITE_API_URL?: string;
   /** Rare deploy default when `/tablet` has no query/localStorage yet (multi-tablet uses localStorage or `/tablet/setup`) */
   readonly VITE_TABLET_MACHINE_ID?: string;

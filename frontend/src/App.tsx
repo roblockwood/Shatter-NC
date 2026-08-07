@@ -14,6 +14,8 @@ import { useBetaMode, useBetaModeActivator } from './hooks/useBetaMode';
 import { BetaRoute } from './components/BetaRoute';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { ExpandedMachineProvider } from './contexts/ExpandedMachineContext';
+import { DemoMonitorFrame } from './components/DemoMonitorFrame';
+import { IS_DEMO_MODE } from './config/demo';
 import './App.css';
 
 // Get version from environment variable (set at build time via Vite)
@@ -71,7 +73,7 @@ function Navigation() {
           >
             [ FILES ]
           </Link>
-          {isBetaMode && (
+          {isBetaMode && !IS_DEMO_MODE && (
             <Link
               to="/notifications"
               className={`nav-link ${isActive('/notifications') ? 'active' : ''}`}
@@ -79,7 +81,7 @@ function Navigation() {
               [ NOTIFY ]
             </Link>
           )}
-          {isBetaMode && (
+          {isBetaMode && !IS_DEMO_MODE && (
             <Link
               to="/tools"
               className={`nav-link ${isActive('/tools') ? 'active' : ''}`}
@@ -105,11 +107,12 @@ function App() {
   return (
     <WebSocketProvider>
       <ExpandedMachineProvider>
-        <Router>
-          <div className="app">
-            <Navigation />
+        <Router basename={import.meta.env.BASE_URL}>
+          <DemoMonitorFrame>
+            <div className="app">
+              <Navigation />
 
-            <div className="app-content">
+              <div className="app-content">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/files" element={<FileBrowser />} />
@@ -140,6 +143,7 @@ function App() {
               </Routes>
             </div>
           </div>
+          </DemoMonitorFrame>
         </Router>
       </ExpandedMachineProvider>
     </WebSocketProvider>

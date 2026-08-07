@@ -20,7 +20,7 @@ Shatter is an open-source web platform for monitoring and managing multiple Brot
 
 ## Quick Start
 
-**First-time or shop install:** See the **[Installation Guide](docs/INSTALLATION_GUIDE.md)** for production deployment with pre-built Docker images, or development setup from source.
+**First-time or shop install:** See the **[Installation Guide](docs/INSTALLATION_GUIDE.md)** for production deployment with pre-built Docker images, or development setup from source. Try the **[live demo](https://roblockwood.github.io/Shatter-NC/demo/)** or use the **[Install Kit generator](https://roblockwood.github.io/Shatter-NC/install/)** for Komodo deployments.
 
 **Development (after cloning):**
 
@@ -68,7 +68,9 @@ Per-channel config stored in the database can override global defaults.
 
 ### Getting Started
 
+- **[Live demo](https://roblockwood.github.io/Shatter-NC/demo/)** — Interactive preview (Dashboard + Files)
 - **[Installation Guide](docs/INSTALLATION_GUIDE.md)** — Shop install, backup, upgrade
+- **[Install Kit generator](https://roblockwood.github.io/Shatter-NC/install/)** — Guided `.env` + compose for Komodo
 - **[User Guide](docs/USER_GUIDE.md)** — Dashboard, files, validation, tools
 - **[Development Guide](docs/DEVELOPMENT_GUIDE.md)** — Contributor setup and tests
 - **[Environment Variables](docs/ENVIRONMENT_VARIABLES.md)** — Configuration table

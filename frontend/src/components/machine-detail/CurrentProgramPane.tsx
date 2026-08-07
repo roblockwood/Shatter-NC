@@ -625,9 +625,9 @@ export const CurrentProgramPane: React.FC<CurrentProgramPaneProps> = ({
         <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>TOOLS &amp; VALIDATION{hasStaleFail ? ' ⚠' : ''}</span>
           <button
+            className="expand-toggle"
             onClick={() => handleRevalidate()}
             disabled={isRevalidating}
-            style={{ fontSize: '0.7rem', padding: '1px 6px', cursor: isRevalidating ? 'wait' : 'pointer' }}
             title="Re-run tool validation against current machine state"
           >
             {isRevalidating ? '[...]' : '[RE-VALIDATE]'}

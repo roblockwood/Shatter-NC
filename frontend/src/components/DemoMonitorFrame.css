@@ -1,0 +1,166 @@
+.demo-monitor-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 16px 24px;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 40%, rgba(0, 255, 0, 0.04), transparent 70%),
+    linear-gradient(180deg, #050505 0%, #0a0a0a 45%, #060606 100%);
+  overflow: auto;
+}
+
+.demo-monitor-stage .demo-banner {
+  width: min(100%, 1280px);
+  margin-bottom: 14px;
+  border: 1px dashed rgba(0, 255, 0, 0.25);
+  border-radius: 8px;
+}
+
+.demo-monitor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(96vw, 1280px);
+  flex-shrink: 0;
+}
+
+.demo-monitor-bezel {
+  width: 100%;
+  padding: 14px 14px 16px;
+  border-radius: 14px 14px 10px 10px;
+  background: linear-gradient(165deg, #3a3a3a 0%, #222 35%, #1a1a1a 100%);
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.demo-monitor-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 0 4px;
+}
+
+.demo-monitor-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00ff00;
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.85);
+  animation: demo-monitor-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes demo-monitor-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.demo-monitor-model {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+}
+
+.demo-monitor-screen {
+  position: relative;
+  width: 100%;
+  height: min(78vh, 820px);
+  min-height: 420px;
+  border-radius: 6px;
+  padding: 3px;
+  background: #0a0a0a;
+  box-shadow:
+    inset 0 0 32px rgba(0, 0, 0, 0.9),
+    inset 0 0 0 1px rgba(0, 255, 0, 0.12),
+    0 0 20px rgba(0, 255, 0, 0.06);
+  overflow: hidden;
+}
+
+.demo-monitor-screen-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.demo-monitor-screen-inner > .app {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.demo-monitor-scanlines {
+  pointer-events: none;
+  position: absolute;
+  inset: 3px;
+  z-index: 2;
+  border-radius: 4px;
+  opacity: 0.04;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.45) 2px,
+    rgba(0, 0, 0, 0.45) 4px
+  );
+}
+
+.demo-monitor-stand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -2px;
+}
+
+.demo-monitor-neck {
+  width: 72px;
+  height: 36px;
+  background: linear-gradient(90deg, #1a1a1a, #333 50%, #1a1a1a);
+  clip-path: polygon(18% 0%, 82% 0%, 100% 100%, 0% 100%);
+  box-shadow: inset 0 -4px 8px rgba(0, 0, 0, 0.5);
+}
+
+.demo-monitor-base {
+  width: 220px;
+  height: 14px;
+  margin-top: -1px;
+  border-radius: 0 0 8px 8px;
+  background: linear-gradient(180deg, #2a2a2a, #141414);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+}
+
+@media (max-width: 720px) {
+  .demo-monitor-stage {
+    padding: 10px 8px 16px;
+    justify-content: flex-start;
+  }
+
+  .demo-monitor-bezel {
+    padding: 10px;
+  }
+
+  .demo-monitor-screen {
+    height: min(72vh, 720px);
+    min-height: 360px;
+  }
+
+  .demo-monitor-base {
+    width: 160px;
+  }
+}

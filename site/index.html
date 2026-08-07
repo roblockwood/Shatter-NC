@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shatter</title>
+    <link rel="stylesheet" href="./install/style.css" />
+    <style>
+      .landing-links {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .landing-links a {
+        display: block;
+        text-align: center;
+        text-decoration: none;
+        padding: 14px 16px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        color: var(--text);
+      }
+      .landing-links a:hover {
+        border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+        box-shadow: 0 0 10px rgba(0, 255, 0, 0.25);
+      }
+      .landing-links a.primary {
+        border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+      }
+      .landing-links .hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <header class="header">
+        <pre class="asciiTitle">SHATTER
+=======</pre>
+        <p class="muted">CNC management for Brother machines — monitor, deploy, and analyze production.</p>
+      </header>
+
+      <section class="panel">
+        <h2>Get started</h2>
+        <div class="landing-links">
+          <a class="primary" href="./demo/">
+            Try the demo
+            <div class="hint">Interactive preview — sample fleet, no install required</div>
+          </a>
+          <a href="./install/">
+            Install Shatter
+            <div class="hint">Generate .env + docker-compose.yml for Komodo or Docker</div>
+          </a>
+          <a href="https://github.com/roblockwood/Shatter-NC">
+            View on GitHub
+            <div class="hint">Source, docs, and releases</div>
+          </a>
+        </div>
+      </section>
+
+      <footer class="footer muted">
+        <a href="https://github.com/roblockwood/Shatter-NC/blob/main/docs/INSTALLATION_GUIDE.md">Installation guide</a>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -19,6 +19,7 @@ import {
   compressorCardTelemetryLines,
 } from '../utils/compressorCardSummary';
 import './MachineCard.css';
+import { IS_DEMO_MODE } from '../config/demo';
 
 interface CompressorCardProps {
   compressor: CompressorStatus;
@@ -912,6 +913,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
 
           <MachineCardAsciiDivider variant="thin" />
           <div className="machine-footer">
+            {!IS_DEMO_MODE && (
             <button
               type="button"
               className="machine-edit-footer-btn"
@@ -923,6 +925,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
             >
               [edit]
             </button>
+            )}
             <div className="machine-timestamp">
               {compressor.is_online ? 'LAST UPDATE' : 'LAST SEEN'}: {new Date(pollTs).toLocaleTimeString()}
             </div>
