@@ -1,0 +1,30 @@
+.demo-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 8px 16px;
+  border-bottom: 1px dashed var(--border-color, #2a2a2a);
+  background: rgba(255, 170, 0, 0.08);
+  font-size: 12px;
+}
+
+.demo-banner-label {
+  color: var(--accent-warning, #ffaa00);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.demo-banner-text {
+  color: var(--text-muted, #66ff66);
+  flex: 1;
+}
+
+.demo-banner-link {
+  color: var(--accent-cyan, #00ffff);
+  text-decoration: none;
+}
+
+.demo-banner-link:hover {
+  text-decoration: underline;
+}

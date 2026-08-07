@@ -1,7 +1,7 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, type Plugin } from 'vitest/config'
 import react from '@vitejs/plugin-react'
-import { readFileSync } from 'fs'
-import { resolve } from 'path'
+import { existsSync, readFileSync, statSync } from 'fs'
+import { resolve, join, extname } from 'path'
 import { execSync } from 'child_process'
 
 // Get version for UI display.
@@ -59,18 +59,81 @@ function getVersion(): string {
 }
 
 const version = getVersion()
+const isDemoMode = process.env.VITE_DEMO_MODE === 'true'
 
 function getReleaseChannel(): string {
   const channel = process.env.VITE_RELEASE_CHANNEL
   return channel?.trim() ?? ''
 }
 
+const GITHUB_PAGES_ROOT = '/Shatter-NC'
+const SITE_ROOT = resolve(__dirname, '../site')
+
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+}
+
+/** Serve landing + install kit from ../site during `npm run dev:demo`. */
+function githubPagesSitePlugin(): Plugin {
+  return {
+    name: 'github-pages-site',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const pathname = (req.url ?? '').split('?')[0]
+        if (!pathname.startsWith(GITHUB_PAGES_ROOT)) {
+          return next()
+        }
+        // Vite handles the demo SPA under /Shatter-NC/demo/
+        if (pathname.startsWith(`${GITHUB_PAGES_ROOT}/demo`)) {
+          return next()
+        }
+
+        let filePath: string | null = null
+        if (pathname === GITHUB_PAGES_ROOT || pathname === `${GITHUB_PAGES_ROOT}/`) {
+          filePath = join(SITE_ROOT, 'index.html')
+        } else if (pathname.startsWith(`${GITHUB_PAGES_ROOT}/install`)) {
+          const rest = pathname.slice(`${GITHUB_PAGES_ROOT}/install`.length)
+          if (!rest || rest === '/') {
+            filePath = join(SITE_ROOT, 'install', 'index.html')
+          } else {
+            filePath = join(SITE_ROOT, 'install', rest)
+          }
+        }
+
+        if (!filePath || !existsSync(filePath)) {
+          return next()
+        }
+
+        if (statSync(filePath).isDirectory()) {
+          filePath = join(filePath, 'index.html')
+          if (!existsSync(filePath)) {
+            return next()
+          }
+        }
+
+        const mime = MIME[extname(filePath)] ?? 'application/octet-stream'
+        res.statusCode = 200
+        res.setHeader('Content-Type', mime)
+        res.end(readFileSync(filePath))
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  base: isDemoMode ? '/Shatter-NC/demo/' : '/',
+  plugins: [react(), ...(isDemoMode ? [githubPagesSitePlugin()] : [])],
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(version),
     'import.meta.env.VITE_RELEASE_CHANNEL': JSON.stringify(getReleaseChannel()),
+    'import.meta.env.VITE_DEMO_MODE': JSON.stringify(isDemoMode ? 'true' : ''),
   },
   server: {
     host: '0.0.0.0',

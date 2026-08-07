@@ -7,6 +7,7 @@ import type {
   ToolValidation,
 } from './FileBrowserTypes';
 import { formatBytes, formatDate, formatRuntime, isONumberFile } from './FileBrowserUtils';
+import { IS_DEMO_MODE } from '../config/demo';
 
 export interface FileBrowserDetailPanelProps {
   selectedProgram: Program;
@@ -540,7 +541,7 @@ export const FileBrowserDetailPanel: React.FC<FileBrowserDetailPanelProps> = ({
               [ VIEW CODE ]
             </button>
           )}
-          {selectedProgram.name.match(/^O\d{4}\.NC$/i) && (
+          {selectedProgram.name.match(/^O\d{4}\.NC$/i) && !IS_DEMO_MODE && (
             validationLoading ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>{renderProgressBar()}</span>

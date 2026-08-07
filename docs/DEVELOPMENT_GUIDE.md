@@ -56,6 +56,24 @@ docker compose -f docker-compose.dev.yml up -d postgres backend
 cd frontend && npm install && npm run dev
 ```
 
+### Demo mode (GitHub Pages preview)
+
+Build a static, read-only preview with fixture data — no backend required:
+
+```bash
+cd frontend
+npm run dev:demo    # demo: http://localhost:3000/Shatter-NC/demo/
+                    # install kit + landing also served at /Shatter-NC/ and /Shatter-NC/install/
+npm run build:demo  # output in frontend/dist/ (deployed to site/demo/ on main)
+```
+
+- Flag: `VITE_DEMO_MODE=true` (set automatically by demo scripts)
+- Fixtures: `frontend/src/demo/fixtures/`
+- Mock fetch router: `frontend/src/demo/demoFetchRouter.ts`
+- Mock WebSocket: `frontend/src/demo/useDemoWebSocket.ts`
+
+To add API coverage for a new pane, extend `routeDemoFetch()` with a GET handler; mutations return 403 automatically.
+
 ### Option 4: Fully local
 
 Run PostgreSQL locally or point `POSTGRES_*` at a remote instance. Start backend with `start-dev.sh` and frontend with `npm run dev`.

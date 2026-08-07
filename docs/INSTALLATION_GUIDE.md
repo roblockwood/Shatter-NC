@@ -3,7 +3,8 @@
 Install and operate Shatter on **Windows**, **macOS**, or **Linux** using Docker Desktop.
 
 - **Production / shop** — pull pre-built images from [GitHub Container Registry](https://github.com/roblockwood?tab=packages) (`ghcr.io`). Download two config files; **no git clone required**.
-- **Komodo + guided setup** — use the **[Install Kit generator](https://roblockwood.github.io/Shatter-NC/)** to build `.env` and `docker-compose.yml` in your browser (secrets stay local).
+- **Komodo + guided setup** — use the **[Install Kit generator](https://roblockwood.github.io/Shatter-NC/install/)** to build `.env` and `docker-compose.yml` in your browser (secrets stay local).
+- **Preview** — try the **[live demo](https://roblockwood.github.io/Shatter-NC/demo/)** (Dashboard + Files, sample data).
 - **Development** — clone the repo and use `docker-compose.dev.yml` (see [Development Guide](DEVELOPMENT_GUIDE.md))
 
 ---
@@ -54,7 +55,7 @@ Shop installs run **published container images**. The backend image includes app
 
 ### Komodo install (guided)
 
-If you deploy with [Komodo](https://komo.do/), use the **[Install Kit generator](https://roblockwood.github.io/Shatter-NC/)** to walk through Docker setup, generate secrets, and copy `.env` + `docker-compose.yml` into a Komodo Stack. The wizard runs entirely in your browser — nothing is uploaded.
+If you deploy with [Komodo](https://komo.do/), use the **[Install Kit generator](https://roblockwood.github.io/Shatter-NC/install/)** to walk through Docker setup, generate secrets, and copy `.env` + `docker-compose.yml` into a Komodo Stack. The wizard runs entirely in your browser — nothing is uploaded.
 
 ### Manual install (curl)
 

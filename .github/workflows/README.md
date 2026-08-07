@@ -41,7 +41,7 @@ See [docs/RELEASE_PROCESS.md](../docs/RELEASE_PROCESS.md) for branch workflow an
 ### `pages.yml`
 
 - **Triggers:** Push to `main` (`site/**` or workflow file), or manual dispatch
-- **Purpose:** Deploy the [Install Kit generator](https://roblockwood.github.io/Shatter-NC/) from `site/` to GitHub Pages
+- **Purpose:** Deploy GitHub Pages (landing, [Install Kit](https://roblockwood.github.io/Shatter-NC/install/), [demo](https://roblockwood.github.io/Shatter-NC/demo/)) from `site/`
 
 ---
 

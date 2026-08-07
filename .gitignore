@@ -1,3 +1,7 @@
+# GitHub Pages demo build output (CI copies frontend/dist here)
+site/demo/*
+!site/demo/.gitkeep
+
 # Environment
 .env
 .env.bak

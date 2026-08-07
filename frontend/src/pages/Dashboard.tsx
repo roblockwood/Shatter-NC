@@ -13,6 +13,7 @@ import './Dashboard.css';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { API_BASE, getApiErrorMessage } from '../config/api';
 import type { CompressorStatus } from '../hooks/useWebSocket';
+import { IS_DEMO_MODE } from '../config/demo';
 
 type DeleteTarget =
   | { kind: 'cnc'; data: { machine_id: number; machine_name: string } }
@@ -225,7 +226,7 @@ export const Dashboard = () => {
         {expandedMachine && (
           <div className="fleet-overview-right">
             <span className="expanded-machine-name">{expandedMachine.name}</span>
-            {layoutEditMode && (
+            {layoutEditMode && !IS_DEMO_MODE && (
               <>
                 <button
                   className="card-action-btn"
@@ -249,6 +250,7 @@ export const Dashboard = () => {
                 </button>
               </>
             )}
+            {!IS_DEMO_MODE && (
             <button
               className="card-action-btn"
               onClick={(e) => {
@@ -259,6 +261,7 @@ export const Dashboard = () => {
             >
               {layoutEditMode ? '[EXIT EDIT]' : '[CUSTOMIZE LAYOUT]'}
             </button>
+            )}
             <button
               className="card-action-btn"
               onClick={(e) => {
@@ -464,7 +467,8 @@ export const Dashboard = () => {
             ))}
             {(machines.length > 0 || compressors.length > 0 || isConnected) &&
               editingMachineId === null &&
-              editingCompressorId === null && (
+              editingCompressorId === null &&
+              !IS_DEMO_MODE && (
                 <>
                   {!isAddingCompressor && (
                     <AddMachineCard
