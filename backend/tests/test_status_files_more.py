@@ -87,7 +87,12 @@ async def test_file_metadata_parses_tools_and_runtime(monkeypatch):
         "parse_gcode",
         MagicMock(return_value={"tools": [{"tool_number": 1}, {"tool_number": 7}], "estimated_runtime_seconds": 91.9}),
     )
-    monkeypatch.setattr(files, "_program_note_for_path", MagicMock(return_value=None))
+    persist = MagicMock(return_value="FACE OP")
+    monkeypatch.setattr(
+        files,
+        "ProgramService",
+        MagicMock(return_value=MagicMock(persist_comment_for_machine_file=persist)),
+    )
 
     result = await files.get_file_metadata(1, "/O1000.NC", _db(_machine()))
 
@@ -96,8 +101,9 @@ async def test_file_metadata_parses_tools_and_runtime(monkeypatch):
         "tools": [1, 7],
         "runtime_seconds": 91,
         "has_errors": False,
-        "program_note": None,
+        "program_note": "FACE OP",
     }
+    persist.assert_called_once()
 
 
 @pytest.mark.asyncio
