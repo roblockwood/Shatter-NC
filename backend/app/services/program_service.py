@@ -1,6 +1,7 @@
 """Program management service for upload, versioning, and deployment."""
 import logging
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy import func
 from typing import Optional, Dict, Any
 from datetime import datetime
@@ -8,8 +9,15 @@ from datetime import datetime
 from app.models.program import Program, ProgramDeployment
 from app.models.machine import Machine
 from app.parsers.gcode_parser import parse_gcode
+from app.parsers.nc_header_parser import extract_nc_program_header, format_program_note
 
 logger = logging.getLogger(__name__)
+
+
+def program_comment_from_content(gcode_content: str, filename: str) -> Optional[str]:
+    """Extract display comment from NC header comments."""
+    header = extract_nc_program_header(gcode_content)
+    return format_program_note(header.get("title"), filename)
 
 
 class ProgramService:
@@ -17,6 +25,98 @@ class ProgramService:
 
     def __init__(self, db: Session):
         self.db = db
+
+    @staticmethod
+    def _build_program_metadata(
+        parsed_metadata: Dict[str, Any],
+        gcode_content: str,
+        filename: str,
+    ) -> Dict[str, Any]:
+        metadata: Dict[str, Any] = {
+            "tools": parsed_metadata.get("tools", []),
+            "wcs_offset": parsed_metadata.get("wcs_offset"),
+            "stock_size": parsed_metadata.get("stock_size"),
+        }
+        comment = program_comment_from_content(gcode_content, filename)
+        if comment:
+            metadata["program_comment"] = comment
+        return metadata
+
+    def _set_program_comment(
+        self,
+        program: Program,
+        gcode_content: str,
+        filename: str,
+    ) -> Optional[str]:
+        comment = program_comment_from_content(gcode_content, filename)
+        metadata = dict(program.program_metadata or {})
+        if comment:
+            metadata["program_comment"] = comment
+            program.program_metadata = metadata
+            flag_modified(program, "program_metadata")
+        return comment
+
+    @staticmethod
+    def _normalize_remote_path(path_value: str) -> str:
+        normalized = "/" + "/".join(
+            segment for segment in str(path_value).replace("\\", "/").split("/") if segment
+        )
+        return normalized if normalized != "/" else "/"
+
+    def persist_comment_for_machine_file(
+        self,
+        machine_id: int,
+        file_path: str,
+        gcode_content: str,
+        filename: str,
+    ) -> Optional[str]:
+        """Store program comment for a machine file path when Shatter-managed."""
+        normalized_path = self._normalize_remote_path(file_path)
+        comment = program_comment_from_content(gcode_content, filename)
+        if not comment:
+            return None
+
+        deployment = (
+            self.db.query(ProgramDeployment)
+            .filter(
+                ProgramDeployment.machine_id == machine_id,
+                ProgramDeployment.deployed_path == normalized_path,
+                ProgramDeployment.is_current == True,
+            )
+            .first()
+        )
+        if deployment is None:
+            deployment = (
+                self.db.query(ProgramDeployment)
+                .filter(
+                    ProgramDeployment.machine_id == machine_id,
+                    ProgramDeployment.deployed_filename.ilike(filename),
+                    ProgramDeployment.is_current == True,
+                )
+                .first()
+            )
+
+        if deployment is not None:
+            program = self.db.query(Program).filter(Program.id == deployment.program_id).first()
+            if program is not None:
+                self._set_program_comment(program, gcode_content, filename)
+                self.db.commit()
+                return comment
+
+        content_hash = Program.compute_hash(gcode_content)
+        program = self.db.query(Program).filter(Program.content_hash == content_hash).first()
+        if program is not None:
+            self._set_program_comment(program, gcode_content, filename)
+            self.db.commit()
+            return comment
+
+        self.upload_program(
+            gcode_content=gcode_content,
+            original_filename=filename,
+            machine_id=None,
+            validate=False,
+        )
+        return comment
 
     def upload_program(
         self,
@@ -84,6 +184,9 @@ class ProgramService:
         ).first()
 
         if existing_program:
+            self._set_program_comment(existing_program, gcode_content, original_filename)
+            self.db.commit()
+            self.db.refresh(existing_program)
             # Program already exists - return existing record (no duplicate)
             result = {
                 "program": existing_program,
@@ -128,11 +231,9 @@ class ProgramService:
             content_hash=content_hash,
             posted_date=parsed_metadata.get("posted_date"),
             version_number=version_number,
-            program_metadata={
-                "tools": parsed_metadata.get("tools", []),
-                "wcs_offset": parsed_metadata.get("wcs_offset"),
-                "stock_size": parsed_metadata.get("stock_size"),
-            },
+            program_metadata=self._build_program_metadata(
+                parsed_metadata, gcode_content, original_filename
+            ),
             file_size_bytes=parsed_metadata.get("file_size", 0),
             line_count=parsed_metadata.get("line_count", 0),
             estimated_runtime_seconds=parsed_metadata.get("estimated_runtime_seconds"),
@@ -212,10 +313,7 @@ class ProgramService:
 
         def _normalize_remote_path(path_value: str) -> str:
             """Normalize remote CNC file paths to a canonical /dir/file form."""
-            normalized = "/" + "/".join(
-                segment for segment in str(path_value).replace("\\", "/").split("/") if segment
-            )
-            return normalized if normalized != "/" else "/"
+            return ProgramService._normalize_remote_path(path_value)
 
         # Construct deployment path: prefer caller-supplied full remote path so that
         # files in different subfolders with the same basename are stored distinctly.

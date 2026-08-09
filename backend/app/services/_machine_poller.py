@@ -288,7 +288,7 @@ class MachinePoller:
         """
         try:
             from app.clients.ftp_client import CNCFtpClient
-            from app.services.notification_service import extract_nc_program_header
+            from app.parsers.nc_header_parser import extract_nc_program_header
 
             ftp = CNCFtpClient(
                 ip_address=self.machine.ip_address,

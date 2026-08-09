@@ -54,9 +54,10 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
   const [expandedWCS, setExpandedWCS] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('name');
+  const [sortBy, setSortBy] = useState<'name' | 'comment' | 'size' | 'modified'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [filesWithDeployments, setFilesWithDeployments] = useState<Set<string>>(new Set());
+  const [programsRefreshKey, setProgramsRefreshKey] = useState(0);
 
   // Handle URL parameters for navigation from upload success screen
   useEffect(() => {
@@ -179,7 +180,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
       });
 
     return () => controller.abort();
-  }, [machineId, currentPath, pathLoading]);
+  }, [machineId, currentPath, pathLoading, programsRefreshKey]);
 
   // Fetch deployments list for the machine
   useEffect(() => {
@@ -470,6 +471,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           deployed_filename: program.name,
+          deployed_path: filePath,
           gcode_content: validationData.gcode_content,
           validation_results: validationData.validation
         })
@@ -478,6 +480,9 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
       if (!deployResponse.ok) {
         console.warn('Failed to save validation to database');
       }
+
+      sessionStorage.removeItem(`programs_cache_${machineId}_${currentPath}`);
+      setProgramsRefreshKey((key) => key + 1);
 
       await fetchDeploymentDetail(program);
       setFreshValidation(null);
@@ -565,6 +570,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
       const query = searchQuery.toLowerCase();
       filtered = programs.filter(p => 
         p.name.toLowerCase().includes(query) ||
+        (p.program_note && p.program_note.toLowerCase().includes(query)) ||
         (p.is_directory && 'directory'.includes(query)) ||
         (!p.is_directory && 'file'.includes(query))
       );
@@ -577,6 +583,8 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
       let comparison = 0;
       if (sortBy === 'name') {
         comparison = a.name.localeCompare(b.name);
+      } else if (sortBy === 'comment') {
+        comparison = (a.program_note ?? '').localeCompare(b.program_note ?? '');
       } else if (sortBy === 'size') {
         comparison = a.size - b.size;
       } else if (sortBy === 'modified') {
@@ -650,9 +658,10 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                     <Select
                       className="file-manager-terminal-select-sm"
                       value={sortBy}
-                      onChange={(value) => setSortBy(value as 'name' | 'size' | 'modified')}
+                      onChange={(value) => setSortBy(value as 'name' | 'comment' | 'size' | 'modified')}
                       options={[
                         { value: 'name', label: 'NAME' },
+                        { value: 'comment', label: 'COMMENT' },
                         { value: 'size', label: 'SIZE' },
                         { value: 'modified', label: 'MODIFIED' },
                       ]}
@@ -668,6 +677,7 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                 </div>
                 <div className="file-manager-table-header">
                   <div className="file-manager-col-name">NAME</div>
+                  <div className="file-manager-col-comment">COMMENT</div>
                   <div className="file-manager-col-size">SIZE</div>
                   <div className="file-manager-col-modified">MODIFIED</div>
                   <div className="file-manager-col-actions">ACTIONS</div>
@@ -689,6 +699,12 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
                         {!program.is_directory && filesWithDeployments.has(program.name.toUpperCase()) && (
                           <span className="file-manager-deployment-indicator" title="Has deployment data">●</span>
                         )}
+                      </div>
+                      <div
+                        className="file-manager-col-comment text-dim"
+                        title={program.program_note ?? undefined}
+                      >
+                        {program.program_note ?? (program.is_directory ? '' : '—')}
                       </div>
                       <div className="file-manager-col-size">{program.is_directory ? '<DIR>' : formatBytes(program.size)}</div>
                       <div className="file-manager-col-modified">{formatDate(program.modified)}</div>

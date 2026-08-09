@@ -26,7 +26,8 @@ class Program(Base):
     # Structure: {
     #   "tools": [{"tool_number": 1, "diameter": 0.25, "corner_radius": 0, ...}],
     #   "wcs_offset": {"x": -21.99, "y": -2.85, "z": -15.89, "work_offset": 54, "tolerance": 2.0},
-    #   "stock_size": {"x": 146.05, "y": 25.4, "z": 12.7}
+    #   "stock_size": {"x": 146.05, "y": 25.4, "z": 12.7},
+    #   "program_comment": "BRACKET POCKET"
     # }
 
     # File characteristics

@@ -210,7 +210,7 @@
 
 .table-header {
   display: grid;
-  grid-template-columns: 2fr 1fr 2fr 1fr;
+  grid-template-columns: 2fr 2fr 1fr 2fr 1fr;
   gap: var(--spacing-md);
   padding: var(--spacing-sm) var(--spacing-md);
   font-weight: 700;
@@ -232,7 +232,7 @@
 
 .table-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 2fr 1fr;
+  grid-template-columns: 2fr 2fr 1fr 2fr 1fr;
   gap: var(--spacing-md);
   padding: var(--spacing-xs) var(--spacing-md);
   cursor: pointer;
@@ -253,6 +253,12 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
+}
+
+.col-comment {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .col-actions {
