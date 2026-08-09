@@ -4,6 +4,7 @@ export interface Program {
   modified: string;
   is_directory: boolean;
   path: string;
+  program_note?: string | null;
 }
 
 export interface ViewData {
@@ -18,6 +19,7 @@ export interface FileMetadata {
   tools: number[];
   runtime_seconds: number;
   has_errors: boolean;
+  program_note?: string | null;
 }
 
 export interface ToolDetail {

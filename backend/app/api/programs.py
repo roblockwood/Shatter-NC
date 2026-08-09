@@ -156,6 +156,7 @@ class ProgramValidationWithContentResponse(BaseModel):
     """Validation results with the validated content."""
     validation: ProgramValidationResponse
     gcode_content: str
+    program_comment: Optional[str] = None
 
 
 class DeployValidatedRequest(BaseModel):
@@ -163,6 +164,7 @@ class DeployValidatedRequest(BaseModel):
     deployed_filename: str
     gcode_content: str
     validation_results: dict
+    deployed_path: Optional[str] = None
 
 
 @router.post("/machines/{machine_id}/programs/validate", response_model=ProgramValidationResponse)
@@ -568,10 +570,20 @@ async def validate_file_on_machine(
     request = ProgramValidateRequest(gcode_content=gcode_content)
     validation_result = await validate_program(machine_id, request, db)
 
+    filename = normalized_file_path.rsplit("/", 1)[-1]
+    service = ProgramService(db)
+    program_comment = service.persist_comment_for_machine_file(
+        machine_id=machine_id,
+        file_path=normalized_file_path,
+        gcode_content=gcode_content,
+        filename=filename,
+    )
+
     # Return validation results WITH content for deployment
     return ProgramValidationWithContentResponse(
         validation=validation_result,
-        gcode_content=gcode_content
+        gcode_content=gcode_content,
+        program_comment=program_comment,
     )
 
 
@@ -984,6 +996,7 @@ async def deploy_validated_program(
             original_filename=request.deployed_filename,
             machine_id=machine_id,
             deployed_filename=request.deployed_filename,
+            deployed_path=request.deployed_path,
             validate=False,  # Already validated
             validation_results=request.validation_results
         )
