@@ -347,6 +347,30 @@ export const FileManagerPane: React.FC<FileManagerPaneProps> = ({ machineId, onE
       }
       const data: FileMetadata = await response.json();
       setFileMetadata(data);
+      if (data.program_note) {
+        setPrograms((prev) =>
+          prev.map((p) =>
+            p.path === program.path && p.name === program.name
+              ? { ...p, program_note: data.program_note }
+              : p
+          )
+        );
+        const cacheKey = `programs_cache_${machineId}_${currentPath}`;
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const cacheData = JSON.parse(cached);
+            cacheData.programs = (cacheData.programs || []).map((p: Program) =>
+              p.path === program.path && p.name === program.name
+                ? { ...p, program_note: data.program_note }
+                : p
+            );
+            sessionStorage.setItem(cacheKey, JSON.stringify(cacheData));
+          } catch {
+            /* ignore stale cache */
+          }
+        }
+      }
     } catch (err) {
       console.error('Metadata error:', err);
       setFileMetadata(null);

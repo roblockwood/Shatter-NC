@@ -18,6 +18,7 @@ from app.models.program import ProgramDeployment
 from app.utils.api_errors import public_error_detail
 from app.clients.ftp_client import CNCFtpClient
 from app.parsers.gcode_parser import parse_gcode
+from app.services.program_service import ProgramService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -262,8 +263,6 @@ async def get_file_metadata(
             detail=f"Machine with id {machine_id} not found",
         )
 
-    program_note = _program_note_for_path(db, machine_id, file_path)
-
     try:
         ftp_client = CNCFtpClient(
             ip_address=db_machine.ip_address,
@@ -283,6 +282,17 @@ async def get_file_metadata(
             text_content = file_content.decode('utf-8', errors='replace')
         except Exception:
             text_content = str(file_content)
+
+        filename = file_path.rsplit("/", 1)[-1]
+        service = ProgramService(db)
+        program_note = service.persist_comment_for_machine_file(
+            machine_id=machine_id,
+            file_path=file_path,
+            gcode_content=text_content,
+            filename=filename,
+        )
+        if program_note is None:
+            program_note = _program_note_for_path(db, machine_id, file_path)
 
         parsed = parse_gcode(text_content)
 
