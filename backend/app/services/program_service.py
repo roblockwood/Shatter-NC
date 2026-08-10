@@ -103,20 +103,59 @@ class ProgramService:
                 self.db.commit()
                 return comment
 
+        program: Optional[Program] = None
         content_hash = Program.compute_hash(gcode_content)
         program = self.db.query(Program).filter(Program.content_hash == content_hash).first()
         if program is not None:
             self._set_program_comment(program, gcode_content, filename)
             self.db.commit()
-            return comment
+        else:
+            result = self.upload_program(
+                gcode_content=gcode_content,
+                original_filename=filename,
+                machine_id=None,
+                validate=False,
+            )
+            program = result["program"]
 
-        self.upload_program(
-            gcode_content=gcode_content,
-            original_filename=filename,
-            machine_id=None,
-            validate=False,
-        )
+        if program is not None:
+            self._ensure_comment_deployment(
+                program_id=program.id,
+                machine_id=machine_id,
+                filename=filename,
+                deployed_path=normalized_path,
+            )
+
         return comment
+
+    def _ensure_comment_deployment(
+        self,
+        program_id: int,
+        machine_id: int,
+        filename: str,
+        deployed_path: str,
+    ) -> None:
+        """Link program comment to machine file path so list lookups survive refresh."""
+        existing = (
+            self.db.query(ProgramDeployment)
+            .filter(
+                ProgramDeployment.machine_id == machine_id,
+                ProgramDeployment.deployed_path == deployed_path,
+                ProgramDeployment.is_current == True,
+            )
+            .first()
+        )
+        if existing is not None:
+            return
+
+        self.deploy_program(
+            program_id=program_id,
+            machine_id=machine_id,
+            deployed_filename=filename,
+            deployed_path=deployed_path,
+            validate=False,
+            validation_results=None,
+        )
 
     def upload_program(
         self,
