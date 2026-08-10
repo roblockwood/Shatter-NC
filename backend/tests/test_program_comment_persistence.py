@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.api import _status_files as files
+from app.models.program import Program, ProgramDeployment
 from app.services.program_service import ProgramService, program_comment_from_content
 
 
@@ -100,3 +101,44 @@ def test_upload_program_stores_program_comment_in_metadata():
 
     metadata = result["program"].program_metadata
     assert metadata["program_comment"] == "FACE OP"
+
+
+def test_persist_comment_creates_deployment_for_list_lookup():
+    db = MagicMock()
+    service = ProgramService(db)
+    content = "(O2000 — FACE OP)\nG90\nM30\n"
+    program = SimpleNamespace(id=42, program_metadata={})
+
+    deployment_query = MagicMock()
+    deployment_query.filter.return_value.first.return_value = None
+    program_query = MagicMock()
+    program_query.filter.return_value.first.return_value = program
+
+    def query_side_effect(model):
+        if model is ProgramDeployment:
+            return deployment_query
+        if model is Program:
+            return program_query
+        return MagicMock()
+
+    db.query.side_effect = query_side_effect
+
+    with patch.object(service, "_set_program_comment", return_value="FACE OP") as set_comment:
+        with patch.object(service, "upload_program") as upload:
+            with patch.object(service, "_ensure_comment_deployment") as ensure_deployment:
+                result = service.persist_comment_for_machine_file(
+                    machine_id=1,
+                    file_path="/O2000.NC",
+                    gcode_content=content,
+                    filename="O2000.NC",
+                )
+
+    assert result == "FACE OP"
+    upload.assert_not_called()
+    set_comment.assert_called_once_with(program, content, "O2000.NC")
+    ensure_deployment.assert_called_once_with(
+        program_id=42,
+        machine_id=1,
+        filename="O2000.NC",
+        deployed_path="/O2000.NC",
+    )
