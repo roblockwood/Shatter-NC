@@ -50,7 +50,7 @@ class MachineStateValidator:
         Args:
             machine_id: Machine ID to validate
             operation_type: Type of operation - "tool_color", "tool_assignment", "tool_delete", 
-                          "spindle_tool", "tool_type", "tool_life", "tool_offset"
+                          "spindle_tool", "tool_type", "tool_life", "tool_offset", "macro_write"
             db: Database session
             
         Returns:

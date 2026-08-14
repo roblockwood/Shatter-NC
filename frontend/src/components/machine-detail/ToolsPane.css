@@ -490,6 +490,47 @@
   white-space: nowrap;
 }
 
+.tools-col-measure {
+  width: auto;
+  min-width: 2.25rem;
+  max-width: 2.75rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tools-measure-btn {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  line-height: 1;
+  min-width: 1.5rem;
+  padding: 1px 4px;
+}
+
+.tools-measure-btn:hover:not(:disabled) {
+  border-color: var(--color-text-primary);
+  color: var(--color-text-primary);
+}
+
+.tools-measure-btn.active {
+  border-color: var(--color-accent, #00ccff);
+  color: var(--color-accent, #00ccff);
+  font-weight: 700;
+}
+
+.tools-measure-btn:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.tools-table tbody tr.measurement-tool {
+  box-shadow: inset 2px 0 0 var(--color-accent, #00ccff);
+}
+
 .tools-col-color {
   width: 90px;
   min-width: 90px;

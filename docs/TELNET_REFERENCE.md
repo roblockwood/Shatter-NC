@@ -47,11 +47,12 @@ Protocol reference for Shatter's telnet client ([`telnet_client.py`](../backend/
 
 ### Tool table
 
-| Command | Purpose |
-|---------|---------|
-| WRTTOFS | Write tool offset |
-| WRTTLLF | Write tool life |
-| CLRTLLF | Clear tool life |
+| Command | Method | Purpose |
+|---------|--------|---------|
+| WRTTOFS | `write_tool_offset()` | Tool offset |
+| WRTTLLF | `write_tool_life()` | Tool life |
+| CLRTLLF | `clear_tool_life()` | Clear tool life |
+| WRTMCNM | `write_macro_variable()` | Macro variables 500–999 |
 
 ### ATC magazine (CHGMAG*)
 
@@ -76,7 +77,6 @@ CHGMAGC 05 42 02
 | Command | Purpose |
 |---------|---------|
 | WRTREL | Preset relative position |
-| WRTMCNM | Write macro variable |
 | IOCMOD | Write I/O signal (multipart) |
 
 ---

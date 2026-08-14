@@ -147,6 +147,16 @@ def test_set_tool_offset_route_registered():
     assert (frozenset({"PUT"}), "/{machine_id}/tools/{tool_number}/offset") in sigs
 
 
+def test_set_macro_variable_route_registered():
+    sigs = _route_signatures(status_module.router)
+    assert (frozenset({"PUT"}), "/{machine_id}/macros/{macro_number}") in sigs
+
+
+def test_set_measurement_tool_route_registered():
+    sigs = _route_signatures(status_module.router)
+    assert (frozenset({"PUT"}), "/{machine_id}/tools/measurement-tool") in sigs
+
+
 # ---------------------------------------------------------------------------
 # Route registration - file endpoints
 # ---------------------------------------------------------------------------
@@ -183,7 +193,7 @@ def test_upload_file_route_registered():
 def test_total_route_count():
     """Exactly 20 routes must be registered. Catches silent deletions during split."""
     sigs = _route_signatures(status_module.router)
-    assert len(sigs) == 20, f"Expected 20 routes, got {len(sigs)}: {sigs}"
+    assert len(sigs) == 22, f"Expected 22 routes, got {len(sigs)}: {sigs}"
 
 
 # ---------------------------------------------------------------------------

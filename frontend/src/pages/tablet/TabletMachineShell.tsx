@@ -105,6 +105,7 @@ function TabletPaneContent({
             toolsTimestamp={machine.tools_timestamp ?? undefined}
             toolTableTimestamp={machine.tool_table_timestamp ?? undefined}
             toolPollIntervalSeconds={machine.tool_poll_interval_seconds ?? 30}
+            macros={machine.macros}
           />
         </div>
       );
