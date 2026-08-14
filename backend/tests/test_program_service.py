@@ -8,7 +8,12 @@ from app.services.program_service import ProgramService
 
 
 def test_upload_program_dedupe_hit():
-    existing = SimpleNamespace(id=1, original_filename="A.NC", content_hash="abc")
+    existing = SimpleNamespace(
+        id=1,
+        original_filename="A.NC",
+        content_hash="abc",
+        program_metadata={},
+    )
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = existing
     service = ProgramService(db)
