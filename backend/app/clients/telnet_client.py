@@ -2,7 +2,7 @@
 
 Brother CNC machines support Protocol Type 2 over TCP/IP port 10000, which provides:
 - Direct data file reading (same format as FTP files)
-- Write operations (tool offsets, tool life, ATC configuration)
+- Write operations (tool offsets, tool life, ATC configuration, macro variables)
 - Macro variable access
 - More reliable than HTTP/FTP for data reads
 

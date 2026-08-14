@@ -50,6 +50,8 @@ interface ToolsPaneProps {
   programName?: string;
   /** ATC carousel pocket count — defaults to 21. */
   numPockets?: number;
+  /** Live macro variables from polling (#500-999). */
+  macros?: Record<string, number>;
 }
 
 type SortColumn = 'pot_number' | 'tool_number' | 'tool_name' | 'diameter' | 'length' | 'group' | 'life' | 'tool_type' | 'color';
@@ -71,6 +73,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   variant = 'default',
   programName,
   numPockets: numPocketsProp = 21,
+  macros,
 }) => {
   // Cache sort settings separately for each view (ATC and TABLE)
   const [sortSettings, setSortSettings] = useState<{
@@ -113,6 +116,21 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
   // ──────────────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'atc' | 'table' | 'optimizer'>('atc');
+
+  const [measurementTool, setMeasurementTool] = useState<number | null>(null);
+  const [measurementSaving, setMeasurementSaving] = useState(false);
+  const [measurementError, setMeasurementError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const raw = macros?.['920'];
+    if (raw === undefined || raw === null || !Number.isFinite(Number(raw))) {
+      return;
+    }
+    const parsed = Math.round(Number(raw));
+    if (parsed > 0) {
+      setMeasurementTool(parsed);
+    }
+  }, [macros]);
 
   // Track recently pushed items to prevent stale WebSocket data from overwriting confirmed values
   const recentlyPushedRef = useRef<Map<string, { potNumber: number; toolNumber: number; color: number; timestamp: number }>>(new Map());
@@ -537,6 +555,45 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           : t
       ),
     }));
+  };
+
+  const handleMeasurementToolSelect = async (tool: Tool) => {
+    if (toolSource !== 'atc' || !machineId || !tool.tool_number) {
+      return;
+    }
+    if (measurementTool === tool.tool_number || measurementSaving) {
+      return;
+    }
+
+    setMeasurementSaving(true);
+    setMeasurementError(null);
+    const previous = measurementTool;
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/machines/${machineId}/tools/measurement-tool?tool_number=${tool.tool_number}`,
+        { method: 'PUT' }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        const detail = error.detail;
+        const message =
+          typeof detail === 'string'
+            ? detail
+            : detail?.message || 'Failed to set measurement tool';
+        throw new Error(message);
+      }
+
+      const data = await response.json();
+      const verified = data.verified_value ?? data.tool_number;
+      setMeasurementTool(Math.round(Number(verified)));
+    } catch (err) {
+      setMeasurementTool(previous ?? null);
+      setMeasurementError(err instanceof Error ? err.message : 'Failed to set measurement tool');
+    } finally {
+      setMeasurementSaving(false);
+    }
   };
 
   const handlePushChanges = async () => {
@@ -999,6 +1056,11 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 <span className="tools-error-text">⚠ {currentError}</span>
               </div>
             )}
+            {measurementError && (
+              <div className="tools-error-message" onClick={(e) => e.stopPropagation()}>
+                <span className="tools-error-text">⚠ {measurementError}</span>
+              </div>
+            )}
             {!isHoverPreview && isToolsSnapshotStale && !currentError && (
               <div className="tools-stale-banner" onClick={(e) => e.stopPropagation()}>
                 <span className="tools-stale-text">
@@ -1081,6 +1143,11 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                   >
                     TYPE {sortColumn === 'tool_type' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
+                  {toolSource === 'atc' && machineId ? (
+                    <th className="tools-col-measure" title="Tool selected for measurement (macro #920)">
+                      MEAS
+                    </th>
+                  ) : null}
                   <th 
                     className="tools-col-color tools-sortable"
                     onClick={() => handleSort('color')}
@@ -1092,7 +1159,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               <tbody>
                 {filteredAndSortedTools.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="tools-empty-row">
+                    <td colSpan={toolSource === 'atc' && machineId ? 10 : 9} className="tools-empty-row">
                       NO TOOLS MATCH SEARCH
                     </td>
                   </tr>
@@ -1103,10 +1170,13 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 const hasMatch = matched !== null && isBetaMode;
                 const colorIdx = getToolColorClassIndex(tool);
                 const rowColored = isBetaMode && toolsColorMode;
+                const isMeasurementTool = measurementTool === tool.tool_number;
                 return (
                   <tr 
                     key={idx} 
                     className={`${isCurrent ? 'current-tool' : ''} ${hasMatch ? 'tool-matched' : ''} ${
+                      isMeasurementTool ? 'measurement-tool' : ''
+                    } ${
                       rowColored ? `tools-row-colored tool-color-${colorIdx}` : ''
                     }`}
                     onClick={(e) => handleRowClick(tool, e)}
@@ -1125,6 +1195,27 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     <td className="tools-col-group">{tool.group ?? '──'}</td>
                     <td className="tools-col-life">{formatLife(tool.life)}</td>
                     <td className="tools-col-type">{formatToolType(tool.tool_type)}</td>
+                    {toolSource === 'atc' && machineId ? (
+                      <td
+                        className="tools-col-measure"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          className={`tools-measure-btn ${isMeasurementTool ? 'active' : ''}`}
+                          disabled={measurementSaving}
+                          title={
+                            isMeasurementTool
+                              ? `T${String(tool.tool_number).padStart(2, '0')} is the measurement tool`
+                              : `Set T${String(tool.tool_number).padStart(2, '0')} as measurement tool`
+                          }
+                          onClick={() => handleMeasurementToolSelect(tool)}
+                          aria-pressed={isMeasurementTool}
+                        >
+                          {isMeasurementTool ? '●' : '○'}
+                        </button>
+                      </td>
+                    ) : null}
                     <td
                       className="tools-col-color"
                       onClick={(e) => e.stopPropagation()}

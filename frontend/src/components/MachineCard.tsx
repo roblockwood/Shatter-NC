@@ -86,6 +86,7 @@ interface MachineStatus {
   tools_timestamp?: string | null;
   tool_table_timestamp?: string | null;
   macros_timestamp?: string | null;
+  macros?: Record<string, number>;
   response_time_ms?: number;
   tool_response_time_ms?: number;
   ip_address?: string;
@@ -854,6 +855,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               toolTableTimestamp={machine.tool_table_timestamp ?? undefined}
               toolPollIntervalSeconds={machine.tool_poll_interval_seconds ?? 30}
               programName={currentProgram ?? undefined}
+              macros={machine.macros}
             />
                   </div>
                 ),
@@ -1757,6 +1759,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     toolsTimestamp={machine.tools_timestamp ?? undefined}
                     toolTableTimestamp={machine.tool_table_timestamp ?? undefined}
                     toolPollIntervalSeconds={machine.tool_poll_interval_seconds ?? 30}
+                    macros={machine.macros}
                   />
                 </div>
               )}

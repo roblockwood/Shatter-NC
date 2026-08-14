@@ -66,6 +66,7 @@ export interface MachineStatus {
   tools_timestamp?: string | null;
   tool_table_timestamp?: string | null;
   macros_timestamp?: string | null;
+  macros?: Record<string, number>;
   response_time_ms?: number;
   tool_response_time_ms?: number;
   ip_address?: string;

@@ -19,6 +19,17 @@ from app.clients._telnet_state import _get_machine_lock
 
 logger = logging.getLogger(__name__)
 
+MACRO_VARIABLE_MIN = 500
+MACRO_VARIABLE_MAX = 999
+
+
+def format_macro_set_value(value: float) -> str:
+    """Format a macro variable set value for WRTMCNM (12-byte data field)."""
+    text = f"{value:.4f}"
+    if len(text) > 12:
+        text = f"{value:.3f}"[:12]
+    return text.ljust(12)[:12]
+
 
 class CNCWriteOpsMixin:
     """Mixin of write operations that modify machine tool data and ATC magazine.
@@ -196,6 +207,87 @@ class CNCWriteOpsMixin:
         except Exception as e:
             logger.error(f"Error writing tool offset: {e}")
             return False, None
+
+    # ------------------------------------------------------------------
+    # Macro variable write
+    # ------------------------------------------------------------------
+
+    async def write_macro_variable(
+        self,
+        macro_number: int,
+        value: float,
+        verbose: bool = False,
+        verify: bool = False,
+    ) -> Tuple[bool, Optional[str], Optional[float]]:
+        """
+        Write macro variable value using WRTMCNM command.
+
+        Args:
+            macro_number: Macro variable number (500-999)
+            value: Value to write
+            verbose: If True, log command details
+            verify: If True, read back via REDMCNM and confirm value matches
+
+        Returns:
+            Tuple of (success, status_code, verified_value)
+        """
+        if not self._connected:
+            connected = await self.connect()
+            if not connected:
+                return False, None, None
+
+        if not MACRO_VARIABLE_MIN <= macro_number <= MACRO_VARIABLE_MAX:
+            logger.error(
+                f"Macro number {macro_number} out of valid range "
+                f"({MACRO_VARIABLE_MIN}-{MACRO_VARIABLE_MAX})"
+            )
+            return False, "30", None
+
+        macro_str = f"{macro_number:03d}"
+        arguments = f"{macro_str}     "[:8]
+        data_payload = format_macro_set_value(value)
+
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+
+        start_time = asyncio.get_event_loop().time()
+        try:
+            async with machine_lock:
+                success, status, _ = await self._send_multipart_command(
+                    "WRTMCNM", arguments, data_payload, verbose=verbose
+                )
+
+                duration_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
+
+                if success:
+                    logger.info(
+                        f"[WRITE] Macro #{macro_number} set to {value} ({duration_ms}ms)"
+                    )
+                else:
+                    status_desc = self.get_status_description(status or "00")
+                    logger.warning(f"Failed to write macro #{macro_number}: {status_desc}")
+
+            if not success:
+                return False, status, None
+
+            if not verify:
+                return True, status, None
+
+            read_back = await self.get_macro_variable(macro_number, verbose=verbose)
+            if read_back is None:
+                logger.warning(f"Macro #{macro_number} write succeeded but read-back failed")
+                return False, "verify_failed", None
+
+            if abs(read_back - value) > 0.0001:
+                logger.warning(
+                    f"Macro #{macro_number} verify mismatch: wrote {value}, read {read_back}"
+                )
+                return False, "verify_mismatch", read_back
+
+            return True, status, read_back
+
+        except Exception as e:
+            logger.error(f"Error writing macro variable #{macro_number}: {e}")
+            return False, None, None
 
     # ------------------------------------------------------------------
     # ATC magazine operations

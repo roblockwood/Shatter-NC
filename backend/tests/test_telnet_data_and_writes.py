@@ -1,6 +1,9 @@
 """Behavioral tests for telnet data-read and write-ops mixins."""
+from unittest.mock import AsyncMock
+
 import pytest
 
+from app.clients._telnet_write_ops import format_macro_set_value
 from app.clients.telnet_client import CNCTelnetClient
 from tests.helpers import FakeReader, FakeWriter, make_brother_response
 
@@ -134,6 +137,44 @@ async def test_write_tool_offset_success():
     assert ok is True
     assert status == "00"
     assert b"WRTTOFS" in writer.written[0]
+
+
+def test_format_macro_set_value_twelve_bytes():
+    assert len(format_macro_set_value(42.0)) == 12
+    assert format_macro_set_value(42.0).strip() == "42.0000"
+    assert format_macro_set_value(12.5).strip() == "12.5000"
+
+
+@pytest.mark.asyncio
+async def test_write_macro_variable_out_of_range():
+    client, writer = _connected()
+    ok, status, verified = await client.write_macro_variable(100, 5.0)
+    assert ok is False
+    assert status == "30"
+    assert verified is None
+    assert writer.written == []
+
+
+@pytest.mark.asyncio
+async def test_write_macro_variable_success():
+    client, writer = _connected(make_brother_response("WRTMCNM", status="00"))
+    ok, status, verified = await client.write_macro_variable(920, 5.0, verify=False)
+    assert ok is True
+    assert status == "00"
+    assert verified is None
+    assert b"WRTMCNM" in writer.written[0]
+    assert b"5.0000" in writer.written[0]
+
+
+@pytest.mark.asyncio
+async def test_write_macro_variable_verify_success(monkeypatch):
+    client, writer = _connected(make_brother_response("WRTMCNM", status="00"))
+    monkeypatch.setattr(client, "get_macro_variable", AsyncMock(return_value=5.0))
+    ok, status, verified = await client.write_macro_variable(920, 5.0, verify=True)
+    assert ok is True
+    assert status == "00"
+    assert verified == pytest.approx(5.0)
+    assert b"WRTMCNM" in writer.written[0]
 
 
 @pytest.mark.asyncio

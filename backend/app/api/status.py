@@ -5,7 +5,7 @@ Routes are split across focused sub-modules:
   _status_tools.py  — POST refresh, PUT/DELETE ATC writes, life, offset
   _status_files.py  — GET programs/position/download/metadata/view, POST upload
 
-All 20 routes and all public import paths are preserved unchanged.
+All 22 routes and all public import paths are preserved unchanged.
 """
 from fastapi import APIRouter
 import app.api._status_state as _state
