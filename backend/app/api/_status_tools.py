@@ -14,7 +14,7 @@ Routes:
     PUT  /{machine_id}/tools/measurement-tool         — set macro #920 (measurement tool)
 """
 from datetime import datetime
-import asyncio
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
 from sqlalchemy.orm import Session
 from app.db.base import get_db
@@ -32,6 +32,69 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MEASUREMENT_TOOL_MACRO = 920
+
+_MACRO_WRITE_RETRY_CODES = ("32", "36", "37", "63", "verify_failed", "verify_mismatch")
+
+
+async def _run_macro_write(
+    db_machine: Machine,
+    machine_id: int,
+    macro_number: int,
+    value: float,
+    operation_type: str,
+    operation_details: dict,
+    failure_message: str,
+) -> tuple[bool, Optional[str], Optional[float], dict]:
+    from app.clients.telnet_client import CNCTelnetClient
+    from app.services.audit_logger import AuditLogger
+    from app.services.macro_write_service import execute_macro_write
+
+    outcome = await execute_macro_write(
+        db_machine=db_machine,
+        machine_id=machine_id,
+        macro_number=macro_number,
+        value=value,
+    )
+
+    if outcome.error_message and not outcome.success and outcome.status_code is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail=outcome.error_message,
+        )
+
+    status_data = outcome.status_data
+    success = outcome.success
+    status_code = outcome.status_code
+    verified_value = outcome.verified_value
+
+    audit_details = {**operation_details, "verified_value": verified_value}
+
+    status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
+    AuditLogger.log_tool_modification(
+        machine_id=machine_id,
+        operation_type=operation_type,
+        operation_details=audit_details,
+        success=success,
+        error_message=status_desc or outcome.error_message,
+        machine_state=status_data,
+    )
+
+    if not success:
+        error_response = {
+            "error_code": status_code or "unknown",
+            "message": f"{failure_message}: {status_desc}",
+            "can_retry": status_code in _MACRO_WRITE_RETRY_CODES if status_code else False,
+        }
+        if status_data:
+            error_response["machine_state"] = status_data
+        if verified_value is not None:
+            error_response["verified_value"] = verified_value
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=error_response,
+        )
+
+    return success, status_code, verified_value, status_data
 
 
 @router.post("/{machine_id}/status/tools/refresh")
@@ -1057,72 +1120,19 @@ async def set_macro_variable(
             detail=f"Invalid macro number: {macro_number} (must be 500-999)",
         )
 
-    telnet_client = None
     try:
-        from app.services.machine_state_validator import MachineStateValidator
-        from app.clients.telnet_client import CNCTelnetClient, create_fresh_connection
-        from app.services.audit_logger import AuditLogger
-
-        validator = MachineStateValidator()
-        is_safe, error_message, status_data = await validator.validate_safe_for_write(
+        _, _, verified_value, _ = await _run_macro_write(
+            db_machine=db_machine,
             machine_id=machine_id,
-            operation_type="macro_write",
-            db=db,
-        )
-
-        if not is_safe:
-            raise HTTPException(
-                status_code=http_status.HTTP_409_CONFLICT,
-                detail=error_message or "Machine is not in a safe state for this operation",
-            )
-
-        # Brief pause after validation disconnect so the control finishes the prior session
-        # before the write connection opens (reduces CM7522 from overlapping telnet sessions).
-        await asyncio.sleep(0.25)
-
-        telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
-            timeout=10,
-        )
-
-        success, status_code, verified_value = await telnet_client.write_macro_variable(
             macro_number=macro_number,
             value=value,
-            verbose=True,
-            verify=True,
-        )
-
-        status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
-        AuditLogger.log_tool_modification(
-            machine_id=machine_id,
             operation_type="macro_write",
             operation_details={
                 "macro_number": macro_number,
                 "new_value": value,
-                "verified_value": verified_value,
             },
-            success=success,
-            error_message=status_desc,
-            machine_state=status_data,
+            failure_message=f"Failed to write macro #{macro_number}",
         )
-
-        if not success:
-            error_response = {
-                "error_code": status_code or "unknown",
-                "message": f"Failed to write macro #{macro_number}: {status_desc}",
-                "can_retry": status_code in ("32", "36", "37", "63", "verify_failed", "verify_mismatch")
-                if status_code
-                else False,
-            }
-            if status_data:
-                error_response["machine_state"] = status_data
-            if verified_value is not None:
-                error_response["verified_value"] = verified_value
-            raise HTTPException(
-                status_code=http_status.HTTP_400_BAD_REQUEST,
-                detail=error_response,
-            )
 
         return {
             "success": True,
@@ -1140,9 +1150,6 @@ async def set_macro_variable(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
-    finally:
-        if telnet_client:
-            await telnet_client.disconnect()
 
 
 @router.put("/{machine_id}/tools/measurement-tool")
@@ -1167,70 +1174,19 @@ async def set_measurement_tool(
             detail=f"Machine with id {machine_id} not found",
         )
 
-    telnet_client = None
     try:
-        from app.services.machine_state_validator import MachineStateValidator
-        from app.clients.telnet_client import CNCTelnetClient, create_fresh_connection
-        from app.services.audit_logger import AuditLogger
-
-        validator = MachineStateValidator()
-        is_safe, error_message, status_data = await validator.validate_safe_for_write(
+        _, _, verified_value, _ = await _run_macro_write(
+            db_machine=db_machine,
             machine_id=machine_id,
-            operation_type="macro_write",
-            db=db,
-        )
-
-        if not is_safe:
-            raise HTTPException(
-                status_code=http_status.HTTP_409_CONFLICT,
-                detail=error_message or "Machine is not in a safe state for this operation",
-            )
-
-        await asyncio.sleep(0.25)
-
-        telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
-            timeout=10,
-        )
-
-        success, status_code, verified_value = await telnet_client.write_macro_variable(
             macro_number=MEASUREMENT_TOOL_MACRO,
             value=float(tool_number),
-            verbose=True,
-            verify=True,
-        )
-
-        status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
-        AuditLogger.log_tool_modification(
-            machine_id=machine_id,
             operation_type="measurement_tool",
             operation_details={
                 "macro_number": MEASUREMENT_TOOL_MACRO,
                 "tool_number": tool_number,
-                "verified_value": verified_value,
             },
-            success=success,
-            error_message=status_desc,
-            machine_state=status_data,
+            failure_message="Failed to set measurement tool",
         )
-
-        if not success:
-            error_response = {
-                "error_code": status_code or "unknown",
-                "message": f"Failed to set measurement tool: {status_desc}",
-                "can_retry": status_code in ("32", "36", "37", "63", "verify_failed", "verify_mismatch")
-                if status_code
-                else False,
-            }
-            if status_data:
-                error_response["machine_state"] = status_data
-            if verified_value is not None:
-                error_response["verified_value"] = verified_value
-            raise HTTPException(
-                status_code=http_status.HTTP_400_BAD_REQUEST,
-                detail=error_response,
-            )
 
         return {
             "success": True,
@@ -1248,6 +1204,3 @@ async def set_measurement_tool(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
-    finally:
-        if telnet_client:
-            await telnet_client.disconnect()
