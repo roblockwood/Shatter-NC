@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from app.api import _status_tools as tools
 import app.api._status_state as _state
+from app.services.macro_write_service import MacroWriteOutcome
 
 
 def _db(machine):
@@ -119,49 +120,37 @@ async def test_set_macro_variable_invalid_number():
 
 @pytest.mark.asyncio
 async def test_set_macro_variable_success(monkeypatch):
-    validator = MagicMock()
-    validator.validate_safe_for_write = AsyncMock(return_value=(True, None, {"status": "standby"}))
-    monkeypatch.setattr(
-        "app.services.machine_state_validator.MachineStateValidator",
-        lambda: validator,
+    outcome = MacroWriteOutcome(
+        success=True,
+        status_code="00",
+        verified_value=5.0,
+        status_data={"status": "standby"},
     )
-    telnet = MagicMock()
-    telnet.write_macro_variable = AsyncMock(return_value=(True, "00", 5.0))
-    telnet.disconnect = AsyncMock()
     monkeypatch.setattr(
-        "app.clients.telnet_client.create_fresh_connection",
-        AsyncMock(return_value=telnet),
+        "app.services.macro_write_service.execute_macro_write",
+        AsyncMock(return_value=outcome),
     )
     monkeypatch.setattr("app.services.audit_logger.AuditLogger.log_tool_modification", MagicMock())
 
     result = await tools.set_macro_variable(1, 920, value=5.0, db=_db(_machine()))
     assert result["success"] is True
     assert result["macro_number"] == 920
-    telnet.write_macro_variable.assert_awaited_once_with(
-        macro_number=920, value=5.0, verbose=True, verify=True
-    )
 
 
 @pytest.mark.asyncio
 async def test_set_measurement_tool_success(monkeypatch):
-    validator = MagicMock()
-    validator.validate_safe_for_write = AsyncMock(return_value=(True, None, {"status": "standby"}))
-    monkeypatch.setattr(
-        "app.services.machine_state_validator.MachineStateValidator",
-        lambda: validator,
+    outcome = MacroWriteOutcome(
+        success=True,
+        status_code="00",
+        verified_value=12.0,
+        status_data={"status": "standby"},
     )
-    telnet = MagicMock()
-    telnet.write_macro_variable = AsyncMock(return_value=(True, "00", 12.0))
-    telnet.disconnect = AsyncMock()
     monkeypatch.setattr(
-        "app.clients.telnet_client.create_fresh_connection",
-        AsyncMock(return_value=telnet),
+        "app.services.macro_write_service.execute_macro_write",
+        AsyncMock(return_value=outcome),
     )
     monkeypatch.setattr("app.services.audit_logger.AuditLogger.log_tool_modification", MagicMock())
 
     result = await tools.set_measurement_tool(1, tool_number=12, db=_db(_machine()))
     assert result["success"] is True
     assert result["tool_number"] == 12
-    telnet.write_macro_variable.assert_awaited_once_with(
-        macro_number=920, value=12.0, verbose=True, verify=True
-    )
