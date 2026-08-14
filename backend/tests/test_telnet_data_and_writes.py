@@ -141,8 +141,9 @@ async def test_write_tool_offset_success():
 
 def test_format_macro_set_value_twelve_bytes():
     assert len(format_macro_set_value(42.0)) == 12
-    assert format_macro_set_value(42.0).strip() == "42.0000"
+    assert format_macro_set_value(42.0).strip() == "42"
     assert format_macro_set_value(12.5).strip() == "12.5000"
+    assert format_macro_set_value(5.0) == "           5"
 
 
 @pytest.mark.asyncio
@@ -163,13 +164,15 @@ async def test_write_macro_variable_success():
     assert status == "00"
     assert verified is None
     assert b"WRTMCNM" in writer.written[0]
-    assert b"5.0000" in writer.written[0]
+    assert format_macro_set_value(5.0).encode() in writer.written[0]
 
 
 @pytest.mark.asyncio
 async def test_write_macro_variable_verify_success(monkeypatch):
     client, writer = _connected(make_brother_response("WRTMCNM", status="00"))
-    monkeypatch.setattr(client, "get_macro_variable", AsyncMock(return_value=5.0))
+    monkeypatch.setattr(
+        client, "_fetch_macro_variable_unlocked", AsyncMock(return_value=5.0)
+    )
     ok, status, verified = await client.write_macro_variable(920, 5.0, verify=True)
     assert ok is True
     assert status == "00"
