@@ -14,6 +14,7 @@ Routes:
     PUT  /{machine_id}/tools/measurement-tool         — set macro #920 (measurement tool)
 """
 from datetime import datetime
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
 from sqlalchemy.orm import Session
 from app.db.base import get_db
@@ -1075,6 +1076,10 @@ async def set_macro_variable(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
+        # Brief pause after validation disconnect so the control finishes the prior session
+        # before the write connection opens (reduces CM7522 from overlapping telnet sessions).
+        await asyncio.sleep(0.25)
+
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
@@ -1180,6 +1185,8 @@ async def set_measurement_tool(
                 status_code=http_status.HTTP_409_CONFLICT,
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
+
+        await asyncio.sleep(0.25)
 
         telnet_client = await create_fresh_connection(
             ip_address=db_machine.ip_address,

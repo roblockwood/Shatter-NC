@@ -24,11 +24,19 @@ MACRO_VARIABLE_MAX = 999
 
 
 def format_macro_set_value(value: float) -> str:
-    """Format a macro variable set value for WRTMCNM (12-byte data field)."""
+    """Format a macro variable set value for WRTMCNM (12-byte data field).
+
+    Whole numbers are sent without a decimal point (Brother accepts the integer
+    part). Fractional values use four decimal places. The field is right-justified
+    to 12 characters, matching REDMCNM range response layout.
+    """
+    rounded = round(value)
+    if abs(value - rounded) < 0.0001:
+        return f"{int(rounded)}".rjust(12)[:12]
     text = f"{value:.4f}"
     if len(text) > 12:
         text = f"{value:.3f}"[:12]
-    return text.ljust(12)[:12]
+    return text.rjust(12)[:12]
 
 
 class CNCWriteOpsMixin:
@@ -266,24 +274,24 @@ class CNCWriteOpsMixin:
                     status_desc = self.get_status_description(status or "00")
                     logger.warning(f"Failed to write macro #{macro_number}: {status_desc}")
 
-            if not success:
-                return False, status, None
+                if not success:
+                    return False, status, None
 
-            if not verify:
-                return True, status, None
+                if not verify:
+                    return True, status, None
 
-            read_back = await self.get_macro_variable(macro_number, verbose=verbose)
-            if read_back is None:
-                logger.warning(f"Macro #{macro_number} write succeeded but read-back failed")
-                return False, "verify_failed", None
+                read_back = await self._fetch_macro_variable_unlocked(macro_number, verbose=verbose)
+                if read_back is None:
+                    logger.warning(f"Macro #{macro_number} write succeeded but read-back failed")
+                    return False, "verify_failed", None
 
-            if abs(read_back - value) > 0.0001:
-                logger.warning(
-                    f"Macro #{macro_number} verify mismatch: wrote {value}, read {read_back}"
-                )
-                return False, "verify_mismatch", read_back
+                if abs(read_back - value) > 0.0001:
+                    logger.warning(
+                        f"Macro #{macro_number} verify mismatch: wrote {value}, read {read_back}"
+                    )
+                    return False, "verify_mismatch", read_back
 
-            return True, status, read_back
+                return True, status, read_back
 
         except Exception as e:
             logger.error(f"Error writing macro variable #{macro_number}: {e}")

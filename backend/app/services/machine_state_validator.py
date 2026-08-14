@@ -66,8 +66,6 @@ class MachineStateValidator:
         
         telnet_client = None
         try:
-            # Get current machine status (includes PRD3, alarms)
-            # We need to extend this to also fetch MEM data for mode and operation_status
             from app.clients.telnet_client import create_fresh_connection
             from app.parsers.mem_parser_v2 import parse_mem_v2
 
@@ -170,7 +168,7 @@ class MachineStateValidator:
             # All checks passed
             status_data["alarms"] = alarms
             return True, None, status_data
-            
+
         except Exception as e:
             logger.error(f"Error validating machine state for machine {machine_id}: {e}")
             return False, f"Error checking machine state: {str(e)}", None
