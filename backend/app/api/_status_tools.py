@@ -3,7 +3,8 @@
 Routes:
     POST /{machine_id}/status/tools/refresh           — trigger polling refresh
     PUT  /{machine_id}/tools/atc/pot/{pot}/color      — single color change
-    PUT  /{machine_id}/tools/atc/colors/batch         — batch color change
+    PUT  /{machine_id}/tools/changes/batch            — unified batch tool writes
+    PUT  /{machine_id}/tools/atc/colors/batch         — batch color change (legacy)
     PUT  /{machine_id}/tools/atc/pot/{pot}/tool       — assign tool to pot
     PUT  /{machine_id}/tools/atc/pot/{pot}/type       — change tool type
     DELETE /{machine_id}/tools/atc/pot/{pot}          — remove tool from pot
@@ -22,6 +23,8 @@ from app.models.machine import Machine
 from app.api._status_state import (
     BatchColorChangeRequest,
     BatchColorChangeResponse,
+    BatchToolChangesRequest,
+    BatchToolChangesResponse,
     ColorChangeResult,
 )
 import app.api._status_state as _state
@@ -270,6 +273,58 @@ async def change_tool_color(
         )
 
 
+@router.put("/{machine_id}/tools/changes/batch", response_model=BatchToolChangesResponse)
+async def batch_apply_tool_changes(
+    machine_id: int,
+    request: BatchToolChangesRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Apply multiple tooling writes in one request.
+
+    Validates machine state once (strictest rule among pending ops), uses a single
+    telnet session, and processes changes in safe order: delete → assign/spindle →
+    type/color → offset/life.
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    if not request.changes:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="No changes provided",
+        )
+
+    try:
+        from app.services.tool_write_service import apply_tool_changes_batch_with_refresh
+
+        return await apply_tool_changes_batch_with_refresh(
+            db_machine, machine_id, request.changes, db
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except PermissionError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in batch tool changes for machine {machine_id}: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply tool changes: {str(e)}",
+        )
+
+
 @router.put("/{machine_id}/tools/atc/colors/batch", response_model=BatchColorChangeResponse)
 async def batch_change_tool_colors(
     machine_id: int,
@@ -311,110 +366,25 @@ async def batch_change_tool_colors(
                 detail=f"Invalid color value: {change.color} (must be 0-7)",
             )
 
-    telnet_client = None
     try:
-        from app.services.machine_state_validator import MachineStateValidator
-        validator = MachineStateValidator()
-        is_safe, error_message, status_data = await validator.validate_safe_for_write(
-            machine_id=machine_id,
-            operation_type="tool_color",
-            db=db
+        from app.services.tool_write_service import apply_color_changes_batch
+
+        results = await apply_color_changes_batch(
+            db_machine, machine_id, request.changes, db
         )
-
-        if not is_safe:
-            raise HTTPException(
-                status_code=http_status.HTTP_409_CONFLICT,
-                detail=error_message or "Machine is not in a safe state for this operation",
-            )
-
-        from app.clients.telnet_client import CNCTelnetClient, create_fresh_connection
-        from app.services.audit_logger import AuditLogger
-
-        telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
-            timeout=10
-        )
-
-        color_names = {0: "None", 1: "Blue", 2: "Red", 3: "Purple", 4: "Green", 5: "Light Blue", 6: "Yellow", 7: "White"}
-        results = []
-        successful = 0
-        failed = 0
-
-        for change in request.changes:
-            try:
-                success, status_code = await telnet_client.change_atc_tool(
-                    operation_type='C',
-                    magazine_pos=change.pot_number,
-                    tool_num=change.tool_number,
-                    new_value=change.color,
-                    verbose=False
-                )
-
-                status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
-                AuditLogger.log_tool_modification(
-                    machine_id=machine_id,
-                    operation_type="tool_color",
-                    operation_details={
-                        "pot_number": change.pot_number,
-                        "tool_number": change.tool_number,
-                        "new_color": change.color,
-                        "new_color_name": color_names.get(change.color, "Unknown"),
-                    },
-                    success=success,
-                    error_message=status_desc,
-                    machine_state=None
-                )
-
-                if success:
-                    results.append(ColorChangeResult(
-                        pot_number=change.pot_number,
-                        tool_number=change.tool_number,
-                        color=change.color,
-                        success=True,
-                        message=f"Tool color changed to {color_names.get(change.color, 'Unknown')}"
-                    ))
-                    successful += 1
-                else:
-                    error_msg = status_desc or f"Failed with status code {status_code}"
-                    results.append(ColorChangeResult(
-                        pot_number=change.pot_number,
-                        tool_number=change.tool_number,
-                        color=change.color,
-                        success=False,
-                        error_code=status_code or "unknown",
-                        message=error_msg
-                    ))
-                    failed += 1
-                    logger.error(f"Failed to change tool color for pot {change.pot_number}, tool {change.tool_number}, color {change.color}: {error_msg}")
-
-            except Exception as e:
-                error_msg = str(e)
-                results.append(ColorChangeResult(
-                    pot_number=change.pot_number,
-                    tool_number=change.tool_number,
-                    color=change.color,
-                    success=False,
-                    error_code="exception",
-                    message=error_msg
-                ))
-                failed += 1
-                logger.error(f"Exception changing tool color for pot {change.pot_number}, tool {change.tool_number}: {e}")
-
-        if successful > 0 and _state.polling_service:
-            try:
-                await _state.polling_service.refresh_tool_data(machine_id)
-                logger.debug(f"Refreshed tool data for machine {machine_id} after batch color changes ({successful} successful)")
-            except Exception as e:
-                logger.warning(f"Failed to refresh tool data after batch color changes for machine {machine_id}: {e}")
-
+        successful = sum(1 for r in results if r.success)
+        failed = len(results) - successful
         return BatchColorChangeResponse(
             results=results,
             total=len(request.changes),
             successful=successful,
-            failed=failed
+            failed=failed,
         )
-
+    except PermissionError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -423,9 +393,6 @@ async def batch_change_tool_colors(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to batch change tool colors: {str(e)}",
         )
-    finally:
-        if telnet_client:
-            await telnet_client.disconnect()
 
 
 @router.put("/{machine_id}/tools/atc/pot/{pot_number}/tool")

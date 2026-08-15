@@ -114,6 +114,49 @@ async def test_change_atc_validation_and_success():
 
 
 @pytest.mark.asyncio
+async def test_change_atc_tool_magazine_assign_argument_format():
+    """CHGMAGM uses pot(2)+tool(2) for T1-99, not pot(2)+tool(3)."""
+    client = _connected(make_brother_response("CHGMAGM", status="00"))
+    client._send_command = AsyncMock(return_value=(True, "00", None))
+
+    ok, status = await client.change_atc_tool("M", 4, new_value=7)
+    assert ok is True
+    args = client._send_command.await_args.args[1]
+    assert args.startswith("0407")
+
+    client._send_command.reset_mock()
+    ok, status = await client.change_atc_tool("M", 2, new_value=101)
+    assert ok is True
+    args = client._send_command.await_args.args[1]
+    assert args.startswith("02101")
+
+
+@pytest.mark.asyncio
+async def test_assign_tool_to_pot_clears_cap_before_assign():
+    client = _connected(make_brother_response("CHGMAGM", status="00"))
+    client._read_pot_tool_number = AsyncMock(return_value=255)
+    client.remove_tool_from_pot = AsyncMock(return_value=(True, "00"))
+    client._send_command = AsyncMock(return_value=(True, "00", None))
+
+    ok, status = await client.assign_tool_to_pot(6, 7, clear_cap=True)
+    assert ok is True
+    client.remove_tool_from_pot.assert_awaited_once_with(6, verbose=False)
+    args = client._send_command.await_args.args[1]
+    assert args.startswith("0607")
+
+
+@pytest.mark.asyncio
+async def test_clear_cap_from_pot_skips_delete_when_not_cap():
+    client = _connected()
+    client._read_pot_tool_number = AsyncMock(return_value=12)
+    client.remove_tool_from_pot = AsyncMock()
+
+    ok, status = await client.clear_cap_from_pot(3)
+    assert ok is True and status == "00"
+    client.remove_tool_from_pot.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_assign_tool_to_pot_rejects_spindle():
     client = _connected()
     ok, status = await client.assign_tool_to_pot(0, 5)

@@ -117,6 +117,11 @@ def test_batch_change_tool_colors_route_registered():
     assert (frozenset({"PUT"}), "/{machine_id}/tools/atc/colors/batch") in sigs
 
 
+def test_batch_apply_tool_changes_route_registered():
+    sigs = _route_signatures(status_module.router)
+    assert (frozenset({"PUT"}), "/{machine_id}/tools/changes/batch") in sigs
+
+
 def test_change_tool_assignment_route_registered():
     sigs = _route_signatures(status_module.router)
     assert (frozenset({"PUT"}), "/{machine_id}/tools/atc/pot/{pot_number}/tool") in sigs
@@ -193,7 +198,7 @@ def test_upload_file_route_registered():
 def test_total_route_count():
     """Exactly 20 routes must be registered. Catches silent deletions during split."""
     sigs = _route_signatures(status_module.router)
-    assert len(sigs) == 22, f"Expected 22 routes, got {len(sigs)}: {sigs}"
+    assert len(sigs) == 23, f"Expected 23 routes, got {len(sigs)}: {sigs}"
 
 
 # ---------------------------------------------------------------------------

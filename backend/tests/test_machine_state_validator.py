@@ -50,10 +50,10 @@ async def test_blocks_when_prd3_operating():
 
 
 @pytest.mark.asyncio
-async def test_blocks_mem_mode_2():
+async def test_blocks_mem_mode_2_when_operation_active():
     machine = SimpleNamespace(id=1, name="M1", ip_address="10.0.0.1")
     client = _telnet_mock(
-        mem="A01,'F',2045,0,0,0,2,0",  # mode at index 5
+        mem="A01,'F',2045,1,0,0,2,0",  # operation_status=1, mode=2
         prd3="A01,1,2,1\nC01,20240101120000,2,0,2045,'F',0",
     )
     with patch("app.clients.telnet_client.create_fresh_connection", AsyncMock(return_value=client)):
@@ -62,6 +62,21 @@ async def test_blocks_mem_mode_2():
         )
     assert ok is False
     assert "running" in msg.lower()
+
+
+@pytest.mark.asyncio
+async def test_mem_mode_2_idle_allows_tool_life():
+    machine = SimpleNamespace(id=1, name="M1", ip_address="10.0.0.1")
+    client = _telnet_mock(
+        mem="A01,'F',2045,0,0,0,2,0",  # operation_status=0, mode=2 (memory selected, not running)
+        prd3="A01,1,2,1\nC01,20240101120000,2,0,2045,'F',0",
+    )
+    with patch("app.clients.telnet_client.create_fresh_connection", AsyncMock(return_value=client)):
+        ok, msg, _ = await MachineStateValidator().validate_safe_for_write(
+            1, "tool_life", _db_with_machine(machine)
+        )
+    assert ok is True
+    assert msg is None
 
 
 @pytest.mark.asyncio
