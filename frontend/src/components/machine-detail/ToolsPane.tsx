@@ -6,6 +6,7 @@ import type { UnitType } from '../../utils/formatDimension';
 import './ToolsPane.css';
 import { API_BASE_URL } from '../../config/api';
 import { ColorSelect } from './ColorSelect';
+import { Select } from '../ui/Select';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import { ToolsOptimizerTab } from './ToolsOptimizerTab';
 
@@ -13,6 +14,7 @@ import { ToolsOptimizerTab } from './ToolsOptimizerTab';
 type ToolModificationOperationType = 
   | 'color' 
   | 'tool_number' 
+  | 'pot_number'
   | 'tool_type' 
   | 'delete' 
   | 'life' 
@@ -56,6 +58,12 @@ interface ToolsPaneProps {
 
 type SortColumn = 'pot_number' | 'tool_number' | 'tool_name' | 'diameter' | 'length' | 'group' | 'life' | 'tool_type' | 'color';
 type SortDirection = 'asc' | 'desc';
+
+const TOOL_TYPE_OPTIONS = [
+  { value: '1', label: 'STD' },
+  { value: '2', label: 'LARGE' },
+  { value: '3', label: 'MED' },
+];
 
 interface PendingChange {
   tool: Tool;
@@ -104,6 +112,46 @@ function isSpindlePot(pot: string | number | undefined): boolean {
   return typeof pot === 'string' && pot.toUpperCase() === 'SPINDLE';
 }
 
+function formatPotDisplay(pot: string | number | undefined): string {
+  if (pot === undefined || pot === null || pot === '') return '──';
+  return String(pot);
+}
+
+interface NumericEditInputProps {
+  className?: string;
+  value: string | number | undefined;
+  onValueChange: (raw: string) => void;
+  onClick?: (e: React.MouseEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  decimal?: boolean;
+}
+
+/** Free-form numeric entry without browser spinner arrows. */
+function NumericEditInput({
+  className,
+  value,
+  onValueChange,
+  onClick,
+  placeholder,
+  decimal = false,
+}: NumericEditInputProps) {
+  const display =
+    value === undefined || value === null || value === ''
+      ? ''
+      : String(value);
+  return (
+    <input
+      type="text"
+      inputMode={decimal ? 'decimal' : 'numeric'}
+      className={className}
+      value={display}
+      placeholder={placeholder}
+      onClick={onClick}
+      onChange={(e) => onValueChange(e.target.value)}
+    />
+  );
+}
+
 function makePendingKey(
   tool: Tool,
   field: string,
@@ -116,6 +164,8 @@ function makePendingKey(
       return `${pot}-${tn}-color`;
     case 'tool_number':
       return `${pot}-assignment`;
+    case 'pot_number':
+      return `${tn}-pot-assignment`;
     case 'tool_type':
       return `${pot}-type`;
     case 'delete':
@@ -137,6 +187,11 @@ function applyFieldToTool(tool: Tool, field: string, value: string | number): To
       return { ...tool, color: Number(value) };
     case 'tool_number':
       return { ...tool, tool_number: Number(value) };
+    case 'pot_number':
+      if (value === '' || value === undefined || value === null) {
+        return { ...tool, pot_number: undefined };
+      }
+      return { ...tool, pot_number: Number(value) };
     case 'tool_type':
       return { ...tool, tool_type: Number(value) };
     case 'length':
@@ -197,6 +252,16 @@ function pendingToBatchItem(key: string, change: PendingChange): ToolChangeBatch
         pot_number: pot,
         tool_number: Number(change.newValue),
       };
+    case 'pot_number': {
+      const assignPot = Number(change.newValue);
+      if (!Number.isFinite(assignPot) || assignPot < 1) return null;
+      return {
+        operation_type: 'assignment',
+        client_id: key,
+        pot_number: assignPot,
+        tool_number: change.tool.tool_number,
+      };
+    }
     case 'tool_type':
       if (pot === null || pot < 1) return null;
       return {
@@ -245,6 +310,8 @@ function getToolFieldValue(tool: Tool, field: string): string | number | undefin
       return tool.color;
     case 'tool_number':
       return tool.tool_number;
+    case 'pot_number':
+      return tool.pot_number;
     case 'tool_type':
       return tool.tool_type;
     case 'length':
@@ -747,6 +814,24 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     );
   };
 
+  const handlePotNumberChange = (tool: Tool, raw: string) => {
+    if (toolSource !== 'table' || !machineId || !tool.tool_number) return;
+    const trimmed = raw.trim();
+    if (trimmed === '') return;
+    const parsed = parseInt(trimmed, 10);
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed > numPocketsProp) return;
+
+    const oldPot = tool.pot_number ?? '';
+    stagePendingChange(
+      tool,
+      'pot_number',
+      oldPot,
+      parsed,
+      'pot_number',
+      'table',
+    );
+  };
+
   const handleToolTypeChange = (tool: Tool, raw: string) => {
     if (toolSource !== 'atc' || !machineId || !tool.pot_number || isSpindlePot(tool.pot_number)) {
       return;
@@ -922,23 +1007,34 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           if (!change) return;
 
           const confirmed = getConfirmedValueFromResult(result);
-          if (!confirmed) return;
+          const applyConfirmed = (t: Tool): Tool => {
+            if (change.operationType === 'pot_number') {
+              const potVal = result.pot_number ?? Number(change.newValue);
+              return applyFieldToTool(t, 'pot_number', potVal);
+            }
+            if (confirmed) {
+              return applyFieldToTool(t, confirmed.field, confirmed.value);
+            }
+            return t;
+          };
 
           if (change.cacheSlice === 'atc') {
             atc = atc.map(t => {
               if (!toolsMatchForSlice(change.tool, t, 'atc')) return t;
-              return applyFieldToTool(t, confirmed.field, confirmed.value);
+              return applyConfirmed(t);
             });
             const trackKey = `${change.tool.pot_number}-${change.tool.tool_number}`;
-            recentlyPushedRef.current.set(trackKey, {
-              field: confirmed.field,
-              value: confirmed.value,
-              timestamp: Date.now(),
-            });
+            if (confirmed) {
+              recentlyPushedRef.current.set(trackKey, {
+                field: confirmed.field,
+                value: confirmed.value,
+                timestamp: Date.now(),
+              });
+            }
           } else {
             table = table.map(t => {
               if (t.tool_number !== change.tool.tool_number) return t;
-              return applyFieldToTool(t, confirmed.field, confirmed.value);
+              return applyConfirmed(t);
             });
           }
         });
@@ -1445,7 +1541,17 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     title={hasMatch ? `Click to view tool ${matched.tool_number} in Tool Management` : undefined}
                   >
                     <td className="tools-col-pot">
-                      {tool.pot_number ?? '──'}
+                      {isTableEditable ? (
+                        <NumericEditInput
+                          className="tools-edit-input tools-edit-input--pot-number"
+                          value={tool.pot_number}
+                          placeholder="—"
+                          onClick={(e) => e.stopPropagation()}
+                          onValueChange={(raw) => handlePotNumberChange(tool, raw)}
+                        />
+                      ) : (
+                        formatPotDisplay(tool.pot_number)
+                      )}
                       {isAtcEditable && !isSpindlePot(tool.pot_number) && tool.tool_number ? (
                         <button
                           type="button"
@@ -1464,14 +1570,12 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       {isCurrent && <span className="current-indicator">►</span>}
                       {hasMatch && <span className="matched-indicator" title="Tool exists in Tool Management">●</span>}
                       {isAtcEditable ? (
-                        <input
-                          type="number"
+                        <NumericEditInput
                           className="tools-edit-input tools-edit-input--tool-number"
-                          min={isSpindlePot(tool.pot_number) ? 0 : 1}
-                          max={999}
                           value={tool.tool_number || ''}
+                          placeholder="—"
                           onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => handleToolNumberChange(tool, e.target.value)}
+                          onValueChange={(raw) => handleToolNumberChange(tool, raw)}
                         />
                       ) : (
                         <>T{String(tool.tool_number).padStart(2, '0')}</>
@@ -1480,13 +1584,12 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     <td className="tools-col-name">{getToolDisplayName(tool) || '──'}</td>
                     <td className="tools-col-diameter">
                       {isTableEditable ? (
-                        <input
-                          type="number"
-                          step="0.0001"
+                        <NumericEditInput
                           className="tools-edit-input"
                           value={tool.diameter ?? ''}
+                          decimal
                           onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => handleOffsetChange(tool, 'D', e.target.value)}
+                          onValueChange={(raw) => handleOffsetChange(tool, 'D', raw)}
                         />
                       ) : (
                         formatDimension(tool.diameter, units)
@@ -1494,13 +1597,12 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     </td>
                     <td className="tools-col-length">
                       {isTableEditable ? (
-                        <input
-                          type="number"
-                          step="0.0001"
+                        <NumericEditInput
                           className="tools-edit-input"
                           value={tool.length ?? ''}
+                          decimal
                           onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => handleOffsetChange(tool, 'H', e.target.value)}
+                          onValueChange={(raw) => handleOffsetChange(tool, 'H', raw)}
                         />
                       ) : (
                         formatDimension(tool.length, units)
@@ -1509,30 +1611,27 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     <td className="tools-col-group">{tool.group ?? '──'}</td>
                     <td className="tools-col-life">
                       {isTableEditable ? (
-                        <input
-                          type="number"
-                          min={0}
+                        <NumericEditInput
                           className="tools-edit-input tools-edit-input--life"
                           value={tool.life ?? ''}
                           onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => handleLifeChange(tool, e.target.value)}
+                          onValueChange={(raw) => handleLifeChange(tool, raw)}
                         />
                       ) : (
                         formatLife(tool.life)
                       )}
                     </td>
-                    <td className="tools-col-type">
+                    <td
+                      className="tools-col-type"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {isAtcEditable && !isSpindlePot(tool.pot_number) ? (
-                        <select
-                          className="tools-edit-select"
-                          value={tool.tool_type ?? 1}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => handleToolTypeChange(tool, e.target.value)}
-                        >
-                          <option value={1}>STD</option>
-                          <option value={2}>LARGE</option>
-                          <option value={3}>MED</option>
-                        </select>
+                        <Select
+                          className="tools-type-select"
+                          value={String(tool.tool_type ?? 1)}
+                          onChange={(raw) => handleToolTypeChange(tool, raw)}
+                          options={TOOL_TYPE_OPTIONS}
+                        />
                       ) : (
                         formatToolType(tool.tool_type)
                       )}

@@ -536,8 +536,7 @@
   background: rgba(0, 204, 255, 0.06) !important;
 }
 
-.tools-edit-input,
-.tools-edit-select {
+.tools-edit-input {
   width: 100%;
   max-width: 5.5rem;
   background: var(--color-bg-primary);
@@ -548,9 +547,99 @@
   padding: 1px 4px;
 }
 
+.tools-type-select {
+  width: 100%;
+  max-width: none;
+}
+
+.tools-type-select .custom-select {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  padding: 2px 18px 2px 6px;
+  min-height: 20px;
+  text-transform: uppercase;
+  box-shadow: none;
+}
+
+.tools-type-select .custom-select-value {
+  font-size: var(--font-xs);
+  text-align: left;
+}
+
+.tools-type-select .custom-select-arrow {
+  right: 4px;
+  font-size: 8px;
+  color: var(--color-text-primary);
+}
+
+.tools-type-select .custom-select:hover:not(.disabled) {
+  border-color: var(--color-text-primary);
+  background-color: var(--color-bg-elevated);
+  box-shadow: 0 0 5px rgba(0, 255, 0, 0.2);
+}
+
+.tools-type-select .custom-select:focus,
+.tools-type-select .custom-select.open {
+  outline: none;
+  border-color: var(--color-text-primary);
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
+}
+
+.tools-type-select .custom-select-dropdown {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-text-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 0, 0.3);
+  border-radius: 0;
+  z-index: 1100;
+}
+
+.tools-type-select .custom-select-option {
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tools-type-select .custom-select-option:last-child {
+  border-bottom: none;
+}
+
+.tools-type-select .custom-select-option:hover {
+  background: rgba(0, 255, 0, 0.15);
+}
+
+.tools-type-select .custom-select-option.selected {
+  background: rgba(0, 255, 0, 0.1);
+  border-left: 2px solid var(--color-text-primary);
+}
+
+.tools-type-select .custom-select-option.selected .custom-select-option-label {
+  font-weight: 600;
+}
+
+.tools-pane--hover-preview .tools-type-select .custom-select {
+  min-height: 18px;
+  padding: 1px 16px 1px 4px;
+  font-size: 9px;
+}
+
+.tools-pane--hover-preview .tools-type-select .custom-select-value {
+  font-size: 9px;
+}
+
 .tools-edit-input--tool-number {
   max-width: 3.5rem;
   text-align: right;
+}
+
+.tools-edit-input--pot-number {
+  max-width: 3rem;
+  text-align: center;
 }
 
 .tools-edit-input--life {
@@ -558,8 +647,7 @@
   text-align: center;
 }
 
-.tools-edit-input:focus,
-.tools-edit-select:focus {
+.tools-edit-input:focus {
   outline: none;
   border-color: var(--color-info);
   box-shadow: 0 0 4px rgba(0, 204, 255, 0.35);
