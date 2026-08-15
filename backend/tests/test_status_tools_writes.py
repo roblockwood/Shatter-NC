@@ -176,3 +176,104 @@ async def test_batch_change_colors_empty():
             1, BatchColorChangeRequest(changes=[]), db=_db(_machine())
         )
     assert ei.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_batch_apply_tool_changes_mixed_success(monkeypatch):
+    from app.api._status_state import BatchToolChangesRequest, ToolChangeItem
+
+    _patch_safe(monkeypatch)
+    telnet = _patch_telnet(monkeypatch)
+    call_order = []
+
+    async def track_delete(*args, **kwargs):
+        call_order.append("delete")
+        return True, "00"
+
+    async def track_assign(*args, **kwargs):
+        call_order.append("assignment")
+        return True, "00"
+
+    async def track_color(*args, **kwargs):
+        call_order.append("color")
+        return True, "00"
+
+    async def track_offset(*args, **kwargs):
+        call_order.append("offset")
+        return True, "00"
+
+    telnet.remove_tool_from_pot = AsyncMock(side_effect=track_delete)
+    telnet.assign_tool_to_pot = AsyncMock(side_effect=track_assign)
+    telnet.change_atc_tool = AsyncMock(side_effect=track_color)
+    telnet.write_tool_offset = AsyncMock(side_effect=track_offset)
+
+    _state.polling_service = MagicMock()
+    _state.polling_service.refresh_tool_data = AsyncMock(return_value={})
+    req = BatchToolChangesRequest(
+        changes=[
+            ToolChangeItem(operation_type="color", pot_number=2, tool_number=6, color=3),
+            ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=10),
+            ToolChangeItem(operation_type="delete", pot_number=1, tool_number=5),
+            ToolChangeItem(operation_type="offset", tool_number=5, offset_type="H", value=1.5),
+        ]
+    )
+    try:
+        result = await tools.batch_apply_tool_changes(1, req, db=_db(_machine()))
+        assert result.successful == 4
+        assert result.failed == 0
+        assert call_order == ["delete", "assignment", "color", "offset"]
+    finally:
+        _state.polling_service = None
+
+
+@pytest.mark.asyncio
+async def test_batch_apply_tool_changes_unsafe_strict_op(monkeypatch):
+    from app.api._status_state import BatchToolChangesRequest, ToolChangeItem
+
+    _patch_safe(monkeypatch, safe=False)
+    req = BatchToolChangesRequest(
+        changes=[
+            ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=10),
+        ]
+    )
+    with pytest.raises(HTTPException) as ei:
+        await tools.batch_apply_tool_changes(1, req, db=_db(_machine()))
+    assert ei.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_batch_apply_tool_changes_partial_failure(monkeypatch):
+    from app.api._status_state import BatchToolChangesRequest, ToolChangeItem
+
+    _patch_safe(monkeypatch)
+    telnet = _patch_telnet(monkeypatch)
+    telnet.change_atc_tool = AsyncMock(side_effect=[(True, "00"), (False, "01")])
+
+    req = BatchToolChangesRequest(
+        changes=[
+            ToolChangeItem(operation_type="color", pot_number=1, tool_number=5, color=2),
+            ToolChangeItem(operation_type="color", pot_number=2, tool_number=6, color=3),
+        ]
+    )
+    result = await tools.batch_apply_tool_changes(1, req, db=_db(_machine()))
+    assert result.successful == 1
+    assert result.failed == 1
+    assert len(result.results) == 2
+
+
+def test_tool_write_service_validation_operation_type():
+    from app.api._status_state import ToolChangeItem
+    from app.services.tool_write_service import validation_operation_type
+
+    assert validation_operation_type([
+        ToolChangeItem(operation_type="color", pot_number=1, tool_number=1, color=1),
+    ]) == "tool_color"
+    assert validation_operation_type([
+        ToolChangeItem(operation_type="color", pot_number=1, tool_number=1, color=1),
+        ToolChangeItem(operation_type="offset", tool_number=5, offset_type="H", value=1.0),
+    ]) == "tool_offset"
+    assert validation_operation_type([
+        ToolChangeItem(operation_type="life", tool_number=5, life_value=100),
+        ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=10),
+    ]) == "tool_assignment"
+

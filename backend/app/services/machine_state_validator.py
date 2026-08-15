@@ -274,16 +274,37 @@ class MachineStateValidator:
                 # Mode 2 = Memory operation (actively running program)
                 # Mode 3 = Edit, Mode 4 = MDI manual, Mode 5 = Memory edit (editing modes)
                 if mode is not None:
-                    if mode == 2:  # Memory operation - actively running
-                        return False, "Machine is running a program. Stop the program before making changes.", status_data
-                    elif mode in self.UNSAFE_MODES:  # Edit modes
-                        mode_names = {3: "Edit", 4: "MDI manual", 5: "Memory edit"}
-                        mode_name = mode_names.get(mode, f"Mode {mode}")
-                        # For color changes, edit modes might be OK, but for tool assignment, block
+                    mode_names = {2: "Memory", 3: "Edit", 4: "MDI manual", 5: "Memory edit"}
+                    mode_name = mode_names.get(mode, f"Mode {mode}")
+                    actively_running = operation_status in (1, 2, 3)
+                    lenient_ops = (
+                        "tool_color",
+                        "tool_type",
+                        "tool_life",
+                        "tool_offset",
+                        "macro_write",
+                        "measurement_tool",
+                    )
+                    if mode == 2 and actively_running:
+                        return False, (
+                            "Machine is running a program. Stop the program before making changes."
+                        ), status_data
+                    if mode == 2 and operation_type in lenient_ops:
+                        logger.info(
+                            "MEM mode 2 with operation_status=%s for %s — allowing (control will reject if unsafe)",
+                            operation_status,
+                            operation_type,
+                        )
+                    elif mode in self.UNSAFE_MODES:
                         if operation_type in ("tool_assignment", "tool_delete", "spindle_tool"):
-                            return False, f"Machine is in {mode_name} mode. Exit edit mode before making tool assignments.", status_data
-                        # For color changes, just warn but allow
-                        logger.info(f"Machine in {mode_name} mode for {operation_type} - allowing (machine will reject if unsafe)")
+                            return False, (
+                                f"Machine is in {mode_name} mode. Exit edit mode before making tool assignments."
+                            ), status_data
+                        logger.info(
+                            "Machine in %s mode for %s — allowing (machine will reject if unsafe)",
+                            mode_name,
+                            operation_type,
+                        )
                 
                 # Check operation_status - block if actively operating
                 if operation_status is not None and operation_status in self.UNSAFE_OPERATION_STATUSES:

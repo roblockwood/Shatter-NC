@@ -19,6 +19,10 @@ from app.clients._telnet_state import _get_machine_lock
 
 logger = logging.getLogger(__name__)
 
+# C00 ATCTL cap marker (D00 uses 999). CHGMAGD clears cap → empty (0).
+CAP_TOOL_NUMBER_C00 = 255
+CAP_TOOL_NUMBER_D00 = 999
+
 MACRO_VARIABLE_MIN = 500
 MACRO_VARIABLE_MAX = 999
 
@@ -351,7 +355,12 @@ class CNCWriteOpsMixin:
             if not 1 <= new_value <= 999:
                 logger.error(f"Tool number {new_value} out of valid range (1-999)")
                 return False, "30"
-            arguments = f"{magazine_pos:02d}{new_value:03d}"
+            # C00 CHGMAGM uses pot(2) + tool(2) for T1-99 (e.g. pot 4 T7 → "0407").
+            # Tools 100+ use a 3-digit tool field on D00-class controls (e.g. "02101").
+            if new_value <= 99:
+                arguments = f"{magazine_pos:02d}{new_value:02d}"
+            else:
+                arguments = f"{magazine_pos:02d}{new_value:03d}"
 
         elif operation_type == 'S':
             if not 0 <= new_value <= 999:
@@ -359,7 +368,10 @@ class CNCWriteOpsMixin:
                 return False, "30"
             if magazine_pos != 0:
                 logger.warning(f"Spindle tool change typically uses magazine position 0, got {magazine_pos}")
-            arguments = f"{magazine_pos:02d}{new_value:03d}"
+            if new_value <= 99:
+                arguments = f"{magazine_pos:02d}{new_value:02d}"
+            else:
+                arguments = f"{magazine_pos:02d}{new_value:03d}"
 
         elif operation_type == 'K':
             if not 1 <= new_value <= 3:
@@ -452,11 +464,51 @@ class CNCWriteOpsMixin:
             verbose=verbose
         )
 
+    async def _read_pot_tool_number(
+        self, pot_number: int, verbose: bool = False
+    ) -> Optional[int]:
+        """Read current tool_number for an ATC pocket from ATCTL."""
+        from app.parsers.atctl_parser_v2 import parse_atctl_v2
+
+        control = await self.detect_control_type() or "C00"
+        raw = await self.get_atc_magazine_data(control_version=control, verbose=verbose)
+        if not raw:
+            return None
+        parsed = parse_atctl_v2(raw.encode("utf-8"), control_version=control)
+        for tool in parsed.get("tools", []):
+            pot = tool.get("pot_number")
+            if pot is None or str(pot).upper() == "SPINDLE":
+                continue
+            try:
+                if int(pot) == pot_number:
+                    return tool.get("tool_number")
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    async def clear_cap_from_pot(
+        self,
+        pot_number: int,
+        verbose: bool = False,
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Clear a cap setting (C00: tool 255, D00: 999) from a pocket via CHGMAGD.
+
+        Also clears empty (0) and registered tools; callers should check ATCTL first
+        when they only intend to remove cap.
+        """
+        current = await self._read_pot_tool_number(pot_number, verbose=verbose)
+        cap_values = {CAP_TOOL_NUMBER_C00, CAP_TOOL_NUMBER_D00}
+        if current not in cap_values:
+            return True, "00"
+        return await self.remove_tool_from_pot(pot_number, verbose=verbose)
+
     async def assign_tool_to_pot(
         self,
         pot_number: int,
         tool_number: int,
-        verbose: bool = False
+        verbose: bool = False,
+        clear_cap: bool = True,
     ) -> Tuple[bool, Optional[str]]:
         """
         Simplified wrapper: Assign a tool to an ATC pot.
@@ -465,6 +517,7 @@ class CNCWriteOpsMixin:
             pot_number: Pot number (1-99, not spindle)
             tool_number: Tool number to assign (1-999)
             verbose: If True, log command details
+            clear_cap: If True, CHGMAGD clears cap (255/999) before CHGMAGM assign
 
         Returns:
             Tuple of (success, status_code)
@@ -472,6 +525,11 @@ class CNCWriteOpsMixin:
         if pot_number == 0:
             logger.error("Cannot assign to spindle (pot 0). Use change_spindle_tool() instead.")
             return False, "30"
+
+        if clear_cap:
+            ok, status = await self.clear_cap_from_pot(pot_number, verbose=verbose)
+            if not ok:
+                return ok, status
 
         return await self.change_atc_tool_assignment(
             magazine_pos=pot_number,
@@ -488,7 +546,9 @@ class CNCWriteOpsMixin:
         verbose: bool = False
     ) -> Tuple[bool, Optional[str]]:
         """
-        Simplified wrapper: Remove tool from ATC pot.
+        Simplified wrapper: Remove tool from ATC pot (CHGMAGD).
+
+        Clears registered tools and cap settings (C00 tool 255 / D00 tool 999).
 
         Args:
             pot_number: Pot number (0-99, 0=spindle)

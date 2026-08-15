@@ -66,11 +66,20 @@ Implemented in [`_telnet_write_ops.py`](../backend/app/clients/_telnet_write_ops
 | C | CHGMAGC | Tool color (0–7) |
 | D | CHGMAGD | Remove tool from pot |
 
-**Example — set pot 5 tool 42 to red (color 2):**
+**Argument layout (8-char field, space-padded):**
 
-```
-CHGMAGC 05 42 02
-```
+| Type | Example | Payload | Meaning |
+|------|---------|---------|---------|
+| M | CHGMAGM | `0407` | Pot 4 → tool 7 (C00: 2-digit tool) |
+| M | CHGMAGM | `02101` | Pot 2 → tool 101 (D00: 3-digit tool) |
+| S | CHGMAGS | `0012` | Spindle → tool 12 |
+| C | CHGMAGC | `023` | Pot 2 → color 3 |
+| K | CHGMAGK | `022` | Pot 2 → type 2 (Large) |
+| D | CHGMAGD | `05` | Clear pot 5 |
+
+Pots marked **Cap (255)** in ATCTL are not empty — run **CHGMAGD** first (`remove_tool_from_pot` /
+`clear_cap_from_pot`), then **CHGMAGM** to assign a tool. `assign_tool_to_pot(clear_cap=True)` does
+this automatically.
 
 ### Other writes
 
