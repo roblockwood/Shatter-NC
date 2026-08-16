@@ -3,6 +3,72 @@
   width: 100%;
 }
 
+/* Dense table variant — matches ColorSelect in ToolsPane */
+.custom-select-wrapper--compact .custom-select {
+  font-size: var(--font-xs);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  padding: 2px 18px 2px 6px;
+  min-height: 20px;
+  text-transform: uppercase;
+  box-shadow: none;
+}
+
+.custom-select-wrapper--compact .custom-select-value {
+  font-size: var(--font-xs);
+  text-align: left;
+}
+
+.custom-select-wrapper--compact .custom-select-arrow {
+  right: 4px;
+  font-size: 8px;
+}
+
+.custom-select-wrapper--compact .custom-select:hover:not(.disabled) {
+  border-color: var(--color-text-primary);
+  background-color: var(--color-bg-elevated);
+  box-shadow: 0 0 5px rgba(0, 255, 0, 0.2);
+}
+
+.custom-select-wrapper--compact .custom-select:focus,
+.custom-select-wrapper--compact .custom-select.open {
+  border-color: var(--color-text-primary);
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
+}
+
+.custom-select-wrapper--compact .custom-select-dropdown {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-text-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 0, 0.3);
+  border-radius: 0;
+  z-index: 1100;
+}
+
+.custom-select-wrapper--compact .custom-select-option {
+  padding: 4px 8px;
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.custom-select-wrapper--compact .custom-select-option:last-child {
+  border-bottom: none;
+}
+
+.custom-select-wrapper--compact .custom-select-option:hover {
+  background: rgba(0, 255, 0, 0.15);
+}
+
+.custom-select-wrapper--compact .custom-select-option.selected {
+  background: rgba(0, 255, 0, 0.1);
+  border-left: 2px solid var(--color-text-primary);
+}
+
+.custom-select-wrapper--compact .custom-select-option.selected .custom-select-option-label {
+  font-weight: 600;
+}
+
 .custom-select {
   background: var(--color-bg-primary, #1a1a1a);
   border: 1px solid var(--color-border, #2a2a2a);

@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useBetaMode } from '../../hooks/useBetaMode';
 import { formatDimension } from '../../utils/formatDimension';
 import type { UnitType } from '../../utils/formatDimension';
-import './ToolsPane.css';
 import { API_BASE_URL } from '../../config/api';
 import { ColorSelect } from './ColorSelect';
 import { Select } from '../ui/Select';
+import './ToolsPane.css';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import { ToolsOptimizerTab } from './ToolsOptimizerTab';
 
@@ -126,7 +126,7 @@ interface NumericEditInputProps {
   decimal?: boolean;
 }
 
-/** Free-form numeric entry without browser spinner arrows. */
+/** Free-form numeric entry without browser spinner arrows. Keeps local draft while focused. */
 function NumericEditInput({
   className,
   value,
@@ -135,19 +135,41 @@ function NumericEditInput({
   placeholder,
   decimal = false,
 }: NumericEditInputProps) {
-  const display =
+  const externalDisplay =
     value === undefined || value === null || value === ''
       ? ''
       : String(value);
+  const [draft, setDraft] = useState(externalDisplay);
+  const focusedRef = useRef(false);
+
+  useEffect(() => {
+    if (!focusedRef.current) {
+      setDraft(externalDisplay);
+    }
+  }, [externalDisplay]);
+
   return (
     <input
       type="text"
       inputMode={decimal ? 'decimal' : 'numeric'}
+      autoComplete="off"
       className={className}
-      value={display}
+      value={draft}
       placeholder={placeholder}
       onClick={onClick}
-      onChange={(e) => onValueChange(e.target.value)}
+      onMouseDown={(e) => e.stopPropagation()}
+      onFocus={(e) => {
+        focusedRef.current = true;
+        e.stopPropagation();
+      }}
+      onBlur={(e) => {
+        focusedRef.current = false;
+        onValueChange(e.target.value);
+      }}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        onValueChange(e.target.value);
+      }}
     />
   );
 }
@@ -1183,17 +1205,21 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
   // Filter and sort tools
   const filteredAndSortedTools = useMemo(() => {
-    let filtered =
-      toolSource === 'atc' && machineId
-        ? expandAtcToolsWithEmptyPots(tools).map((tool) =>
-            mergeServerToolWithPending(tool, pendingChanges, 'atc'),
-          )
-        : tools;
+    let filtered = tools;
+    if (toolSource === 'atc' && machineId) {
+      filtered = expandAtcToolsWithEmptyPots(tools).map((tool) =>
+        mergeServerToolWithPending(tool, pendingChanges, 'atc'),
+      );
+    } else if (toolSource === 'table' && machineId) {
+      filtered = tools.map((tool) =>
+        mergeServerToolWithPending(tool, pendingChanges, 'table'),
+      );
+    }
 
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
-      filtered = tools.filter(tool => {
+      filtered = filtered.filter(tool => {
         return (
           String(tool.tool_number).includes(query) ||
           (tool.tool_name && tool.tool_name.toLowerCase().includes(query)) ||
@@ -1555,7 +1581,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 const rowColored = isBetaMode && toolsColorMode;
                 const isMeasurementTool = measurementTool === tool.tool_number;
                 const hasPending = toolHasPending(tool);
-                const isAtcEditable = toolSource === 'atc' && !!machineId && !!tool.pot_number;
+                const isAtcRowEditable =
+                  toolSource === 'atc' &&
+                  !!machineId &&
+                  (isSpindlePot(tool.pot_number) || parsePotNumber(tool.pot_number) !== null);
                 const isTableEditable = toolSource === 'table' && !!machineId;
                 const isEmptyPot = !isSpindlePot(tool.pot_number) && !tool.tool_number;
                 return (
@@ -1572,19 +1601,18 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     style={{ cursor: hasMatch ? 'pointer' : 'default' }}
                     title={hasMatch ? `Click to view tool ${matched.tool_number} in Tool Management` : undefined}
                   >
-                    <td className="tools-col-pot">
+                    <td className="tools-col-pot" onClick={(e) => e.stopPropagation()}>
                       {isTableEditable ? (
                         <NumericEditInput
                           className="tools-edit-input tools-edit-input--pot-number"
                           value={tool.pot_number}
                           placeholder="—"
-                          onClick={(e) => e.stopPropagation()}
                           onValueChange={(raw) => handlePotNumberChange(tool, raw)}
                         />
                       ) : (
                         formatPotDisplay(tool.pot_number)
                       )}
-                      {isAtcEditable && !isSpindlePot(tool.pot_number) && tool.tool_number ? (
+                      {isAtcRowEditable && !isSpindlePot(tool.pot_number) && tool.tool_number ? (
                         <button
                           type="button"
                           className="tools-clear-pot-btn"
@@ -1598,15 +1626,14 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                         </button>
                       ) : null}
                     </td>
-                    <td className="tools-col-number">
+                    <td className="tools-col-number" onClick={(e) => e.stopPropagation()}>
                       {isCurrent && <span className="current-indicator">►</span>}
                       {hasMatch && <span className="matched-indicator" title="Tool exists in Tool Management">●</span>}
-                      {isAtcEditable ? (
+                      {isAtcRowEditable ? (
                         <NumericEditInput
                           className="tools-edit-input tools-edit-input--tool-number"
                           value={tool.tool_number || ''}
                           placeholder="—"
-                          onClick={(e) => e.stopPropagation()}
                           onValueChange={(raw) => handleToolNumberChange(tool, raw)}
                         />
                       ) : (
@@ -1657,8 +1684,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       className="tools-col-type"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {isAtcEditable && !isSpindlePot(tool.pot_number) && tool.tool_number ? (
+                      {isAtcRowEditable && !isSpindlePot(tool.pot_number) && tool.tool_number ? (
                         <Select
+                          compact
                           className="tools-type-select"
                           value={String(tool.tool_type ?? 1)}
                           onChange={(raw) => handleToolTypeChange(tool, raw)}
