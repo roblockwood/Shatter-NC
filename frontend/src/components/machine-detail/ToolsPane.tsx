@@ -1184,7 +1184,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           alert(`Pot ${pot} is in use by tool ${occupant}. Clear that pot first.`);
           return;
         }
-        stagePendingChange(tool, 'is_cap', tool.is_cap ?? false, true, 'cap', 'pocket');
+        stagePendingChange(tool, 'is_cap', tool.is_cap ? 1 : 0, 1, 'cap', 'pocket');
         return;
       }
 
