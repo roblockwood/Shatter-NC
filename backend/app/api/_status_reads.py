@@ -535,8 +535,16 @@ async def get_tools(
                     f"No TOLN data available for ATC merge - ATC tools will have no diameter/length/name"
                 )
 
-            tools = merge_atc_tools_for_display(atc_parsed, tool_table_tools)
-            tools_unified = build_unified_tool_view(tool_table_tools, atc_parsed)
+            tools = merge_atc_tools_for_display(
+                atc_parsed,
+                tool_table_tools,
+                atc_pockets=db_machine.atc_pockets,
+            )
+            tools_unified = build_unified_tool_view(
+                tool_table_tools,
+                atc_parsed,
+                atc_pockets=db_machine.atc_pockets,
+            )
 
             data = {
                 "tools": tools,

@@ -15,6 +15,7 @@ interface MachineData {
   path?: string;
   poll_interval_seconds?: number;
   tool_poll_interval_seconds?: number;
+  atc_pockets?: number;
   enabled?: boolean;
   model?: string;
   diameter_tolerance?: number;
@@ -76,6 +77,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
     path: '/',
     poll_interval_seconds: 5,
     tool_poll_interval_seconds: 30,
+    atc_pockets: 21,
     enabled: true,
     model: 'Brother CNC',
     diameter_tolerance: 0.010,
@@ -126,6 +128,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
           path: '/',
           poll_interval_seconds: 5,
           tool_poll_interval_seconds: 30,
+    atc_pockets: 21,
           enabled: true,
           model: 'Brother CNC',
           diameter_tolerance: 0.010,
@@ -181,6 +184,7 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
       path: '/',
       poll_interval_seconds: 5,
       tool_poll_interval_seconds: 30,
+    atc_pockets: 21,
       enabled: true,
       model: 'Brother CNC',
       diameter_tolerance: 0.010,
@@ -411,6 +415,22 @@ export const AddMachineCard: React.FC<AddMachineCardProps> = ({
                 max="600"
                 value={formData.tool_poll_interval_seconds}
                 onChange={(e) => setFormData({ ...formData, tool_poll_interval_seconds: parseInt(e.target.value) })}
+                disabled={isSaving}
+              />
+            </div>
+          </div>
+
+          <div className="form-row-inline">
+            <div>
+              <label>ATC POCKETS:</label>
+              <input
+                type="number"
+                min="1"
+                max="60"
+                value={formData.atc_pockets ?? 21}
+                onChange={(e) =>
+                  setFormData({ ...formData, atc_pockets: parseInt(e.target.value, 10) || 21 })
+                }
                 disabled={isSaving}
               />
             </div>

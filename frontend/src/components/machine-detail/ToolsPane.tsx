@@ -528,8 +528,12 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
   const resolvedUnifiedView = useMemo((): UnifiedToolView => {
     if (initialToolsUnified) return initialToolsUnified;
-    return buildUnifiedToolViewFromLegacy(initialToolTable || [], initialTools || []);
-  }, [initialToolsUnified, initialToolTable, initialTools]);
+    return buildUnifiedToolViewFromLegacy(
+      initialToolTable || [],
+      initialTools || [],
+      numPocketsProp,
+    );
+  }, [initialToolsUnified, initialToolTable, initialTools, numPocketsProp]);
 
   const [sortColumn, setSortColumn] = useState<SortColumn>('tool_number');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');

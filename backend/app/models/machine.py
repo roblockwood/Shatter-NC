@@ -22,6 +22,7 @@ class Machine(Base):
     tags = Column(JSON, nullable=True)  # ["production", "floor-a"]
     poll_interval_seconds = Column(Integer, default=5)
     tool_poll_interval_seconds = Column(Integer, default=30)  # Tool table/ATC polling interval (slower than fast poll)
+    atc_pockets = Column(Integer, default=21)  # Magazine pocket count (1-60)
     enabled = Column(Boolean, default=True)
 
     # Validation tolerances (in inches)

@@ -100,6 +100,7 @@ export interface MachineStatus {
   path?: string;
   poll_interval_seconds?: number;
   tool_poll_interval_seconds?: number;
+  atc_pockets?: number;
   part_display_mode?: 'cycle' | 'parts';
   enabled?: boolean;
   units?: 'in' | 'mm';

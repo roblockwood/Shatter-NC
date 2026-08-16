@@ -427,8 +427,16 @@ class MachinePoller:
                                 tool["color"] = atc_info["color"]
                     
                     # Merge ATC positions with tool details (forward merge: ATCTL -> TOLN)
-                    tools = merge_atc_tools_for_display(atc_parsed, tool_table_tools)
-                    tools_unified = build_unified_tool_view(tool_table_tools, atc_parsed)
+                    tools = merge_atc_tools_for_display(
+                        atc_parsed,
+                        tool_table_tools,
+                        atc_pockets=self.machine.atc_pockets,
+                    )
+                    tools_unified = build_unified_tool_view(
+                        tool_table_tools,
+                        atc_parsed,
+                        atc_pockets=self.machine.atc_pockets,
+                    )
 
                     tool_data["tools"] = tools
                     tool_data["tools_unified"] = tools_unified
@@ -439,7 +447,7 @@ class MachinePoller:
                     logger.warning(f"Machine {self.machine.id} - No ATC data available via Telnet")
                     tool_data["tools"] = []
                     tool_data["tools_unified"] = build_unified_tool_view(
-                        tool_table_tools, None
+                        tool_table_tools, None, atc_pockets=self.machine.atc_pockets
                     )
                     tool_data["tools_timestamp"] = poll_timestamp.isoformat()
                 
@@ -703,6 +711,8 @@ class MachinePoller:
                     status_data["tools"] = ws_status["tools"]
                 if "tool_table" in ws_status:
                     status_data["tool_table"] = ws_status["tool_table"]
+                if "tools_unified" in ws_status:
+                    status_data["tools_unified"] = ws_status["tools_unified"]
                 if "current_tool" in ws_status:
                     status_data["current_tool"] = ws_status["current_tool"]
                 if "tools_timestamp" in ws_status:
@@ -733,6 +743,7 @@ class MachinePoller:
                 "poll_timestamp": poll_timestamp.isoformat(),
                 "response_time_ms": response_time_ms,
                 "part_display_mode": getattr(self.machine, "part_display_mode", "parts"),
+                "atc_pockets": getattr(self.machine, "atc_pockets", 21) or 21,
             })
             
             # Ensure program_name is explicitly included (even if None)
