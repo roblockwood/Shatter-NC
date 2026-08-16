@@ -902,6 +902,13 @@ function mergePendingOntoUnifiedCache(
   };
 }
 
+function isSpindleToolRow(
+  tool: Tool,
+  spindleToolNumber: number | null | undefined,
+): boolean {
+  return spindleToolNumber != null && tool.tool_number === spindleToolNumber;
+}
+
 function getToolRowState(
   tool: Tool,
   spindleToolNumber: number | null | undefined,
@@ -909,10 +916,8 @@ function getToolRowState(
 ): 'spindle' | 'program-atc' | 'program' | 'atc' | null {
   const inProgram = programToolNumbers.has(tool.tool_number);
   const inAtc = Boolean(tool.in_atc);
-  const isSpindleTool =
-    spindleToolNumber != null && tool.tool_number === spindleToolNumber;
 
-  if (isSpindleTool) return 'spindle';
+  if (isSpindleToolRow(tool, spindleToolNumber)) return 'spindle';
   if (inProgram && inAtc) return 'program-atc';
   if (inProgram) return 'program';
   if (inAtc) return 'atc';
@@ -2472,7 +2477,8 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 const colorIdx = getToolColorClassIndex(tool);
                 const rowStateClass = getToolRowStateClass(tool);
                 const rowStateTitle = getToolRowStateTitle(tool);
-                const rowMagazineColored = isBetaMode && toolsColorMode && tool.in_atc;
+                const rowMagazineColored =
+                  isBetaMode && toolsColorMode && tool.in_atc && !isSpindleToolRow(tool, spindleToolNumber);
                 const isMeasurementTool = measurementTool === tool.tool_number;
                 const hasPending = toolHasPending(tool);
                 const isEditable = !!machineId && useUnifiedView;

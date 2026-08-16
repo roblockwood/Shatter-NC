@@ -1150,6 +1150,16 @@
   box-shadow: inset 3px 0 0 var(--color-info);
 }
 
+/* Spindle wins over beta magazine color tint when a tool is both in ATC and the spindle */
+.tools-table tbody tr.tools-state-spindle.tools-row-colored {
+  background: rgba(0, 204, 255, 0.08) !important;
+  background-image: none !important;
+  border-left: none;
+  box-shadow: inset 3px 0 0 var(--color-info);
+  color: inherit;
+  font-style: inherit;
+}
+
 .tools-table tbody tr.tools-state-program-atc {
   background: rgba(0, 255, 0, 0.06);
   box-shadow: inset 3px 0 0 var(--color-success);
