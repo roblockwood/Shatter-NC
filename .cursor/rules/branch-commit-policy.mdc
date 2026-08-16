@@ -21,7 +21,7 @@ Allowed commits on `main`/`beta` are only those produced by GitHub merges (PRs) 
 
 1. Cut a feature branch from `beta` (e.g. `feat/…`, `fix/…`, `chore/…`).
 2. Commit on that feature branch (conventional commits).
-3. Open a PR **into `beta`** and merge there.
+3. Open a PR **into `beta`**, wait for **green CI**, then merge — see [pr-merge-policy.mdc](pr-merge-policy.mdc).
 4. Stable release: promote **`beta` → `main`** via [`.cursor/promote-release-skill.md`](../promote-release-skill.md) when the user asks.
 
 ## Merging a feature branch to `main`

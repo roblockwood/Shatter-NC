@@ -1,0 +1,44 @@
+---
+description: Require green CI before merging PRs; fix or report failures first
+alwaysApply: true
+---
+
+# PR merge policy (agents)
+
+## Hard rule
+
+**Do not merge a PR while required CI checks are failing or still pending**, unless the user explicitly overrides after you report the failure (e.g. emergency hotfix with known unrelated breakage).
+
+Required checks include at minimum the **`pytest`** job on PRs to `beta` and `main`. Treat **`build-and-push`** / Docker validation the same way when present.
+
+## Before merge
+
+When the user asks to open, merge, or “push/merge” a PR:
+
+1. Open the PR (feature branch → `beta`, or `beta` → `main` for releases).
+2. Run `gh pr checks <number>` (or `gh pr view <number> --json statusCheckRollup`).
+3. If checks are **pending**, wait with `gh pr checks <number> --watch --interval 15` (or poll until complete).
+4. If checks **fail**, fix failures on the branch, push, and re-watch until green — **do not merge**.
+5. Merge only when required checks **pass**, then report the merged PR URL and any post-merge notes (deploy `:beta`, etc.).
+
+## When CI fails after merge
+
+If a merge already landed with red CI:
+
+1. Tell the user what failed and why (test name, log excerpt).
+2. Cut a fix branch from `beta`, fix, PR, wait for green CI, then merge.
+
+## Examples
+
+```text
+❌ User says "merge it" → gh pr merge immediately while pytest is failing
+✅ User says "merge it" → gh pr checks --watch → fix test → push → green → gh pr merge
+
+❌ "CI failed but I'll merge anyway" without telling the user
+✅ "CI failed: test_batch_apply_tool_changes_mixed_success — fixing mock, will re-merge when green"
+```
+
+## Related
+
+- Branch workflow: [branch-commit-policy.mdc](branch-commit-policy.mdc)
+- Stable promote: [`.cursor/promote-release-skill.md`](../promote-release-skill.md)
