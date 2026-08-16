@@ -42,6 +42,8 @@ def _patch_telnet(monkeypatch, **methods):
         "change_spindle_tool": (True, "00"),
         "write_tool_life": (True, "00"),
         "write_tool_offset": (True, "00"),
+        "detect_control_type": "C00",
+        "get_atc_magazine_data": "",
         "disconnect": None,
     }
     defaults.update(methods)
@@ -276,4 +278,60 @@ def test_tool_write_service_validation_operation_type():
         ToolChangeItem(operation_type="life", tool_number=5, life_value=100),
         ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=10),
     ]) == "tool_assignment"
+
+
+def test_validate_batch_pot_conflicts():
+    from app.api._status_state import ToolChangeItem
+    from app.services.tool_write_service import validate_batch_pot_conflicts
+
+    assert validate_batch_pot_conflicts([
+        ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=10),
+        ToolChangeItem(operation_type="cap", pot_number=2),
+    ]) is not None
+    assert validate_batch_pot_conflicts([
+        ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=10),
+        ToolChangeItem(operation_type="assignment", pot_number=3, tool_number=11),
+    ]) is None
+
+
+def test_pots_needing_preclear_swap():
+    from app.api._status_state import ToolChangeItem
+    from app.services.tool_write_service import pots_needing_preclear_before_assignments
+
+    atc = {1: 1, 2: 2}
+    changes = [
+        ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=1),
+        ToolChangeItem(operation_type="assignment", pot_number=1, tool_number=2),
+    ]
+    assert pots_needing_preclear_before_assignments(changes, atc) == [1, 2]
+
+
+def test_pots_needing_preclear_move_to_empty():
+    from app.api._status_state import ToolChangeItem
+    from app.services.tool_write_service import pots_needing_preclear_before_assignments
+
+    atc = {1: 5, 3: 0}
+    changes = [ToolChangeItem(operation_type="assignment", pot_number=3, tool_number=5)]
+    assert pots_needing_preclear_before_assignments(changes, atc) == [1]
+
+
+def test_pots_needing_preclear_skips_explicit_delete():
+    from app.api._status_state import ToolChangeItem
+    from app.services.tool_write_service import pots_needing_preclear_before_assignments
+
+    atc = {1: 5, 2: 0}
+    changes = [
+        ToolChangeItem(operation_type="delete", pot_number=1, tool_number=5),
+        ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=5),
+    ]
+    assert pots_needing_preclear_before_assignments(changes, atc) == []
+
+
+def test_pots_needing_preclear_move_into_occupied():
+    from app.api._status_state import ToolChangeItem
+    from app.services.tool_write_service import pots_needing_preclear_before_assignments
+
+    atc = {1: 1, 2: 2}
+    changes = [ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=1)]
+    assert pots_needing_preclear_before_assignments(changes, atc) == [1, 2]
 

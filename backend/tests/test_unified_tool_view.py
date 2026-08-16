@@ -40,6 +40,9 @@ def test_atc_fields_only_when_assigned():
     assert view["spindle"]["tool_number"] == 5
     assert len(view["empty_pockets"]) == 2
     assert view["empty_pockets"][0]["pot_number"] == 2
+    assert view["empty_pockets"][0]["is_cap"] is False
+    cap_pocket = next(p for p in view["empty_pockets"] if p["pot_number"] == 3)
+    assert cap_pocket["is_cap"] is True
 
     assigned = next(t for t in view["tools"] if t["tool_number"] == 5)
     unassigned = next(t for t in view["tools"] if t["tool_number"] == 10)

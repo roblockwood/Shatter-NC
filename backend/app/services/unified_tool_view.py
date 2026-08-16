@@ -84,6 +84,7 @@ def _build_atc_lookups(
                     "pot_number": pot_number,
                     "tool_type": atc_tool.get("tool_type"),
                     "color": atc_tool.get("color"),
+                    "is_cap": tool_num in (255, 999),
                 }
             )
         elif tool_num > 0:

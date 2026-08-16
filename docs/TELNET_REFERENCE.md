@@ -82,6 +82,10 @@ Pots marked **Cap (255)** in ATCTL are not empty — run **CHGMAGD** first (`rem
 `clear_cap_from_pot`), then **CHGMAGM** to assign a tool. `assign_tool_to_pot(clear_cap=True)` does
 this automatically.
 
+To **set cap** on an empty pocket, use **CHGMAGM** with tool **255** (C00) or **999** (D00).
+The machine panel displays cap as tool **0**; Shatter maps UI `0` on empty-pot rows to this write
+(`set_cap_on_pot`).
+
 ### Other writes
 
 | Command | Purpose |

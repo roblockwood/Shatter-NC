@@ -66,6 +66,7 @@ ToolChangeOperationType = Literal[
     "assignment",
     "type",
     "delete",
+    "cap",
     "spindle",
     "offset",
     "life",
@@ -105,6 +106,9 @@ class ToolChangeItem(BaseModel):
         elif op == "delete":
             if self.pot_number is None:
                 raise ValueError("delete requires pot_number")
+        elif op == "cap":
+            if self.pot_number is None:
+                raise ValueError("cap requires pot_number")
         elif op == "spindle":
             if self.tool_number is None:
                 raise ValueError("spindle requires tool_number")

@@ -35,6 +35,7 @@ OFFSET_NAMES = {"H": "Length", "D": "Diameter", "W": "Wear"}
 _EXEC_ORDER = {
     "delete": 0,
     "assignment": 1,
+    "cap": 1,
     "spindle": 2,
     "type": 3,
     "color": 4,
@@ -47,6 +48,7 @@ _EXEC_ORDER = {
 _VALIDATOR_FOR_OP = {
     "color": "tool_color",
     "assignment": "tool_assignment",
+    "cap": "tool_assignment",
     "type": "tool_type",
     "delete": "tool_delete",
     "spindle": "spindle_tool",
@@ -55,7 +57,8 @@ _VALIDATOR_FOR_OP = {
     "name": "tool_name",
 }
 
-_STRICT_OPS = frozenset({"assignment", "delete", "spindle"})
+_STRICT_OPS = frozenset({"assignment", "cap", "delete", "spindle"})
+_CAP_TOOL_NUMBERS = frozenset({255, 999})
 _STRICT_VALIDATOR_PRIORITY = (
     "assignment",
     "delete",
@@ -85,10 +88,124 @@ def sort_changes_for_execution(changes: List[ToolChangeItem]) -> List[ToolChange
     return sorted(changes, key=lambda c: (_EXEC_ORDER.get(c.operation_type, 99), c.pot_number or 0, c.tool_number or 0))
 
 
+def pots_needing_preclear_before_assignments(
+    changes: List[ToolChangeItem],
+    atc_by_pot: Dict[int, int],
+) -> List[int]:
+    """Return pot numbers that must be cleared before assignment/cap ops in this batch.
+
+    Covers tool moves/swaps: vacate target pots occupied by another tool and source
+    pots for tools being assigned elsewhere. Skips pots already slated for delete.
+    """
+    assignment_ops = [c for c in changes if c.operation_type in ("assignment", "cap")]
+    if not assignment_ops or not atc_by_pot:
+        return []
+
+    explicit_delete_pots = {
+        c.pot_number
+        for c in changes
+        if c.operation_type == "delete" and c.pot_number is not None
+    }
+
+    assignment_targets: Dict[int, Optional[int]] = {}
+    cap_targets: set[int] = set()
+    for change in assignment_ops:
+        pot = change.pot_number
+        if pot is None:
+            continue
+        if change.operation_type == "assignment" and change.tool_number is not None:
+            assignment_targets[pot] = change.tool_number
+        elif change.operation_type == "cap":
+            cap_targets.add(pot)
+
+    pots_to_clear: set[int] = set()
+
+    for pot, new_tool in assignment_targets.items():
+        if pot in explicit_delete_pots:
+            continue
+        current = atc_by_pot.get(pot, 0)
+        if current != 0 and current != new_tool:
+            pots_to_clear.add(pot)
+
+    for pot in cap_targets:
+        if pot in explicit_delete_pots:
+            continue
+        current = atc_by_pot.get(pot, 0)
+        if current > 0 and current not in _CAP_TOOL_NUMBERS:
+            pots_to_clear.add(pot)
+
+    tools_being_assigned = {t for t in assignment_targets.values() if t is not None}
+    for pot, current_tool in atc_by_pot.items():
+        if current_tool not in tools_being_assigned:
+            continue
+        target_pot = next(
+            (p for p, t in assignment_targets.items() if t == current_tool),
+            None,
+        )
+        if target_pot is not None and pot != target_pot and pot not in explicit_delete_pots:
+            pots_to_clear.add(pot)
+
+    return sorted(pots_to_clear)
+
+
+async def _read_atc_pot_map(telnet_client) -> Dict[int, int]:
+    """Map magazine pot number → current ATCTL tool number (0 = empty)."""
+    from app.parsers.atctl_parser_v2 import parse_atctl_v2
+
+    control = await telnet_client.detect_control_type() or "C00"
+    raw = await telnet_client.get_atc_magazine_data(control_version=control, verbose=False)
+    if not raw:
+        return {}
+
+    parsed = parse_atctl_v2(raw.encode("utf-8"), control_version=control)
+    by_pot: Dict[int, int] = {}
+    for tool in parsed.get("tools", []):
+        pot = tool.get("pot_number")
+        if pot is None or str(pot).upper() == "SPINDLE":
+            continue
+        try:
+            by_pot[int(pot)] = int(tool.get("tool_number") or 0)
+        except (TypeError, ValueError):
+            continue
+    return by_pot
+
+
+async def _preclear_atc_pots(
+    telnet_client,
+    machine_id: int,
+    pots: List[int],
+    atc_by_pot: Dict[int, int],
+) -> None:
+    """CHGMAGD-clear pots before reassignment so targets are not occupied."""
+    from app.clients.telnet_client import CNCTelnetClient
+    from app.services.audit_logger import AuditLogger
+
+    for pot in pots:
+        current = atc_by_pot.get(pot, 0)
+        if current == 0:
+            continue
+        ok, status = await telnet_client.remove_tool_from_pot(
+            pot_number=pot,
+            tool_number=current if current not in _CAP_TOOL_NUMBERS else None,
+            verbose=False,
+        )
+        status_desc = CNCTelnetClient.get_status_description(status or "00") if not ok else None
+        AuditLogger.log_tool_modification(
+            machine_id=machine_id,
+            operation_type="tool_delete",
+            operation_details={"pot_number": pot, "tool_number": current, "preclear": True},
+            success=ok,
+            error_message=status_desc,
+            machine_state=None,
+        )
+        if not ok:
+            raise RuntimeError(f"Failed to pre-clear pot {pot} before assignment: {status_desc or status}")
+
+
 def validate_change_ranges(change: ToolChangeItem) -> Optional[str]:
     """Return error message if ranges invalid, else None."""
     op = change.operation_type
-    if op in ("color", "assignment", "type", "delete"):
+    if op in ("color", "assignment", "type", "delete", "cap"):
         if change.pot_number is not None and not 1 <= change.pot_number <= 99:
             return f"Invalid pot number: {change.pot_number} (must be 1-99)"
     if op == "color" and change.color is not None and not 0 <= change.color <= 7:
@@ -114,6 +231,21 @@ def validate_change_ranges(change: ToolChangeItem) -> Optional[str]:
             return f"Invalid tool number: {change.tool_number} (must be 1-99)"
         if change.name_value is not None and len(change.name_value.strip()) > 14:
             return f"Tool name too long: max 14 characters (got {len(change.name_value.strip())})"
+    return None
+
+
+def validate_batch_pot_conflicts(changes: List[ToolChangeItem]) -> Optional[str]:
+    """Reject batches that assign the same pot more than once."""
+    seen: Dict[int, str] = {}
+    for change in changes:
+        if change.operation_type not in ("assignment", "cap"):
+            continue
+        pot = change.pot_number
+        if pot is None:
+            continue
+        if pot in seen:
+            return f"Pot {pot} is assigned more than once in this batch ({seen[pot]} and {change.operation_type})"
+        seen[pot] = change.operation_type
     return None
 
 
@@ -164,6 +296,15 @@ async def _apply_single_change(telnet_client, change: ToolChangeItem) -> Tuple[b
         )
         details = {"pot_number": change.pot_number, "new_tool_number": change.tool_number}
         msg = f"Tool {change.tool_number} assigned to pot {change.pot_number}" if success else ""
+        return success, status, msg, "tool_assignment", details
+
+    if op == "cap":
+        success, status = await telnet_client.set_cap_on_pot(
+            pot_number=change.pot_number,
+            verbose=False,
+        )
+        details = {"pot_number": change.pot_number}
+        msg = f"Cap set on pot {change.pot_number}" if success else ""
         return success, status, msg, "tool_assignment", details
 
     if op == "type":
@@ -327,6 +468,10 @@ async def apply_tool_changes_batch(
         if err:
             raise ValueError(err)
 
+    batch_err = validate_batch_pot_conflicts(changes)
+    if batch_err:
+        raise ValueError(batch_err)
+
     validator = MachineStateValidator()
     val_op = validation_operation_type(changes)
     is_safe, error_message, _status_data = await validator.validate_safe_for_write(
@@ -352,6 +497,19 @@ async def apply_tool_changes_batch(
                 port=10000,
                 timeout=10,
             )
+
+            if any(c.operation_type in ("assignment", "cap") for c in telnet_changes):
+                atc_by_pot = await _read_atc_pot_map(telnet_client)
+                preclear_pots = pots_needing_preclear_before_assignments(changes, atc_by_pot)
+                if preclear_pots:
+                    logger.info(
+                        "Pre-clearing ATC pots %s before batch assignments (machine %s)",
+                        preclear_pots,
+                        machine_id,
+                    )
+                    await _preclear_atc_pots(
+                        telnet_client, machine_id, preclear_pots, atc_by_pot
+                    )
 
             for change in telnet_changes:
                 try:

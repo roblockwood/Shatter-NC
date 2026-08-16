@@ -539,6 +539,44 @@ class CNCWriteOpsMixin:
             verbose=verbose
         )
 
+    async def set_cap_on_pot(
+        self,
+        pot_number: int,
+        verbose: bool = False,
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Mark an ATC pocket as cap (C00: ATCTL tool 255, D00: 999).
+
+        The machine panel displays cap as tool 0; telnet CHGMAGM uses the ATCTL value.
+        """
+        if pot_number == 0:
+            logger.error("Cannot set cap on spindle (pot 0).")
+            return False, "30"
+
+        control = await self.detect_control_type() or "C00"
+        cap_value = (
+            CAP_TOOL_NUMBER_D00
+            if str(control).upper().startswith("D")
+            else CAP_TOOL_NUMBER_C00
+        )
+        cap_values = {CAP_TOOL_NUMBER_C00, CAP_TOOL_NUMBER_D00}
+
+        current = await self._read_pot_tool_number(pot_number, verbose=verbose)
+        if current in cap_values:
+            return True, "00"
+        if current is not None and current not in (0, *cap_values):
+            ok, status = await self.remove_tool_from_pot(pot_number, verbose=verbose)
+            if not ok:
+                return ok, status
+
+        return await self.change_atc_tool_assignment(
+            magazine_pos=pot_number,
+            tool_num=None,
+            change_type='M',
+            new_value=cap_value,
+            verbose=verbose,
+        )
+
     async def remove_tool_from_pot(
         self,
         pot_number: int,
