@@ -423,6 +423,56 @@ function getToolFieldValue(tool: Tool, field: string): string | number | undefin
   }
 }
 
+function getToolRowState(
+  tool: Tool,
+  spindleToolNumber: number | null | undefined,
+  programToolNumbers: Set<number>,
+): 'spindle' | 'program-atc' | 'program' | 'atc' | null {
+  const inProgram = programToolNumbers.has(tool.tool_number);
+  const inAtc = Boolean(tool.in_atc);
+  const isSpindleTool =
+    spindleToolNumber != null && tool.tool_number === spindleToolNumber;
+
+  if (isSpindleTool) return 'spindle';
+  if (inProgram && inAtc) return 'program-atc';
+  if (inProgram) return 'program';
+  if (inAtc) return 'atc';
+  return null;
+}
+
+const TOOL_ROW_STATE_TITLES: Record<NonNullable<ReturnType<typeof getToolRowState>>, string> = {
+  spindle: 'Tool is in the spindle',
+  'program-atc': 'Used in current program and assigned to ATC',
+  program: 'Used in current program (not in ATC)',
+  atc: 'Assigned to ATC (not used in current program)',
+};
+
+function extractProgramToolNumbers(deploymentData: {
+  deployment?: { validation_results?: { tools?: Record<string, unknown> } };
+  program?: { program_metadata?: { tools?: Array<{ tool_number?: number }> } };
+}): Set<number> {
+  const nums = new Set<number>();
+
+  const validationTools = deploymentData.deployment?.validation_results?.tools;
+  if (validationTools) {
+    Object.keys(validationTools).forEach((key) => {
+      const n = parseInt(key, 10);
+      if (Number.isFinite(n) && n > 0) nums.add(n);
+    });
+  }
+
+  const metaTools = deploymentData.program?.program_metadata?.tools;
+  if (Array.isArray(metaTools)) {
+    metaTools.forEach((tool) => {
+      if (tool.tool_number && tool.tool_number > 0) {
+        nums.add(tool.tool_number);
+      }
+    });
+  }
+
+  return nums;
+}
+
 function getConfirmedValueFromResult(result: ToolChangeBatchResult): {
   field: string;
   value: string | number;
@@ -491,6 +541,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const [isLoadingTools, setIsLoadingTools] = useState(false);
   const [toolsError, setToolsError] = useState<string | null>(null);
   const [toolsSummary, setToolsSummary] = useState<Array<{ tool_number: number; description: string }>>([]);
+  const [programToolNumbers, setProgramToolNumbers] = useState<Set<number>>(() => new Set());
 
   // Track pending changes (changes not yet pushed to server)
   const [pendingChanges, setPendingChanges] = useState<Map<string, PendingChange>>(new Map());
@@ -705,6 +756,25 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     }
   }, [isBetaMode]);
 
+  useEffect(() => {
+    if (!machineId || !programName) {
+      setProgramToolNumbers(new Set());
+      return;
+    }
+
+    fetch(
+      `${API_BASE_URL}/api/programs/machines/${machineId}/deployments/by-onumber/${encodeURIComponent(programName)}?include_program=true`,
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) {
+          setProgramToolNumbers(extractProgramToolNumbers(data));
+        } else {
+          setProgramToolNumbers(new Set());
+        }
+      })
+      .catch(() => setProgramToolNumbers(new Set()));
+  }, [machineId, programName]);
 
   useEffect(() => {
     if (!machineId || !useUnifiedView) return;
@@ -1258,6 +1328,18 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     setActiveTab(tab);
   };
 
+  const spindleToolNumber = unifiedCache.spindle?.tool_number ?? null;
+
+  const getToolRowStateClass = (tool: Tool): string => {
+    const state = getToolRowState(tool, spindleToolNumber, programToolNumbers);
+    return state ? `tools-state-${state}` : '';
+  };
+
+  const getToolRowStateTitle = (tool: Tool): string | undefined => {
+    const state = getToolRowState(tool, spindleToolNumber, programToolNumbers);
+    return state ? TOOL_ROW_STATE_TITLES[state] : undefined;
+  };
+
   const isCurrentTool = (toolNum: number) => {
     return currentTool !== undefined && currentTool === toolNum;
   };
@@ -1559,6 +1641,26 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 )}
               </div>
             )}
+            {!isHoverPreview && programName && (
+              <div className="tools-state-legend" onClick={(e) => e.stopPropagation()}>
+                <span className="tools-state-legend-item">
+                  <span className="tools-state-legend-swatch tools-state-legend-swatch--spindle" aria-hidden />
+                  Spindle
+                </span>
+                <span className="tools-state-legend-item">
+                  <span className="tools-state-legend-swatch tools-state-legend-swatch--program-atc" aria-hidden />
+                  Program + ATC
+                </span>
+                <span className="tools-state-legend-item">
+                  <span className="tools-state-legend-swatch tools-state-legend-swatch--program" aria-hidden />
+                  Program
+                </span>
+                <span className="tools-state-legend-item">
+                  <span className="tools-state-legend-swatch tools-state-legend-swatch--atc" aria-hidden />
+                  ATC only
+                </span>
+              </div>
+            )}
             <div className="tools-table-wrapper">
               <table className="tools-table">
               <thead onClick={(e) => e.stopPropagation()}>
@@ -1647,22 +1749,27 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 const matched = getMatchedTool(tool);
                 const hasMatch = matched !== null && isBetaMode;
                 const colorIdx = getToolColorClassIndex(tool);
-                const rowColored = isBetaMode && toolsColorMode && tool.in_atc;
+                const rowStateClass = getToolRowStateClass(tool);
+                const rowStateTitle = getToolRowStateTitle(tool);
+                const rowMagazineColored = isBetaMode && toolsColorMode && tool.in_atc;
                 const isMeasurementTool = measurementTool === tool.tool_number;
                 const hasPending = toolHasPending(tool);
                 const isEditable = !!machineId && useUnifiedView;
                 const isAtcAssigned = Boolean(tool.in_atc && tool.pot_number);
+                const rowTitle = [rowStateTitle, hasMatch ? `Click to view tool ${matched!.tool_number} in Tool Management` : undefined]
+                  .filter(Boolean)
+                  .join(' — ') || undefined;
                 return (
                   <tr
                     key={`tool-${tool.tool_number}-${idx}`}
                     className={`${isCurrent ? 'current-tool' : ''} ${hasMatch ? 'tool-matched' : ''} ${
                       isMeasurementTool ? 'measurement-tool' : ''
-                    } ${hasPending ? 'tools-row-pending' : ''} ${
-                      rowColored ? `tools-row-colored tool-color-${colorIdx}` : ''
+                    } ${hasPending ? 'tools-row-pending' : ''} ${rowStateClass} ${
+                      rowMagazineColored ? `tools-row-colored tool-color-${colorIdx}` : ''
                     }`}
                     onClick={(e) => handleRowClick(tool, e)}
                     style={{ cursor: hasMatch ? 'pointer' : 'default' }}
-                    title={hasMatch ? `Click to view tool ${matched.tool_number} in Tool Management` : undefined}
+                    title={rowTitle}
                   >
                     <td className="tools-col-number" onClick={(e) => e.stopPropagation()}>
                       {isCurrent && <span className="current-indicator">►</span>}
@@ -1709,29 +1816,34 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       )}
                     </td>
                     <td className="tools-col-pot tools-col-atc" onClick={(e) => e.stopPropagation()}>
-                      {isEditable && unifiedCache.atc_available ? (
-                        <NumericEditInput
-                          className="tools-edit-input tools-edit-input--pot-number"
-                          value={isAtcAssigned ? tool.pot_number : ''}
-                          placeholder="—"
-                          onValueChange={(raw) => handlePotNumberChange(tool, raw)}
-                        />
-                      ) : (
-                        formatPotDisplay(isAtcAssigned ? tool.pot_number : undefined)
-                      )}
-                      {isEditable && isAtcAssigned ? (
-                        <button
-                          type="button"
-                          className="tools-clear-pot-btn"
-                          title="Unassign from pocket"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteFromPot(tool);
-                          }}
-                        >
-                          CLR
-                        </button>
-                      ) : null}
+                      <div className="tools-pot-cell">
+                        {isEditable && unifiedCache.atc_available ? (
+                          <>
+                            <NumericEditInput
+                              className="tools-edit-input tools-edit-input--pot-number"
+                              value={isAtcAssigned ? tool.pot_number : ''}
+                              placeholder="—"
+                              onValueChange={(raw) => handlePotNumberChange(tool, raw)}
+                            />
+                            {isAtcAssigned ? (
+                              <button
+                                type="button"
+                                className="tools-clear-pot-btn"
+                                title="Unassign from pocket"
+                                aria-label="Unassign from pocket"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteFromPot(tool);
+                                }}
+                              >
+                                ×
+                              </button>
+                            ) : null}
+                          </>
+                        ) : (
+                          formatPotDisplay(isAtcAssigned ? tool.pot_number : undefined)
+                        )}
+                      </div>
                     </td>
                     <td className="tools-col-group tools-col-atc">{isAtcAssigned ? (tool.group ?? '──') : '──'}</td>
                     <td className="tools-col-type tools-col-atc" onClick={(e) => e.stopPropagation()}>
@@ -1787,7 +1899,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               </table>
             </div>
             {useUnifiedView && unifiedCache.spindle && (
-              <div className="tools-spindle-row">
+              <div className="tools-spindle-row tools-state-spindle">
                 <span className="tools-spindle-label">SPINDLE</span>
                 {machineId ? (
                   <NumericEditInput
