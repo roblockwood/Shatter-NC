@@ -637,6 +637,31 @@
   min-width: 0;
 }
 
+.tools-inline-field-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.tools-field-warning {
+  flex: 0 1 auto;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.2;
+  color: var(--color-warning);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 11rem;
+}
+
+.tools-inline-field-group--invalid .tools-edit-input {
+  border-color: var(--color-warning);
+  box-shadow: 0 0 4px rgba(255, 183, 77, 0.35);
+}
+
 .tools-pot-cell .tools-edit-input--pot-number {
   flex: 1 1 auto;
   min-width: 0;
