@@ -54,8 +54,31 @@ export interface MachineStatus {
   cycle_time?: string;
   power_on_hours?: string;
   counters?: Array<{ counter_number: number; count: number }>;
-  tools?: Tool[];  // ATC data
-  tool_table?: Tool[];  // TABLE data (TOLN)
+  tools?: Tool[];  // ATC data (legacy)
+  tool_table?: Tool[];  // TABLE data (TOLN, legacy)
+  tools_unified?: {
+    tools: Array<{
+      tool_number: number;
+      tool_name?: string;
+      diameter?: number;
+      length?: number;
+      life?: number;
+      in_atc?: boolean;
+      pot_number?: string | number;
+      group?: string | number;
+      tool_type?: number;
+      color?: number;
+    }>;
+    empty_pockets: Array<{ pot_number: number; tool_type?: number; color?: number }>;
+    spindle?: {
+      pot_number: 'SPINDLE';
+      tool_number: number;
+      tool_type?: number;
+      color?: number;
+      group?: string | number;
+    } | null;
+    atc_available: boolean;
+  };
   current_tool?: number;
   alarms?: Alarm[];
   panel?: PanelData;  // Panel data (doors, mode, overrides)

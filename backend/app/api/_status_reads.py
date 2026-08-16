@@ -467,6 +467,7 @@ async def get_tools(
             from app.parsers.atctl_parser_v2 import parse_atctl_v2
             from app.parsers.tolni_parser_v2 import parse_tolni_v2
             from app.services.atc_tool_merge import merge_atc_tools_for_display
+            from app.services.unified_tool_view import build_unified_tool_view
 
             if raw_html:
                 http_client = CNCHttpClient(db_machine.ip_address, port=db_machine.http_port)
@@ -535,9 +536,11 @@ async def get_tools(
                 )
 
             tools = merge_atc_tools_for_display(atc_parsed, tool_table_tools)
+            tools_unified = build_unified_tool_view(tool_table_tools, atc_parsed)
 
             data = {
                 "tools": tools,
+                "tools_unified": tools_unified,
                 "machine_id": machine_id,
                 "source": "atc",
                 "protocol": "telnet",

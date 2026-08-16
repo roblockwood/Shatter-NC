@@ -76,6 +76,29 @@ interface MachineStatus {
   counters?: Array<{ counter_number: number; count: number }>;
   tools?: Tool[];  // ATC data
   tool_table?: Tool[];  // TABLE data (TOLN)
+  tools_unified?: {
+    tools: Array<{
+      tool_number: number;
+      tool_name?: string;
+      diameter?: number;
+      length?: number;
+      life?: number;
+      in_atc?: boolean;
+      pot_number?: string | number;
+      group?: string | number;
+      tool_type?: number;
+      color?: number;
+    }>;
+    empty_pockets: Array<{ pot_number: number; tool_type?: number; color?: number }>;
+    spindle?: {
+      pot_number: 'SPINDLE';
+      tool_number: number;
+      tool_type?: number;
+      color?: number;
+      group?: string | number;
+    } | null;
+    atc_available: boolean;
+  };
   current_tool?: number;
   alarms?: Alarm[];
   panel?: PanelData;  // Panel data (doors, mode, overrides)
@@ -845,6 +868,11 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             <ToolsPane
               tools={machine.tools || []}
               toolTable={machine.tool_table || []}
+              toolsUnified={
+                machine.tools_unified
+                  ? { ...machine.tools_unified, spindle: machine.tools_unified.spindle ?? null }
+                  : undefined
+              }
               currentTool={machine.current_tool}
               machineId={machine.machine_id}
               units={machine.units ?? 'in'}
@@ -1752,6 +1780,11 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     variant="hover"
                     tools={machine.tools || []}
                     toolTable={machine.tool_table || []}
+                    toolsUnified={
+                machine.tools_unified
+                  ? { ...machine.tools_unified, spindle: machine.tools_unified.spindle ?? null }
+                  : undefined
+              }
                     currentTool={machine.current_tool}
                     machineId={machine.machine_id}
                     units={machine.units ?? 'in'}

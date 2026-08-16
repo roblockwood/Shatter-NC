@@ -8,6 +8,7 @@ from app.parsers.mem_parser_v2 import parse_mem_v2
 from app.utils.time_utils import format_cnc_time
 from app.parsers.atctl_parser_v2 import parse_atctl_v2
 from app.services.atc_tool_merge import merge_atc_tools_for_display
+from app.services.unified_tool_view import build_unified_tool_view
 from app.parsers.panel_parser_v2 import parse_panel_v2
 from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
 from app.parsers.montr_parser_v2 import parse_montr_v2
@@ -427,17 +428,19 @@ class MachinePoller:
                     
                     # Merge ATC positions with tool details (forward merge: ATCTL -> TOLN)
                     tools = merge_atc_tools_for_display(atc_parsed, tool_table_tools)
+                    tools_unified = build_unified_tool_view(tool_table_tools, atc_parsed)
 
                     tool_data["tools"] = tools
+                    tool_data["tools_unified"] = tools_unified
                     tool_data["tools_timestamp"] = poll_timestamp.isoformat()
                     step_times['merge_tools'] = time.time() - step_start
                     logger.debug(f"Machine {self.machine.id} - Fetched {len(tools)} ATC tools and {len(tool_table_tools)} table tools via Telnet (slow poll)")
                 else:
                     logger.warning(f"Machine {self.machine.id} - No ATC data available via Telnet")
-                    # ATC magazine file absent (status 07) — leave tools empty so the
-                    # frontend can show a proper "ATC unavailable" message rather than
-                    # displaying tool table data in the ATC pot view.
                     tool_data["tools"] = []
+                    tool_data["tools_unified"] = build_unified_tool_view(
+                        tool_table_tools, None
+                    )
                     tool_data["tools_timestamp"] = poll_timestamp.isoformat()
                 
                 # Store TABLE data with pot numbers merged (if ATC data was available)

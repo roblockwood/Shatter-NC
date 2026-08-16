@@ -96,6 +96,11 @@ function TabletPaneContent({
           <ToolsPane
             tools={machine.tools || []}
             toolTable={machine.tool_table || []}
+            toolsUnified={
+              machine.tools_unified
+                ? { ...machine.tools_unified, spindle: machine.tools_unified.spindle ?? null }
+                : undefined
+            }
             currentTool={machine.current_tool}
             machineId={machine.machine_id}
             units={machine.units || 'in'}
