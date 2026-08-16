@@ -608,12 +608,17 @@
 }
 
 .tools-clear-pot-btn {
-  display: block;
-  margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  margin: 0;
   padding: 0 3px;
+  min-width: 1rem;
+  height: 1rem;
   font-family: var(--font-mono);
-  font-size: 9px;
-  line-height: 1.2;
+  font-size: 11px;
+  line-height: 1;
   background: transparent;
   border: 1px solid var(--color-border);
   color: var(--color-text-muted);
@@ -623,6 +628,19 @@
 .tools-clear-pot-btn:hover {
   border-color: var(--color-error);
   color: var(--color-error);
+}
+
+.tools-pot-cell {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tools-pot-cell .tools-edit-input--pot-number {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 2.5rem;
 }
 
 .tools-col-color {
@@ -1011,5 +1029,72 @@
   letter-spacing: 0.06em;
   color: var(--color-text-secondary);
   min-width: 4.5rem;
+}
+
+/* Program / ATC / spindle row state colors */
+.tools-table tbody tr.tools-state-spindle,
+.tools-spindle-row.tools-state-spindle {
+  background: rgba(0, 204, 255, 0.08);
+  box-shadow: inset 3px 0 0 var(--color-info);
+}
+
+.tools-table tbody tr.tools-state-program-atc {
+  background: rgba(0, 255, 0, 0.06);
+  box-shadow: inset 3px 0 0 var(--color-success);
+}
+
+.tools-table tbody tr.tools-state-program {
+  background: rgba(0, 102, 255, 0.08);
+  box-shadow: inset 3px 0 0 #0066ff;
+}
+
+.tools-table tbody tr.tools-state-atc {
+  background: rgba(255, 204, 0, 0.07);
+  box-shadow: inset 3px 0 0 #ffcc00;
+}
+
+.tools-table tbody tr.tools-state-spindle:hover,
+.tools-table tbody tr.tools-state-program-atc:hover,
+.tools-table tbody tr.tools-state-program:hover,
+.tools-table tbody tr.tools-state-atc:hover {
+  filter: brightness(1.08);
+}
+
+.tools-state-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+}
+
+.tools-state-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tools-state-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.tools-state-legend-swatch--spindle {
+  background: var(--color-info);
+}
+
+.tools-state-legend-swatch--program-atc {
+  background: var(--color-success);
+}
+
+.tools-state-legend-swatch--program {
+  background: #0066ff;
+}
+
+.tools-state-legend-swatch--atc {
+  background: #ffcc00;
 }
 
