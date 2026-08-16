@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 MACRO_WRITE_CACHE_DEFAULT_MAX_AGE_SECONDS = 15
 
 
+# Operation status codes from MEM data (0=Reset, 1=Operation, 2=Temporary stop, 3=Block stop)
+UNSAFE_OPERATION_STATUSES = frozenset({1, 2, 3})
+
+
 def macro_write_cache_max_age_seconds(poll_interval_seconds: Optional[int]) -> int:
     """Max age for trusting poller cache before a live macro-write safety check."""
     interval = poll_interval_seconds if poll_interval_seconds and poll_interval_seconds > 0 else 5
@@ -52,8 +56,9 @@ def evaluate_macro_write_safety(
     mem_mode: Optional[int],
     machine_id: int,
     machine_name: str,
+    operation_status: Optional[int] = None,
 ) -> Tuple[bool, Optional[str], Dict[str, Any]]:
-    """Apply macro-write block rules (operating PRD3 status or MEM mode 2)."""
+    """Apply macro-write block rules aligned with lenient batch ops (color, measurement)."""
     status_data: Dict[str, Any] = {
         "machine_id": machine_id,
         "machine_name": machine_name,
@@ -62,6 +67,8 @@ def evaluate_macro_write_safety(
         status_data["status"] = machine_status
     if mem_mode is not None:
         status_data["mode"] = mem_mode
+    if operation_status is not None:
+        status_data["operation_status"] = operation_status
 
     if machine_status == "operating":
         return (
@@ -69,7 +76,9 @@ def evaluate_macro_write_safety(
             "Machine is currently running a program. Stop the program before making changes.",
             status_data,
         )
-    if mem_mode == 2:
+
+    actively_running = operation_status in UNSAFE_OPERATION_STATUSES
+    if mem_mode == 2 and actively_running:
         return (
             False,
             "Machine is running a program. Stop the program before making changes.",
@@ -85,7 +94,7 @@ class MachineStateValidator:
     UNSAFE_MODES = {3, 4, 5}  # Edit, MDI manual, Memory edit
     
     # Operation status codes from MEM data (0=Reset, 1=Operation, 2=Temporary stop, 3=Block stop)
-    UNSAFE_OPERATION_STATUSES = {1, 2, 3}  # Operation, Temporary stop, Block stop
+    UNSAFE_OPERATION_STATUSES = UNSAFE_OPERATION_STATUSES
 
     @staticmethod
     def try_validate_macro_write_from_cache(
@@ -104,6 +113,7 @@ class MachineStateValidator:
         """
         machine_status = cached_status.get("status")
         mem_mode = cached_status.get("mem_mode")
+        mem_operation_status = cached_status.get("mem_operation_status")
         status_data = {
             "machine_id": machine_id,
             "machine_name": machine_name,
@@ -112,6 +122,8 @@ class MachineStateValidator:
             status_data["status"] = machine_status
         if mem_mode is not None:
             status_data["mode"] = mem_mode
+        if mem_operation_status is not None:
+            status_data["operation_status"] = mem_operation_status
 
         if machine_status is None and mem_mode is None:
             return None, None, status_data
@@ -125,6 +137,7 @@ class MachineStateValidator:
             mem_mode=mem_mode,
             machine_id=machine_id,
             machine_name=machine_name,
+            operation_status=mem_operation_status,
         )
         return is_safe, error_message, evaluated
 
@@ -141,11 +154,13 @@ class MachineStateValidator:
 
         machine_status: Optional[str] = None
         mem_mode: Optional[int] = None
+        operation_status: Optional[int] = None
 
         mem_data = await telnet_client.get_memory_data(verbose=False)
         if mem_data:
             mem_parsed = parse_mem_v2(mem_data.encode("utf-8"), control_version=control_version)
             mem_mode = mem_parsed.get("mode")
+            operation_status = mem_parsed.get("operation_status")
 
         prd3_data = await telnet_client.get_prd3_data(control_version=control_version, verbose=False)
         if prd3_data:
@@ -158,6 +173,7 @@ class MachineStateValidator:
             mem_mode=mem_mode,
             machine_id=machine_id,
             machine_name=machine_name,
+            operation_status=operation_status,
         )
     
     async def validate_safe_for_write(
