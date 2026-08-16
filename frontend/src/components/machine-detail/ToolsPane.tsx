@@ -152,6 +152,30 @@ function NumericEditInput({
   );
 }
 
+function expandAtcToolsWithEmptyPots(tools: Tool[]): Tool[] {
+  const spindleRows = tools.filter((tool) => isSpindlePot(tool.pot_number));
+  const byPot = new Map<number, Tool>();
+  let maxPot = 0;
+
+  for (const tool of tools) {
+    if (isSpindlePot(tool.pot_number)) continue;
+    const pot = parsePotNumber(tool.pot_number);
+    if (pot === null || pot < 1) continue;
+    byPot.set(pot, tool);
+    maxPot = Math.max(maxPot, pot);
+  }
+
+  if (maxPot === 0) {
+    return tools;
+  }
+
+  const expanded: Tool[] = [...spindleRows];
+  for (let pot = 1; pot <= maxPot; pot += 1) {
+    expanded.push(byPot.get(pot) ?? { pot_number: pot, tool_number: 0 });
+  }
+  return expanded;
+}
+
 function makePendingKey(
   tool: Tool,
   field: string,
@@ -1159,7 +1183,12 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
   // Filter and sort tools
   const filteredAndSortedTools = useMemo(() => {
-    let filtered = tools;
+    let filtered =
+      toolSource === 'atc' && machineId
+        ? expandAtcToolsWithEmptyPots(tools).map((tool) =>
+            mergeServerToolWithPending(tool, pendingChanges, 'atc'),
+          )
+        : tools;
 
     // Apply search filter
     if (searchQuery.trim()) {
@@ -1242,7 +1271,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     });
 
     return sorted;
-  }, [tools, searchQuery, sortColumn, sortDirection]);
+  }, [tools, searchQuery, sortColumn, sortDirection, toolSource, machineId, pendingChanges]);
 
   const handleSort = (column: SortColumn) => {
     setSortSettings(prev => {
@@ -1528,12 +1557,15 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 const hasPending = toolHasPending(tool);
                 const isAtcEditable = toolSource === 'atc' && !!machineId && !!tool.pot_number;
                 const isTableEditable = toolSource === 'table' && !!machineId;
+                const isEmptyPot = !isSpindlePot(tool.pot_number) && !tool.tool_number;
                 return (
                   <tr 
                     key={idx} 
                     className={`${isCurrent ? 'current-tool' : ''} ${hasMatch ? 'tool-matched' : ''} ${
                       isMeasurementTool ? 'measurement-tool' : ''
                     } ${hasPending ? 'tools-row-pending' : ''} ${
+                      isEmptyPot ? 'tools-row-empty-pot' : ''
+                    } ${
                       rowColored ? `tools-row-colored tool-color-${colorIdx}` : ''
                     }`}
                     onClick={(e) => handleRowClick(tool, e)}
@@ -1625,7 +1657,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       className="tools-col-type"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {isAtcEditable && !isSpindlePot(tool.pot_number) ? (
+                      {isAtcEditable && !isSpindlePot(tool.pot_number) && tool.tool_number ? (
                         <Select
                           className="tools-type-select"
                           value={String(tool.tool_type ?? 1)}
@@ -1661,12 +1693,12 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       className="tools-col-color"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {toolSource === 'atc' && tool.pot_number && machineId ? (
+                      {toolSource === 'atc' && tool.pot_number && machineId && tool.tool_number ? (
                         <ColorSelect
                           value={tool.color ?? 0}
                           onChange={(newColor) => handleColorChange(tool, newColor)}
                         />
-                      ) : tool.color !== undefined && tool.color !== null ? (
+                      ) : tool.color !== undefined && tool.color !== null && tool.tool_number ? (
                         <ColorSelect
                           value={tool.color}
                           onChange={() => {}}

@@ -7,6 +7,7 @@ from app.parsers.tolni_parser_v2 import parse_tolni_v2
 from app.parsers.mem_parser_v2 import parse_mem_v2
 from app.utils.time_utils import format_cnc_time
 from app.parsers.atctl_parser_v2 import parse_atctl_v2
+from app.services.atc_tool_merge import merge_atc_tools_for_display
 from app.parsers.panel_parser_v2 import parse_panel_v2
 from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
 from app.parsers.montr_parser_v2 import parse_montr_v2
@@ -425,38 +426,8 @@ class MachinePoller:
                                 tool["color"] = atc_info["color"]
                     
                     # Merge ATC positions with tool details (forward merge: ATCTL -> TOLN)
-                    tools = []
-                    tool_lookup = {}
-                    
-                    # Create lookup by tool number from TOLN data
-                    for tool in tool_table_tools:
-                        tool_num = tool.get("tool_number")
-                        if tool_num:
-                            tool_lookup[tool_num] = tool
-                    
-                    # Merge ATC tools with tool details from TOLN
-                    # Match by tool_number to correlate pot position with tool data
-                    # Only include tools that have valid TOLN data
-                    for atc_tool in atc_parsed.get("tools", []):
-                        tool_num = atc_tool.get("tool_number")
-                        pot_number = atc_tool.get("pot_number")
-                        
-                        if tool_num and tool_num > 0 and tool_num != 255:  # Skip "not set" and "cap setting"
-                            if tool_num in tool_lookup:
-                                tol_tool = tool_lookup[tool_num]
-                                merged_tool = {
-                                    "pot_number": pot_number,
-                                    "tool_number": tool_num,
-                                    "tool_name": tol_tool.get("tool_name"),
-                                    "diameter": tol_tool.get("diameter"),
-                                    "length": tol_tool.get("length"),
-                                    "group": atc_tool.get("group"),
-                                    "life": None,  # Not in ATCTL
-                                    "tool_type": atc_tool.get("tool_type"),
-                                    "color": atc_tool.get("color"),
-                                }
-                                tools.append(merged_tool)
-                    
+                    tools = merge_atc_tools_for_display(atc_parsed, tool_table_tools)
+
                     tool_data["tools"] = tools
                     tool_data["tools_timestamp"] = poll_timestamp.isoformat()
                     step_times['merge_tools'] = time.time() - step_start

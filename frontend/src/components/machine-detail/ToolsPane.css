@@ -536,6 +536,14 @@
   background: rgba(0, 204, 255, 0.06) !important;
 }
 
+.tools-table tbody tr.tools-row-empty-pot {
+  color: var(--color-text-muted);
+}
+
+.tools-table tbody tr.tools-row-empty-pot.tools-row-pending {
+  color: var(--color-text-primary);
+}
+
 .tools-edit-input {
   width: 100%;
   max-width: 5.5rem;
