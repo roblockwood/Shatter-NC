@@ -617,6 +617,23 @@ function reconcileUnifiedCacheAfterBatch(
   };
 }
 
+function FieldInlineWarning({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <span className="tools-field-warning" role="alert" title={message}>
+      ⚠ {message}
+    </span>
+  );
+}
+
+function potAssignWarningKey(toolNumber: number): string {
+  return `pot-tool-${toolNumber}`;
+}
+
+function pocketAssignWarningKey(potNumber: number): string {
+  return `pocket-${potNumber}`;
+}
+
 function pendingToBatchItem(key: string, change: PendingChange): ToolChangeBatchItem | null {
   const pot = parsePotNumber(change.tool.pot_number);
   switch (change.operationType) {
@@ -872,6 +889,24 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   };
   const [isPushingChanges, setIsPushingChanges] = useState(false);
   const [pushComplete, setPushComplete] = useState(false);
+  const [fieldWarnings, setFieldWarnings] = useState<Map<string, string>>(() => new Map());
+
+  const setFieldWarning = (key: string, message: string) => {
+    setFieldWarnings((prev) => {
+      const next = new Map(prev);
+      next.set(key, message);
+      return next;
+    });
+  };
+
+  const clearFieldWarning = (key: string) => {
+    setFieldWarnings((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Map(prev);
+      next.delete(key);
+      return next;
+    });
+  };
 
   // ──────────────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'tools' | 'optimizer'>('tools');
@@ -1331,9 +1366,13 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       if (parsed === 0) {
         const occupant = getPotOccupantTool(unifiedCache, pending, pot);
         if (occupant != null) {
-          alert(`Pot ${pot} is in use by tool ${occupant}. Clear that pot first.`);
+          setFieldWarning(
+            pocketAssignWarningKey(pot),
+            `Pot ${pot} in use (T${String(occupant).padStart(2, '0')}) — clear first`,
+          );
           return;
         }
+        clearFieldWarning(pocketAssignWarningKey(pot));
         stagePendingChange(tool, 'is_cap', tool.is_cap ? 1 : 0, 1, 'cap', 'pocket');
         return;
       }
@@ -1342,16 +1381,23 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
       const potOccupant = getPotOccupantTool(unifiedCache, pending, pot);
       if (potOccupant != null) {
-        alert(`Pot ${pot} is in use by tool ${potOccupant}. Clear that pot first.`);
+        setFieldWarning(
+          pocketAssignWarningKey(pot),
+          `Pot ${pot} in use (T${String(potOccupant).padStart(2, '0')}) — clear first`,
+        );
         return;
       }
 
       const existingPot = findToolPotAssignment(unifiedCache, pending, parsed);
       if (existingPot != null && existingPot !== pot) {
-        alert(`Tool ${parsed} is already in pot ${existingPot}. Clear that pot first.`);
+        setFieldWarning(
+          pocketAssignWarningKey(pot),
+          `T${String(parsed).padStart(2, '0')} already in pot ${existingPot} — clear first`,
+        );
         return;
       }
 
+      clearFieldWarning(pocketAssignWarningKey(pot));
       stagePendingChange(tool, 'tool_number', tool.tool_number, parsed, 'tool_number', 'pocket');
     }
   };
@@ -1359,7 +1405,11 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const handlePotNumberChange = (tool: Tool, raw: string) => {
     if (!machineId || !tool.tool_number) return;
     const trimmed = raw.trim();
-    if (trimmed === '') return;
+    const warningKey = potAssignWarningKey(tool.tool_number);
+    if (trimmed === '') {
+      clearFieldWarning(warningKey);
+      return;
+    }
     const parsed = parseInt(trimmed, 10);
     if (!Number.isFinite(parsed) || parsed < 1 || parsed > numPocketsProp) return;
 
@@ -1370,10 +1420,14 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       tool.tool_number,
     );
     if (occupant != null) {
-      alert(`Pot ${parsed} is in use by tool ${occupant}. Clear that pot first.`);
+      setFieldWarning(
+        warningKey,
+        `Pot ${parsed} in use (T${String(occupant).padStart(2, '0')}) — clear first`,
+      );
       return;
     }
 
+    clearFieldWarning(warningKey);
     stagePendingChange(
       tool,
       'pot_number',
@@ -1590,6 +1644,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
   const handleDiscardChanges = () => {
     if (pendingChanges.size === 0) return;
+    setFieldWarnings(new Map());
 
     setUnifiedCache((prev) => {
       let tools = [...prev.tools];
@@ -2168,12 +2223,23 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       >
                         <td className="tools-col-number" onClick={(e) => e.stopPropagation()}>
                           {isEditable ? (
-                            <NumericEditInput
-                              className="tools-edit-input tools-edit-input--tool-number"
-                              value={merged.is_cap ? 0 : (merged.tool_number || '')}
-                              placeholder="T# or 0"
-                              onValueChange={(raw) => handleToolNumberChange(asTool, raw, 'pocket')}
-                            />
+                            <div
+                              className={`tools-inline-field-group${
+                                fieldWarnings.has(pocketAssignWarningKey(pocket.pot_number))
+                                  ? ' tools-inline-field-group--invalid'
+                                  : ''
+                              }`}
+                            >
+                              <NumericEditInput
+                                className="tools-edit-input tools-edit-input--tool-number"
+                                value={merged.is_cap ? 0 : (merged.tool_number || '')}
+                                placeholder="T# or 0"
+                                onValueChange={(raw) => handleToolNumberChange(asTool, raw, 'pocket')}
+                              />
+                              <FieldInlineWarning
+                                message={fieldWarnings.get(pocketAssignWarningKey(pocket.pot_number))}
+                              />
+                            </div>
                           ) : merged.is_cap ? (
                             'CAP'
                           ) : merged.tool_number ? (
@@ -2288,33 +2354,44 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       )}
                     </td>
                     <td className="tools-col-pot tools-col-atc" onClick={(e) => e.stopPropagation()}>
-                      <div className="tools-pot-cell">
-                        {isEditable && unifiedCache.atc_available ? (
-                          <>
-                            <NumericEditInput
-                              className="tools-edit-input tools-edit-input--pot-number"
-                              value={isAtcAssigned ? tool.pot_number : ''}
-                              placeholder="—"
-                              onValueChange={(raw) => handlePotNumberChange(tool, raw)}
-                            />
-                            {isAtcAssigned ? (
-                              <button
-                                type="button"
-                                className="tools-clear-pot-btn"
-                                title="Unassign from pocket"
-                                aria-label="Unassign from pocket"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteFromPot(tool);
-                                }}
-                              >
-                                ×
-                              </button>
-                            ) : null}
-                          </>
-                        ) : (
-                          formatPotDisplay(isAtcAssigned ? tool.pot_number : undefined)
-                        )}
+                      <div
+                        className={`tools-inline-field-group${
+                          fieldWarnings.has(potAssignWarningKey(tool.tool_number))
+                            ? ' tools-inline-field-group--invalid'
+                            : ''
+                        }`}
+                      >
+                        <div className="tools-pot-cell">
+                          {isEditable && unifiedCache.atc_available ? (
+                            <>
+                              <NumericEditInput
+                                className="tools-edit-input tools-edit-input--pot-number"
+                                value={isAtcAssigned ? tool.pot_number : ''}
+                                placeholder="—"
+                                onValueChange={(raw) => handlePotNumberChange(tool, raw)}
+                              />
+                              {isAtcAssigned ? (
+                                <button
+                                  type="button"
+                                  className="tools-clear-pot-btn"
+                                  title="Unassign from pocket"
+                                  aria-label="Unassign from pocket"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteFromPot(tool);
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              ) : null}
+                            </>
+                          ) : (
+                            formatPotDisplay(isAtcAssigned ? tool.pot_number : undefined)
+                          )}
+                        </div>
+                        <FieldInlineWarning
+                          message={fieldWarnings.get(potAssignWarningKey(tool.tool_number))}
+                        />
                       </div>
                     </td>
                     <td className="tools-col-group tools-col-atc">{isAtcAssigned ? (tool.group ?? '──') : '──'}</td>
