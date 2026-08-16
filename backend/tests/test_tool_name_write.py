@@ -4,9 +4,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.api._status_state import ToolChangeItem
+from app.services.tool_name_write_service import write_tool_names_via_ftp
+from app.services.tolni_patch import tool_names_match
 from app.services.tool_write_service import apply_tool_changes_batch
 
-SAMPLE_TOLN = """T07,3.4494,0.0000,0.0000,0.0000,1,10000,9500,9952,'OLD NAME      ',,,,,,0,0,,0.0000,0.0000,0.0000,0.0000,
+FULL_TOLN = """T07,3.4494,0.0000,0.0000,0.0000,1,10000,9500,9952,'OLD NAME      ',,,,,,0,0,,0.0000,0.0000,0.0000,0.0000,
+M01,5,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0
 """
 
 
@@ -109,3 +112,34 @@ async def test_batch_telnet_then_name_order(monkeypatch):
 
     assert result.successful == 2
     assert order == ["offset", "name"]
+
+
+@pytest.mark.asyncio
+async def test_write_tool_names_reads_full_file_via_ftp():
+    machine = _machine()
+    ftp = AsyncMock()
+    ftp.get_tool_table_data = AsyncMock(return_value=FULL_TOLN)
+    ftp.upload_file = AsyncMock(return_value={"success": True})
+    ftp.disconnect = AsyncMock()
+
+    telnet = AsyncMock()
+    patched_toln = FULL_TOLN.replace("'OLD NAME      '", "'NEW EM        '")
+    telnet.get_tool_table_data = AsyncMock(side_effect=[FULL_TOLN, patched_toln])
+    telnet.disconnect = AsyncMock()
+
+    with patch(
+        "app.services.tool_name_write_service._ftp_client_for_machine",
+        return_value=ftp,
+    ):
+        old_names, verified = await write_tool_names_via_ftp(
+            machine,
+            {7: "NEW EM"},
+            telnet_client=telnet,
+        )
+
+    ftp.get_tool_table_data.assert_awaited_once()
+    upload_bytes = ftp.upload_file.await_args.args[0]
+    assert b"M01," in upload_bytes
+    assert b"'NEW EM        '" in upload_bytes
+    assert tool_names_match("OLD NAME", old_names[7])
+    assert verified[7] is True

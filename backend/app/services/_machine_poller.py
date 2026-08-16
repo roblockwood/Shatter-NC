@@ -8,7 +8,11 @@ from app.parsers.mem_parser_v2 import parse_mem_v2
 from app.utils.time_utils import format_cnc_time
 from app.parsers.atctl_parser_v2 import parse_atctl_v2
 from app.services.atc_tool_merge import merge_atc_tools_for_display
-from app.services.unified_tool_view import build_unified_tool_view
+from app.services.unified_tool_view import (
+    build_unified_tool_view,
+    merge_toln_fields_into_tool_table,
+    refresh_unified_toln_fields,
+)
 from app.parsers.panel_parser_v2 import parse_panel_v2
 from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
 from app.parsers.montr_parser_v2 import parse_montr_v2
@@ -314,6 +318,36 @@ class MachinePoller:
                 f"Machine {self.machine.id}: could not fetch NC header for {deployed_path}: {e}"
             )
 
+    async def _fetch_atc_data_with_retry(
+        self,
+        telnet_client: CNCTelnetClient,
+        attempts: int = 3,
+        delay_seconds: float = 0.5,
+    ) -> Optional[str]:
+        """ATCTL can fail briefly after TOLN FTP uploads; retry before dropping magazine cache."""
+        for attempt in range(attempts):
+            atc_data = await telnet_client.get_atc_magazine_data(
+                control_version=self.machine.control_version,
+                verbose=False,
+            )
+            if atc_data:
+                return atc_data
+            if attempt < attempts - 1:
+                logger.debug(
+                    "Machine %s - ATCTL read failed (attempt %s/%s), retrying in %.1fs",
+                    self.machine.id,
+                    attempt + 1,
+                    attempts,
+                    delay_seconds,
+                )
+                await asyncio.sleep(delay_seconds)
+        return None
+
+    def _prior_tool_cache(self) -> dict:
+        if not self.websocket_manager:
+            return {}
+        return self.websocket_manager.get_machine_status(self.machine.id) or {}
+
     async def poll_tool_data(self) -> Dict[str, Any]:
         """
         Poll tool table and ATC magazine data (slow polling operation).
@@ -373,11 +407,12 @@ class MachinePoller:
                 
                 # Get ATC magazine data (pot/tool mappings) for merging
                 step_start = time.time()
-                atc_data = await telnet_client.get_atc_magazine_data(control_version=self.machine.control_version, verbose=False)
+                atc_data = await self._fetch_atc_data_with_retry(telnet_client)
                 step_times['get_atc'] = time.time() - step_start
                 
                 # Start with pure TOLN (table) data
                 tool_table_tools = tool_table_parsed.get("tools", [])
+                prior_cache = self._prior_tool_cache()
                 
                 if atc_data:
                     step_start = time.time()
@@ -444,15 +479,37 @@ class MachinePoller:
                     step_times['merge_tools'] = time.time() - step_start
                     logger.debug(f"Machine {self.machine.id} - Fetched {len(tools)} ATC tools and {len(tool_table_tools)} table tools via Telnet (slow poll)")
                 else:
-                    logger.warning(f"Machine {self.machine.id} - No ATC data available via Telnet")
-                    tool_data["tools"] = []
-                    tool_data["tools_unified"] = build_unified_tool_view(
-                        tool_table_tools, None, atc_pockets=self.machine.atc_pockets
+                    logger.warning(
+                        f"Machine {self.machine.id} - No ATC data available via Telnet after retries; "
+                        "preserving prior magazine cache when available"
                     )
+                    prior_unified = prior_cache.get("tools_unified")
+                    prior_tools = prior_cache.get("tools")
+                    prior_table = prior_cache.get("tool_table")
+
+                    merged_table = merge_toln_fields_into_tool_table(
+                        tool_table_tools,
+                        prior_table,
+                    )
+                    tool_data["tool_table"] = merged_table
+
+                    if prior_unified and prior_unified.get("atc_available"):
+                        tool_data["tools_unified"] = refresh_unified_toln_fields(
+                            prior_unified,
+                            tool_table_tools,
+                        )
+                        tool_data["tools"] = prior_tools or []
+                        if prior_cache.get("current_tool") is not None:
+                            tool_data["current_tool"] = prior_cache["current_tool"]
+                    else:
+                        tool_data["tools"] = []
+                        tool_data["tools_unified"] = build_unified_tool_view(
+                            merged_table, None, atc_pockets=self.machine.atc_pockets
+                        )
                     tool_data["tools_timestamp"] = poll_timestamp.isoformat()
                 
-                # Store TABLE data with pot numbers merged (if ATC data was available)
-                tool_data["tool_table"] = tool_table_tools
+                if atc_data:
+                    tool_data["tool_table"] = tool_table_tools
                 tool_data["tool_table_timestamp"] = poll_timestamp.isoformat()
                 
                 # Update websocket manager cache with tool data so fast poll can use it
