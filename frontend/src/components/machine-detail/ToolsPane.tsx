@@ -9,6 +9,12 @@ import { Select } from '../ui/Select';
 import './ToolsPane.css';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import { ToolsOptimizerTab } from './ToolsOptimizerTab';
+import {
+  buildUnifiedToolViewFromLegacy,
+  type EmptyPocket,
+  type UnifiedToolRow,
+  type UnifiedToolView,
+} from '../../utils/unifiedToolView';
 
 // Define type locally to avoid Vite import issues
 type ToolModificationOperationType = 
@@ -28,17 +34,19 @@ interface Tool {
   diameter?: number;
   length?: number;
   group?: string | number;
-  life?: number; // Tool life remaining in minutes (integer)
-  tool_type?: number; // 1=STD Tool, 2=Large Tool
-  color?: number; // 0=no color, 1=blue, 2=red, 3=purple, 4=green, 5=light blue, 6=yellow, 7=white
+  life?: number;
+  tool_type?: number;
+  color?: number;
+  in_atc?: boolean;
 }
 
 interface ToolsPaneProps {
-  tools: Tool[];  // ATC data from WebSocket
-  toolTable?: Tool[];  // TABLE data from WebSocket (new)
+  tools: Tool[];  // Legacy ATC data (fallback builder input)
+  toolTable?: Tool[];  // Legacy TOLN data (fallback builder input)
+  toolsUnified?: UnifiedToolView;  // Preferred when connected to a machine
   currentTool?: number;
   machineId?: number;
-  source?: 'atc' | 'table';
+  source?: 'atc' | 'table';  // Deprecated — unified view ignores this when machineId is set
   units?: UnitType;
   machineStatus?: string;  // Status from WebSocket polling (e.g., "operating", "standby", "error")
   memMode?: number;  // MEM mode from WebSocket polling: 0=Manual, 1=MDI, 2=Memory, 3=Edit, 4=MDI manual, 5=Memory edit
@@ -71,7 +79,7 @@ interface PendingChange {
   oldValue: string | number;
   newValue: string | number;
   operationType: ToolModificationOperationType;
-  cacheSlice: 'atc' | 'table';
+  cacheSlice: 'tool' | 'pocket' | 'spindle';
 }
 
 interface ToolChangeBatchItem {
@@ -177,30 +185,6 @@ function NumericEditInput({
   );
 }
 
-function expandAtcToolsWithEmptyPots(tools: Tool[]): Tool[] {
-  const spindleRows = tools.filter((tool) => isSpindlePot(tool.pot_number));
-  const byPot = new Map<number, Tool>();
-  let maxPot = 0;
-
-  for (const tool of tools) {
-    if (isSpindlePot(tool.pot_number)) continue;
-    const pot = parsePotNumber(tool.pot_number);
-    if (pot === null || pot < 1) continue;
-    byPot.set(pot, tool);
-    maxPot = Math.max(maxPot, pot);
-  }
-
-  if (maxPot === 0) {
-    return tools;
-  }
-
-  const expanded: Tool[] = [...spindleRows];
-  for (let pot = 1; pot <= maxPot; pot += 1) {
-    expanded.push(byPot.get(pot) ?? { pot_number: pot, tool_number: 0 });
-  }
-  return expanded;
-}
-
 function makePendingKey(
   tool: Tool,
   field: string,
@@ -276,25 +260,68 @@ function potsEqual(
   return pa !== null && pb !== null && pa === pb;
 }
 
-function toolsMatchForSlice(a: Tool, b: Tool, slice: 'atc' | 'table'): boolean {
-  if (slice === 'table') return a.tool_number === b.tool_number;
-  return potsEqual(a.pot_number, b.pot_number);
+function unifiedRowAsTool(row: UnifiedToolRow): Tool {
+  return { ...row };
+}
+
+function emptyPocketAsTool(pocket: EmptyPocket): Tool {
+  return {
+    pot_number: pocket.pot_number,
+    tool_number: 0,
+    tool_type: pocket.tool_type,
+    color: pocket.color,
+  };
+}
+
+function applyAssignmentEdge(tool: Tool, field: string, value: string | number): Tool {
+  const next = applyFieldToTool(tool, field, value);
+  if (field === 'pot_number') {
+    if (value === '' || value === undefined || value === null) {
+      return {
+        ...next,
+        in_atc: false,
+        pot_number: undefined,
+        group: undefined,
+        tool_type: undefined,
+        color: undefined,
+      };
+    }
+    return { ...next, in_atc: true };
+  }
+  if (field === 'tool_number' && Number(value) === 0) {
+    return { ...next, in_atc: false, pot_number: undefined, group: undefined, tool_type: undefined, color: undefined };
+  }
+  return next;
+}
+
+function toolsMatchForSlice(
+  a: Tool,
+  b: Tool,
+  slice: PendingChange['cacheSlice'],
+): boolean {
+  if (slice === 'tool') return a.tool_number === b.tool_number && a.tool_number > 0;
+  if (slice === 'pocket') return potsEqual(a.pot_number, b.pot_number);
+  if (slice === 'spindle') return isSpindlePot(a.pot_number) && isSpindlePot(b.pot_number);
+  return false;
 }
 
 function mergeServerToolWithPending(
   serverTool: Tool,
   pendingChanges: Map<string, PendingChange>,
-  cacheSlice: 'atc' | 'table',
+  cacheSlice: PendingChange['cacheSlice'],
 ): Tool {
   let merged = { ...serverTool };
   pendingChanges.forEach((change) => {
     if (change.cacheSlice !== cacheSlice) return;
     if (!toolsMatchForSlice(change.tool, serverTool, cacheSlice)) return;
     if (change.operationType === 'delete') {
-      merged = { ...merged, tool_number: 0 };
+      merged = applyAssignmentEdge(merged, 'tool_number', 0);
       return;
     }
-    merged = applyFieldToTool(merged, change.field, change.newValue);
+    merged =
+      cacheSlice === 'tool' && (change.field === 'pot_number' || change.field === 'tool_number')
+        ? applyAssignmentEdge(merged, change.field, change.newValue)
+        : applyFieldToTool(merged, change.field, change.newValue);
   });
   return merged;
 }
@@ -431,9 +458,9 @@ function getConfirmedValueFromResult(result: ToolChangeBatchResult): {
 export const ToolsPane: React.FC<ToolsPaneProps> = ({ 
   tools: initialTools, 
   toolTable: initialToolTable,
+  toolsUnified: initialToolsUnified,
   currentTool, 
   machineId,
-  source: initialSource = 'atc',
   units = 'in',
   machineStatus,
   memMode,
@@ -446,38 +473,23 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   numPockets: numPocketsProp = 21,
   macros,
 }) => {
-  // Cache sort settings separately for each view (ATC and TABLE)
-  const [sortSettings, setSortSettings] = useState<{
-    atc: { column: SortColumn; direction: SortDirection };
-    table: { column: SortColumn; direction: SortDirection };
-  }>({
-    atc: { column: 'pot_number', direction: 'asc' },  // ATC defaults to POT# ascending
-    table: { column: 'tool_number', direction: 'asc' }  // TABLE defaults to T# ascending
-  });
+  const useUnifiedView = Boolean(machineId);
+
+  const resolvedUnifiedView = useMemo((): UnifiedToolView => {
+    if (initialToolsUnified) return initialToolsUnified;
+    return buildUnifiedToolViewFromLegacy(initialToolTable || [], initialTools || []);
+  }, [initialToolsUnified, initialToolTable, initialTools]);
+
+  const [sortColumn, setSortColumn] = useState<SortColumn>('tool_number');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [searchQuery, setSearchQuery] = useState('');
-  const [toolSource, setToolSource] = useState<'atc' | 'table'>(initialSource);
-  
-  // Get current sort settings based on active source
-  const sortColumn = sortSettings[toolSource].column;
-  const sortDirection = sortSettings[toolSource].direction;
-  // Cache tools separately for each source (ATC and TABLE)
-  const [toolsCache, setToolsCache] = useState<{ atc: Tool[]; table: Tool[] }>({
-    atc: initialSource === 'atc' ? initialTools : [],
-    table: initialSource === 'table' ? (initialToolTable || []) : []
-  });
-  // Track timestamps for cache entries to determine if data is stale
-  const [cacheTimestamps, setCacheTimestamps] = useState<{
-    atc: number | null;
-    table: number | null;
-  }>({
-    atc: null,
-    table: null
-  });
+
+  const [unifiedCache, setUnifiedCache] = useState<UnifiedToolView>(() => resolvedUnifiedView);
+  const [legacyTools] = useState<Tool[]>(() => initialTools || []);
+
+  const [cacheTimestamp, setCacheTimestamp] = useState<number | null>(null);
   const [isLoadingTools, setIsLoadingTools] = useState(false);
-  const [toolsError, setToolsError] = useState<{ atc: string | null; table: string | null }>({
-    atc: null,
-    table: null
-  });
+  const [toolsError, setToolsError] = useState<string | null>(null);
   const [toolsSummary, setToolsSummary] = useState<Array<{ tool_number: number; description: string }>>([]);
 
   // Track pending changes (changes not yet pushed to server)
@@ -496,7 +508,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const [pushComplete, setPushComplete] = useState(false);
 
   // ──────────────────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<'atc' | 'table' | 'optimizer'>('atc');
+  const [activeTab, setActiveTab] = useState<'tools' | 'optimizer'>('tools');
 
   const [measurementTool, setMeasurementTool] = useState<number | null>(null);
   const [measurementSaving, setMeasurementSaving] = useState(false);
@@ -529,11 +541,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   }, [machineStatus, memMode, memOperationStatus]);
 
   const toolsDataLastUpdatedAt = useMemo(() => {
-    const wsAt = toolSource === 'atc' ? toolsTimestamp : toolTableTimestamp;
+    const wsAt = toolsTimestamp || toolTableTimestamp;
     if (wsAt) return wsAt;
-    const ct = cacheTimestamps[toolSource];
-    return ct != null ? ct : null;
-  }, [toolSource, toolsTimestamp, toolTableTimestamp, cacheTimestamps]);
+    return cacheTimestamp != null ? cacheTimestamp : null;
+  }, [toolsTimestamp, toolTableTimestamp, cacheTimestamp]);
 
   const toolExpectedIntervalMs = Math.max((toolPollIntervalSeconds ?? 30) * 1000, 5000);
 
@@ -546,7 +557,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     return Math.max(0, Date.now() - parsed);
   }, [toolsDataLastUpdatedAt]);
 
-  const visibleToolsCount = toolsCache[toolSource]?.length ?? 0;
+  const visibleToolsCount = useUnifiedView
+    ? unifiedCache.tools.length
+    : legacyTools.length;
 
   const isToolsSnapshotStale = useMemo(() => {
     if (visibleToolsCount === 0) return false;
@@ -563,104 +576,107 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     return `${mins}m ${rem}s old`;
   }, [toolsAgeMs]);
   
-  // Get current tools from cache based on active source
-  const tools = toolsCache[toolSource];
-  // Get current error for active source
-  const currentError = toolsError[toolSource];
+  const tools = useUnifiedView
+    ? unifiedCache.tools.map(unifiedRowAsTool)
+    : legacyTools;
+  const currentError = toolsError;
   
-  // Update cache when WebSocket data arrives (fresh Telnet data from polling)
+  // Update unified cache when WebSocket data arrives
   useEffect(() => {
-    if (machineId) {
-      if (initialTools && initialTools.length > 0) {
-        setToolsCache(prev => {
-          if (isPushingChanges) {
-            const pushingKeys = new Set(Array.from(pendingChanges.keys()));
-            return {
-              ...prev,
-              atc: initialTools.map(serverTool =>
-                pushingKeys.size > 0
-                  ? mergeServerToolWithPending(serverTool, pendingChanges, 'atc')
-                  : serverTool,
-              ),
-            };
-          }
+    if (!useUnifiedView) return;
 
-          const merged = initialTools.map(serverTool => {
-            const pendingMerged = mergeServerToolWithPending(
-              serverTool,
+    const hasData =
+      (initialToolsUnified && initialToolsUnified.tools.length > 0) ||
+      (initialToolTable && initialToolTable.length > 0) ||
+      (initialTools && initialTools.length > 0);
+
+    if (!hasData) return;
+
+    const incoming = resolvedUnifiedView;
+
+    setUnifiedCache(() => {
+      if (isPushingChanges) {
+        return {
+          ...incoming,
+          tools: incoming.tools.map((serverTool) =>
+            mergeServerToolWithPending(
+              unifiedRowAsTool(serverTool),
               pendingChanges,
-              'atc',
-            );
-            const potKey = `${serverTool.pot_number}-${serverTool.tool_number}`;
-            const recentlyPushed = recentlyPushedRef.current.get(potKey);
-            if (recentlyPushed) {
-              const serverVal = getToolFieldValue(serverTool, recentlyPushed.field);
-              if (serverVal === recentlyPushed.value) {
-                recentlyPushedRef.current.delete(potKey);
-                return pendingMerged;
-              }
-              return applyFieldToTool(pendingMerged, recentlyPushed.field, recentlyPushed.value);
-            }
-            return pendingMerged;
-          });
-
-          return { ...prev, atc: merged };
-        });
-        setCacheTimestamps(prev => ({ ...prev, atc: Date.now() }));
-        setToolsError(prev => ({ ...prev, atc: null }));
-
-        if (!isPushingChanges) {
-          updatePendingChanges((prev) => {
-            const next = new Map(prev);
-            initialTools.forEach(serverTool => {
-              next.forEach((change, key) => {
-                if (change.cacheSlice !== 'atc') return;
-                if (!toolsMatchForSlice(change.tool, serverTool, 'atc')) return;
-                if (change.operationType === 'delete' && !serverTool.tool_number) {
-                  next.delete(key);
-                } else {
-                  const fieldVal = getToolFieldValue(serverTool, change.field);
-                  if (valuesEqual(fieldVal ?? '', change.newValue)) {
-                    next.delete(key);
-                  }
-                }
-              });
-            });
-            return next;
-          });
-        }
-      }
-
-      if (initialToolTable && initialToolTable.length > 0) {
-        setToolsCache(prev => ({
-          ...prev,
-          table: initialToolTable.map(serverTool =>
-            mergeServerToolWithPending(serverTool, pendingChanges, 'table'),
+              'tool',
+            ) as UnifiedToolRow,
           ),
-        }));
-        setCacheTimestamps(prev => ({ ...prev, table: Date.now() }));
-        setToolsError(prev => ({ ...prev, table: null }));
-
-        if (!isPushingChanges) {
-          updatePendingChanges((prev) => {
-            const next = new Map(prev);
-            initialToolTable.forEach(serverTool => {
-              next.forEach((change, key) => {
-                if (change.cacheSlice !== 'table') return;
-                if (change.tool.tool_number !== serverTool.tool_number) return;
-                const fieldVal = getToolFieldValue(serverTool, change.field);
-                if (valuesEqual(fieldVal ?? '', change.newValue)) {
-                  next.delete(key);
-                }
-              });
-            });
-            return next;
-          });
-        }
+          empty_pockets: incoming.empty_pockets.map((pocket) =>
+            mergeServerToolWithPending(
+              emptyPocketAsTool(pocket),
+              pendingChanges,
+              'pocket',
+            ) as EmptyPocket,
+          ),
+        };
       }
+
+      const mergedTools = incoming.tools.map((serverTool) => {
+        const asTool = unifiedRowAsTool(serverTool);
+        const pendingMerged = mergeServerToolWithPending(asTool, pendingChanges, 'tool');
+        const trackKey = `${serverTool.tool_number}-tool`;
+        const recentlyPushed = recentlyPushedRef.current.get(trackKey);
+        if (recentlyPushed) {
+          const serverVal = getToolFieldValue(asTool, recentlyPushed.field);
+          if (serverVal === recentlyPushed.value) {
+            recentlyPushedRef.current.delete(trackKey);
+            return pendingMerged as UnifiedToolRow;
+          }
+          return applyFieldToTool(pendingMerged, recentlyPushed.field, recentlyPushed.value) as UnifiedToolRow;
+        }
+        return pendingMerged as UnifiedToolRow;
+      });
+
+      const mergedPockets = incoming.empty_pockets.map((pocket) => {
+        const asTool = emptyPocketAsTool(pocket);
+        return mergeServerToolWithPending(asTool, pendingChanges, 'pocket') as EmptyPocket;
+      });
+
+      return {
+        ...incoming,
+        tools: mergedTools,
+        empty_pockets: mergedPockets,
+        spindle: incoming.spindle,
+      };
+    });
+
+    setCacheTimestamp(Date.now());
+    setToolsError(null);
+
+    if (!isPushingChanges) {
+      updatePendingChanges((prev) => {
+        const next = new Map(prev);
+        incoming.tools.forEach((serverTool) => {
+          const asTool = unifiedRowAsTool(serverTool);
+          next.forEach((change, key) => {
+            if (change.cacheSlice !== 'tool') return;
+            if (change.tool.tool_number !== asTool.tool_number) return;
+            const fieldVal = getToolFieldValue(asTool, change.field);
+            if (valuesEqual(fieldVal ?? '', change.newValue)) {
+              next.delete(key);
+            }
+          });
+        });
+        incoming.empty_pockets.forEach((pocket) => {
+          const asTool = emptyPocketAsTool(pocket);
+          next.forEach((change, key) => {
+            if (change.cacheSlice !== 'pocket') return;
+            if (!potsEqual(change.tool.pot_number, asTool.pot_number)) return;
+            const fieldVal = getToolFieldValue(asTool, change.field);
+            if (valuesEqual(fieldVal ?? '', change.newValue)) {
+              next.delete(key);
+            }
+          });
+        });
+        return next;
+      });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialTools, initialToolTable, machineId, isPushingChanges]);
+  }, [resolvedUnifiedView, useUnifiedView, machineId, isPushingChanges]);
   const navigate = useNavigate();
   const { isBetaMode } = useBetaMode();
   const [toolsColorMode, setToolsColorMode] = useState<boolean>(() => {
@@ -690,88 +706,50 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   }, [isBetaMode]);
 
 
-  // Rely on WebSocket data - no automatic fetching to avoid Telnet conflicts
-  // WebSocket provides fresh data every 5 seconds via polling service
-  // Only fetch as fallback if WebSocket connection appears broken (cache >60s stale)
   useEffect(() => {
-    if (machineId && toolSource) {
-      const cacheTimestamp = cacheTimestamps[toolSource];
-      const now = Date.now();
-      const STALE_THRESHOLD = 60000; // 60 seconds - only fetch if WebSocket is clearly broken
-      
-      // Check if we need to fetch (fallback only):
-      // Cache is very stale (>60s - indicating WebSocket connection is broken)
-      const needsFetch = cacheTimestamp && (now - cacheTimestamp) > STALE_THRESHOLD;
-      
-      if (needsFetch) {
-        // Only fetch as fallback - WebSocket should provide data
+    if (!machineId || !useUnifiedView) return;
+
+    const now = Date.now();
+    const STALE_THRESHOLD = 60000;
+    const needsFetch = cacheTimestamp && (now - cacheTimestamp) > STALE_THRESHOLD;
+
+    if (needsFetch) {
       setIsLoadingTools(true);
-        
-        const sourceParam = toolSource === 'atc' ? 'atc' : 'table';
-        fetch(`${API_BASE_URL}/api/machines/${machineId}/tools?source=${sourceParam}`)
-          .then(res => {
-            if (!res.ok) {
-              return res.json().then(errData => {
-                const errorMsg = errData.detail || `HTTP ${res.status}: ${res.statusText}`;
-                // For 503 errors, provide more helpful message
-                if (res.status === 503) {
-                  throw new Error(`Machine temporarily unavailable: ${errorMsg}. The machine may be busy or Telnet port 10000 may be blocked. Please try again in a moment.`);
-                }
-                throw new Error(errorMsg);
-              });
-            }
-            return res.json();
-          })
-        .then(data => {
-            if (data && data.tools) {
-              // Update cache for this source
-              setToolsCache(prev => ({
-                ...prev,
-                [toolSource]: data.tools
-              }));
-              setCacheTimestamps(prev => ({
-                ...prev,
-                [toolSource]: Date.now()
-              }));
-              // Clear error on successful fetch
-              setToolsError(prev => ({
-                ...prev,
-                [toolSource]: null
-              }));
-            } else {
-              console.warn(`Tool ${sourceParam} response missing tools array:`, data);
-              // Only clear cache if we had no previous data
-              setToolsCache(prev => {
-                if (prev[toolSource].length === 0) {
-                  return {
-                    ...prev,
-                    [toolSource]: []
-                  };
-                }
-                return prev; // Keep existing cache
-              });
+      fetch(`${API_BASE_URL}/api/machines/${machineId}/tools?source=atc`)
+        .then((res) => {
+          if (!res.ok) {
+            return res.json().then((errData) => {
+              const errorMsg = errData.detail || `HTTP ${res.status}: ${res.statusText}`;
+              if (res.status === 503) {
+                throw new Error(
+                  `Machine temporarily unavailable: ${errorMsg}. The machine may be busy or Telnet port 10000 may be blocked. Please try again in a moment.`,
+                );
+              }
+              throw new Error(errorMsg);
+            });
           }
+          return res.json();
+        })
+        .then((data) => {
+          if (data?.tools_unified) {
+            setUnifiedCache(data.tools_unified);
+          } else if (data?.tools) {
+            setUnifiedCache(buildUnifiedToolViewFromLegacy(data.tool_table || [], data.tools));
+          }
+          setCacheTimestamp(Date.now());
+          setToolsError(null);
           setIsLoadingTools(false);
         })
-        .catch(err => {
-            console.error(`Error fetching ${sourceParam} data:`, err);
-            // Store error message for display
-            const errorMessage = err instanceof Error ? err.message : `Failed to fetch ${sourceParam} data`;
-            setToolsError(prev => ({
-              ...prev,
-              [toolSource]: errorMessage
-            }));
-            // Don't clear cache on error - keep previous data visible
+        .catch((err) => {
+          console.error('Error fetching tools data:', err);
+          setToolsError(err instanceof Error ? err.message : 'Failed to fetch tools data');
           setIsLoadingTools(false);
         });
-      } else {
-        // Have cached data or waiting for WebSocket - no fetch needed
-        setIsLoadingTools(false);
-      }
+    } else {
+      setIsLoadingTools(false);
     }
-    // Only check when source changes, not on every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [machineId, toolSource]);
+  }, [machineId, useUnifiedView, cacheTimestamp]);
 
 
   const formatLife = (value: number | string | undefined) => {
@@ -810,7 +788,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     oldValue: string | number,
     newValue: string | number,
     operationType: ToolModificationOperationType,
-    cacheSlice: 'atc' | 'table',
+    cacheSlice: PendingChange['cacheSlice'],
   ) => {
     const changeKey = makePendingKey(tool, field, operationType);
 
@@ -818,19 +796,59 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       const existing = prev.get(changeKey);
       const baseline = existing?.oldValue ?? oldValue;
 
+      const applyToTool = (t: Tool): Tool => {
+        if (operationType === 'delete') {
+          return applyAssignmentEdge(t, 'tool_number', 0);
+        }
+        if (cacheSlice === 'tool' && (field === 'pot_number' || field === 'tool_number')) {
+          return applyAssignmentEdge(t, field, newValue);
+        }
+        return applyFieldToTool(t, field, newValue);
+      };
+
+      const revertTool = (t: Tool): Tool => {
+        if (operationType === 'delete') {
+          return applyAssignmentEdge(t, 'tool_number', baseline as number);
+        }
+        if (cacheSlice === 'tool' && (field === 'pot_number' || field === 'tool_number')) {
+          return applyAssignmentEdge(t, field, baseline);
+        }
+        return applyFieldToTool(t, field, baseline);
+      };
+
       if (valuesEqual(newValue, baseline)) {
         const next = new Map(prev);
         next.delete(changeKey);
-        setToolsCache((cachePrev) => ({
-          ...cachePrev,
-          [cacheSlice]: cachePrev[cacheSlice].map((t) => {
-            if (!toolsMatchForSlice(t, tool, cacheSlice)) return t;
-            if (operationType === 'delete') {
-              return { ...t, tool_number: baseline as number };
+        if (useUnifiedView) {
+          setUnifiedCache((cachePrev) => {
+            if (cacheSlice === 'tool') {
+              return {
+                ...cachePrev,
+                tools: cachePrev.tools.map((row) => {
+                  const asTool = unifiedRowAsTool(row);
+                  if (!toolsMatchForSlice(asTool, tool, 'tool')) return row;
+                  return revertTool(asTool) as UnifiedToolRow;
+                }),
+              };
             }
-            return applyFieldToTool(t, field, baseline);
-          }),
-        }));
+            if (cacheSlice === 'pocket') {
+              return {
+                ...cachePrev,
+                empty_pockets: cachePrev.empty_pockets.map((pocket) => {
+                  const asTool = emptyPocketAsTool(pocket);
+                  if (!toolsMatchForSlice(asTool, tool, 'pocket')) return pocket;
+                  const reverted = revertTool(asTool);
+                  return {
+                    pot_number: pocket.pot_number,
+                    tool_type: reverted.tool_type,
+                    color: reverted.color,
+                  };
+                }),
+              };
+            }
+            return cachePrev;
+          });
+        }
         return next;
       }
 
@@ -844,116 +862,119 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         cacheSlice,
       });
 
-      setToolsCache((cachePrev) => ({
-        ...cachePrev,
-        [cacheSlice]: cachePrev[cacheSlice].map((t) => {
-          if (!toolsMatchForSlice(t, tool, cacheSlice)) return t;
-          if (operationType === 'delete') {
-            return { ...t, tool_number: 0 };
+      if (useUnifiedView) {
+        setUnifiedCache((cachePrev) => {
+          if (cacheSlice === 'tool') {
+            return {
+              ...cachePrev,
+              tools: cachePrev.tools.map((row) => {
+                const asTool = unifiedRowAsTool(row);
+                if (!toolsMatchForSlice(asTool, tool, 'tool')) return row;
+                return applyToTool(asTool) as UnifiedToolRow;
+              }),
+            };
           }
-          return applyFieldToTool(t, field, newValue);
-        }),
-      }));
+          if (cacheSlice === 'pocket') {
+            return {
+              ...cachePrev,
+              empty_pockets: cachePrev.empty_pockets.map((pocket) => {
+                const asTool = emptyPocketAsTool(pocket);
+                if (!toolsMatchForSlice(asTool, tool, 'pocket')) return pocket;
+                const updated = applyToTool(asTool);
+                return {
+                  pot_number: pocket.pot_number,
+                  tool_type: updated.tool_type,
+                  color: updated.color,
+                };
+              }),
+            };
+          }
+          if (cacheSlice === 'spindle' && cachePrev.spindle) {
+            return {
+              ...cachePrev,
+              spindle: {
+                ...cachePrev.spindle,
+                tool_number: Number(newValue),
+              },
+            };
+          }
+          return cachePrev;
+        });
+      }
 
       return next;
     });
   };
 
   const handleColorChange = (tool: Tool, newColor: number) => {
-    if (toolSource !== 'atc' || !machineId || !tool.pot_number) {
-      return;
-    }
-    stagePendingChange(
-      tool,
-      'color',
-      tool.color ?? 0,
-      newColor,
-      'color',
-      'atc',
-    );
+    if (!machineId || !tool.pot_number || !tool.in_atc) return;
+    stagePendingChange(tool, 'color', tool.color ?? 0, newColor, 'color', 'tool');
   };
 
-  const handleToolNumberChange = (tool: Tool, raw: string) => {
-    if (toolSource !== 'atc' || !machineId || !tool.pot_number) return;
+  const handleToolNumberChange = (tool: Tool, raw: string, cacheSlice: 'tool' | 'pocket' | 'spindle' = 'pocket') => {
+    if (!machineId) return;
     const parsed = parseInt(raw, 10);
     if (!Number.isFinite(parsed)) return;
 
-    if (isSpindlePot(tool.pot_number)) {
-      stagePendingChange(tool, 'tool_number', tool.tool_number, parsed, 'spindle', 'atc');
+    if (cacheSlice === 'spindle' || isSpindlePot(tool.pot_number)) {
+      stagePendingChange(tool, 'tool_number', tool.tool_number, parsed, 'spindle', 'spindle');
       return;
     }
 
     if (parsed < 1 || parsed > 999) return;
-    stagePendingChange(
-      tool,
-      'tool_number',
-      tool.tool_number,
-      parsed,
-      'tool_number',
-      'atc',
-    );
+    stagePendingChange(tool, 'tool_number', tool.tool_number, parsed, 'tool_number', cacheSlice);
   };
 
   const handlePotNumberChange = (tool: Tool, raw: string) => {
-    if (toolSource !== 'table' || !machineId || !tool.tool_number) return;
+    if (!machineId || !tool.tool_number) return;
     const trimmed = raw.trim();
     if (trimmed === '') return;
     const parsed = parseInt(trimmed, 10);
     if (!Number.isFinite(parsed) || parsed < 1 || parsed > numPocketsProp) return;
 
-    const oldPot = tool.pot_number ?? '';
     stagePendingChange(
       tool,
       'pot_number',
-      oldPot,
+      tool.pot_number ?? '',
       parsed,
       'pot_number',
-      'table',
+      'tool',
     );
   };
 
   const handleToolTypeChange = (tool: Tool, raw: string) => {
-    if (toolSource !== 'atc' || !machineId || !tool.pot_number || isSpindlePot(tool.pot_number)) {
-      return;
-    }
+    if (!machineId || !tool.pot_number || !tool.in_atc || isSpindlePot(tool.pot_number)) return;
     const parsed = parseInt(raw, 10);
     if (![1, 2, 3].includes(parsed)) return;
-    stagePendingChange(
-      tool,
-      'tool_type',
-      tool.tool_type ?? 1,
-      parsed,
-      'tool_type',
-      'atc',
-    );
+    stagePendingChange(tool, 'tool_type', tool.tool_type ?? 1, parsed, 'tool_type', 'tool');
   };
 
   const handleDeleteFromPot = (tool: Tool) => {
-    if (toolSource !== 'atc' || !machineId || !tool.pot_number || isSpindlePot(tool.pot_number)) {
-      return;
-    }
+    if (!machineId || !tool.pot_number || isSpindlePot(tool.pot_number) || !tool.in_atc) return;
     if (!tool.tool_number) return;
-    stagePendingChange(tool, 'tool_number', tool.tool_number, 0, 'delete', 'atc');
+    stagePendingChange(tool, 'tool_number', tool.tool_number, 0, 'delete', 'tool');
   };
 
   const handleOffsetChange = (tool: Tool, offsetType: 'H' | 'D', raw: string) => {
-    if (toolSource !== 'table' || !machineId) return;
+    if (!machineId) return;
     const parsed = parseFloat(raw);
     if (!Number.isFinite(parsed)) return;
     const oldValue = offsetType === 'H' ? (tool.length ?? 0) : (tool.diameter ?? 0);
-    stagePendingChange(tool, offsetType, oldValue, parsed, 'offset', 'table');
+    stagePendingChange(tool, offsetType, oldValue, parsed, 'offset', 'tool');
   };
 
   const handleLifeChange = (tool: Tool, raw: string) => {
-    if (toolSource !== 'table' || !machineId) return;
+    if (!machineId) return;
     const parsed = parseInt(raw, 10);
     if (!Number.isFinite(parsed) || parsed < 0) return;
-    stagePendingChange(tool, 'life', tool.life ?? 0, parsed, 'life', 'table');
+    stagePendingChange(tool, 'life', tool.life ?? 0, parsed, 'life', 'tool');
   };
 
-  const toolHasPending = (tool: Tool): boolean =>
+  const toolHasPending = (tool: Tool, slice?: PendingChange['cacheSlice']): boolean =>
     Array.from(pendingChanges.values()).some(
-      c => c.cacheSlice === toolSource && toolsMatchForSlice(c.tool, tool, toolSource),
+      (c) =>
+        (slice ? c.cacheSlice === slice : true) &&
+        toolsMatchForSlice(c.tool, tool, c.cacheSlice),
     );
 
   const getColorInfo = (value: number | undefined): { name: string; hex: string } => {
@@ -997,9 +1018,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   };
 
   const handleMeasurementToolSelect = async (tool: Tool) => {
-    if (toolSource !== 'atc' || !machineId || !tool.tool_number) {
-      return;
-    }
+    if (!machineId || !tool.tool_number) return;
     if (measurementTool === tool.tool_number || measurementSaving) {
       return;
     }
@@ -1081,11 +1100,12 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       const results: ToolChangeBatchResult[] = batchData.results || [];
       const failures = results.filter(r => !r.success);
 
-      setToolsCache(prev => {
-        let atc = [...prev.atc];
-        let table = [...prev.table];
+      setUnifiedCache((prev) => {
+        let tools = [...prev.tools];
+        let empty_pockets = [...prev.empty_pockets];
+        let spindle = prev.spindle;
 
-        results.forEach(result => {
+        results.forEach((result) => {
           if (!result.success || !result.client_id) return;
           const change = pendingChangesRef.current.get(result.client_id);
           if (!change) return;
@@ -1094,36 +1114,55 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           const applyConfirmed = (t: Tool): Tool => {
             if (change.operationType === 'pot_number') {
               const potVal = result.pot_number ?? Number(change.newValue);
-              return applyFieldToTool(t, 'pot_number', potVal);
+              return applyAssignmentEdge(t, 'pot_number', potVal);
+            }
+            if (change.operationType === 'delete') {
+              return applyAssignmentEdge(t, 'tool_number', 0);
             }
             if (confirmed) {
+              if (change.cacheSlice === 'tool' && (confirmed.field === 'pot_number' || confirmed.field === 'tool_number')) {
+                return applyAssignmentEdge(t, confirmed.field, confirmed.value);
+              }
               return applyFieldToTool(t, confirmed.field, confirmed.value);
             }
             return t;
           };
 
-          if (change.cacheSlice === 'atc') {
-            atc = atc.map(t => {
-              if (!toolsMatchForSlice(change.tool, t, 'atc')) return t;
-              return applyConfirmed(t);
+          if (change.cacheSlice === 'tool') {
+            tools = tools.map((row) => {
+              const asTool = unifiedRowAsTool(row);
+              if (!toolsMatchForSlice(change.tool, asTool, 'tool')) return row;
+              const updated = applyConfirmed(asTool);
+              const trackKey = `${row.tool_number}-tool`;
+              if (confirmed) {
+                recentlyPushedRef.current.set(trackKey, {
+                  field: confirmed.field,
+                  value: confirmed.value,
+                  timestamp: Date.now(),
+                });
+              }
+              return updated as UnifiedToolRow;
             });
-            const trackKey = `${change.tool.pot_number}-${change.tool.tool_number}`;
-            if (confirmed) {
-              recentlyPushedRef.current.set(trackKey, {
-                field: confirmed.field,
-                value: confirmed.value,
-                timestamp: Date.now(),
-              });
-            }
-          } else {
-            table = table.map(t => {
-              if (t.tool_number !== change.tool.tool_number) return t;
-              return applyConfirmed(t);
+          } else if (change.cacheSlice === 'pocket') {
+            empty_pockets = empty_pockets.map((pocket) => {
+              const asTool = emptyPocketAsTool(pocket);
+              if (!toolsMatchForSlice(change.tool, asTool, 'pocket')) return pocket;
+              const updated = applyConfirmed(asTool);
+              return {
+                pot_number: pocket.pot_number,
+                tool_type: updated.tool_type,
+                color: updated.color,
+              };
             });
+          } else if (change.cacheSlice === 'spindle' && spindle) {
+            spindle = {
+              ...spindle,
+              tool_number: Number(result.tool_number ?? change.newValue),
+            };
           }
         });
 
-        return { atc, table };
+        return { ...prev, tools, empty_pockets, spindle };
       });
 
       updatePendingChanges((prev) => {
@@ -1156,53 +1195,70 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const handleDiscardChanges = () => {
     if (pendingChanges.size === 0) return;
 
-    setToolsCache(prev => {
-      let atc = [...prev.atc];
-      let table = [...prev.table];
+    setUnifiedCache((prev) => {
+      let tools = [...prev.tools];
+      let empty_pockets = [...prev.empty_pockets];
+      let spindle = prev.spindle;
 
-      pendingChanges.forEach(change => {
-        const revert = (t: Tool) => {
+      pendingChanges.forEach((change) => {
+        const revert = (t: Tool): Tool => {
           if (change.operationType === 'delete') {
-            return { ...t, tool_number: change.oldValue as number };
+            return applyAssignmentEdge(t, 'tool_number', change.oldValue as number);
+          }
+          if (change.cacheSlice === 'tool' && (change.field === 'pot_number' || change.field === 'tool_number')) {
+            return applyAssignmentEdge(t, change.field, change.oldValue);
           }
           return applyFieldToTool(t, change.field, change.oldValue);
         };
 
-        if (change.cacheSlice === 'atc') {
-          atc = atc.map(t =>
-            toolsMatchForSlice(change.tool, t, 'atc') ? revert(t) : t,
-          );
-        } else {
-          table = table.map(t =>
-            t.tool_number === change.tool.tool_number ? revert(t) : t,
-          );
+        if (change.cacheSlice === 'tool') {
+          tools = tools.map((row) => {
+            const asTool = unifiedRowAsTool(row);
+            return toolsMatchForSlice(change.tool, asTool, 'tool')
+              ? (revert(asTool) as UnifiedToolRow)
+              : row;
+          });
+        } else if (change.cacheSlice === 'pocket') {
+          empty_pockets = empty_pockets.map((pocket) => {
+            const asTool = emptyPocketAsTool(pocket);
+            if (!toolsMatchForSlice(change.tool, asTool, 'pocket')) return pocket;
+            const reverted = revert(asTool);
+            return {
+              pot_number: pocket.pot_number,
+              tool_type: reverted.tool_type,
+              color: reverted.color,
+            };
+          });
+        } else if (change.cacheSlice === 'spindle' && spindle) {
+          spindle = {
+            ...spindle,
+            tool_number: Number(change.oldValue),
+          };
         }
       });
 
-      return { atc, table };
+      return { ...prev, tools, empty_pockets, spindle };
     });
 
     updatePendingChanges(() => new Map());
   };
 
-  // Build tool_number → actual_pot map from live ATC data (passed to optimizer tab)
   const actualPotMap = useMemo(() => {
     const map = new Map<number, number>();
-    (toolsCache.atc || []).forEach(tool => {
-      const tn = tool.tool_number;
-      const pot = Number(tool.pot_number);
-      if (tn && !isNaN(pot)) map.set(tn, pot);
+    unifiedCache.tools.forEach((tool) => {
+      if (tool.in_atc && tool.pot_number != null) {
+        const pot = Number(tool.pot_number);
+        if (tool.tool_number && !Number.isNaN(pot)) {
+          map.set(tool.tool_number, pot);
+        }
+      }
     });
     return map;
-  }, [toolsCache.atc]);
+  }, [unifiedCache.tools]);
 
-  const handleTabClick = (tab: 'atc' | 'table' | 'optimizer', e: React.MouseEvent) => {
+  const handleTabClick = (tab: 'tools' | 'optimizer', e: React.MouseEvent) => {
     e.stopPropagation();
     setActiveTab(tab);
-    if (tab === 'atc' || tab === 'table') {
-      setToolSource(tab);
-    }
-    // Optimizer auto-runs in ToolsOptimizerTab when it mounts with a programName
   };
 
   const isCurrentTool = (toolNum: number) => {
@@ -1243,34 +1299,23 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
   // Filter and sort tools
   const filteredAndSortedTools = useMemo(() => {
-    let filtered = tools;
-    if (toolSource === 'atc' && machineId) {
-      filtered = expandAtcToolsWithEmptyPots(tools).map((tool) =>
-        mergeServerToolWithPending(tool, pendingChanges, 'atc'),
-      );
-    } else if (toolSource === 'table' && machineId) {
-      filtered = tools.map((tool) =>
-        mergeServerToolWithPending(tool, pendingChanges, 'table'),
-      );
-    }
+    let filtered = tools.map((tool) =>
+      mergeServerToolWithPending(tool, pendingChanges, 'tool'),
+    );
 
-    // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(tool => {
-        return (
-          String(tool.tool_number).includes(query) ||
-          (tool.tool_name && tool.tool_name.toLowerCase().includes(query)) ||
-          (tool.pot_number && String(tool.pot_number).toLowerCase().includes(query)) ||
-          (tool.group && String(tool.group).toLowerCase().includes(query)) ||
-          (tool.tool_type !== undefined && formatToolType(tool.tool_type).toLowerCase().includes(query)) ||
-          (tool.color !== undefined && getColorInfo(tool.color).name.toLowerCase().includes(query)) ||
-          (tool.life !== undefined && String(tool.life).includes(query))
-        );
-      });
+      filtered = filtered.filter((tool) => (
+        String(tool.tool_number).includes(query) ||
+        (tool.tool_name && tool.tool_name.toLowerCase().includes(query)) ||
+        (tool.pot_number && String(tool.pot_number).toLowerCase().includes(query)) ||
+        (tool.group && String(tool.group).toLowerCase().includes(query)) ||
+        (tool.tool_type !== undefined && formatToolType(tool.tool_type).toLowerCase().includes(query)) ||
+        (tool.color !== undefined && getColorInfo(tool.color).name.toLowerCase().includes(query)) ||
+        (tool.life !== undefined && String(tool.life).includes(query))
+      ));
     }
 
-    // Apply sorting
     const sorted = [...filtered].sort((a, b) => {
       let aVal: string | number;
       let bVal: string | number;
@@ -1335,31 +1380,24 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     });
 
     return sorted;
-  }, [tools, searchQuery, sortColumn, sortDirection, toolSource, machineId, pendingChanges]);
+  }, [tools, searchQuery, sortColumn, sortDirection, pendingChanges]);
+
+  const filteredEmptyPockets = useMemo(() => {
+    if (!useUnifiedView || !unifiedCache.atc_available) return [];
+    return unifiedCache.empty_pockets.map((pocket) => {
+      const asTool = emptyPocketAsTool(pocket);
+      const merged = mergeServerToolWithPending(asTool, pendingChanges, 'pocket');
+      return { pocket, merged };
+    });
+  }, [useUnifiedView, unifiedCache.empty_pockets, unifiedCache.atc_available, pendingChanges]);
 
   const handleSort = (column: SortColumn) => {
-    setSortSettings(prev => {
-      const current = prev[toolSource];
-      if (current.column === column) {
-        // Toggle direction for same column
-        return {
-          ...prev,
-          [toolSource]: {
-            column,
-            direction: current.direction === 'asc' ? 'desc' : 'asc'
-          }
-        };
+    if (sortColumn === column) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
-        // New column - default to ascending
-        return {
-          ...prev,
-          [toolSource]: {
-            column,
-            direction: 'asc'
-          }
-        };
+      setSortColumn(column);
+      setSortDirection('asc');
     }
-    });
   };
 
   // Show all tools since list is scrollable
@@ -1368,7 +1406,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const toolsListTitleMid =
     activeTab === 'optimizer'
       ? `OPTIMIZER${programName ? ` ─ ${programName}` : ''}`
-      : activeTab === 'atc' ? `ATC (${tools.length})` : `TABLE (${tools.length})`;
+      : `TOOLS (${tools.length})`;
   /** Long run clipped by flex so header rule length matches pane width for any label. */
   const terminalRuleFill = '─'.repeat(320);
 
@@ -1393,13 +1431,13 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 <PollingStatusLight
                   lastUpdatedAt={toolsDataLastUpdatedAt}
                   expectedIntervalMs={toolExpectedIntervalMs}
-                  ariaLabel={`Tools (${toolSource.toUpperCase()}) data freshness`}
+                  ariaLabel="Tools data freshness"
                 />
               )}
               {!isHoverPreview && isToolsSnapshotStale && activeTab !== 'optimizer' && (
                 <span
                   className="tools-stale-chip"
-                  title={`Visible ${toolSource.toUpperCase()} tools are stale (${formatToolsAge}). Validation uses backend live data.`}
+                  title={`Visible tools are stale (${formatToolsAge}). Validation uses backend live data.`}
                 >
                   STALE SNAPSHOT
                 </span>
@@ -1419,20 +1457,15 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               )}
               {machineId && (
                 <div className="tools-source-toggle" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    className={`source-toggle-btn ${activeTab === 'atc' ? 'active' : ''}`}
-                    onClick={(e) => handleTabClick('atc', e)}
-                    title="ATC Magazine"
-                  >
-                    ATC
-                  </button>
-                  <button
-                    className={`source-toggle-btn ${activeTab === 'table' ? 'active' : ''}`}
-                    onClick={(e) => handleTabClick('table', e)}
-                    title="Tool Table"
-                  >
-                    TABLE
-                  </button>
+                  {!isHoverPreview && activeTab === 'optimizer' && (
+                    <button
+                      className="source-toggle-btn"
+                      onClick={(e) => handleTabClick('tools', e)}
+                      title="Tool table"
+                    >
+                      TOOLS
+                    </button>
+                  )}
                   {!isHoverPreview && (
                     <button
                       className={`source-toggle-btn ${activeTab === 'optimizer' ? 'active' : ''}`}
@@ -1511,7 +1544,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
             {!isHoverPreview && isToolsSnapshotStale && !currentError && (
               <div className="tools-stale-banner" onClick={(e) => e.stopPropagation()}>
                 <span className="tools-stale-text">
-                  STALE {toolSource.toUpperCase()} DATA ({formatToolsAge}) - DISPLAY MAY SHOW LAST KNOWN TOOLS
+                  STALE TOOL DATA ({formatToolsAge}) - DISPLAY MAY SHOW LAST KNOWN TOOLS
                 </span>
               </div>
             )}
@@ -1541,62 +1574,72 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
             <div className="tools-table-wrapper">
               <table className="tools-table">
               <thead onClick={(e) => e.stopPropagation()}>
+                {useUnifiedView && (
+                  <tr className="tools-col-group-row">
+                    <th colSpan={5} className="tools-col-group-label tools-col-group-label--tool">
+                      TOOL
+                    </th>
+                    <th colSpan={machineId ? 5 : 4} className="tools-col-group-label tools-col-group-label--atc">
+                      ATC {unifiedCache.atc_available ? '' : '(unavailable)'}
+                    </th>
+                  </tr>
+                )}
                 <tr>
-                  <th 
-                    className="tools-col-pot tools-sortable"
-                    onClick={() => handleSort('pot_number')}
-                  >
-                    POT {sortColumn === 'pot_number' && (sortDirection === 'asc' ? '▲' : '▼')}
-                  </th>
-                  <th 
+                  <th
                     className="tools-col-number tools-sortable"
                     onClick={() => handleSort('tool_number')}
                   >
                     T# {sortColumn === 'tool_number' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
-                  <th 
+                  <th
                     className="tools-col-name tools-sortable"
                     onClick={() => handleSort('tool_name')}
                   >
-                    TOOL NAME {sortColumn === 'tool_name' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    NAME {sortColumn === 'tool_name' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
-                  <th 
+                  <th
                     className="tools-col-diameter tools-sortable"
                     onClick={() => handleSort('diameter')}
                   >
-                    DIAMETER {sortColumn === 'diameter' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    D {sortColumn === 'diameter' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
-                  <th 
+                  <th
                     className="tools-col-length tools-sortable"
                     onClick={() => handleSort('length')}
                   >
-                    LENGTH {sortColumn === 'length' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    H {sortColumn === 'length' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
-                  <th 
-                    className="tools-col-group tools-sortable"
-                    onClick={() => handleSort('group')}
-                  >
-                    GROUP {sortColumn === 'group' && (sortDirection === 'asc' ? '▲' : '▼')}
-                  </th>
-                  <th 
+                  <th
                     className="tools-col-life tools-sortable"
                     onClick={() => handleSort('life')}
                   >
                     LIFE {sortColumn === 'life' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
-                  <th 
-                    className="tools-col-type tools-sortable"
+                  <th
+                    className="tools-col-pot tools-sortable tools-col-atc"
+                    onClick={() => handleSort('pot_number')}
+                  >
+                    POT {sortColumn === 'pot_number' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                  <th
+                    className="tools-col-group tools-sortable tools-col-atc"
+                    onClick={() => handleSort('group')}
+                  >
+                    GRP {sortColumn === 'group' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                  <th
+                    className="tools-col-type tools-sortable tools-col-atc"
                     onClick={() => handleSort('tool_type')}
                   >
                     TYPE {sortColumn === 'tool_type' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
-                  {toolSource === 'atc' && machineId ? (
-                    <th className="tools-col-measure" title="Tool selected for measurement (macro #920)">
+                  {machineId ? (
+                    <th className="tools-col-measure tools-col-atc" title="Tool selected for measurement (macro #920)">
                       MEAS
                     </th>
                   ) : null}
-                  <th 
-                    className="tools-col-color tools-sortable"
+                  <th
+                    className="tools-col-color tools-sortable tools-col-atc"
                     onClick={() => handleSort('color')}
                   >
                     COLOR {sortColumn === 'color' && (sortDirection === 'asc' ? '▲' : '▼')}
@@ -1606,7 +1649,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               <tbody>
                 {filteredAndSortedTools.length === 0 ? (
                   <tr>
-                    <td colSpan={toolSource === 'atc' && machineId ? 10 : 9} className="tools-empty-row">
+                    <td colSpan={machineId ? 10 : 9} className="tools-empty-row">
                       NO TOOLS MATCH SEARCH
                     </td>
                   </tr>
@@ -1616,71 +1659,31 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 const matched = getMatchedTool(tool);
                 const hasMatch = matched !== null && isBetaMode;
                 const colorIdx = getToolColorClassIndex(tool);
-                const rowColored = isBetaMode && toolsColorMode;
+                const rowColored = isBetaMode && toolsColorMode && tool.in_atc;
                 const isMeasurementTool = measurementTool === tool.tool_number;
                 const hasPending = toolHasPending(tool);
-                const isAtcRowEditable =
-                  toolSource === 'atc' &&
-                  !!machineId &&
-                  (isSpindlePot(tool.pot_number) || parsePotNumber(tool.pot_number) !== null);
-                const isTableEditable = toolSource === 'table' && !!machineId;
-                const isEmptyPot = !isSpindlePot(tool.pot_number) && !tool.tool_number;
+                const isEditable = !!machineId && useUnifiedView;
+                const isAtcAssigned = Boolean(tool.in_atc && tool.pot_number);
                 return (
-                  <tr 
-                    key={idx} 
+                  <tr
+                    key={`tool-${tool.tool_number}-${idx}`}
                     className={`${isCurrent ? 'current-tool' : ''} ${hasMatch ? 'tool-matched' : ''} ${
                       isMeasurementTool ? 'measurement-tool' : ''
                     } ${hasPending ? 'tools-row-pending' : ''} ${
-                      isEmptyPot ? 'tools-row-empty-pot' : ''
-                    } ${
                       rowColored ? `tools-row-colored tool-color-${colorIdx}` : ''
                     }`}
                     onClick={(e) => handleRowClick(tool, e)}
                     style={{ cursor: hasMatch ? 'pointer' : 'default' }}
                     title={hasMatch ? `Click to view tool ${matched.tool_number} in Tool Management` : undefined}
                   >
-                    <td className="tools-col-pot" onClick={(e) => e.stopPropagation()}>
-                      {isTableEditable ? (
-                        <NumericEditInput
-                          className="tools-edit-input tools-edit-input--pot-number"
-                          value={tool.pot_number}
-                          placeholder="—"
-                          onValueChange={(raw) => handlePotNumberChange(tool, raw)}
-                        />
-                      ) : (
-                        formatPotDisplay(tool.pot_number)
-                      )}
-                      {isAtcRowEditable && !isSpindlePot(tool.pot_number) && tool.tool_number ? (
-                        <button
-                          type="button"
-                          className="tools-clear-pot-btn"
-                          title="Clear pocket (remove tool)"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteFromPot(tool);
-                          }}
-                        >
-                          CLR
-                        </button>
-                      ) : null}
-                    </td>
                     <td className="tools-col-number" onClick={(e) => e.stopPropagation()}>
                       {isCurrent && <span className="current-indicator">►</span>}
                       {hasMatch && <span className="matched-indicator" title="Tool exists in Tool Management">●</span>}
-                      {isAtcRowEditable ? (
-                        <NumericEditInput
-                          className="tools-edit-input tools-edit-input--tool-number"
-                          value={tool.tool_number || ''}
-                          placeholder="—"
-                          onValueChange={(raw) => handleToolNumberChange(tool, raw)}
-                        />
-                      ) : (
-                        <>T{String(tool.tool_number).padStart(2, '0')}</>
-                      )}
+                      T{String(tool.tool_number).padStart(2, '0')}
                     </td>
                     <td className="tools-col-name">{getToolDisplayName(tool) || '──'}</td>
                     <td className="tools-col-diameter">
-                      {isTableEditable ? (
+                      {isEditable ? (
                         <NumericEditInput
                           className="tools-edit-input"
                           value={tool.diameter ?? ''}
@@ -1693,7 +1696,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       )}
                     </td>
                     <td className="tools-col-length">
-                      {isTableEditable ? (
+                      {isEditable ? (
                         <NumericEditInput
                           className="tools-edit-input"
                           value={tool.length ?? ''}
@@ -1705,9 +1708,8 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                         formatDimension(tool.length, units)
                       )}
                     </td>
-                    <td className="tools-col-group">{tool.group ?? '──'}</td>
                     <td className="tools-col-life">
-                      {isTableEditable ? (
+                      {isEditable ? (
                         <NumericEditInput
                           className="tools-edit-input tools-edit-input--life"
                           value={tool.life ?? ''}
@@ -1718,11 +1720,34 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                         formatLife(tool.life)
                       )}
                     </td>
-                    <td
-                      className="tools-col-type"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {isAtcRowEditable && !isSpindlePot(tool.pot_number) && tool.tool_number ? (
+                    <td className="tools-col-pot tools-col-atc" onClick={(e) => e.stopPropagation()}>
+                      {isEditable && unifiedCache.atc_available ? (
+                        <NumericEditInput
+                          className="tools-edit-input tools-edit-input--pot-number"
+                          value={isAtcAssigned ? tool.pot_number : ''}
+                          placeholder="—"
+                          onValueChange={(raw) => handlePotNumberChange(tool, raw)}
+                        />
+                      ) : (
+                        formatPotDisplay(isAtcAssigned ? tool.pot_number : undefined)
+                      )}
+                      {isEditable && isAtcAssigned ? (
+                        <button
+                          type="button"
+                          className="tools-clear-pot-btn"
+                          title="Unassign from pocket"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteFromPot(tool);
+                          }}
+                        >
+                          CLR
+                        </button>
+                      ) : null}
+                    </td>
+                    <td className="tools-col-group tools-col-atc">{isAtcAssigned ? (tool.group ?? '──') : '──'}</td>
+                    <td className="tools-col-type tools-col-atc" onClick={(e) => e.stopPropagation()}>
+                      {isEditable && isAtcAssigned ? (
                         <Select
                           compact
                           className="tools-type-select"
@@ -1731,44 +1756,36 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                           options={TOOL_TYPE_OPTIONS}
                         />
                       ) : (
-                        formatToolType(tool.tool_type)
+                        isAtcAssigned ? formatToolType(tool.tool_type) : '──'
                       )}
                     </td>
-                    {toolSource === 'atc' && machineId ? (
-                      <td
-                        className="tools-col-measure"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          className={`tools-measure-btn ${isMeasurementTool ? 'active' : ''}`}
-                          disabled={measurementSaving}
-                          title={
-                            isMeasurementTool
-                              ? `T${String(tool.tool_number).padStart(2, '0')} is the measurement tool`
-                              : `Set T${String(tool.tool_number).padStart(2, '0')} as measurement tool`
-                          }
-                          onClick={() => handleMeasurementToolSelect(tool)}
-                          aria-pressed={isMeasurementTool}
-                        >
-                          {isMeasurementTool ? '●' : '○'}
-                        </button>
+                    {machineId ? (
+                      <td className="tools-col-measure tools-col-atc" onClick={(e) => e.stopPropagation()}>
+                        {isAtcAssigned ? (
+                          <button
+                            type="button"
+                            className={`tools-measure-btn ${isMeasurementTool ? 'active' : ''}`}
+                            disabled={measurementSaving}
+                            title={
+                              isMeasurementTool
+                                ? `T${String(tool.tool_number).padStart(2, '0')} is the measurement tool`
+                                : `Set T${String(tool.tool_number).padStart(2, '0')} as measurement tool`
+                            }
+                            onClick={() => handleMeasurementToolSelect(tool)}
+                            aria-pressed={isMeasurementTool}
+                          >
+                            {isMeasurementTool ? '●' : '○'}
+                          </button>
+                        ) : (
+                          '──'
+                        )}
                       </td>
                     ) : null}
-                    <td
-                      className="tools-col-color"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {toolSource === 'atc' && tool.pot_number && machineId && tool.tool_number ? (
+                    <td className="tools-col-color tools-col-atc" onClick={(e) => e.stopPropagation()}>
+                      {isEditable && isAtcAssigned ? (
                         <ColorSelect
                           value={tool.color ?? 0}
                           onChange={(newColor) => handleColorChange(tool, newColor)}
-                        />
-                      ) : tool.color !== undefined && tool.color !== null && tool.tool_number ? (
-                        <ColorSelect
-                          value={tool.color}
-                          onChange={() => {}}
-                          readOnly
                         />
                       ) : (
                         '──'
@@ -1781,6 +1798,51 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               </tbody>
               </table>
             </div>
+            {useUnifiedView && unifiedCache.atc_available && filteredEmptyPockets.length > 0 && (
+              <div className="tools-empty-pockets-section">
+                <div className="tools-empty-pockets-title">EMPTY POCKETS — assign tool #</div>
+                <div className="tools-empty-pockets-grid">
+                  {filteredEmptyPockets.map(({ pocket, merged }) => {
+                    const asTool = emptyPocketAsTool(pocket);
+                    const hasPending = toolHasPending(asTool, 'pocket');
+                    return (
+                      <div
+                        key={`empty-pot-${pocket.pot_number}`}
+                        className={`tools-empty-pocket ${hasPending ? 'tools-row-pending' : ''}`}
+                      >
+                        <span className="tools-empty-pocket-label">P{pocket.pot_number}</span>
+                        <NumericEditInput
+                          className="tools-edit-input tools-edit-input--tool-number"
+                          value={merged.tool_number || ''}
+                          placeholder="T#"
+                          onValueChange={(raw) => handleToolNumberChange(asTool, raw, 'pocket')}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {useUnifiedView && unifiedCache.spindle && (
+              <div className="tools-spindle-row">
+                <span className="tools-spindle-label">SPINDLE</span>
+                {machineId ? (
+                  <NumericEditInput
+                    className="tools-edit-input tools-edit-input--tool-number"
+                    value={unifiedCache.spindle.tool_number}
+                    onValueChange={(raw) =>
+                      handleToolNumberChange(
+                        { pot_number: 'SPINDLE', tool_number: unifiedCache.spindle!.tool_number },
+                        raw,
+                        'spindle',
+                      )
+                    }
+                  />
+                ) : (
+                  <span>T{String(unifiedCache.spindle.tool_number).padStart(2, '0')}</span>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

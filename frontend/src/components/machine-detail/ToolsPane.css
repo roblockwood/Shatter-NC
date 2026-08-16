@@ -970,3 +970,80 @@
   border-left: 2px solid rgba(255, 255, 255, 0.65);
 }
 
+/* Unified table: TOOL vs ATC column groups */
+.tools-col-group-row .tools-col-group-label {
+  font-size: var(--font-xs);
+  letter-spacing: 0.08em;
+  text-align: center;
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.12));
+}
+
+.tools-col-group-label--tool {
+  color: var(--color-text-secondary);
+}
+
+.tools-col-group-label--atc {
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.45));
+  border-left: 1px dashed var(--color-border-subtle, rgba(255, 255, 255, 0.15));
+}
+
+.tools-table .tools-col-atc {
+  border-left: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.tools-table thead tr:last-child .tools-col-atc:first-of-type,
+.tools-table tbody .tools-col-atc:first-of-type {
+  border-left: 1px dashed rgba(255, 255, 255, 0.15);
+}
+
+.tools-empty-pockets-section {
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-xs);
+  border-top: 1px dashed var(--color-border-subtle, rgba(255, 255, 255, 0.15));
+}
+
+.tools-empty-pockets-title {
+  font-size: var(--font-xs);
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.5));
+  margin-bottom: var(--spacing-xs);
+}
+
+.tools-empty-pockets-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.tools-empty-pocket {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: 2px;
+}
+
+.tools-empty-pocket-label {
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+  min-width: 1.5rem;
+}
+
+.tools-spindle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+  padding: var(--spacing-xs) 0;
+  font-size: var(--font-sm);
+  border-top: 1px dashed var(--color-border-subtle, rgba(255, 255, 255, 0.12));
+}
+
+.tools-spindle-label {
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  min-width: 4.5rem;
+}
+
