@@ -997,40 +997,6 @@
   border-left: 1px dashed rgba(255, 255, 255, 0.15);
 }
 
-.tools-empty-pockets-section {
-  margin-top: var(--spacing-sm);
-  padding-top: var(--spacing-xs);
-  border-top: 1px dashed var(--color-border-subtle, rgba(255, 255, 255, 0.15));
-}
-
-.tools-empty-pockets-title {
-  font-size: var(--font-xs);
-  letter-spacing: 0.06em;
-  color: var(--color-text-muted, rgba(255, 255, 255, 0.5));
-  margin-bottom: var(--spacing-xs);
-}
-
-.tools-empty-pockets-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-xs);
-}
-
-.tools-empty-pocket {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border: 1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.12));
-  border-radius: 2px;
-}
-
-.tools-empty-pocket-label {
-  font-size: var(--font-xs);
-  color: var(--color-text-secondary);
-  min-width: 1.5rem;
-}
-
 .tools-spindle-row {
   display: flex;
   align-items: center;

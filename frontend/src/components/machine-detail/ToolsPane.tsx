@@ -911,7 +911,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     stagePendingChange(tool, 'color', tool.color ?? 0, newColor, 'color', 'tool');
   };
 
-  const handleToolNumberChange = (tool: Tool, raw: string, cacheSlice: 'tool' | 'pocket' | 'spindle' = 'pocket') => {
+  const handleToolNumberChange = (tool: Tool, raw: string, cacheSlice: 'spindle') => {
     if (!machineId) return;
     const parsed = parseInt(raw, 10);
     if (!Number.isFinite(parsed)) return;
@@ -920,9 +920,6 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       stagePendingChange(tool, 'tool_number', tool.tool_number, parsed, 'spindle', 'spindle');
       return;
     }
-
-    if (parsed < 1 || parsed > 999) return;
-    stagePendingChange(tool, 'tool_number', tool.tool_number, parsed, 'tool_number', cacheSlice);
   };
 
   const handlePotNumberChange = (tool: Tool, raw: string) => {
@@ -1382,15 +1379,6 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     return sorted;
   }, [tools, searchQuery, sortColumn, sortDirection, pendingChanges]);
 
-  const filteredEmptyPockets = useMemo(() => {
-    if (!useUnifiedView || !unifiedCache.atc_available) return [];
-    return unifiedCache.empty_pockets.map((pocket) => {
-      const asTool = emptyPocketAsTool(pocket);
-      const merged = mergeServerToolWithPending(asTool, pendingChanges, 'pocket');
-      return { pocket, merged };
-    });
-  }, [useUnifiedView, unifiedCache.empty_pockets, unifiedCache.atc_available, pendingChanges]);
-
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -1798,31 +1786,6 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               </tbody>
               </table>
             </div>
-            {useUnifiedView && unifiedCache.atc_available && filteredEmptyPockets.length > 0 && (
-              <div className="tools-empty-pockets-section">
-                <div className="tools-empty-pockets-title">EMPTY POCKETS — assign tool #</div>
-                <div className="tools-empty-pockets-grid">
-                  {filteredEmptyPockets.map(({ pocket, merged }) => {
-                    const asTool = emptyPocketAsTool(pocket);
-                    const hasPending = toolHasPending(asTool, 'pocket');
-                    return (
-                      <div
-                        key={`empty-pot-${pocket.pot_number}`}
-                        className={`tools-empty-pocket ${hasPending ? 'tools-row-pending' : ''}`}
-                      >
-                        <span className="tools-empty-pocket-label">P{pocket.pot_number}</span>
-                        <NumericEditInput
-                          className="tools-edit-input tools-edit-input--tool-number"
-                          value={merged.tool_number || ''}
-                          placeholder="T#"
-                          onValueChange={(raw) => handleToolNumberChange(asTool, raw, 'pocket')}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
             {useUnifiedView && unifiedCache.spindle && (
               <div className="tools-spindle-row">
                 <span className="tools-spindle-label">SPINDLE</span>
