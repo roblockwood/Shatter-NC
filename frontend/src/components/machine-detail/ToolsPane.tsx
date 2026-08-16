@@ -1089,10 +1089,12 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const machineStateWarning = useMemo(() => {
     if (!machineStatus && memMode === undefined) return undefined;
     const status = machineStatus?.toLowerCase();
-    if (status === 'operating') {
+    const programActive =
+      memOperationStatus !== undefined && memOperationStatus !== 0;
+    if (status === 'operating' && programActive) {
       return 'Machine reports operating — push may be rejected by the control.';
     }
-    if (memMode === 2 && memOperationStatus !== undefined && memOperationStatus !== 0) {
+    if (memMode === 2 && programActive) {
       return 'Program operation in progress — push may be rejected by the control.';
     }
     if (memMode === 3 || memMode === 4 || memMode === 5) {

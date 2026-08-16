@@ -57,15 +57,6 @@ async def execute_macro_write(
         max_age_seconds=max_age,
     )
 
-    if cache_safe is False:
-        return MacroWriteOutcome(
-            success=False,
-            status_code=None,
-            verified_value=None,
-            status_data=status_data,
-            error_message=cache_error,
-        )
-
     telnet_client = None
     try:
         telnet_client = await create_fresh_connection(
@@ -74,7 +65,9 @@ async def execute_macro_write(
             timeout=10,
         )
 
-        if cache_safe is None:
+        # Cache may be stale (e.g. PRD3 still "operating" after cycle end) — confirm live
+        # before rejecting; only skip live check when cache confirms safe.
+        if cache_safe is not True:
             is_safe, live_error, status_data = await validator.validate_macro_write_live_minimal(
                 telnet_client=telnet_client,
                 control_version=db_machine.control_version,
@@ -87,7 +80,7 @@ async def execute_macro_write(
                     status_code=None,
                     verified_value=None,
                     status_data=status_data,
-                    error_message=live_error,
+                    error_message=live_error or cache_error,
                 )
         else:
             logger.debug(

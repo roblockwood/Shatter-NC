@@ -39,15 +39,30 @@ def test_evaluate_macro_write_blocks_operating():
     assert data["status"] == "operating"
 
 
-def test_evaluate_macro_write_blocks_mem_mode_2():
+def test_evaluate_macro_write_blocks_mem_mode_2_when_active():
     ok, msg, _ = evaluate_macro_write_safety(
         machine_status="standby",
         mem_mode=2,
         machine_id=1,
         machine_name="Mill",
+        operation_status=1,
     )
     assert ok is False
     assert "running" in msg.lower()
+
+
+def test_evaluate_macro_write_allows_mem_mode_2_idle():
+    ok, msg, data = evaluate_macro_write_safety(
+        machine_status="standby",
+        mem_mode=2,
+        machine_id=1,
+        machine_name="Mill",
+        operation_status=0,
+    )
+    assert ok is True
+    assert msg is None
+    assert data["mode"] == 2
+    assert data["operation_status"] == 0
 
 
 def test_try_validate_from_fresh_cache():
@@ -73,6 +88,45 @@ def test_try_validate_stale_cache_returns_none():
     )
     assert safe is None
     assert err is None
+
+
+@pytest.mark.asyncio
+async def test_execute_macro_write_live_when_cache_unsafe(monkeypatch):
+    """Stale cache 'operating' should not block if live MEM/PRD3 show idle."""
+    machine = SimpleNamespace(
+        id=1,
+        name="Mill",
+        ip_address="10.0.0.1",
+        poll_interval_seconds=5,
+        control_version="C00",
+    )
+    ts = datetime.now(timezone.utc).isoformat()
+    ws = MagicMock()
+    ws.get_machine_status.return_value = {
+        "status": "operating",
+        "mem_mode": 2,
+        "mem_operation_status": 1,
+        "last_successful_poll_at": ts,
+    }
+    polling = MagicMock(websocket_manager=ws)
+    monkeypatch.setattr("app.api._status_state.polling_service", polling)
+
+    telnet = MagicMock()
+    telnet.get_memory_data = AsyncMock(return_value="A01,'F',2045,0,0,0,2,0")
+    telnet.get_prd3_data = AsyncMock(
+        return_value="A01,1,2,1\nC01,20240101120000,2,0,2045,'F',0"
+    )
+    telnet.write_macro_variable = AsyncMock(return_value=(True, "00", 12.0))
+    telnet.disconnect = AsyncMock()
+    monkeypatch.setattr(
+        "app.clients.telnet_client.create_fresh_connection",
+        AsyncMock(return_value=telnet),
+    )
+
+    outcome = await execute_macro_write(machine, machine_id=1, macro_number=920, value=12.0)
+    assert outcome.success is True
+    telnet.get_memory_data.assert_awaited_once()
+    telnet.get_prd3_data.assert_awaited_once()
 
 
 @pytest.mark.asyncio
