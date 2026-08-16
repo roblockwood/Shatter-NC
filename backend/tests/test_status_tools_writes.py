@@ -33,23 +33,40 @@ def _patch_safe(monkeypatch, safe=True):
 
 def _patch_telnet(monkeypatch, **methods):
     telnet = MagicMock()
+    pot_state = {}
+
+    async def read_pot(pot_number, verbose=False):
+        return pot_state.get(pot_number, 0)
+
+    async def assign_tool_to_pot(pot_number, tool_number, verbose=False):
+        pot_state[pot_number] = tool_number
+        return True, "00"
+
+    async def remove_tool_from_pot(pot_number, tool_number, verbose=False):
+        pot_state[pot_number] = 0
+        return True, "00"
+
     # Default async methods used across write routes
     defaults = {
         "change_atc_tool": (True, "00"),
-        "assign_tool_to_pot": (True, "00"),
+        "assign_tool_to_pot": assign_tool_to_pot,
         "change_tool_type": (True, "00"),
-        "remove_tool_from_pot": (True, "00"),
+        "remove_tool_from_pot": remove_tool_from_pot,
         "change_spindle_tool": (True, "00"),
         "write_tool_life": (True, "00"),
         "write_tool_offset": (True, "00"),
+        "_read_pot_tool_number": read_pot,
         "detect_control_type": "C00",
         "get_atc_magazine_data": "",
         "disconnect": None,
     }
     defaults.update(methods)
+    telnet._pot_state = pot_state
     for name, ret in defaults.items():
         if ret is None:
             setattr(telnet, name, AsyncMock())
+        elif callable(ret):
+            setattr(telnet, name, AsyncMock(side_effect=ret))
         else:
             setattr(telnet, name, AsyncMock(return_value=ret))
     monkeypatch.setattr(
@@ -186,14 +203,18 @@ async def test_batch_apply_tool_changes_mixed_success(monkeypatch):
 
     _patch_safe(monkeypatch)
     telnet = _patch_telnet(monkeypatch)
+    pot_state = telnet._pot_state
+    pot_state[1] = 5
     call_order = []
 
-    async def track_delete(*args, **kwargs):
+    async def track_delete(pot_number, tool_number, verbose=False):
         call_order.append("delete")
+        pot_state[pot_number] = 0
         return True, "00"
 
-    async def track_assign(*args, **kwargs):
+    async def track_assign(pot_number, tool_number, verbose=False):
         call_order.append("assignment")
+        pot_state[pot_number] = tool_number
         return True, "00"
 
     async def track_color(*args, **kwargs):
