@@ -456,7 +456,7 @@ function mergeServerToolWithPending(
     if (change.cacheSlice !== cacheSlice) return;
     if (!toolsMatchForSlice(change.tool, serverTool, cacheSlice)) return;
     if (change.operationType === 'delete') {
-      merged = applyAssignmentEdge(merged, 'tool_number', 0);
+      merged = clearAtcAssignment(merged);
       return;
     }
     if (change.operationType === 'cap') {
@@ -469,6 +469,152 @@ function mergeServerToolWithPending(
         : applyFieldToTool(merged, change.field, change.newValue);
   });
   return merged;
+}
+
+async function loadUnifiedToolsCache(machineId: number): Promise<UnifiedToolView | null> {
+  const response = await fetch(`${API_BASE_URL}/api/machines/${machineId}/tools?source=atc`);
+  if (!response.ok) return null;
+  const data = await response.json();
+  if (data?.tools_unified) {
+    return { ...data.tools_unified, spindle: data.tools_unified.spindle ?? null };
+  }
+  if (data?.tools) {
+    return buildUnifiedToolViewFromLegacy(data.tool_table || [], data.tools);
+  }
+  return null;
+}
+
+function applyConfirmedToolChange(
+  tool: Tool,
+  change: PendingChange,
+  result: ToolChangeBatchResult,
+): Tool {
+  const confirmed = getConfirmedValueFromResult(result);
+  if (change.operationType === 'delete') {
+    return clearAtcAssignment(tool);
+  }
+  if (change.operationType === 'pot_number') {
+    const potVal = result.pot_number ?? Number(change.newValue);
+    return applyAssignmentEdge(tool, 'pot_number', potVal);
+  }
+  if (change.operationType === 'cap') {
+    return { ...tool, is_cap: true };
+  }
+  if (confirmed) {
+    if (change.cacheSlice === 'tool' && (confirmed.field === 'pot_number' || confirmed.field === 'tool_number')) {
+      return applyAssignmentEdge(tool, confirmed.field, confirmed.value);
+    }
+    return applyFieldToTool(tool, confirmed.field, confirmed.value);
+  }
+  return tool;
+}
+
+function reconcileUnifiedCacheAfterBatch(
+  cache: UnifiedToolView,
+  results: ToolChangeBatchResult[],
+  pendingByClientId: Map<string, PendingChange>,
+): UnifiedToolView {
+  let tools = cache.tools.map((row) => unifiedRowAsTool(row));
+  let empty_pockets = cache.empty_pockets.map((pocket) => ({ ...pocket }));
+  let spindle = cache.spindle;
+
+  for (const result of results) {
+    if (!result.success || !result.client_id) continue;
+    const change = pendingByClientId.get(result.client_id);
+    if (!change) continue;
+
+    if (change.operationType === 'delete') {
+      const clearedPot = parsePotNumber(change.tool.pot_number);
+      tools = tools.map((row) =>
+        toolsMatchForSlice(change.tool, row, 'tool') ? clearAtcAssignment(row) : row,
+      );
+      if (clearedPot !== null && !empty_pockets.some((p) => p.pot_number === clearedPot)) {
+        empty_pockets.push({
+          pot_number: clearedPot,
+          tool_type: change.tool.tool_type ?? 1,
+          color: change.tool.color ?? 0,
+        });
+      }
+      continue;
+    }
+
+    if (
+      change.operationType === 'pot_number'
+      || (change.operationType === 'tool_number' && change.cacheSlice === 'pocket')
+    ) {
+      const targetPot =
+        change.operationType === 'pot_number'
+          ? Number(change.newValue)
+          : parsePotNumber(change.tool.pot_number);
+      const assignedTool =
+        change.operationType === 'pot_number'
+          ? change.tool.tool_number
+          : Number(change.newValue);
+
+      if (targetPot === null || !Number.isFinite(targetPot) || targetPot < 1 || !Number.isFinite(assignedTool)) {
+        continue;
+      }
+
+      tools = tools.map((row) => {
+        if (row.tool_number === assignedTool) {
+          return {
+            ...row,
+            in_atc: true,
+            pot_number: targetPot,
+          };
+        }
+        if (row.in_atc && parsePotNumber(row.pot_number) === targetPot) {
+          return clearAtcAssignment(row);
+        }
+        return row;
+      });
+      empty_pockets = empty_pockets.filter((p) => p.pot_number !== targetPot);
+      continue;
+    }
+
+    if (change.operationType === 'cap' && change.cacheSlice === 'pocket') {
+      const pot = parsePotNumber(change.tool.pot_number);
+      if (pot === null) continue;
+      empty_pockets = empty_pockets.map((p) =>
+        p.pot_number === pot ? { ...p, is_cap: true } : p,
+      );
+      continue;
+    }
+
+    if (change.cacheSlice === 'tool') {
+      tools = tools.map((row) =>
+        toolsMatchForSlice(change.tool, row, 'tool')
+          ? applyConfirmedToolChange(row, change, result)
+          : row,
+      );
+    } else if (change.cacheSlice === 'pocket') {
+      empty_pockets = empty_pockets.map((pocket) => {
+        const asTool = emptyPocketAsTool(pocket);
+        if (!toolsMatchForSlice(change.tool, asTool, 'pocket')) return pocket;
+        const updated = applyConfirmedToolChange(asTool, change, result);
+        return {
+          pot_number: pocket.pot_number,
+          tool_type: updated.tool_type,
+          color: updated.color,
+          is_cap: updated.is_cap,
+        };
+      });
+    } else if (change.cacheSlice === 'spindle' && spindle) {
+      spindle = {
+        ...spindle,
+        tool_number: Number(result.tool_number ?? change.newValue),
+      };
+    }
+  }
+
+  empty_pockets.sort((a, b) => a.pot_number - b.pot_number);
+
+  return {
+    ...cache,
+    tools: tools as UnifiedToolRow[],
+    empty_pockets,
+    spindle,
+  };
 }
 
 function pendingToBatchItem(key: string, change: PendingChange): ToolChangeBatchItem | null {
@@ -843,7 +989,11 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         const recentlyPushed = recentlyPushedRef.current.get(trackKey);
         if (recentlyPushed) {
           const serverVal = getToolFieldValue(asTool, recentlyPushed.field);
-          if (serverVal === recentlyPushed.value) {
+          const matches =
+            recentlyPushed.field === 'pot_number'
+              ? potsEqual(serverVal, recentlyPushed.value)
+              : serverVal === recentlyPushed.value;
+          if (matches) {
             recentlyPushedRef.current.delete(trackKey);
             return pendingMerged as UnifiedToolRow;
           }
@@ -1397,75 +1547,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       const batchData = await batchResponse.json();
       const results: ToolChangeBatchResult[] = batchData.results || [];
       const failures = results.filter(r => !r.success);
+      const pendingSnapshot = new Map(pendingChangesRef.current);
 
-      setUnifiedCache((prev) => {
-        let tools = [...prev.tools];
-        let empty_pockets = [...prev.empty_pockets];
-        let spindle = prev.spindle;
-
-        results.forEach((result) => {
-          if (!result.success || !result.client_id) return;
-          const change = pendingChangesRef.current.get(result.client_id);
-          if (!change) return;
-
-          const confirmed = getConfirmedValueFromResult(result);
-          const applyConfirmed = (t: Tool): Tool => {
-            if (change.operationType === 'pot_number') {
-              const potVal = result.pot_number ?? Number(change.newValue);
-              return applyAssignmentEdge(t, 'pot_number', potVal);
-            }
-            if (change.operationType === 'delete') {
-              return applyAssignmentEdge(t, 'tool_number', 0);
-            }
-            if (change.operationType === 'cap') {
-              return { ...t, tool_number: 0, is_cap: true };
-            }
-            if (confirmed) {
-              if (change.cacheSlice === 'tool' && (confirmed.field === 'pot_number' || confirmed.field === 'tool_number')) {
-                return applyAssignmentEdge(t, confirmed.field, confirmed.value);
-              }
-              return applyFieldToTool(t, confirmed.field, confirmed.value);
-            }
-            return t;
-          };
-
-          if (change.cacheSlice === 'tool') {
-            tools = tools.map((row) => {
-              const asTool = unifiedRowAsTool(row);
-              if (!toolsMatchForSlice(change.tool, asTool, 'tool')) return row;
-              const updated = applyConfirmed(asTool);
-              const trackKey = `${row.tool_number}-tool`;
-              if (confirmed) {
-                recentlyPushedRef.current.set(trackKey, {
-                  field: confirmed.field,
-                  value: confirmed.value,
-                  timestamp: Date.now(),
-                });
-              }
-              return updated as UnifiedToolRow;
-            });
-          } else if (change.cacheSlice === 'pocket') {
-            empty_pockets = empty_pockets.map((pocket) => {
-              const asTool = emptyPocketAsTool(pocket);
-              if (!toolsMatchForSlice(change.tool, asTool, 'pocket')) return pocket;
-              const updated = applyConfirmed(asTool);
-              return {
-                pot_number: pocket.pot_number,
-                tool_type: updated.tool_type,
-                color: updated.color,
-                is_cap: updated.is_cap,
-              };
-            });
-          } else if (change.cacheSlice === 'spindle' && spindle) {
-            spindle = {
-              ...spindle,
-              tool_number: Number(result.tool_number ?? change.newValue),
-            };
-          }
-        });
-
-        return { ...prev, tools, empty_pockets, spindle };
-      });
+      setUnifiedCache((prev) => reconcileUnifiedCacheAfterBatch(prev, results, pendingSnapshot));
 
       updatePendingChanges((prev) => {
         const next = new Map(prev);
@@ -1476,6 +1560,16 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         });
         return next;
       });
+
+      recentlyPushedRef.current.clear();
+
+      if (results.some((r) => r.success)) {
+        const freshCache = await loadUnifiedToolsCache(machineId);
+        if (freshCache) {
+          setUnifiedCache(freshCache);
+          setCacheTimestamp(Date.now());
+        }
+      }
 
       if (failures.length > 0) {
         const errorMessages = failures
