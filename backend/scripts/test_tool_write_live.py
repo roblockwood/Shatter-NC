@@ -14,6 +14,7 @@ Usage:
     cd backend && PYTHONPATH=. python3 scripts/test_tool_write_live.py --tool 7 --assign-to-pot 12
     cd backend && PYTHONPATH=. python3 scripts/test_tool_write_live.py --tool 7 --assign-to-pot auto
     cd backend && PYTHONPATH=. python3 scripts/test_tool_write_live.py --tool 7 --read-only
+    cd backend && PYTHONPATH=. python3 scripts/test_tool_write_live.py --tool 7 --name "TEST EM" --restore-name
 """
 from __future__ import annotations
 
@@ -351,6 +352,53 @@ async def test_atc_fields(
     return results
 
 
+async def test_tool_name_via_ftp(
+    ip: str,
+    tool_number: int,
+    new_name: str,
+    units: str,
+    restore: bool,
+) -> WriteResult:
+    from types import SimpleNamespace
+
+    from app.services.tool_name_write_service import write_tool_names_via_ftp
+
+    machine = SimpleNamespace(
+        id=0,
+        ip_address=ip,
+        ftp_port=21,
+        ftp_username="anonymous",
+        ftp_password="anonymous",
+        units=units,
+        control_version=None,
+    )
+    print(f"\n--- TOLN name (FTP) T{tool_number:02d} → {new_name!r} ---")
+    try:
+        old_names, verified = await write_tool_names_via_ftp(
+            machine,
+            {tool_number: new_name},
+        )
+        ok = verified.get(tool_number, False)
+        old = (old_names.get(tool_number) or "").strip()
+        if not ok:
+            return WriteResult("TOLN name (FTP)", False, detail="verify readback failed")
+        detail = f"name set to {new_name!r} (was {old!r})"
+        if restore and old_names.get(tool_number) is not None:
+            _, restored = await write_tool_names_via_ftp(
+                machine,
+                {tool_number: old},
+            )
+            if restored.get(tool_number):
+                detail += f"; restored to {old!r}"
+            else:
+                return WriteResult("TOLN name (FTP)", False, detail="restore verify failed")
+        print(f"    OK: {detail}")
+        return WriteResult("TOLN name (FTP)", True, detail=detail)
+    except Exception as exc:
+        print(f"    FAIL: {exc}")
+        return WriteResult("TOLN name (FTP)", False, detail=str(exc))
+
+
 async def main() -> int:
     parser = argparse.ArgumentParser(description="Live test all writable tool fields")
     parser.add_argument("--ip", default=DEFAULT_IP)
@@ -372,6 +420,16 @@ async def main() -> int:
         "--skip-table",
         action="store_true",
         help="Skip TOLN offset/life write tests",
+    )
+    parser.add_argument(
+        "--name",
+        metavar="TEXT",
+        help="Write tool name via TOLN FTP patch (max 14 chars)",
+    )
+    parser.add_argument(
+        "--restore-name",
+        action="store_true",
+        help="With --name, restore the original name after verify",
     )
     args = parser.parse_args()
 
@@ -451,6 +509,17 @@ async def main() -> int:
             all_results.extend(await test_table_fields(client, args.tool, row, args.units))
         if atc_row:
             all_results.extend(await test_atc_fields(client, args.tool, atc_row))
+
+        if args.name is not None:
+            all_results.append(
+                await test_tool_name_via_ftp(
+                    args.ip,
+                    args.tool,
+                    args.name[:14],
+                    args.units,
+                    restore=args.restore_name,
+                )
+            )
 
         print("\n" + "=" * 60)
         print("SUMMARY")

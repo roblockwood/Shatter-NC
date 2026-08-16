@@ -25,7 +25,8 @@ type ToolModificationOperationType =
   | 'delete' 
   | 'life' 
   | 'offset' 
-  | 'spindle';
+  | 'spindle'
+  | 'name';
 
 interface Tool {
   pot_number?: string | number;
@@ -94,6 +95,7 @@ interface ToolChangeBatchItem {
   value?: number;
   life_value?: number;
   life_type?: 'TIME' | 'COUNT';
+  name_value?: string;
 }
 
 interface ToolChangeBatchResult {
@@ -108,6 +110,7 @@ interface ToolChangeBatchResult {
   offset_type?: string;
   value?: number;
   life_value?: number;
+  name_value?: string;
 }
 
 function parsePotNumber(pot: string | number | undefined): number | null {
@@ -135,7 +138,6 @@ interface NumericEditInputProps {
   decimal?: boolean;
 }
 
-/** Free-form numeric entry without browser spinner arrows. Keeps local draft while focused. */
 function NumericEditInput({
   className,
   value,
@@ -186,6 +188,63 @@ function NumericEditInput({
   );
 }
 
+interface TextEditInputProps {
+  className?: string;
+  value: string | undefined;
+  onValueChange: (raw: string) => void;
+  onClick?: (e: React.MouseEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  maxLength?: number;
+}
+
+/** Text entry with local draft while focused (tool name, etc.). */
+function TextEditInput({
+  className,
+  value,
+  onValueChange,
+  onClick,
+  placeholder,
+  maxLength,
+}: TextEditInputProps) {
+  const externalDisplay = value ?? '';
+  const [draft, setDraft] = useState(externalDisplay);
+  const focusedRef = useRef(false);
+
+  useEffect(() => {
+    if (!focusedRef.current) {
+      setDraft(externalDisplay);
+    }
+  }, [externalDisplay]);
+
+  return (
+    <input
+      type="text"
+      autoComplete="off"
+      className={className}
+      value={draft}
+      placeholder={placeholder}
+      maxLength={maxLength}
+      onClick={onClick}
+      onMouseDown={(e) => e.stopPropagation()}
+      onFocus={(e) => {
+        focusedRef.current = true;
+        e.stopPropagation();
+      }}
+      onBlur={(e) => {
+        focusedRef.current = false;
+        const finalValue = e.target.value;
+        if (finalValue !== externalDisplay) {
+          onValueChange(finalValue);
+        }
+      }}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        onValueChange(e.target.value);
+      }}
+    />
+  );
+}
+
 function makePendingKey(
   tool: Tool,
   field: string,
@@ -210,6 +269,8 @@ function makePendingKey(
       return `${tn}-offset-${field}`;
     case 'life':
       return `${tn}-life`;
+    case 'name':
+      return `${tn}-name`;
     default:
       return `${pot}-${tn}-${field}`;
   }
@@ -238,6 +299,8 @@ function applyFieldToTool(tool: Tool, field: string, value: string | number): To
       return { ...tool, diameter: Number(value) };
     case 'life':
       return { ...tool, life: Number(value) };
+    case 'tool_name':
+      return { ...tool, tool_name: String(value) };
     default:
       return tool;
   }
@@ -394,6 +457,13 @@ function pendingToBatchItem(key: string, change: PendingChange): ToolChangeBatch
         tool_number: change.tool.tool_number,
         life_value: Number(change.newValue),
       };
+    case 'name':
+      return {
+        operation_type: 'name',
+        client_id: key,
+        tool_number: change.tool.tool_number,
+        name_value: String(change.newValue).trim().slice(0, 14),
+      };
     default:
       return null;
   }
@@ -415,6 +485,8 @@ function getToolFieldValue(tool: Tool, field: string): string | number | undefin
       return tool.diameter;
     case 'life':
       return tool.life;
+    case 'tool_name':
+      return tool.tool_name;
     case 'H':
       return tool.length;
     case 'D':
@@ -500,6 +572,10 @@ function getConfirmedValueFromResult(result: ToolChangeBatchResult): {
     case 'life':
       return result.life_value !== undefined
         ? { field: 'life', value: result.life_value }
+        : null;
+    case 'name':
+      return result.name_value !== undefined
+        ? { field: 'tool_name', value: result.name_value }
         : null;
     default:
       return null;
@@ -1048,6 +1124,13 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     stagePendingChange(tool, 'life', tool.life ?? 0, parsed, 'life', 'tool');
   };
 
+  const handleNameChange = (tool: Tool, raw: string) => {
+    if (!machineId) return;
+    const trimmed = raw.trim().slice(0, 14);
+    const oldName = (tool.tool_name ?? '').trimEnd();
+    stagePendingChange(tool, 'tool_name', oldName, trimmed, 'name', 'tool');
+  };
+
   const toolHasPending = (tool: Tool, slice?: PendingChange['cacheSlice']): boolean =>
     Array.from(pendingChanges.values()).some(
       (c) =>
@@ -1082,8 +1165,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   };
 
   const getToolDisplayName = (tool: Tool) => {
-    // Return empty string if no tool_name, so it displays as blank
-    return tool.tool_name || '';
+    return (tool.tool_name ?? '').trimEnd();
   };
 
   /** Beta row tint: 0–7 matching ColorSelect / getColorInfo. */
@@ -1915,7 +1997,20 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       {hasMatch && <span className="matched-indicator" title="Tool exists in Tool Management">●</span>}
                       T{String(tool.tool_number).padStart(2, '0')}
                     </td>
-                    <td className="tools-col-name">{getToolDisplayName(tool) || '──'}</td>
+                    <td className="tools-col-name" onClick={(e) => e.stopPropagation()}>
+                      {isEditable ? (
+                        <TextEditInput
+                          className="tools-edit-input tools-edit-input-name"
+                          value={getToolDisplayName(tool)}
+                          maxLength={14}
+                          placeholder="──"
+                          onClick={(e) => e.stopPropagation()}
+                          onValueChange={(raw) => handleNameChange(tool, raw)}
+                        />
+                      ) : (
+                        getToolDisplayName(tool) || '──'
+                      )}
+                    </td>
                     <td className="tools-col-diameter">
                       {isEditable ? (
                         <NumericEditInput

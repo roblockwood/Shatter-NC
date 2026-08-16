@@ -1,7 +1,7 @@
 # Plan: Remote tool name writes (#137)
 
 **Issue:** [GitHub #137](https://github.com/roblockwood/Shatter-NC/issues/137)  
-**Status:** Planned (not started)  
+**Status:** In progress (backend + UI on `feat/tool-name-ftp-writes`)  
 **Supersedes:** #138 (closed as duplicate)
 
 ## Problem

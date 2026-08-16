@@ -31,7 +31,7 @@ COLOR_NAMES = {
 TOOL_TYPE_NAMES = {1: "Standard", 2: "Large", 3: "Medium"}
 OFFSET_NAMES = {"H": "Length", "D": "Diameter", "W": "Wear"}
 
-# Execution order: deletes → assignments/spindle → type/color → offsets/life
+# Execution order: deletes → assignments/spindle → type/color → offsets/life → name (FTP)
 _EXEC_ORDER = {
     "delete": 0,
     "assignment": 1,
@@ -40,6 +40,7 @@ _EXEC_ORDER = {
     "color": 4,
     "offset": 5,
     "life": 6,
+    "name": 7,
 }
 
 # Strictest validator operation for mixed batches
@@ -51,10 +52,20 @@ _VALIDATOR_FOR_OP = {
     "spindle": "spindle_tool",
     "offset": "tool_offset",
     "life": "tool_life",
+    "name": "tool_name",
 }
 
 _STRICT_OPS = frozenset({"assignment", "delete", "spindle"})
-_STRICT_VALIDATOR_PRIORITY = ("assignment", "delete", "spindle", "type", "offset", "life", "color")
+_STRICT_VALIDATOR_PRIORITY = (
+    "assignment",
+    "delete",
+    "spindle",
+    "type",
+    "offset",
+    "life",
+    "name",
+    "color",
+)
 
 
 def validation_operation_type(changes: List[ToolChangeItem]) -> str:
@@ -64,7 +75,7 @@ def validation_operation_type(changes: List[ToolChangeItem]) -> str:
         for op in _STRICT_VALIDATOR_PRIORITY:
             if op in ops and op in _VALIDATOR_FOR_OP:
                 return _VALIDATOR_FOR_OP[op]
-    for op in ("offset", "life", "color"):
+    for op in ("offset", "life", "name", "color"):
         if op in ops:
             return _VALIDATOR_FOR_OP[op]
     return "tool_color"
@@ -98,6 +109,11 @@ def validate_change_ranges(change: ToolChangeItem) -> Optional[str]:
             return f"Invalid tool number: {change.tool_number} (must be 1-99)"
         if change.life_value is not None and not 0 <= change.life_value <= 999999:
             return f"Invalid life value: {change.life_value}"
+    if op == "name":
+        if change.tool_number is not None and not 1 <= change.tool_number <= 99:
+            return f"Invalid tool number: {change.tool_number} (must be 1-99)"
+        if change.name_value is not None and len(change.name_value.strip()) > 14:
+            return f"Tool name too long: max 14 characters (got {len(change.name_value.strip())})"
     return None
 
 
@@ -113,6 +129,7 @@ def _result_from_change(change: ToolChangeItem, **kwargs: Any) -> ToolChangeResu
         value=change.value,
         life_value=change.life_value,
         life_type=change.life_type,
+        name_value=change.name_value,
         **kwargs,
     )
 
@@ -219,6 +236,82 @@ async def _apply_single_change(telnet_client, change: ToolChangeItem) -> Tuple[b
     return False, "01", "Unknown operation", "tool_color", {}
 
 
+async def _apply_name_changes_batch(
+    db_machine: Machine,
+    machine_id: int,
+    changes: List[ToolChangeItem],
+    telnet_client,
+) -> List[ToolChangeResult]:
+    """Apply one or more name changes via a single TOLN FTP upload."""
+    from app.services.audit_logger import AuditLogger
+    from app.services.tool_name_write_service import write_tool_names_via_ftp
+    from app.services.tolni_patch import normalize_tool_name
+
+    updates = {c.tool_number: c.name_value or "" for c in changes if c.tool_number is not None}
+    results: List[ToolChangeResult] = []
+
+    try:
+        old_names, verified = await write_tool_names_via_ftp(
+            db_machine,
+            updates,
+            telnet_client=telnet_client,
+        )
+        for change in changes:
+            tn = change.tool_number or 0
+            new_name = normalize_tool_name(change.name_value or "")
+            old_name = normalize_tool_name(old_names.get(tn, ""))
+            ok = verified.get(tn, False)
+            details = {
+                "tool_number": tn,
+                "old_name": old_name,
+                "new_name": new_name,
+            }
+            msg = f"Tool {tn} name set to {new_name!r}" if ok else f"Tool {tn} name verify failed after upload"
+            AuditLogger.log_tool_modification(
+                machine_id=machine_id,
+                operation_type="tool_name",
+                operation_details=details,
+                success=ok,
+                error_message=None if ok else msg,
+                machine_state=None,
+            )
+            if ok:
+                results.append(_result_from_change(change, success=True, message=msg))
+            else:
+                results.append(
+                    _result_from_change(
+                        change,
+                        success=False,
+                        error_code="verify_failed",
+                        message=msg,
+                    )
+                )
+    except Exception as exc:
+        logger.error("Tool name FTP write failed: %s", exc)
+        for change in changes:
+            AuditLogger.log_tool_modification(
+                machine_id=machine_id,
+                operation_type="tool_name",
+                operation_details={
+                    "tool_number": change.tool_number,
+                    "new_name": normalize_tool_name(change.name_value or ""),
+                },
+                success=False,
+                error_message=str(exc),
+                machine_state=None,
+            )
+            results.append(
+                _result_from_change(
+                    change,
+                    success=False,
+                    error_code="ftp_error",
+                    message=str(exc),
+                )
+            )
+
+    return results
+
+
 async def apply_tool_changes_batch(
     db_machine: Machine,
     machine_id: int,
@@ -245,59 +338,79 @@ async def apply_tool_changes_batch(
         raise PermissionError(error_message or "Machine is not in a safe state for this operation")
 
     ordered = sort_changes_for_execution(changes)
+    telnet_changes = [c for c in ordered if c.operation_type != "name"]
+    name_changes = [c for c in ordered if c.operation_type == "name"]
     results: List[ToolChangeResult] = []
     successful = 0
     failed = 0
 
     telnet_client = None
     try:
-        telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
-            timeout=10,
-        )
+        if telnet_changes:
+            telnet_client = await create_fresh_connection(
+                ip_address=db_machine.ip_address,
+                port=10000,
+                timeout=10,
+            )
 
-        for change in ordered:
-            try:
-                success, status_code, msg, audit_op, details = await _apply_single_change(
-                    telnet_client, change
-                )
-                status_desc = (
-                    CNCTelnetClient.get_status_description(status_code or "00") if not success else None
-                )
-                AuditLogger.log_tool_modification(
-                    machine_id=machine_id,
-                    operation_type=audit_op,
-                    operation_details=details,
-                    success=success,
-                    error_message=status_desc,
-                    machine_state=None,
-                )
-                if success:
-                    results.append(_result_from_change(change, success=True, message=msg))
-                    successful += 1
-                else:
-                    error_msg = status_desc or f"Failed with status code {status_code}"
+            for change in telnet_changes:
+                try:
+                    success, status_code, msg, audit_op, details = await _apply_single_change(
+                        telnet_client, change
+                    )
+                    status_desc = (
+                        CNCTelnetClient.get_status_description(status_code or "00") if not success else None
+                    )
+                    AuditLogger.log_tool_modification(
+                        machine_id=machine_id,
+                        operation_type=audit_op,
+                        operation_details=details,
+                        success=success,
+                        error_message=status_desc,
+                        machine_state=None,
+                    )
+                    if success:
+                        results.append(_result_from_change(change, success=True, message=msg))
+                        successful += 1
+                    else:
+                        error_msg = status_desc or f"Failed with status code {status_code}"
+                        results.append(
+                            _result_from_change(
+                                change,
+                                success=False,
+                                error_code=status_code or "unknown",
+                                message=error_msg,
+                            )
+                        )
+                        failed += 1
+                except Exception as exc:
                     results.append(
                         _result_from_change(
                             change,
                             success=False,
-                            error_code=status_code or "unknown",
-                            message=error_msg,
+                            error_code="exception",
+                            message=str(exc),
                         )
                     )
                     failed += 1
-            except Exception as exc:
-                results.append(
-                    _result_from_change(
-                        change,
-                        success=False,
-                        error_code="exception",
-                        message=str(exc),
-                    )
+                    logger.error("Exception applying tool change %s: %s", change.operation_type, exc)
+
+        if name_changes:
+            if telnet_client is None:
+                telnet_client = await create_fresh_connection(
+                    ip_address=db_machine.ip_address,
+                    port=10000,
+                    timeout=10,
                 )
-                failed += 1
-                logger.error("Exception applying tool change %s: %s", change.operation_type, exc)
+            name_results = await _apply_name_changes_batch(
+                db_machine, machine_id, name_changes, telnet_client
+            )
+            for result in name_results:
+                results.append(result)
+                if result.success:
+                    successful += 1
+                else:
+                    failed += 1
 
     finally:
         if telnet_client:
