@@ -23,6 +23,7 @@ type ToolModificationOperationType =
   | 'pot_number'
   | 'tool_type' 
   | 'delete' 
+  | 'cap'
   | 'life' 
   | 'offset' 
   | 'spindle'
@@ -39,6 +40,8 @@ interface Tool {
   tool_type?: number;
   color?: number;
   in_atc?: boolean;
+  /** Empty-pocket row: ATCTL cap marker (panel shows tool 0). */
+  is_cap?: boolean;
 }
 
 interface ToolsPaneProps {
@@ -263,6 +266,8 @@ function makePendingKey(
       return `${pot}-type`;
     case 'delete':
       return `${pot}-delete`;
+    case 'cap':
+      return `${pot}-cap`;
     case 'spindle':
       return 'spindle-tool';
     case 'offset':
@@ -334,26 +339,98 @@ function emptyPocketAsTool(pocket: EmptyPocket): Tool {
     tool_number: 0,
     tool_type: pocket.tool_type,
     color: pocket.color,
+    is_cap: pocket.is_cap,
+  };
+}
+
+const CAP_ATC_TOOL_NUMBERS = new Set([255, 999]);
+
+function isRealAtcToolNumber(toolNumber: number): boolean {
+  return toolNumber > 0 && !CAP_ATC_TOOL_NUMBERS.has(toolNumber);
+}
+
+function buildPotOccupancyMap(
+  cache: UnifiedToolView,
+  pending: Map<string, PendingChange>,
+): Map<number, number> {
+  const occupancy = new Map<number, number>();
+
+  for (const row of cache.tools) {
+    const merged = mergeServerToolWithPending(unifiedRowAsTool(row), pending, 'tool');
+    const pot = parsePotNumber(merged.pot_number);
+    if (pot !== null && pot > 0 && merged.in_atc && isRealAtcToolNumber(merged.tool_number)) {
+      occupancy.set(pot, merged.tool_number);
+    }
+  }
+
+  for (const pocket of cache.empty_pockets) {
+    const asTool = emptyPocketAsTool(pocket);
+    const merged = mergeServerToolWithPending(asTool, pending, 'pocket');
+    const pot = parsePotNumber(merged.pot_number);
+    if (pot !== null && pot > 0 && isRealAtcToolNumber(merged.tool_number)) {
+      occupancy.set(pot, merged.tool_number);
+    }
+  }
+
+  return occupancy;
+}
+
+function findToolPotAssignment(
+  cache: UnifiedToolView,
+  pending: Map<string, PendingChange>,
+  toolNumber: number,
+): number | null {
+  for (const [pot, tool] of buildPotOccupancyMap(cache, pending)) {
+    if (tool === toolNumber) return pot;
+  }
+  return null;
+}
+
+function getPotOccupantTool(
+  cache: UnifiedToolView,
+  pending: Map<string, PendingChange>,
+  potNumber: number,
+  excludeToolNumber?: number,
+): number | null {
+  const occupant = buildPotOccupancyMap(cache, pending).get(potNumber);
+  if (occupant === undefined) return null;
+  if (excludeToolNumber !== undefined && occupant === excludeToolNumber) return null;
+  return occupant;
+}
+
+function clearAtcAssignment(tool: Tool): Tool {
+  return {
+    ...tool,
+    in_atc: false,
+    pot_number: undefined,
+    group: undefined,
+    tool_type: undefined,
+    color: undefined,
+  };
+}
+
+function restoreAtcAssignment(tool: Tool, snapshot: Tool): Tool {
+  return {
+    ...tool,
+    tool_number: snapshot.tool_number,
+    in_atc: true,
+    pot_number: snapshot.pot_number,
+    group: snapshot.group,
+    tool_type: snapshot.tool_type,
+    color: snapshot.color,
   };
 }
 
 function applyAssignmentEdge(tool: Tool, field: string, value: string | number): Tool {
+  if (field === 'tool_number' && Number(value) === 0) {
+    return clearAtcAssignment(tool);
+  }
   const next = applyFieldToTool(tool, field, value);
   if (field === 'pot_number') {
     if (value === '' || value === undefined || value === null) {
-      return {
-        ...next,
-        in_atc: false,
-        pot_number: undefined,
-        group: undefined,
-        tool_type: undefined,
-        color: undefined,
-      };
+      return clearAtcAssignment(next);
     }
     return { ...next, in_atc: true };
-  }
-  if (field === 'tool_number' && Number(value) === 0) {
-    return { ...next, in_atc: false, pot_number: undefined, group: undefined, tool_type: undefined, color: undefined };
   }
   return next;
 }
@@ -380,6 +457,10 @@ function mergeServerToolWithPending(
     if (!toolsMatchForSlice(change.tool, serverTool, cacheSlice)) return;
     if (change.operationType === 'delete') {
       merged = applyAssignmentEdge(merged, 'tool_number', 0);
+      return;
+    }
+    if (change.operationType === 'cap') {
+      merged = { ...merged, tool_number: 0, is_cap: true };
       return;
     }
     merged =
@@ -427,6 +508,13 @@ function pendingToBatchItem(key: string, change: PendingChange): ToolChangeBatch
         client_id: key,
         pot_number: pot,
         tool_type: Number(change.newValue),
+      };
+    case 'cap':
+      if (pot === null || pot < 1) return null;
+      return {
+        operation_type: 'cap',
+        client_id: key,
+        pot_number: pot,
       };
     case 'delete':
       if (pot === null || pot < 1) return null;
@@ -952,6 +1040,12 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         if (operationType === 'delete') {
           return applyAssignmentEdge(t, 'tool_number', 0);
         }
+        if (operationType === 'cap') {
+          return { ...t, tool_number: 0, is_cap: true };
+        }
+        if (operationType === 'tool_number' && cacheSlice === 'pocket') {
+          return { ...applyFieldToTool(t, field, newValue), is_cap: false };
+        }
         if (cacheSlice === 'tool' && (field === 'pot_number' || field === 'tool_number')) {
           return applyAssignmentEdge(t, field, newValue);
         }
@@ -960,7 +1054,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
       const revertTool = (t: Tool): Tool => {
         if (operationType === 'delete') {
-          return applyAssignmentEdge(t, 'tool_number', baseline as number);
+          return restoreAtcAssignment(t, tool);
+        }
+        if (operationType === 'cap') {
+          return { ...t, is_cap: Boolean(baseline) };
         }
         if (cacheSlice === 'tool' && (field === 'pot_number' || field === 'tool_number')) {
           return applyAssignmentEdge(t, field, baseline);
@@ -994,6 +1091,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     pot_number: pocket.pot_number,
                     tool_type: reverted.tool_type,
                     color: reverted.color,
+                    is_cap: reverted.is_cap,
                   };
                 }),
               };
@@ -1037,6 +1135,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                   pot_number: pocket.pot_number,
                   tool_type: updated.tool_type,
                   color: updated.color,
+                  is_cap: updated.is_cap,
                 };
               }),
             };
@@ -1074,7 +1173,35 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     }
 
     if (cacheSlice === 'pocket') {
+      const pot = parsePotNumber(tool.pot_number);
+      if (pot === null || pot < 1) return;
+
+      const pending = pendingChangesRef.current;
+
+      if (parsed === 0) {
+        const occupant = getPotOccupantTool(unifiedCache, pending, pot);
+        if (occupant != null) {
+          alert(`Pot ${pot} is in use by tool ${occupant}. Clear that pot first.`);
+          return;
+        }
+        stagePendingChange(tool, 'is_cap', tool.is_cap ?? false, true, 'cap', 'pocket');
+        return;
+      }
+
       if (parsed < 1 || parsed > 999) return;
+
+      const potOccupant = getPotOccupantTool(unifiedCache, pending, pot);
+      if (potOccupant != null) {
+        alert(`Pot ${pot} is in use by tool ${potOccupant}. Clear that pot first.`);
+        return;
+      }
+
+      const existingPot = findToolPotAssignment(unifiedCache, pending, parsed);
+      if (existingPot != null && existingPot !== pot) {
+        alert(`Tool ${parsed} is already in pot ${existingPot}. Clear that pot first.`);
+        return;
+      }
+
       stagePendingChange(tool, 'tool_number', tool.tool_number, parsed, 'tool_number', 'pocket');
     }
   };
@@ -1085,6 +1212,17 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     if (trimmed === '') return;
     const parsed = parseInt(trimmed, 10);
     if (!Number.isFinite(parsed) || parsed < 1 || parsed > numPocketsProp) return;
+
+    const occupant = getPotOccupantTool(
+      unifiedCache,
+      pendingChangesRef.current,
+      parsed,
+      tool.tool_number,
+    );
+    if (occupant != null) {
+      alert(`Pot ${parsed} is in use by tool ${occupant}. Clear that pot first.`);
+      return;
+    }
 
     stagePendingChange(
       tool,
@@ -1279,6 +1417,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
             if (change.operationType === 'delete') {
               return applyAssignmentEdge(t, 'tool_number', 0);
             }
+            if (change.operationType === 'cap') {
+              return { ...t, tool_number: 0, is_cap: true };
+            }
             if (confirmed) {
               if (change.cacheSlice === 'tool' && (confirmed.field === 'pot_number' || confirmed.field === 'tool_number')) {
                 return applyAssignmentEdge(t, confirmed.field, confirmed.value);
@@ -1312,6 +1453,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 pot_number: pocket.pot_number,
                 tool_type: updated.tool_type,
                 color: updated.color,
+                is_cap: updated.is_cap,
               };
             });
           } else if (change.cacheSlice === 'spindle' && spindle) {
@@ -1363,7 +1505,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       pendingChanges.forEach((change) => {
         const revert = (t: Tool): Tool => {
           if (change.operationType === 'delete') {
-            return applyAssignmentEdge(t, 'tool_number', change.oldValue as number);
+            return restoreAtcAssignment(t, change.tool);
           }
           if (change.cacheSlice === 'tool' && (change.field === 'pot_number' || change.field === 'tool_number')) {
             return applyAssignmentEdge(t, change.field, change.oldValue);
@@ -1934,14 +2076,16 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                           {isEditable ? (
                             <NumericEditInput
                               className="tools-edit-input tools-edit-input--tool-number"
-                              value={merged.tool_number || ''}
-                              placeholder="T#"
+                              value={merged.is_cap ? 0 : (merged.tool_number || '')}
+                              placeholder="T# or 0"
                               onValueChange={(raw) => handleToolNumberChange(asTool, raw, 'pocket')}
                             />
+                          ) : merged.is_cap ? (
+                            'CAP'
+                          ) : merged.tool_number ? (
+                            `T${String(merged.tool_number).padStart(2, '0')}`
                           ) : (
-                            merged.tool_number
-                              ? `T${String(merged.tool_number).padStart(2, '0')}`
-                              : '──'
+                            '──'
                           )}
                         </td>
                         <td className="tools-col-name">──</td>

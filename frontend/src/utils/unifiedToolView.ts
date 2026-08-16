@@ -18,6 +18,8 @@ export interface EmptyPocket {
   pot_number: number;
   tool_type?: number;
   color?: number;
+  /** True when ATCTL marks this pocket as cap (C00: 255, D00: 999). Panel shows tool 0. */
+  is_cap?: boolean;
 }
 
 export interface SpindleAssignment {
@@ -92,6 +94,7 @@ export function buildUnifiedToolViewFromLegacy(
         pot_number: potNum,
         tool_type: atc.tool_type,
         color: atc.color,
+        is_cap: tn === 255 || tn === 999,
       });
     } else if (tn > 0) {
       byTool.set(tn, atc);
