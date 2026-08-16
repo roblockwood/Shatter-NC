@@ -69,6 +69,7 @@ ToolChangeOperationType = Literal[
     "spindle",
     "offset",
     "life",
+    "name",
 ]
 
 
@@ -87,6 +88,7 @@ class ToolChangeItem(BaseModel):
     value: Optional[float] = None
     life_value: Optional[int] = None
     life_type: Optional[Literal["TIME", "COUNT"]] = "TIME"
+    name_value: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_payload(self) -> "ToolChangeItem":
@@ -112,6 +114,9 @@ class ToolChangeItem(BaseModel):
         elif op == "life":
             if self.tool_number is None or self.life_value is None:
                 raise ValueError("life requires tool_number and life_value")
+        elif op == "name":
+            if self.tool_number is None or self.name_value is None:
+                raise ValueError("name requires tool_number and name_value")
         return self
 
 
@@ -131,6 +136,7 @@ class ToolChangeResult(BaseModel):
     value: Optional[float] = None
     life_value: Optional[int] = None
     life_type: Optional[str] = None
+    name_value: Optional[str] = None
     error_code: Optional[str] = None
     message: Optional[str] = None
 
