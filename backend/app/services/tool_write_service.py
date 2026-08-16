@@ -266,6 +266,27 @@ def _result_from_change(change: ToolChangeItem, **kwargs: Any) -> ToolChangeResu
     )
 
 
+_CAP_ATC_EMPTY = frozenset({0, 255, 999})
+
+
+async def _verify_pot_has_tool(
+    telnet_client,
+    pot_number: int,
+    expected_tool: int,
+) -> Tuple[bool, Optional[int]]:
+    actual = await telnet_client._read_pot_tool_number(pot_number, verbose=False)
+    if actual is None:
+        return False, None
+    return actual == expected_tool, actual
+
+
+async def _verify_pot_is_empty(telnet_client, pot_number: int) -> Tuple[bool, Optional[int]]:
+    actual = await telnet_client._read_pot_tool_number(pot_number, verbose=False)
+    if actual is None:
+        return False, None
+    return actual in _CAP_ATC_EMPTY, actual
+
+
 async def _apply_single_change(telnet_client, change: ToolChangeItem) -> Tuple[bool, Optional[str], str, Dict[str, Any]]:
     """Execute one change; returns success, status_code, message, audit operation_details."""
     op = change.operation_type
@@ -294,8 +315,21 @@ async def _apply_single_change(telnet_client, change: ToolChangeItem) -> Tuple[b
             tool_number=change.tool_number,
             verbose=False,
         )
+        msg = ""
+        if success:
+            verified, actual = await _verify_pot_has_tool(
+                telnet_client, change.pot_number, change.tool_number
+            )
+            if not verified:
+                success = False
+                status = status or "verify"
+                msg = (
+                    f"Assignment not applied — pot {change.pot_number} shows tool {actual}, "
+                    f"expected {change.tool_number}"
+                )
+            else:
+                msg = f"Tool {change.tool_number} assigned to pot {change.pot_number}"
         details = {"pot_number": change.pot_number, "new_tool_number": change.tool_number}
-        msg = f"Tool {change.tool_number} assigned to pot {change.pot_number}" if success else ""
         return success, status, msg, "tool_assignment", details
 
     if op == "cap":
@@ -328,8 +362,16 @@ async def _apply_single_change(telnet_client, change: ToolChangeItem) -> Tuple[b
             tool_number=change.tool_number,
             verbose=False,
         )
+        msg = ""
+        if success:
+            verified, actual = await _verify_pot_is_empty(telnet_client, change.pot_number)
+            if not verified:
+                success = False
+                status = status or "verify"
+                msg = f"Pot {change.pot_number} still contains tool {actual}"
+            else:
+                msg = f"Tool removed from pot {change.pot_number}"
         details = {"pot_number": change.pot_number, "tool_number": change.tool_number}
-        msg = f"Tool removed from pot {change.pot_number}" if success else ""
         return success, status, msg, "tool_delete", details
 
     if op == "spindle":
