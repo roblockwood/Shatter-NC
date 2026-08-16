@@ -65,6 +65,7 @@ export interface MachineStatus {
   location?: string;
   poll_interval_seconds?: number;
   tool_poll_interval_seconds?: number;
+  atc_pockets?: number;
   enabled?: boolean;
   part_display_mode?: 'cycle' | 'parts';
   layout_config?: Record<string, unknown> | null;

@@ -1,4 +1,7 @@
-from app.services.unified_tool_view import build_unified_tool_view
+from app.services.unified_tool_view import (
+    build_unified_tool_view,
+    expand_atc_parsed_to_pocket_count,
+)
 
 
 def test_tool_centric_rows_without_atc():
@@ -45,3 +48,34 @@ def test_atc_fields_only_when_assigned():
 
     assert unassigned["in_atc"] is False
     assert "pot_number" not in unassigned
+
+
+def test_expand_atc_to_configured_pocket_count():
+    atc = {
+        "tools": [
+            {"pot_number": 1, "tool_number": 5, "tool_type": 1, "color": 2},
+            {"pot_number": 3, "tool_number": 0, "tool_type": 1, "color": 0},
+        ]
+    }
+
+    expanded = expand_atc_parsed_to_pocket_count(atc, 5)
+    pots = [
+        row["pot_number"]
+        for row in expanded["tools"]
+        if isinstance(row.get("pot_number"), int)
+    ]
+
+    assert pots == [1, 2, 3, 4, 5]
+    assert expanded["tools"][1]["tool_number"] == 0  # synthetic empty pot 2
+
+
+def test_unified_view_uses_atc_pockets_for_empty_list():
+    atc = {
+        "tools": [
+            {"pot_number": 1, "tool_number": 5, "tool_type": 1, "color": 2},
+        ]
+    }
+    view = build_unified_tool_view([], atc, atc_pockets=4)
+
+    assert len(view["empty_pockets"]) == 3
+    assert {p["pot_number"] for p in view["empty_pockets"]} == {2, 3, 4}

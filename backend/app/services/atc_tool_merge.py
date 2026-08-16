@@ -49,11 +49,17 @@ def _empty_atc_row(atc_tool: dict) -> dict:
 def merge_atc_tools_for_display(
     atc_parsed: dict,
     tool_table_tools: Optional[List[dict]] = None,
+    atc_pockets: Optional[int] = None,
 ) -> List[dict]:
     """
     Build ATC view rows: one entry per magazine pocket from ATCTL, including empty
     and cap (255) pockets as assignable rows with tool_number 0.
     """
+    from app.services.unified_tool_view import expand_atc_parsed_to_pocket_count
+
+    if atc_pockets and atc_pockets > 0:
+        atc_parsed = expand_atc_parsed_to_pocket_count(atc_parsed, atc_pockets)
+
     tool_lookup = _build_tool_lookup(tool_table_tools or [])
     tools: List[dict] = []
     spindle_tool: Optional[dict] = None

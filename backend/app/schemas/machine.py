@@ -17,6 +17,8 @@ class MachineBase(BaseModel):
     path: str = Field(default="/", max_length=255, description="Default FTP path for program files (root)")
     tags: Optional[List[str]] = Field(default_factory=list)
     poll_interval_seconds: int = Field(default=5, ge=1, le=300)
+    tool_poll_interval_seconds: int = Field(default=30, ge=1, le=600)
+    atc_pockets: int = Field(default=21, ge=1, le=60, description="ATC magazine pocket count")
     enabled: bool = Field(default=True)
     # Validation tolerances (in inches)
     diameter_tolerance: float = Field(default=0.010, ge=0, description="Tool diameter tolerance (±)")
@@ -57,6 +59,8 @@ class MachineUpdate(BaseModel):
     path: Optional[str] = Field(None, max_length=255, description="Default FTP path for program files")
     tags: Optional[List[str]] = None
     poll_interval_seconds: Optional[int] = Field(None, ge=1, le=300)
+    tool_poll_interval_seconds: Optional[int] = Field(None, ge=1, le=600)
+    atc_pockets: Optional[int] = Field(None, ge=1, le=60, description="ATC magazine pocket count")
     enabled: Optional[bool] = None
     # Validation tolerances (in inches)
     diameter_tolerance: Optional[float] = Field(None, ge=0, description="Tool diameter tolerance (±)")

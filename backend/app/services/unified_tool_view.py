@@ -6,6 +6,52 @@ from typing import Any, Dict, List, Optional
 from app.services.atc_tool_merge import _is_spindle_pot
 
 
+def _normalize_pot_number(pot_number: Any) -> Optional[int]:
+    if pot_number is None:
+        return None
+    if _is_spindle_pot(pot_number):
+        return None
+    if isinstance(pot_number, int):
+        return pot_number
+    try:
+        return int(pot_number)
+    except (TypeError, ValueError):
+        return None
+
+
+def expand_atc_parsed_to_pocket_count(atc_parsed: dict, num_pockets: int) -> dict:
+    """Ensure ATCTL rows include every pocket 1..num_pockets (synthetic empty when absent)."""
+    if num_pockets < 1:
+        return atc_parsed
+
+    tools = list(atc_parsed.get("tools") or [])
+    by_pot: Dict[int, dict] = {}
+    passthrough: List[dict] = []
+
+    for row in tools:
+        pot = _normalize_pot_number(row.get("pot_number"))
+        if pot is None:
+            passthrough.append(row)
+            continue
+        by_pot[pot] = row
+
+    expanded = list(passthrough)
+    for pot in range(1, num_pockets + 1):
+        if pot in by_pot:
+            expanded.append(by_pot[pot])
+        else:
+            expanded.append(
+                {
+                    "pot_number": pot,
+                    "tool_number": 0,
+                    "tool_type": 1,
+                    "color": 0,
+                }
+            )
+
+    return {**atc_parsed, "tools": expanded}
+
+
 def _build_atc_lookups(
     atc_parsed: dict,
 ) -> tuple[Dict[int, dict], List[dict], Optional[dict]]:
@@ -61,6 +107,7 @@ def _build_atc_lookups(
 def build_unified_tool_view(
     toln_tools: Optional[List[dict]] = None,
     atc_parsed: Optional[dict] = None,
+    atc_pockets: Optional[int] = None,
 ) -> dict:
     """
     Build tool-centric rows with optional ATC assignment overlay.
@@ -75,6 +122,8 @@ def build_unified_tool_view(
     spindle: Optional[dict] = None
 
     if atc_parsed:
+        if atc_pockets and atc_pockets > 0:
+            atc_parsed = expand_atc_parsed_to_pocket_count(atc_parsed, atc_pockets)
         by_tool, empty_pockets, spindle = _build_atc_lookups(atc_parsed)
 
     tool_rows: List[dict] = []

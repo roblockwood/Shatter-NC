@@ -59,9 +59,11 @@ function isSpindlePot(pot: string | number | undefined): boolean {
 export function buildUnifiedToolViewFromLegacy(
   tableTools: LegacyTableTool[],
   atcTools: LegacyAtcTool[],
+  numPockets?: number,
 ): UnifiedToolView {
   const byTool = new Map<number, LegacyAtcTool>();
-  const empty_pockets: EmptyPocket[] = [];
+  const emptyByPot = new Map<number, EmptyPocket>();
+  const occupiedPots = new Set<number>();
   let spindle: SpindleAssignment | null = null;
 
   for (const atc of atcTools) {
@@ -86,17 +88,29 @@ export function buildUnifiedToolViewFromLegacy(
     if (!Number.isFinite(potNum)) continue;
 
     if (tn === 0 || tn === 255 || tn === 999) {
-      empty_pockets.push({
+      emptyByPot.set(potNum, {
         pot_number: potNum,
         tool_type: atc.tool_type,
         color: atc.color,
       });
     } else if (tn > 0) {
       byTool.set(tn, atc);
+      occupiedPots.add(potNum);
     }
   }
 
-  empty_pockets.sort((a, b) => a.pot_number - b.pot_number);
+  let empty_pockets: EmptyPocket[];
+  if (numPockets && numPockets > 0) {
+    empty_pockets = [];
+    for (let pot = 1; pot <= numPockets; pot += 1) {
+      if (occupiedPots.has(pot)) continue;
+      empty_pockets.push(
+        emptyByPot.get(pot) ?? { pot_number: pot, tool_type: 1, color: 0 },
+      );
+    }
+  } else {
+    empty_pockets = [...emptyByPot.values()].sort((a, b) => a.pot_number - b.pot_number);
+  }
 
   const tools: UnifiedToolRow[] = tableTools
     .filter((t) => t.tool_number)
