@@ -451,6 +451,49 @@
   white-space: nowrap;
 }
 
+.tools-col-pot.tools-col-atc {
+  text-align: center;
+  overflow: visible;
+}
+
+.tools-pot-assign-anchor,
+.tools-pocket-assign-anchor {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.tools-validated-field--invalid .tools-edit-input {
+  border-color: var(--color-warning);
+  box-shadow: 0 0 4px rgba(255, 183, 77, 0.35);
+}
+
+.tools-field-popover {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  line-height: 1.35;
+  color: #ffe0b2;
+  background: rgba(22, 18, 10, 0.97);
+  border: 1px solid var(--color-warning);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  padding: 6px 8px;
+  max-width: 15rem;
+  pointer-events: none;
+}
+
+.tools-field-popover__icon {
+  flex: 0 0 auto;
+  color: var(--color-warning);
+}
+
+.tools-field-popover__text {
+  flex: 1 1 auto;
+  white-space: normal;
+}
+
 .tools-col-name {
   width: auto;
   min-width: 9.25rem;
@@ -592,7 +635,8 @@
 }
 
 .tools-edit-input--pot-number {
-  max-width: 3rem;
+  width: 2.5rem;
+  max-width: 2.5rem;
   text-align: center;
 }
 
@@ -631,40 +675,20 @@
 }
 
 .tools-pot-cell {
-  display: flex;
+  display: inline-grid;
+  grid-template-columns: 2.5rem 1rem;
   align-items: center;
   gap: 3px;
-  min-width: 0;
+  justify-content: center;
 }
 
-.tools-inline-field-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.tools-field-warning {
-  flex: 0 1 auto;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  line-height: 1.2;
-  color: var(--color-warning);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 11rem;
-}
-
-.tools-inline-field-group--invalid .tools-edit-input {
-  border-color: var(--color-warning);
-  box-shadow: 0 0 4px rgba(255, 183, 77, 0.35);
+.tools-clear-pot-btn--spacer {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .tools-pot-cell .tools-edit-input--pot-number {
-  flex: 1 1 auto;
-  min-width: 0;
+  width: 2.5rem;
   max-width: 2.5rem;
 }
 

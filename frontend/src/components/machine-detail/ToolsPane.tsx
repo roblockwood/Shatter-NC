@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useBetaMode } from '../../hooks/useBetaMode';
 import { formatDimension } from '../../utils/formatDimension';
@@ -617,12 +618,121 @@ function reconcileUnifiedCacheAfterBatch(
   };
 }
 
-function FieldInlineWarning({ message }: { message?: string }) {
-  if (!message) return null;
+function FieldValidationPopover({
+  message,
+  anchorRef,
+}: {
+  message?: string;
+  anchorRef: React.RefObject<HTMLElement | null>;
+}) {
+  const popoverId = useId();
+  const [pos, setPos] = useState<{
+    top: number;
+    left: number;
+    transform: string;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!message) {
+      setPos(null);
+      return;
+    }
+
+    const update = () => {
+      const el = anchorRef.current;
+      if (!el) return;
+
+      const rect = el.getBoundingClientRect();
+      const margin = 8;
+      const popoverWidth = 240;
+      const popoverHeight = 48;
+      const spaceRight = window.innerWidth - rect.right;
+      const spaceLeft = rect.left;
+      const placeRight = spaceRight >= popoverWidth + margin || spaceRight >= spaceLeft;
+
+      let left = placeRight ? rect.right + margin : rect.left - margin;
+      let top = rect.top + rect.height / 2;
+      let transform = 'translateY(-50%)';
+
+      if (!placeRight) {
+        transform = 'translate(-100%, -50%)';
+      }
+
+      if (top - popoverHeight / 2 < margin) {
+        top = margin + popoverHeight / 2;
+      } else if (top + popoverHeight / 2 > window.innerHeight - margin) {
+        top = window.innerHeight - margin - popoverHeight / 2;
+      }
+
+      if (placeRight && left + popoverWidth > window.innerWidth - margin) {
+        left = window.innerWidth - margin - popoverWidth;
+      }
+      if (!placeRight && left - popoverWidth < margin) {
+        left = margin + popoverWidth;
+        transform = 'translate(-100%, -50%)';
+      }
+
+      setPos({ top, left, transform });
+    };
+
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [message, anchorRef]);
+
+  if (!message || !pos) return null;
+
+  return createPortal(
+    <div
+      id={popoverId}
+      role="alert"
+      className="tools-field-popover"
+      style={{
+        position: 'fixed',
+        top: pos.top,
+        left: pos.left,
+        transform: pos.transform,
+        zIndex: 10000,
+      }}
+    >
+      <span className="tools-field-popover__icon" aria-hidden>
+        ⚠
+      </span>
+      <span className="tools-field-popover__text">{message}</span>
+    </div>,
+    document.body,
+  );
+}
+
+function ValidatedFieldAnchor({
+  warningKey,
+  fieldWarnings,
+  className,
+  children,
+}: {
+  warningKey: string;
+  fieldWarnings: Map<string, string>;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const message = fieldWarnings.get(warningKey);
+  const invalid = Boolean(message);
+
   return (
-    <span className="tools-field-warning" role="alert" title={message}>
-      ⚠ {message}
-    </span>
+    <>
+      <div
+        ref={anchorRef}
+        className={`${className ?? ''}${invalid ? ' tools-validated-field--invalid' : ''}`.trim()}
+      >
+        {children}
+      </div>
+      <FieldValidationPopover message={message} anchorRef={anchorRef} />
+    </>
   );
 }
 
@@ -2223,12 +2333,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       >
                         <td className="tools-col-number" onClick={(e) => e.stopPropagation()}>
                           {isEditable ? (
-                            <div
-                              className={`tools-inline-field-group${
-                                fieldWarnings.has(pocketAssignWarningKey(pocket.pot_number))
-                                  ? ' tools-inline-field-group--invalid'
-                                  : ''
-                              }`}
+                            <ValidatedFieldAnchor
+                              warningKey={pocketAssignWarningKey(pocket.pot_number)}
+                              fieldWarnings={fieldWarnings}
+                              className="tools-pocket-assign-anchor"
                             >
                               <NumericEditInput
                                 className="tools-edit-input tools-edit-input--tool-number"
@@ -2236,10 +2344,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                                 placeholder="T# or 0"
                                 onValueChange={(raw) => handleToolNumberChange(asTool, raw, 'pocket')}
                               />
-                              <FieldInlineWarning
-                                message={fieldWarnings.get(pocketAssignWarningKey(pocket.pot_number))}
-                              />
-                            </div>
+                            </ValidatedFieldAnchor>
                           ) : merged.is_cap ? (
                             'CAP'
                           ) : merged.tool_number ? (
@@ -2354,12 +2459,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       )}
                     </td>
                     <td className="tools-col-pot tools-col-atc" onClick={(e) => e.stopPropagation()}>
-                      <div
-                        className={`tools-inline-field-group${
-                          fieldWarnings.has(potAssignWarningKey(tool.tool_number))
-                            ? ' tools-inline-field-group--invalid'
-                            : ''
-                        }`}
+                      <ValidatedFieldAnchor
+                        warningKey={potAssignWarningKey(tool.tool_number)}
+                        fieldWarnings={fieldWarnings}
+                        className="tools-pot-assign-anchor"
                       >
                         <div className="tools-pot-cell">
                           {isEditable && unifiedCache.atc_available ? (
@@ -2383,16 +2486,18 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                                 >
                                   ×
                                 </button>
-                              ) : null}
+                              ) : (
+                                <span
+                                  className="tools-clear-pot-btn tools-clear-pot-btn--spacer"
+                                  aria-hidden="true"
+                                />
+                              )}
                             </>
                           ) : (
                             formatPotDisplay(isAtcAssigned ? tool.pot_number : undefined)
                           )}
                         </div>
-                        <FieldInlineWarning
-                          message={fieldWarnings.get(potAssignWarningKey(tool.tool_number))}
-                        />
-                      </div>
+                      </ValidatedFieldAnchor>
                     </td>
                     <td className="tools-col-group tools-col-atc">{isAtcAssigned ? (tool.group ?? '──') : '──'}</td>
                     <td className="tools-col-type tools-col-atc" onClick={(e) => e.stopPropagation()}>
