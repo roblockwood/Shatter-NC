@@ -39,8 +39,9 @@ Name is metadata in the TOLN **file record**, not a standalone RED/WRT register.
 | Task | Detail |
 |------|--------|
 | `write_tool_names_via_ftp()` | In `tool_write_service.py` or dedicated service |
-| Read source | Telnet `LOD` raw content (preferred) or `CNCFtpClient.get_tool_table_data(units)` |
+| Read source | **FTP download of full `TOLNI1.NC` / `TOLNM1.NC`** — telnet LOD is read-only for verify; it often omits M## magazine rows |
 | Pre-upload backup | FTP download current file; log diff for target tool only |
+| Integrity gate | Refuse upload if patch would drop M/V/Y section rows |
 | Upload | `upload_file()` → `TOLNI1.NC` / `TOLNM1.NC` per machine `units` |
 | Verify | Telnet `LOD` re-read; assert `tool_name` matches |
 | Cache refresh | `refresh_tool_data` / poller invalidation |

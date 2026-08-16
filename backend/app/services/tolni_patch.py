@@ -8,6 +8,7 @@ TOOL_NAME_CSV_INDEX = 8
 TOOL_NAME_PARTS_INDEX = TOOL_NAME_CSV_INDEX + 1  # parts[0] is T## prefix
 TOOL_NAME_INNER_MAX = 14
 _TOOL_LINE_RE = re.compile(r"^T(\d{1,2}),", re.IGNORECASE)
+_TOLN_PREFIXES = ("T", "M", "V", "Y")
 
 
 def normalize_tool_name(name: str) -> str:
@@ -23,6 +24,36 @@ def format_tool_name_field(name: str) -> str:
 
 def tool_names_match(expected: str, actual: str) -> bool:
     return normalize_tool_name(expected) == normalize_tool_name(actual)
+
+
+def count_toln_line_prefixes(content: str) -> Dict[str, int]:
+    """Count T/M/V/Y section rows — M## magazine lines must survive name patches."""
+    counts = {prefix: 0 for prefix in _TOLN_PREFIXES}
+    for line in content.splitlines():
+        stripped = line.strip()
+        if len(stripped) >= 2 and stripped[0] in counts and stripped[1].isdigit():
+            counts[stripped[0]] += 1
+    return counts
+
+
+def validate_toln_patch_integrity(before: str, after: str) -> None:
+    """Refuse uploads that would drop magazine (M##) or other non-tool TOLN sections."""
+    before_counts = count_toln_line_prefixes(before)
+    after_counts = count_toln_line_prefixes(after)
+    if after_counts["T"] != before_counts["T"]:
+        raise ValueError(
+            f"TOLN patch changed tool row count ({before_counts['T']} -> {after_counts['T']})"
+        )
+    for prefix in ("M", "V", "Y"):
+        if after_counts[prefix] < before_counts[prefix]:
+            raise ValueError(
+                f"TOLN patch would drop {prefix}## lines "
+                f"({before_counts[prefix]} -> {after_counts[prefix]}); aborting upload"
+            )
+
+
+def _detect_newline(content: str) -> str:
+    return "\r\n" if "\r\n" in content else "\n"
 
 
 def _tool_number_from_line(line: str) -> int | None:
@@ -61,7 +92,9 @@ def patch_tool_names(content: str, updates: Dict[int, str]) -> str:
         return content
 
     remaining: Set[int] = set(updates.keys())
-    lines = content.split("\n")
+    newline = _detect_newline(content)
+    trailing_newline = content.endswith("\n") or content.endswith("\r\n")
+    lines = content.splitlines()
     patched_lines: list[str] = []
 
     for line in lines:
@@ -76,7 +109,12 @@ def patch_tool_names(content: str, updates: Dict[int, str]) -> str:
         missing = ", ".join(f"T{n:02d}" for n in sorted(remaining))
         raise ValueError(f"Tool(s) not found in TOLN content: {missing}")
 
-    return "\n".join(patched_lines)
+    result = newline.join(patched_lines)
+    if trailing_newline:
+        result += newline
+
+    validate_toln_patch_integrity(content, result)
+    return result
 
 
 def collect_tool_names(content: str, tool_numbers: Iterable[int]) -> Dict[int, str]:
