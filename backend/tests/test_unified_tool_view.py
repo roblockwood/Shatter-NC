@@ -1,6 +1,8 @@
 from app.services.unified_tool_view import (
     build_unified_tool_view,
     expand_atc_parsed_to_pocket_count,
+    merge_toln_fields_into_tool_table,
+    refresh_unified_toln_fields,
 )
 
 
@@ -79,3 +81,35 @@ def test_unified_view_uses_atc_pockets_for_empty_list():
 
     assert len(view["empty_pockets"]) == 3
     assert {p["pot_number"] for p in view["empty_pockets"]} == {2, 3, 4}
+
+
+def test_refresh_unified_toln_fields_preserves_atc_edges():
+    unified = build_unified_tool_view(
+        [{"tool_number": 5, "tool_name": "OLD", "length": 1.0, "diameter": 0.5, "life": 10}],
+        {
+            "tools": [
+                {"pot_number": 1, "tool_number": 5, "tool_type": 2, "color": 3, "group": 1},
+                {"pot_number": 2, "tool_number": 0, "tool_type": 1, "color": 0},
+            ]
+        },
+    )
+    refreshed = refresh_unified_toln_fields(
+        unified,
+        [{"tool_number": 5, "tool_name": "NEW NAME", "length": 2.0, "diameter": 0.6, "life": 20}],
+    )
+    row = refreshed["tools"][0]
+    assert row["tool_name"] == "NEW NAME"
+    assert row["length"] == 2.0
+    assert row["in_atc"] is True
+    assert row["pot_number"] == 1
+    assert row["color"] == 3
+    assert len(refreshed["empty_pockets"]) == 1
+
+
+def test_merge_toln_fields_into_tool_table_carries_pots():
+    fresh = [{"tool_number": 5, "tool_name": "NEW", "length": 2.0}]
+    prior = [{"tool_number": 5, "tool_name": "OLD", "pot_number": 3, "color": 2, "tool_type": 1}]
+    merged = merge_toln_fields_into_tool_table(fresh, prior)
+    assert merged[0]["tool_name"] == "NEW"
+    assert merged[0]["pot_number"] == 3
+    assert merged[0]["color"] == 2

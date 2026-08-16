@@ -156,3 +156,60 @@ def build_unified_tool_view(
         "spindle": spindle,
         "atc_available": atc_parsed is not None,
     }
+
+
+def merge_toln_fields_into_tool_table(
+    tool_table_tools: List[dict],
+    prior_tool_table: Optional[List[dict]] = None,
+) -> List[dict]:
+    """When ATCTL is temporarily unavailable, keep prior pot/ATC fields on TOLN rows."""
+    if not prior_tool_table:
+        return tool_table_tools
+
+    prior_by_num: Dict[int, dict] = {}
+    for tool in prior_tool_table:
+        tool_num = tool.get("tool_number")
+        if tool_num is not None:
+            prior_by_num[int(tool_num)] = tool
+
+    merged: List[dict] = []
+    for tool in tool_table_tools:
+        row = dict(tool)
+        tool_num = tool.get("tool_number")
+        if tool_num is not None:
+            prior = prior_by_num.get(int(tool_num))
+            if prior:
+                for key in ("pot_number", "group", "tool_type", "color"):
+                    if prior.get(key) is not None:
+                        row[key] = prior[key]
+        merged.append(row)
+    return merged
+
+
+def refresh_unified_toln_fields(
+    unified: dict,
+    toln_tools: List[dict],
+) -> dict:
+    """Refresh TOLN-sourced columns in cached unified view; preserve ATC assignment edges."""
+    if not unified:
+        return unified
+
+    by_num: Dict[int, dict] = {}
+    for tool in toln_tools:
+        tool_num = tool.get("tool_number")
+        if tool_num is not None:
+            by_num[int(tool_num)] = tool
+
+    refreshed_tools: List[dict] = []
+    for row in unified.get("tools") or []:
+        updated = dict(row)
+        tool_num = row.get("tool_number")
+        if tool_num is not None:
+            tol = by_num.get(int(tool_num))
+            if tol:
+                for key in ("tool_name", "diameter", "length", "life"):
+                    if key in tol:
+                        updated[key] = tol.get(key)
+        refreshed_tools.append(updated)
+
+    return {**unified, "tools": refreshed_tools}
