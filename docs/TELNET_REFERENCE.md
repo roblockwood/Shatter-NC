@@ -52,7 +52,7 @@ Protocol reference for Shatter's telnet client ([`telnet_client.py`](../backend/
 | WRTTOFS | `write_tool_offset()` | Tool offset |
 | WRTTLLF | `write_tool_life()` | Tool life |
 | CLRTLLF | `clear_tool_life()` | Clear tool life |
-| *(FTP TOLN)* | `write_tool_names_via_ftp()` | Tool name (no telnet `WRT*`; patch `TOLNI1`/`TOLNM1` + upload) |
+| *(FTP TOLN)* | `write_tool_names_via_ftp()` | Tool name (no telnet `WRT*`; patch `TOLNI1`/`TOLNM1` + upload). **Backs up and restores `ATCTL`/`ATCTLD` around the upload** — replacing TOLN clears magazine assignments on the control. |
 | WRTMCNM | `write_macro_variable()` | Macro variables 500–999 |
 
 ### ATC magazine (CHGMAG*)

@@ -599,6 +599,26 @@ class CNCFtpClient:
         filename = "TOLNI1.NC" if units == 'in' else "TOLNM1.NC"
         return await self.get_system_file(filename)
 
+    async def get_atc_magazine_file(
+        self, control_version: Optional[str] = None
+    ) -> tuple[Optional[str], Optional[str]]:
+        """
+        Download ATC magazine system file (ATCTL / ATCTLD).
+
+        Returns:
+            (content, filename) — filename is the path used for restore upload.
+        """
+        version = (control_version or "C00").upper()
+        if version == "D00":
+            candidates = ("ATCTLD.NC", "ATDTL.NC", "ATCTLD")
+        else:
+            candidates = ("ATCTL.NC", "ATCTL")
+        for name in candidates:
+            content = await self.get_system_file(name)
+            if content:
+                return content, name
+        return None, None
+
     async def get_memory_data(self) -> Optional[str]:
         """
         Get memory information from MEM.NC system file.
