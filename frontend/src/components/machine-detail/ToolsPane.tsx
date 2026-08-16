@@ -164,7 +164,10 @@ function NumericEditInput({
       }}
       onBlur={(e) => {
         focusedRef.current = false;
-        onValueChange(e.target.value);
+        const finalValue = e.target.value;
+        if (!valuesEqual(finalValue, externalDisplay)) {
+          onValueChange(finalValue);
+        }
       }}
       onChange={(e) => {
         setDraft(e.target.value);
@@ -255,9 +258,27 @@ function applyFieldToTool(tool: Tool, field: string, value: string | number): To
   }
 }
 
+function valuesEqual(a: string | number, b: string | number): boolean {
+  if (typeof a === 'number' && typeof b === 'number') {
+    return Math.abs(a - b) < 0.000001;
+  }
+  return a === b;
+}
+
+function potsEqual(
+  a: string | number | undefined,
+  b: string | number | undefined,
+): boolean {
+  if (a === b) return true;
+  if (isSpindlePot(a) && isSpindlePot(b)) return true;
+  const pa = parsePotNumber(a);
+  const pb = parsePotNumber(b);
+  return pa !== null && pb !== null && pa === pb;
+}
+
 function toolsMatchForSlice(a: Tool, b: Tool, slice: 'atc' | 'table'): boolean {
   if (slice === 'table') return a.tool_number === b.tool_number;
-  return a.pot_number === b.pot_number;
+  return potsEqual(a.pot_number, b.pot_number);
 }
 
 function mergeServerToolWithPending(
@@ -461,6 +482,16 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
   // Track pending changes (changes not yet pushed to server)
   const [pendingChanges, setPendingChanges] = useState<Map<string, PendingChange>>(new Map());
+  const pendingChangesRef = useRef<Map<string, PendingChange>>(pendingChanges);
+  const updatePendingChanges = (
+    updater: (prev: Map<string, PendingChange>) => Map<string, PendingChange>,
+  ) => {
+    setPendingChanges((prev) => {
+      const next = updater(prev);
+      pendingChangesRef.current = next;
+      return next;
+    });
+  };
   const [isPushingChanges, setIsPushingChanges] = useState(false);
   const [pushComplete, setPushComplete] = useState(false);
 
@@ -579,7 +610,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         setToolsError(prev => ({ ...prev, atc: null }));
 
         if (!isPushingChanges) {
-          setPendingChanges(prev => {
+          updatePendingChanges((prev) => {
             const next = new Map(prev);
             initialTools.forEach(serverTool => {
               next.forEach((change, key) => {
@@ -589,7 +620,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                   next.delete(key);
                 } else {
                   const fieldVal = getToolFieldValue(serverTool, change.field);
-                  if (fieldVal === change.newValue) {
+                  if (valuesEqual(fieldVal ?? '', change.newValue)) {
                     next.delete(key);
                   }
                 }
@@ -611,14 +642,14 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         setToolsError(prev => ({ ...prev, table: null }));
 
         if (!isPushingChanges) {
-          setPendingChanges(prev => {
+          updatePendingChanges((prev) => {
             const next = new Map(prev);
             initialToolTable.forEach(serverTool => {
               next.forEach((change, key) => {
                 if (change.cacheSlice !== 'table') return;
                 if (change.tool.tool_number !== serverTool.tool_number) return;
                 const fieldVal = getToolFieldValue(serverTool, change.field);
-                if (fieldVal === change.newValue) {
+                if (valuesEqual(fieldVal ?? '', change.newValue)) {
                   next.delete(key);
                 }
               });
@@ -783,46 +814,49 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   ) => {
     const changeKey = makePendingKey(tool, field, operationType);
 
-    if (newValue === oldValue) {
-      setPendingChanges(prev => {
+    updatePendingChanges((prev) => {
+      const existing = prev.get(changeKey);
+      const baseline = existing?.oldValue ?? oldValue;
+
+      if (valuesEqual(newValue, baseline)) {
         const next = new Map(prev);
         next.delete(changeKey);
+        setToolsCache((cachePrev) => ({
+          ...cachePrev,
+          [cacheSlice]: cachePrev[cacheSlice].map((t) => {
+            if (!toolsMatchForSlice(t, tool, cacheSlice)) return t;
+            if (operationType === 'delete') {
+              return { ...t, tool_number: baseline as number };
+            }
+            return applyFieldToTool(t, field, baseline);
+          }),
+        }));
         return next;
-      });
-      setToolsCache(prev => ({
-        ...prev,
-        [cacheSlice]: prev[cacheSlice].map(t =>
-          toolsMatchForSlice(t, tool, cacheSlice)
-            ? applyFieldToTool(t, field, oldValue)
-            : t,
-        ),
-      }));
-      return;
-    }
+      }
 
-    setPendingChanges(prev => {
       const next = new Map(prev);
       next.set(changeKey, {
         tool,
         field,
-        oldValue,
+        oldValue: baseline,
         newValue,
         operationType,
         cacheSlice,
       });
+
+      setToolsCache((cachePrev) => ({
+        ...cachePrev,
+        [cacheSlice]: cachePrev[cacheSlice].map((t) => {
+          if (!toolsMatchForSlice(t, tool, cacheSlice)) return t;
+          if (operationType === 'delete') {
+            return { ...t, tool_number: 0 };
+          }
+          return applyFieldToTool(t, field, newValue);
+        }),
+      }));
+
       return next;
     });
-
-    setToolsCache(prev => ({
-      ...prev,
-      [cacheSlice]: prev[cacheSlice].map(t => {
-        if (!toolsMatchForSlice(t, tool, cacheSlice)) return t;
-        if (operationType === 'delete') {
-          return { ...t, tool_number: 0 };
-        }
-        return applyFieldToTool(t, field, newValue);
-      }),
-    }));
   };
 
   const handleColorChange = (tool: Tool, newColor: number) => {
@@ -1002,15 +1036,19 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   };
 
   const handlePushChanges = async () => {
-    if (pendingChanges.size === 0 || !machineId || isPushingChanges) {
+    if (pendingChangesRef.current.size === 0 || !machineId || isPushingChanges) {
       return;
+    }
+
+    if (document.activeElement instanceof HTMLInputElement) {
+      document.activeElement.blur();
     }
 
     setIsPushingChanges(true);
     setPushComplete(false);
 
     try {
-      const entries = Array.from(pendingChanges.entries());
+      const entries = Array.from(pendingChangesRef.current.entries());
       const changes: ToolChangeBatchItem[] = [];
       for (const [key, change] of entries) {
         const item = pendingToBatchItem(key, change);
@@ -1049,7 +1087,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
         results.forEach(result => {
           if (!result.success || !result.client_id) return;
-          const change = pendingChanges.get(result.client_id);
+          const change = pendingChangesRef.current.get(result.client_id);
           if (!change) return;
 
           const confirmed = getConfirmedValueFromResult(result);
@@ -1088,7 +1126,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         return { atc, table };
       });
 
-      setPendingChanges(prev => {
+      updatePendingChanges((prev) => {
         const next = new Map(prev);
         results.forEach(result => {
           if (result.success && result.client_id) {
@@ -1144,7 +1182,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
       return { atc, table };
     });
 
-    setPendingChanges(new Map());
+    updatePendingChanges(() => new Map());
   };
 
   // Build tool_number → actual_pot map from live ATC data (passed to optimizer tab)
