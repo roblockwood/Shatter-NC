@@ -66,6 +66,7 @@ interface ToolsPaneProps {
 
 type SortColumn = 'pot_number' | 'tool_number' | 'tool_name' | 'diameter' | 'length' | 'group' | 'life' | 'tool_type' | 'color';
 type SortDirection = 'asc' | 'desc';
+type ToolsViewFilter = 'all' | 'atc' | 'empty';
 
 const TOOL_TYPE_OPTIONS = [
   { value: '1', label: 'STD' },
@@ -560,6 +561,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
   // ──────────────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'tools' | 'optimizer'>('tools');
+  const [toolsViewFilter, setToolsViewFilter] = useState<ToolsViewFilter>('all');
 
   const [measurementTool, setMeasurementTool] = useState<number | null>(null);
   const [measurementSaving, setMeasurementSaving] = useState(false);
@@ -981,7 +983,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     stagePendingChange(tool, 'color', tool.color ?? 0, newColor, 'color', 'tool');
   };
 
-  const handleToolNumberChange = (tool: Tool, raw: string, cacheSlice: 'spindle') => {
+  const handleToolNumberChange = (tool: Tool, raw: string, cacheSlice: 'spindle' | 'pocket') => {
     if (!machineId) return;
     const parsed = parseInt(raw, 10);
     if (!Number.isFinite(parsed)) return;
@@ -989,6 +991,11 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     if (cacheSlice === 'spindle' || isSpindlePot(tool.pot_number)) {
       stagePendingChange(tool, 'tool_number', tool.tool_number, parsed, 'spindle', 'spindle');
       return;
+    }
+
+    if (cacheSlice === 'pocket') {
+      if (parsed < 1 || parsed > 999) return;
+      stagePendingChange(tool, 'tool_number', tool.tool_number, parsed, 'tool_number', 'pocket');
     }
   };
 
@@ -1328,6 +1335,25 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     setActiveTab(tab);
   };
 
+  const handleViewFilterClick = (filter: ToolsViewFilter, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setToolsViewFilter(filter);
+    if (filter === 'empty' || filter === 'atc') {
+      setSortColumn('pot_number');
+      setSortDirection('asc');
+    } else {
+      setSortColumn('tool_number');
+      setSortDirection('asc');
+    }
+  };
+
+  const atcAssignedCount = useMemo(
+    () => tools.filter((t) => t.in_atc).length,
+    [tools],
+  );
+
+  const emptyPocketCount = unifiedCache.empty_pockets.length;
+
   const spindleToolNumber = unifiedCache.spindle?.tool_number ?? null;
 
   const getToolRowStateClass = (tool: Tool): string => {
@@ -1381,6 +1407,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     let filtered = tools.map((tool) =>
       mergeServerToolWithPending(tool, pendingChanges, 'tool'),
     );
+
+    if (toolsViewFilter === 'atc') {
+      filtered = filtered.filter((tool) => tool.in_atc);
+    }
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
@@ -1459,7 +1489,38 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     });
 
     return sorted;
-  }, [tools, searchQuery, sortColumn, sortDirection, pendingChanges]);
+  }, [tools, toolsViewFilter, searchQuery, sortColumn, sortDirection, pendingChanges]);
+
+  const filteredAndSortedEmptyPockets = useMemo(() => {
+    if (!useUnifiedView || !unifiedCache.atc_available) return [];
+
+    let items = unifiedCache.empty_pockets.map((pocket) => {
+      const asTool = emptyPocketAsTool(pocket);
+      const merged = mergeServerToolWithPending(asTool, pendingChanges, 'pocket');
+      return { pocket, merged };
+    });
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      items = items.filter(({ pocket }) => String(pocket.pot_number).includes(query));
+    }
+
+    return [...items].sort((a, b) => {
+      const cmp = a.pocket.pot_number - b.pocket.pot_number;
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [
+    useUnifiedView,
+    unifiedCache.empty_pockets,
+    unifiedCache.atc_available,
+    searchQuery,
+    sortDirection,
+    pendingChanges,
+  ]);
+
+  const showingEmptyPots = toolsViewFilter === 'empty' && activeTab === 'tools';
+  const visibleRows = showingEmptyPots ? filteredAndSortedEmptyPockets : filteredAndSortedTools;
+  const visibleCount = visibleRows.length;
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -1470,13 +1531,14 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     }
   };
 
-  // Show all tools since list is scrollable
-  const visibleCount = filteredAndSortedTools.length;
-
   const toolsListTitleMid =
     activeTab === 'optimizer'
       ? `OPTIMIZER${programName ? ` ─ ${programName}` : ''}`
-      : `TOOLS (${tools.length})`;
+      : toolsViewFilter === 'atc'
+        ? `ATC (${atcAssignedCount})`
+        : toolsViewFilter === 'empty'
+          ? `EMPTY POTS (${emptyPocketCount})`
+          : `TOOLS (${tools.length})`;
   /** Long run clipped by flex so header rule length matches pane width for any label. */
   const terminalRuleFill = '─'.repeat(320);
 
@@ -1527,6 +1589,31 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               )}
               {machineId && (
                 <div className="tools-source-toggle" onClick={(e) => e.stopPropagation()}>
+                  {!isHoverPreview && activeTab === 'tools' && (
+                    <>
+                      <button
+                        className={`source-toggle-btn ${toolsViewFilter === 'all' ? 'active' : ''}`}
+                        onClick={(e) => handleViewFilterClick('all', e)}
+                        title="All tool table entries"
+                      >
+                        ALL
+                      </button>
+                      <button
+                        className={`source-toggle-btn ${toolsViewFilter === 'atc' ? 'active' : ''}`}
+                        onClick={(e) => handleViewFilterClick('atc', e)}
+                        title="Tools assigned to ATC pockets"
+                      >
+                        IN ATC
+                      </button>
+                      <button
+                        className={`source-toggle-btn ${toolsViewFilter === 'empty' ? 'active' : ''}`}
+                        onClick={(e) => handleViewFilterClick('empty', e)}
+                        title="Empty ATC pockets"
+                      >
+                        EMPTY
+                      </button>
+                    </>
+                  )}
                   {!isHoverPreview && activeTab === 'optimizer' && (
                     <button
                       className="source-toggle-btn"
@@ -1596,8 +1683,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               actualPotMap={actualPotMap}
             />
           </div>
-        ) : tools.length === 0 && !isLoadingTools && !currentError ? (
+        ) : tools.length === 0 && !showingEmptyPots && !isLoadingTools && !currentError ? (
           <div className="tools-empty">NO TOOLS LOADED</div>
+        ) : showingEmptyPots && !unifiedCache.atc_available && !isLoadingTools ? (
+          <div className="tools-empty">ATC UNAVAILABLE</div>
         ) : (
           <div className="tools-pane-content-inner">
             {/* Show error message if present */}
@@ -1629,19 +1718,19 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 <input
                   type="text"
                   className="tools-search-input"
-                  placeholder="SEARCH TOOLS..."
+                  placeholder={showingEmptyPots ? 'SEARCH POTS...' : 'SEARCH TOOLS...'}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onClick={(e) => e.stopPropagation()}
                 />
                 {searchQuery && (
                   <span className="tools-search-results">
-                    {filteredAndSortedTools.length} / {tools.length}
+                    {visibleCount} / {showingEmptyPots ? emptyPocketCount : toolsViewFilter === 'atc' ? atcAssignedCount : tools.length}
                   </span>
                 )}
               </div>
             )}
-            {!isHoverPreview && programName && (
+            {!isHoverPreview && programName && toolsViewFilter === 'all' && (
               <div className="tools-state-legend" onClick={(e) => e.stopPropagation()}>
                 <span className="tools-state-legend-item">
                   <span className="tools-state-legend-swatch tools-state-legend-swatch--spindle" aria-hidden />
@@ -1737,12 +1826,58 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {filteredAndSortedTools.length === 0 ? (
+                {visibleCount === 0 ? (
                   <tr>
                     <td colSpan={machineId ? 10 : 9} className="tools-empty-row">
-                      NO TOOLS MATCH SEARCH
+                      {showingEmptyPots
+                        ? (searchQuery.trim() ? 'NO POTS MATCH SEARCH' : 'NO EMPTY POTS')
+                        : 'NO TOOLS MATCH SEARCH'}
                     </td>
                   </tr>
+                ) : showingEmptyPots ? (
+                  filteredAndSortedEmptyPockets.map(({ pocket, merged }, idx) => {
+                    const asTool = emptyPocketAsTool(pocket);
+                    const hasPending = toolHasPending(asTool, 'pocket');
+                    const isEditable = !!machineId && useUnifiedView;
+                    return (
+                      <tr
+                        key={`empty-pot-${pocket.pot_number}-${idx}`}
+                        className={`tools-row-empty-pot ${hasPending ? 'tools-row-pending' : ''}`}
+                      >
+                        <td className="tools-col-number" onClick={(e) => e.stopPropagation()}>
+                          {isEditable ? (
+                            <NumericEditInput
+                              className="tools-edit-input tools-edit-input--tool-number"
+                              value={merged.tool_number || ''}
+                              placeholder="T#"
+                              onValueChange={(raw) => handleToolNumberChange(asTool, raw, 'pocket')}
+                            />
+                          ) : (
+                            merged.tool_number
+                              ? `T${String(merged.tool_number).padStart(2, '0')}`
+                              : '──'
+                          )}
+                        </td>
+                        <td className="tools-col-name">──</td>
+                        <td className="tools-col-diameter">──</td>
+                        <td className="tools-col-length">──</td>
+                        <td className="tools-col-life">──</td>
+                        <td className="tools-col-pot tools-col-atc">
+                          {formatPotDisplay(pocket.pot_number)}
+                        </td>
+                        <td className="tools-col-group tools-col-atc">──</td>
+                        <td className="tools-col-type tools-col-atc">
+                          {formatToolType(pocket.tool_type)}
+                        </td>
+                        {machineId ? (
+                          <td className="tools-col-measure tools-col-atc">──</td>
+                        ) : null}
+                        <td className="tools-col-color tools-col-atc">
+                          {pocket.color != null ? getColorInfo(pocket.color).name : '──'}
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   filteredAndSortedTools.slice(0, visibleCount).map((tool, idx) => {
                 const isCurrent = isCurrentTool(tool.tool_number);
@@ -1898,7 +2033,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               </tbody>
               </table>
             </div>
-            {useUnifiedView && unifiedCache.spindle && (
+            {useUnifiedView && unifiedCache.spindle && !showingEmptyPots && (
               <div className="tools-spindle-row tools-state-spindle">
                 <span className="tools-spindle-label">SPINDLE</span>
                 {machineId ? (
