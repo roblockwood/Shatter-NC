@@ -186,7 +186,6 @@ function NumericEditInput({
       }}
       onChange={(e) => {
         setDraft(e.target.value);
-        onValueChange(e.target.value);
       }}
     />
   );
@@ -243,7 +242,6 @@ function TextEditInput({
       }}
       onChange={(e) => {
         setDraft(e.target.value);
-        onValueChange(e.target.value);
       }}
     />
   );
@@ -857,6 +855,53 @@ function getToolFieldValue(tool: Tool, field: string): string | number | undefin
   }
 }
 
+function serverConfirmsPendingChange(
+  change: PendingChange,
+  serverTool: Tool,
+  allTools: UnifiedToolRow[],
+): boolean {
+  switch (change.operationType) {
+    case 'delete':
+      return !serverTool.in_atc;
+    case 'pot_number': {
+      const targetPot = Number(change.newValue);
+      return Boolean(
+        serverTool.in_atc && parsePotNumber(serverTool.pot_number) === targetPot,
+      );
+    }
+    case 'tool_number':
+      if (change.cacheSlice === 'pocket') {
+        const targetPot = parsePotNumber(change.tool.pot_number);
+        const assignedTool = Number(change.newValue);
+        if (targetPot === null || !Number.isFinite(assignedTool)) return false;
+        const row = allTools.find((t) => t.tool_number === assignedTool);
+        return Boolean(row?.in_atc && parsePotNumber(row.pot_number) === targetPot);
+      }
+      return false;
+    case 'cap':
+      return false;
+    default:
+      break;
+  }
+  const fieldVal = getToolFieldValue(serverTool, change.field);
+  return valuesEqual(fieldVal ?? '', change.newValue);
+}
+
+function mergePendingOntoUnifiedCache(
+  cache: UnifiedToolView,
+  pending: Map<string, PendingChange>,
+): UnifiedToolView {
+  return {
+    ...cache,
+    tools: cache.tools.map((row) =>
+      mergeServerToolWithPending(unifiedRowAsTool(row), pending, 'tool') as UnifiedToolRow,
+    ),
+    empty_pockets: cache.empty_pockets.map((pocket) =>
+      mergeServerToolWithPending(emptyPocketAsTool(pocket), pending, 'pocket') as EmptyPocket,
+    ),
+  };
+}
+
 function getToolRowState(
   tool: Tool,
   spindleToolNumber: number | null | undefined,
@@ -999,6 +1044,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   };
   const [isPushingChanges, setIsPushingChanges] = useState(false);
   const [pushComplete, setPushComplete] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
   const [fieldWarnings, setFieldWarnings] = useState<Map<string, string>>(() => new Map());
 
   const setFieldWarning = (key: string, message: string) => {
@@ -1048,6 +1094,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     }
     if (memMode === 2 && memOperationStatus !== undefined && memOperationStatus !== 0) {
       return 'Program operation in progress — push may be rejected by the control.';
+    }
+    if (memMode === 3 || memMode === 4 || memMode === 5) {
+      return 'Machine is in edit mode — exit edit mode before pushing ATC changes.';
     }
     return undefined;
   }, [machineStatus, memMode, memOperationStatus]);
@@ -1171,8 +1220,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           next.forEach((change, key) => {
             if (change.cacheSlice !== 'tool') return;
             if (change.tool.tool_number !== asTool.tool_number) return;
-            const fieldVal = getToolFieldValue(asTool, change.field);
-            if (valuesEqual(fieldVal ?? '', change.newValue)) {
+            if (serverConfirmsPendingChange(change, asTool, incoming.tools)) {
               next.delete(key);
             }
           });
@@ -1182,8 +1230,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
           next.forEach((change, key) => {
             if (change.cacheSlice !== 'pocket') return;
             if (!potsEqual(change.tool.pot_number, asTool.pot_number)) return;
-            const fieldVal = getToolFieldValue(asTool, change.field);
-            if (valuesEqual(fieldVal ?? '', change.newValue)) {
+            if (serverConfirmsPendingChange(change, asTool, incoming.tools)) {
               next.delete(key);
             }
           });
@@ -1590,6 +1637,21 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         toolsMatchForSlice(c.tool, tool, c.cacheSlice),
     );
 
+  const isToolFieldPending = (
+    tool: Tool,
+    cacheSlice: PendingChange['cacheSlice'],
+    match: (change: PendingChange) => boolean,
+  ): boolean =>
+    Array.from(pendingChanges.values()).some(
+      (c) =>
+        c.cacheSlice === cacheSlice &&
+        toolsMatchForSlice(c.tool, tool, cacheSlice) &&
+        match(c),
+    );
+
+  const pendingInputClass = (pending: boolean, base = 'tools-edit-input'): string =>
+    pending ? `${base} tools-edit-input--pending` : base;
+
   const getColorInfo = (value: number | undefined): { name: string; hex: string } => {
     if (value === undefined || value === null) {
       return { name: '──', hex: '#666666' };
@@ -1677,6 +1739,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
     setIsPushingChanges(true);
     setPushComplete(false);
+    setPushError(null);
 
     try {
       const entries = Array.from(pendingChangesRef.current.entries());
@@ -1701,52 +1764,56 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
 
       if (!batchResponse.ok) {
         const error = await batchResponse.json();
-        throw new Error(
-          typeof error.detail === 'string'
-            ? error.detail
-            : error.detail?.message || 'Batch operation failed',
-        );
+        const detail = error.detail;
+        const message =
+          typeof detail === 'string'
+            ? detail
+            : detail?.message || 'Batch operation failed';
+        setPushError(message);
+        return;
       }
 
       const batchData = await batchResponse.json();
       const results: ToolChangeBatchResult[] = batchData.results || [];
-      const failures = results.filter(r => !r.success);
+      const successes = results.filter((r) => r.success);
+      const failures = results.filter((r) => !r.success);
       const pendingSnapshot = new Map(pendingChangesRef.current);
 
-      setUnifiedCache((prev) => reconcileUnifiedCacheAfterBatch(prev, results, pendingSnapshot));
+      if (successes.length > 0) {
+        setUnifiedCache((prev) =>
+          reconcileUnifiedCacheAfterBatch(prev, successes, pendingSnapshot),
+        );
 
-      updatePendingChanges((prev) => {
-        const next = new Map(prev);
-        results.forEach(result => {
-          if (result.success && result.client_id) {
-            next.delete(result.client_id);
-          }
+        updatePendingChanges((prev) => {
+          const next = new Map(prev);
+          successes.forEach((result) => {
+            if (result.client_id) next.delete(result.client_id);
+          });
+          return next;
         });
-        return next;
-      });
 
-      recentlyPushedRef.current.clear();
+        recentlyPushedRef.current.clear();
 
-      if (results.some((r) => r.success)) {
         const freshCache = await loadUnifiedToolsCache(machineId);
         if (freshCache) {
-          setUnifiedCache(freshCache);
+          setUnifiedCache(mergePendingOntoUnifiedCache(freshCache, pendingChangesRef.current));
           setCacheTimestamp(Date.now());
         }
       }
 
       if (failures.length > 0) {
-        const errorMessages = failures
-          .map(f => f.message || `${f.operation_type} failed`)
-          .join('; ');
-        alert(`Some changes failed: ${errorMessages}`);
-      } else {
+        setPushError(
+          failures.map((f) => f.message || `${f.operation_type} failed`).join('; '),
+        );
+      } else if (successes.length > 0) {
         setPushComplete(true);
         setTimeout(() => setPushComplete(false), 1500);
+      } else {
+        setPushError('No changes were applied.');
       }
     } catch (error) {
       console.error('Error pushing changes:', error);
-      alert(`Failed to push changes: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setPushError(error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setIsPushingChanges(false);
     }
@@ -1755,6 +1822,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const handleDiscardChanges = () => {
     if (pendingChanges.size === 0) return;
     setFieldWarnings(new Map());
+    setPushError(null);
 
     setUnifiedCache((prev) => {
       let tools = [...prev.tools];
@@ -2123,6 +2191,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
               )}
               {pendingChanges.size > 0 && (
                 <div className="tools-pending-actions" onClick={(e) => e.stopPropagation()}>
+                  <span className="tools-pending-hint" title="Table edits are local until you push">
+                    LOCAL ({pendingChanges.size})
+                  </span>
                   <button
                     className="tools-action-btn tools-discard-btn"
                     onClick={(e) => {
@@ -2185,6 +2256,18 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
             {measurementError && (
               <div className="tools-error-message" onClick={(e) => e.stopPropagation()}>
                 <span className="tools-error-text">⚠ {measurementError}</span>
+              </div>
+            )}
+            {pushError && (
+              <div className="tools-push-error-message" onClick={(e) => e.stopPropagation()}>
+                <span className="tools-push-error-text">⚠ Push failed: {pushError}</span>
+              </div>
+            )}
+            {pendingChanges.size > 0 && !pushError && (
+              <div className="tools-pending-banner" onClick={(e) => e.stopPropagation()}>
+                <span className="tools-pending-banner-text">
+                  {pendingChanges.size} local edit{pendingChanges.size === 1 ? '' : 's'} — not on machine until PUSH (MEAS writes immediately)
+                </span>
               </div>
             )}
             {!isHoverPreview && isToolsSnapshotStale && !currentError && (
@@ -2300,7 +2383,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     TYPE {sortColumn === 'tool_type' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
                   {machineId ? (
-                    <th className="tools-col-measure tools-col-atc" title="Tool selected for measurement (macro #920)">
+                    <th className="tools-col-measure tools-col-atc" title="Writes to machine immediately (macro #920). All other edits require PUSH.">
                       MEAS
                     </th>
                   ) : null}
@@ -2325,6 +2408,9 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                   filteredAndSortedEmptyPockets.map(({ pocket, merged }, idx) => {
                     const asTool = emptyPocketAsTool(pocket);
                     const hasPending = toolHasPending(asTool, 'pocket');
+                    const pocketAssignPending = isToolFieldPending(asTool, 'pocket', (c) =>
+                      c.operationType === 'tool_number' || c.operationType === 'cap',
+                    );
                     const isEditable = !!machineId && useUnifiedView;
                     return (
                       <tr
@@ -2339,7 +2425,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                               className="tools-pocket-assign-anchor"
                             >
                               <NumericEditInput
-                                className="tools-edit-input tools-edit-input--tool-number"
+                                className={pendingInputClass(
+                                  pocketAssignPending,
+                                  'tools-edit-input tools-edit-input--tool-number',
+                                )}
                                 value={merged.is_cap ? 0 : (merged.tool_number || '')}
                                 placeholder="T# or 0"
                                 onValueChange={(raw) => handleToolNumberChange(asTool, raw, 'pocket')}
@@ -2386,6 +2475,17 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 const hasPending = toolHasPending(tool);
                 const isEditable = !!machineId && useUnifiedView;
                 const isAtcAssigned = Boolean(tool.in_atc && tool.pot_number);
+                const namePending = isToolFieldPending(tool, 'tool', (c) => c.operationType === 'name');
+                const diameterPending = isToolFieldPending(tool, 'tool', (c) => c.operationType === 'offset' && c.field === 'D');
+                const lengthPending = isToolFieldPending(tool, 'tool', (c) => c.operationType === 'offset' && c.field === 'H');
+                const lifePending = isToolFieldPending(tool, 'tool', (c) => c.operationType === 'life');
+                const potPending = isToolFieldPending(
+                  tool,
+                  'tool',
+                  (c) => c.operationType === 'pot_number' || c.operationType === 'delete',
+                );
+                const typePending = isToolFieldPending(tool, 'tool', (c) => c.operationType === 'tool_type');
+                const colorPending = isToolFieldPending(tool, 'tool', (c) => c.operationType === 'color');
                 const rowTitle = [rowStateTitle, hasMatch ? `Click to view tool ${matched!.tool_number} in Tool Management` : undefined]
                   .filter(Boolean)
                   .join(' — ') || undefined;
@@ -2409,7 +2509,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     <td className="tools-col-name" onClick={(e) => e.stopPropagation()}>
                       {isEditable ? (
                         <TextEditInput
-                          className="tools-edit-input tools-edit-input-name"
+                          className={pendingInputClass(namePending, 'tools-edit-input tools-edit-input-name')}
                           value={getToolDisplayName(tool)}
                           maxLength={14}
                           placeholder="──"
@@ -2423,7 +2523,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     <td className="tools-col-diameter">
                       {isEditable ? (
                         <NumericEditInput
-                          className="tools-edit-input"
+                          className={pendingInputClass(diameterPending)}
                           value={tool.diameter ?? ''}
                           decimal
                           onClick={(e) => e.stopPropagation()}
@@ -2436,7 +2536,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     <td className="tools-col-length">
                       {isEditable ? (
                         <NumericEditInput
-                          className="tools-edit-input"
+                          className={pendingInputClass(lengthPending)}
                           value={tool.length ?? ''}
                           decimal
                           onClick={(e) => e.stopPropagation()}
@@ -2449,7 +2549,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     <td className="tools-col-life">
                       {isEditable ? (
                         <NumericEditInput
-                          className="tools-edit-input tools-edit-input--life"
+                          className={pendingInputClass(lifePending, 'tools-edit-input tools-edit-input--life')}
                           value={tool.life ?? ''}
                           onClick={(e) => e.stopPropagation()}
                           onValueChange={(raw) => handleLifeChange(tool, raw)}
@@ -2468,7 +2568,10 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                           {isEditable && unifiedCache.atc_available ? (
                             <>
                               <NumericEditInput
-                                className="tools-edit-input tools-edit-input--pot-number"
+                                className={pendingInputClass(
+                                  potPending,
+                                  'tools-edit-input tools-edit-input--pot-number',
+                                )}
                                 value={isAtcAssigned ? tool.pot_number : ''}
                                 placeholder="—"
                                 onValueChange={(raw) => handlePotNumberChange(tool, raw)}
@@ -2504,7 +2607,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       {isEditable && isAtcAssigned ? (
                         <Select
                           compact
-                          className="tools-type-select"
+                          className={`tools-type-select${typePending ? ' tools-type-select--pending' : ''}`}
                           value={String(tool.tool_type ?? 1)}
                           onChange={(raw) => handleToolTypeChange(tool, raw)}
                           options={TOOL_TYPE_OPTIONS}
@@ -2538,6 +2641,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     <td className="tools-col-color tools-col-atc" onClick={(e) => e.stopPropagation()}>
                       {isEditable && isAtcAssigned ? (
                         <ColorSelect
+                          className={colorPending ? 'tools-color-select--pending' : ''}
                           value={tool.color ?? 0}
                           onChange={(newColor) => handleColorChange(tool, newColor)}
                         />
@@ -2557,7 +2661,14 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 <span className="tools-spindle-label">SPINDLE</span>
                 {machineId ? (
                   <NumericEditInput
-                    className="tools-edit-input tools-edit-input--tool-number"
+                    className={pendingInputClass(
+                      isToolFieldPending(
+                        { pot_number: 'SPINDLE', tool_number: unifiedCache.spindle.tool_number },
+                        'spindle',
+                        (c) => c.operationType === 'spindle',
+                      ),
+                      'tools-edit-input tools-edit-input--tool-number',
+                    )}
                     value={unifiedCache.spindle.tool_number}
                     onValueChange={(raw) =>
                       handleToolNumberChange(
