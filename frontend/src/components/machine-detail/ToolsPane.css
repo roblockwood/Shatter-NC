@@ -234,6 +234,12 @@
   min-width: 0;
 }
 
+/* Allow TYPE/COLOR dropdowns to extend outside the scroll box while open */
+.tools-table-wrapper:has(.custom-select.open),
+.tools-table-wrapper:has(.color-select.open) {
+  overflow: visible;
+}
+
 .tools-pane .terminal-box-title-row {
   display: flex;
   align-items: center;
@@ -393,8 +399,7 @@
 }
 
 /*
- * Fixed layout: columns share 100% width (no min-width sprawl → horizontal scroll).
- * NAME is sized for 14 monospace chars; numeric/ATC cols stay compact.
+ * Fixed layout: compact columns use exact rem widths; NAME takes all remaining space.
  */
 .tools-table {
   width: 100%;
@@ -455,16 +460,22 @@
   padding: var(--spacing-xs) 4px;
   border-right: 1px solid var(--color-border);
   vertical-align: top;
-  overflow: hidden;
 }
 
 .tools-table td:last-child {
   border-right: none;
 }
 
-.tools-col-pot,
 .tools-col-number {
-  width: 5%;
+  width: 2.25rem;
+  min-width: 0;
+  max-width: none;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tools-col-pot {
+  width: 4.85rem;
   min-width: 0;
   max-width: none;
   text-align: right;
@@ -515,18 +526,25 @@
 }
 
 .tools-col-name {
-  /* Scales with pane; input fills cell (14-char limit enforced in TSX) */
-  width: 27%;
-  min-width: 0;
+  /* Absorbs remaining table width after fixed numeric/ATC columns */
+  width: auto;
+  min-width: calc(14ch + 6px);
   max-width: none;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.tools-col-name .tools-edit-input-name {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .tools-col-diameter,
 .tools-col-length {
-  width: 9%;
+  width: 3.35rem;
   min-width: 0;
   max-width: none;
   text-align: right;
@@ -536,7 +554,7 @@
 
 .tools-col-group,
 .tools-col-life {
-  width: 7%;
+  width: 2.35rem;
   min-width: 0;
   max-width: none;
   text-align: center;
@@ -545,19 +563,27 @@
 }
 
 .tools-col-type {
-  width: 8%;
+  width: 3.5rem;
   min-width: 0;
   max-width: none;
   text-align: center;
   white-space: nowrap;
+  overflow: visible;
+}
+
+.tools-col-type .tools-type-select {
+  position: relative;
+  z-index: 1;
 }
 
 .tools-col-measure {
-  width: 6%;
+  width: 1.35rem;
   min-width: 0;
   max-width: none;
   text-align: center;
   white-space: nowrap;
+  padding-left: 1px;
+  padding-right: 1px;
 }
 
 .tools-measure-btn {
@@ -569,8 +595,10 @@
   font-family: var(--font-mono);
   font-size: var(--font-xs);
   line-height: 1;
-  min-width: 1.5rem;
-  padding: 1px 4px;
+  width: 1.15rem;
+  min-width: 1.15rem;
+  height: 1rem;
+  padding: 0;
 }
 
 .tools-measure-btn:hover:not(:disabled) {
@@ -616,12 +644,6 @@
   font-family: var(--font-mono);
   font-size: var(--font-xs);
   padding: 1px 4px;
-}
-
-.tools-edit-input-name {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
 }
 
 /* No browser stepper arrows on any tools table numeric fields */
@@ -746,10 +768,135 @@
 
 .tools-pot-cell {
   display: inline-grid;
-  grid-template-columns: 2.5rem 1rem;
+  grid-template-columns: 2.5rem 1rem 1rem;
   align-items: center;
   gap: 3px;
   justify-content: center;
+}
+
+.tools-pot-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  min-width: 1rem;
+  height: 1rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.tools-pot-picker-btn:hover {
+  border-color: var(--color-info);
+  color: var(--color-info);
+  box-shadow: 0 0 4px rgba(0, 204, 255, 0.25);
+}
+
+.tools-pot-picker-btn--open {
+  border-color: var(--color-info);
+  color: var(--color-info);
+  background: rgba(0, 204, 255, 0.1);
+}
+
+.tools-pot-picker-popover {
+  width: 224px;
+  padding: var(--spacing-sm);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-light);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  line-height: 1.3;
+  box-shadow:
+    0 0 1px var(--color-text-dim),
+    0 0 16px rgba(0, 255, 0, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.55);
+  animation: tools-pot-picker-fade 0.1s ease-out;
+}
+
+@keyframes tools-pot-picker-fade {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tools-pot-picker-popover__header {
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-secondary);
+  font-weight: 700;
+  margin-bottom: var(--spacing-xs);
+}
+
+.tools-pot-picker-popover__grid {
+  display: grid;
+  gap: 4px;
+}
+
+.tools-pot-picker-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-height: 2rem;
+  padding: 2px 4px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.tools-pot-picker-option__num {
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.tools-pot-picker-option__tag {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.tools-pot-picker-option--available:hover:not(:disabled) {
+  border-color: var(--color-info);
+  background: rgba(0, 204, 255, 0.08);
+  color: var(--color-text-primary);
+  box-shadow: 0 0 6px rgba(0, 204, 255, 0.2);
+}
+
+.tools-pot-picker-option--current {
+  border-color: var(--color-info);
+  box-shadow: inset 0 0 0 1px rgba(0, 204, 255, 0.35);
+  background: rgba(0, 204, 255, 0.06);
+}
+
+.tools-pot-picker-option--occupied {
+  opacity: 0.42;
+  cursor: not-allowed;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+
+.tools-pot-picker-option--occupied .tools-pot-picker-option__num {
+  font-weight: 500;
 }
 
 .tools-clear-pot-btn--spacer {
@@ -763,18 +910,21 @@
 }
 
 .tools-col-color {
-  width: 17%;
+  width: 5rem;
   min-width: 0;
   max-width: none;
   text-align: left;
   padding: var(--spacing-xs) 4px;
   vertical-align: middle;
+  overflow: visible;
 }
 
 .tools-col-color .color-select-wrapper {
   display: block;
   max-width: 100%;
   width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .tools-col-color .color-select {
@@ -788,6 +938,12 @@
   white-space: nowrap;
 }
 
+/* Dropdown menus are position:absolute — keep open row above neighbors */
+.tools-table tbody tr:has(.custom-select.open),
+.tools-table tbody tr:has(.color-select.open) {
+  position: relative;
+  z-index: 30;
+}
 
 .tools-pending-actions {
   display: flex;

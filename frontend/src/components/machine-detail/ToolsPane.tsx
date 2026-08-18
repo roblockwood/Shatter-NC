@@ -744,6 +744,267 @@ function ValidatedFieldAnchor({
   );
 }
 
+function PotPickerPopover({
+  open,
+  anchorRef,
+  numPockets,
+  occupancy,
+  toolNumber,
+  currentPot,
+  onSelect,
+  onClose,
+}: {
+  open: boolean;
+  anchorRef: React.RefObject<HTMLElement | null>;
+  numPockets: number;
+  occupancy: Map<number, number>;
+  toolNumber: number;
+  currentPot: number | undefined;
+  onSelect: (pot: number) => void;
+  onClose: () => void;
+}) {
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const popoverId = useId();
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+
+    const update = () => {
+      const el = anchorRef.current;
+      if (!el) return;
+
+      const rect = el.getBoundingClientRect();
+      const margin = 8;
+      const popoverWidth = 224;
+      const popoverHeight = popoverRef.current?.offsetHeight ?? 160;
+
+      let left = rect.left + rect.width / 2 - popoverWidth / 2;
+      let top = rect.bottom + margin;
+
+      if (left + popoverWidth > window.innerWidth - margin) {
+        left = window.innerWidth - margin - popoverWidth;
+      }
+      if (left < margin) {
+        left = margin;
+      }
+
+      if (top + popoverHeight > window.innerHeight - margin) {
+        top = rect.top - margin - popoverHeight;
+      }
+      if (top < margin) {
+        top = margin;
+      }
+
+      setPos({ top, left });
+    };
+
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open, anchorRef, numPockets]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (popoverRef.current?.contains(target)) return;
+      if (anchorRef.current?.contains(target)) return;
+      onClose();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open, anchorRef, onClose]);
+
+  if (!open || !pos) return null;
+
+  const columns = numPockets <= 12 ? 4 : numPockets <= 20 ? 5 : 7;
+
+  return createPortal(
+    <div
+      ref={popoverRef}
+      id={popoverId}
+      role="listbox"
+      aria-label="Select ATC pot"
+      data-testid="pot-picker-popover"
+      className="tools-pot-picker-popover"
+      style={{
+        position: 'fixed',
+        top: pos.top,
+        left: pos.left,
+        zIndex: 10001,
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="tools-pot-picker-popover__header">SELECT POT</div>
+      <div
+        className="tools-pot-picker-popover__grid"
+        style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
+      >
+        {Array.from({ length: numPockets }, (_, idx) => {
+          const pot = idx + 1;
+          const occupant = occupancy.get(pot);
+          const isOccupied = occupant !== undefined && occupant !== toolNumber;
+          const isCurrent = currentPot === pot;
+
+          return (
+            <button
+              key={pot}
+              type="button"
+              role="option"
+              data-testid={`pot-option-${pot}`}
+              aria-selected={isCurrent}
+              disabled={isOccupied}
+              className={[
+                'tools-pot-picker-option',
+                isOccupied ? 'tools-pot-picker-option--occupied' : 'tools-pot-picker-option--available',
+                isCurrent ? 'tools-pot-picker-option--current' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              title={
+                isOccupied
+                  ? `Pot ${pot} — T${String(occupant).padStart(2, '0')}`
+                  : isCurrent
+                    ? `Pot ${pot} (current)`
+                    : `Assign to pot ${pot}`
+              }
+              onClick={() => {
+                onSelect(pot);
+                onClose();
+              }}
+            >
+              <span className="tools-pot-picker-option__num">{pot}</span>
+              {isOccupied ? (
+                <span className="tools-pot-picker-option__tag">
+                  T{String(occupant).padStart(2, '0')}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function PotAssignCell({
+  tool,
+  isAtcAssigned,
+  potPending,
+  numPockets,
+  unifiedCache,
+  pendingChanges,
+  fieldWarnings,
+  onPotNumberChange,
+  onClear,
+}: {
+  tool: Tool;
+  isAtcAssigned: boolean;
+  potPending: boolean;
+  numPockets: number;
+  unifiedCache: UnifiedToolView;
+  pendingChanges: Map<string, PendingChange>;
+  fieldWarnings: Map<string, string>;
+  onPotNumberChange: (tool: Tool, raw: string) => void;
+  onClear: (tool: Tool) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerAnchorRef = useRef<HTMLButtonElement>(null);
+  const occupancy = useMemo(
+    () => buildPotOccupancyMap(unifiedCache, pendingChanges),
+    [unifiedCache, pendingChanges],
+  );
+  const currentPot = parsePotNumber(tool.pot_number);
+  const currentPotNum = currentPot !== null && currentPot > 0 ? currentPot : undefined;
+
+  return (
+    <ValidatedFieldAnchor
+      warningKey={potAssignWarningKey(tool.tool_number)}
+      fieldWarnings={fieldWarnings}
+      className="tools-pot-assign-anchor"
+    >
+      <div className="tools-pot-cell">
+        <NumericEditInput
+          className={pendingInputClass(
+            potPending,
+            'tools-edit-input tools-edit-input--pot-number',
+          )}
+          value={isAtcAssigned ? tool.pot_number : ''}
+          placeholder="—"
+          onValueChange={(raw) => onPotNumberChange(tool, raw)}
+        />
+        <button
+          ref={pickerAnchorRef}
+          type="button"
+          className={`tools-pot-picker-btn${pickerOpen ? ' tools-pot-picker-btn--open' : ''}`}
+          data-testid="pot-picker-btn"
+          aria-label="Choose pot from list"
+          aria-haspopup="listbox"
+          aria-expanded={pickerOpen}
+          title="Choose pot"
+          onClick={(e) => {
+            e.stopPropagation();
+            setPickerOpen((prev) => !prev);
+          }}
+        >
+          ▾
+        </button>
+        {isAtcAssigned ? (
+          <button
+            type="button"
+            className="tools-clear-pot-btn"
+            title="Unassign from pocket"
+            aria-label="Unassign from pocket"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClear(tool);
+            }}
+          >
+            ×
+          </button>
+        ) : (
+          <span className="tools-clear-pot-btn tools-clear-pot-btn--spacer" aria-hidden="true" />
+        )}
+        <PotPickerPopover
+          open={pickerOpen}
+          anchorRef={pickerAnchorRef}
+          numPockets={numPockets}
+          occupancy={occupancy}
+          toolNumber={tool.tool_number}
+          currentPot={currentPotNum}
+          onSelect={(pot) => onPotNumberChange(tool, String(pot))}
+          onClose={() => setPickerOpen(false)}
+        />
+      </div>
+    </ValidatedFieldAnchor>
+  );
+}
+
+function pendingInputClass(pending: boolean, base = 'tools-edit-input'): string {
+  return pending ? `${base} tools-edit-input--pending` : base;
+}
+
 function potAssignWarningKey(toolNumber: number): string {
   return `pot-tool-${toolNumber}`;
 }
@@ -1665,9 +1926,6 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
         toolsMatchForSlice(c.tool, tool, cacheSlice) &&
         match(c),
     );
-
-  const pendingInputClass = (pending: boolean, base = 'tools-edit-input'): string =>
-    pending ? `${base} tools-edit-input--pending` : base;
 
   const getColorInfo = (value: number | undefined): { name: string; hex: string } => {
     if (value === undefined || value === null) {
@@ -2595,48 +2853,21 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       )}
                     </td>
                     <td className="tools-col-pot tools-col-atc" onClick={(e) => e.stopPropagation()}>
-                      <ValidatedFieldAnchor
-                        warningKey={potAssignWarningKey(tool.tool_number)}
-                        fieldWarnings={fieldWarnings}
-                        className="tools-pot-assign-anchor"
-                      >
-                        <div className="tools-pot-cell">
-                          {isEditable && unifiedCache.atc_available ? (
-                            <>
-                              <NumericEditInput
-                                className={pendingInputClass(
-                                  potPending,
-                                  'tools-edit-input tools-edit-input--pot-number',
-                                )}
-                                value={isAtcAssigned ? tool.pot_number : ''}
-                                placeholder="—"
-                                onValueChange={(raw) => handlePotNumberChange(tool, raw)}
-                              />
-                              {isAtcAssigned ? (
-                                <button
-                                  type="button"
-                                  className="tools-clear-pot-btn"
-                                  title="Unassign from pocket"
-                                  aria-label="Unassign from pocket"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteFromPot(tool);
-                                  }}
-                                >
-                                  ×
-                                </button>
-                              ) : (
-                                <span
-                                  className="tools-clear-pot-btn tools-clear-pot-btn--spacer"
-                                  aria-hidden="true"
-                                />
-                              )}
-                            </>
-                          ) : (
-                            formatPotDisplay(isAtcAssigned ? tool.pot_number : undefined)
-                          )}
-                        </div>
-                      </ValidatedFieldAnchor>
+                      {isEditable && unifiedCache.atc_available ? (
+                        <PotAssignCell
+                          tool={tool}
+                          isAtcAssigned={isAtcAssigned}
+                          potPending={potPending}
+                          numPockets={numPocketsProp}
+                          unifiedCache={unifiedCache}
+                          pendingChanges={pendingChanges}
+                          fieldWarnings={fieldWarnings}
+                          onPotNumberChange={handlePotNumberChange}
+                          onClear={handleDeleteFromPot}
+                        />
+                      ) : (
+                        formatPotDisplay(isAtcAssigned ? tool.pot_number : undefined)
+                      )}
                     </td>
                     <td className="tools-col-group tools-col-atc">{isAtcAssigned ? (tool.group ?? '──') : '──'}</td>
                     <td className="tools-col-type tools-col-atc" onClick={(e) => e.stopPropagation()}>
