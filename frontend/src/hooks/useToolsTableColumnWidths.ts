@@ -2,19 +2,24 @@ import { useLayoutEffect, type RefObject } from 'react';
 
 export const TOOL_NAME_MAX_LENGTH = 14;
 export const TOOLS_TABLE_NAME_COLUMN_INDEX = 1;
+export const TOOLS_TABLE_MEASURE_COLUMN_INDEX = 8;
+export const TOOLS_TABLE_COLOR_COLUMN_INDEX = 9;
 
-/** Column order matches `<colgroup>` in ToolsPane. Mins = max input/content width + cell padding. */
+/** Surplus width split: most extra goes to NAME; COLOR gets a slice so labels are not truncated. */
+export const TOOLS_TABLE_NAME_SURPLUS_RATIO = 0.85;
+
+/** Column order matches `<colgroup>` in ToolsPane. */
 export const TOOLS_TABLE_COLUMN_MIN_PX: readonly number[] = [
-  30, // T# (T99 + indicators)
-  154, // NAME fallback (14 chars @ mono xs — remeasured from font in hook)
-  48, // D (e.g. 999.999)
-  48, // H
-  34, // LIFE
-  72, // POT (input + picker + clear)
-  26, // GRP
-  38, // TYPE (STD)
-  22, // MEAS (toggle)
-  76, // COLOR (swatch + label)
+  26, // T# (T99)
+  154, // NAME fallback (14 chars — remeasured in hook)
+  42, // D
+  46, // H (slightly wider than D for values like 96.065)
+  24, // LIFE (1–3 digits)
+  68, // POT (input + picker + clear)
+  20, // GRP
+  32, // TYPE (STD)
+  20, // MEAS
+  90, // COLOR (full labels e.g. PURPLE)
 ];
 
 function horizontalChrome(style: CSSStyleDeclaration): number {
@@ -32,6 +37,12 @@ function measureTextWidthPx(font: string, text: string): number {
   if (!ctx) return text.length * 8;
   ctx.font = font;
   return ctx.measureText(text).width;
+}
+
+function colorColumnIndex(columnCount: number): number {
+  return columnCount === TOOLS_TABLE_COLUMN_MIN_PX.length
+    ? TOOLS_TABLE_COLOR_COLUMN_INDEX
+    : TOOLS_TABLE_COLOR_COLUMN_INDEX - 1;
 }
 
 /** Measure NAME column min from the actual input font + cell padding (14-char tool names). */
@@ -71,12 +82,12 @@ export function resolveToolsTableColumnMinimums(
 ): number[] {
   const mins = [...TOOLS_TABLE_COLUMN_MIN_PX];
   mins[TOOLS_TABLE_NAME_COLUMN_INDEX] = measureNameColumnMinPx(table);
-  return includeMeasure ? mins : mins.filter((_, index) => index !== 8);
+  return includeMeasure ? mins : mins.filter((_, index) => index !== TOOLS_TABLE_MEASURE_COLUMN_INDEX);
 }
 
 /**
- * Compact columns stay at their minimum; NAME absorbs all leftover table width.
- * When the pane is narrower than the sum of minimums, use minimums (horizontal scroll).
+ * Compact columns stay at minimum. Surplus width goes mostly to NAME (~85%) and partly
+ * to COLOR (~15%) so tool names and color labels both have room.
  */
 export function distributeColumnWidths(
   availableWidth: number,
@@ -88,14 +99,20 @@ export function distributeColumnWidths(
     return [...mins];
   }
 
-  const fixedTotal = sumMin - mins[flexIndex]!;
-  const flexWidth = availableWidth - fixedTotal;
+  const extra = availableWidth - sumMin;
+  const nameBonus = Math.floor(extra * TOOLS_TABLE_NAME_SURPLUS_RATIO);
+  const colorBonus = extra - nameBonus;
+  const colorIndex = colorColumnIndex(mins.length);
 
-  return mins.map((min, index) => (index === flexIndex ? flexWidth : min));
+  return mins.map((min, index) => {
+    if (index === flexIndex) return min + nameBonus;
+    if (index === colorIndex) return min + colorBonus;
+    return min;
+  });
 }
 
 /**
- * Fixed-layout table: compact columns at content minimum, NAME takes remaining width.
+ * Fixed-layout table: tight ATC/numeric columns; NAME + COLOR share surplus width.
  */
 export function useToolsTableColumnWidths(
   wrapperRef: RefObject<HTMLDivElement | null>,
