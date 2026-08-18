@@ -155,8 +155,14 @@
 .tools-pane--hover-preview .tools-col-pot,
 .tools-pane--hover-preview .tools-col-number {
   width: auto;
-  min-width: 2.25rem;
+  min-width: 1.75rem;
   white-space: nowrap;
+}
+
+.tools-pane--hover-preview .tools-col-measure {
+  width: auto;
+  min-width: 1.2rem;
+  max-width: 1.2rem;
 }
 
 .tools-pane--hover-preview .tools-col-diameter,
@@ -399,7 +405,9 @@
 }
 
 /*
- * Fixed layout: compact columns use exact rem widths; NAME takes all remaining space.
+ * Column widths are computed in useToolsTableColumnWidths: each column gets its
+ * content minimum, then leftover pane width is split evenly across all columns.
+ * Min widths below are fallbacks before/without JS and for horizontal scroll floor.
  */
 .tools-table {
   width: 100%;
@@ -432,6 +440,16 @@
   font-size: var(--font-xs);
   text-transform: uppercase;
   border-right: 1px solid var(--color-border);
+}
+
+.tools-table th.tools-col-number,
+.tools-table th.tools-col-group,
+.tools-table th.tools-col-life,
+.tools-table th.tools-col-measure,
+.tools-table th.tools-col-diameter,
+.tools-table th.tools-col-length {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tools-table th:last-child {
@@ -467,19 +485,19 @@
 }
 
 .tools-col-number {
-  width: 2.25rem;
-  min-width: 0;
-  max-width: none;
+  min-width: 30px;
   text-align: right;
   white-space: nowrap;
+  padding-left: 2px;
+  padding-right: 2px;
 }
 
 .tools-col-pot {
-  width: 4.85rem;
-  min-width: 0;
-  max-width: none;
+  min-width: 72px;
   text-align: right;
   white-space: nowrap;
+  padding-left: 2px;
+  padding-right: 2px;
 }
 
 .tools-col-pot.tools-col-atc {
@@ -526,10 +544,7 @@
 }
 
 .tools-col-name {
-  /* Absorbs remaining table width after fixed numeric/ATC columns */
-  width: auto;
-  min-width: calc(14ch + 6px);
-  max-width: none;
+  min-width: 98px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -544,31 +559,35 @@
 
 .tools-col-diameter,
 .tools-col-length {
-  width: 3.35rem;
-  min-width: 0;
-  max-width: none;
+  min-width: 52px;
   text-align: right;
   font-family: var(--font-mono);
   white-space: nowrap;
+  padding-left: 2px;
+  padding-right: 2px;
 }
 
 .tools-col-group,
 .tools-col-life {
-  width: 2.35rem;
-  min-width: 0;
-  max-width: none;
+  min-width: 28px;
   text-align: center;
   font-family: var(--font-mono);
   white-space: nowrap;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
+.tools-col-life {
+  min-width: 36px;
 }
 
 .tools-col-type {
-  width: 3.5rem;
-  min-width: 0;
-  max-width: none;
+  min-width: 40px;
   text-align: center;
   white-space: nowrap;
   overflow: visible;
+  padding-left: 2px;
+  padding-right: 2px;
 }
 
 .tools-col-type .tools-type-select {
@@ -577,13 +596,17 @@
 }
 
 .tools-col-measure {
-  width: 1.35rem;
-  min-width: 0;
-  max-width: none;
+  min-width: 22px;
   text-align: center;
   white-space: nowrap;
   padding-left: 1px;
   padding-right: 1px;
+  overflow: hidden;
+}
+
+.tools-table th.tools-col-measure {
+  letter-spacing: 0;
+  font-size: var(--font-xs);
 }
 
 .tools-measure-btn {
@@ -910,11 +933,9 @@
 }
 
 .tools-col-color {
-  width: 5rem;
-  min-width: 0;
-  max-width: none;
+  min-width: 76px;
   text-align: left;
-  padding: var(--spacing-xs) 4px;
+  padding: var(--spacing-xs) 2px;
   vertical-align: middle;
   overflow: visible;
 }
@@ -1176,12 +1197,12 @@
 
 .current-indicator {
   color: var(--color-text-primary);
-  margin-right: var(--spacing-xs);
+  margin-right: 1px;
 }
 
 .matched-indicator {
   color: var(--color-info);
-  margin-right: var(--spacing-xs);
+  margin-right: 1px;
   font-size: 0.8em;
 }
 
