@@ -16,6 +16,7 @@ import {
   type UnifiedToolRow,
   type UnifiedToolView,
 } from '../../utils/unifiedToolView';
+import { useToolsTableColumnWidths } from '../../hooks/useToolsTableColumnWidths';
 
 // Define type locally to avoid Vite import issues
 type ToolModificationOperationType = 
@@ -1305,6 +1306,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const [toolsError, setToolsError] = useState<string | null>(null);
   const [toolsSummary, setToolsSummary] = useState<Array<{ tool_number: number; description: string }>>([]);
   const [programToolNumbers, setProgramToolNumbers] = useState<Set<number>>(() => new Set());
+  const toolsTableWrapperRef = useRef<HTMLDivElement>(null);
 
   // Track pending changes (changes not yet pushed to server)
   const [pendingChanges, setPendingChanges] = useState<Map<string, PendingChange>>(new Map());
@@ -2377,6 +2379,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
   const terminalRuleFill = '─'.repeat(320);
 
   const isHoverPreview = variant === 'hover';
+  useToolsTableColumnWidths(toolsTableWrapperRef, Boolean(machineId), !isHoverPreview);
 
   return (
     <div 
@@ -2599,8 +2602,20 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                 </span>
               </div>
             )}
-            <div className="tools-table-wrapper">
+            <div className="tools-table-wrapper" ref={toolsTableWrapperRef}>
               <table className="tools-table">
+              <colgroup>
+                <col className="tools-col-number" />
+                <col className="tools-col-name" />
+                <col className="tools-col-diameter" />
+                <col className="tools-col-length" />
+                <col className="tools-col-life" />
+                <col className="tools-col-pot" />
+                <col className="tools-col-group" />
+                <col className="tools-col-type" />
+                {machineId ? <col className="tools-col-measure" /> : null}
+                <col className="tools-col-color" />
+              </colgroup>
               <thead onClick={(e) => e.stopPropagation()}>
                 {useUnifiedView && (
                   <tr className="tools-col-group-row">
@@ -2662,8 +2677,8 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     TYPE {sortColumn === 'tool_type' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
                   {machineId ? (
-                    <th className="tools-col-measure tools-col-atc" title="Writes to machine immediately (macro #920). All other edits require PUSH.">
-                      MEAS
+                    <th className="tools-col-measure tools-col-atc" title="Measurement tool (macro #920). Writes immediately; other edits require PUSH.">
+                      M
                     </th>
                   ) : null}
                   <th
