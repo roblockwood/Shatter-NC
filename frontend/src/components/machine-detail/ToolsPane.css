@@ -405,8 +405,8 @@
 }
 
 /*
- * Column widths from useToolsTableColumnWidths: NAME fixed at 14 chars;
- * other cols = max(content, header). Table width = sum of mins (no stretch).
+ * Column widths from useToolsTableColumnWidths: content/header mins, then
+ * leftover pane width split evenly across all columns to fill the panel.
  */
 .tools-table {
   width: 100%;
@@ -564,16 +564,15 @@
 }
 
 /*
- * Size the editable surface to 14 character cells of the mono font.
- * content-box so padding/border are NOT subtracted from the 14ch content width
- * (global .tools-edit-input uses border-box, which was clipping the 14th glyph).
+ * Size name fields to fill the column, with a 14ch content floor so maxLength=14
+ * always fits. Column min is measured from a content-box probe in the hook.
  */
 .tools-col-name .tools-edit-input-name {
   display: block;
-  box-sizing: content-box;
-  width: 14ch;
-  min-width: 14ch;
-  max-width: 14ch;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .tools-col-diameter,
