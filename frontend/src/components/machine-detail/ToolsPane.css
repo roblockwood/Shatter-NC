@@ -405,9 +405,8 @@
 }
 
 /*
- * Column widths are computed in useToolsTableColumnWidths: each column gets its
- * content minimum, then leftover pane width is split evenly across all columns.
- * Min widths below are fallbacks before/without JS and for horizontal scroll floor.
+ * Column widths from useToolsTableColumnWidths: compact columns stay at content
+ * minimum; NAME absorbs all leftover pane width. Min widths below are fallbacks.
  */
 .tools-table {
   width: 100%;
@@ -560,7 +559,7 @@
 
 .tools-col-diameter,
 .tools-col-length {
-  min-width: 52px;
+  min-width: 48px;
   text-align: right;
   font-family: var(--font-mono);
   white-space: nowrap;
@@ -570,7 +569,7 @@
 
 .tools-col-group,
 .tools-col-life {
-  min-width: 28px;
+  min-width: 26px;
   text-align: center;
   font-family: var(--font-mono);
   white-space: nowrap;
@@ -579,11 +578,11 @@
 }
 
 .tools-col-life {
-  min-width: 36px;
+  min-width: 34px;
 }
 
 .tools-col-type {
-  min-width: 40px;
+  min-width: 38px;
   text-align: center;
   white-space: nowrap;
   overflow: visible;

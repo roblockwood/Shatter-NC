@@ -7,12 +7,12 @@ export const TOOLS_TABLE_NAME_COLUMN_INDEX = 1;
 export const TOOLS_TABLE_COLUMN_MIN_PX: readonly number[] = [
   30, // T# (T99 + indicators)
   154, // NAME fallback (14 chars @ mono xs — remeasured from font in hook)
-  52, // D (e.g. 999.999)
-  52, // H
-  36, // LIFE
+  48, // D (e.g. 999.999)
+  48, // H
+  34, // LIFE
   72, // POT (input + picker + clear)
-  28, // GRP
-  40, // TYPE (STD)
+  26, // GRP
+  38, // TYPE (STD)
   22, // MEAS (toggle)
   76, // COLOR (swatch + label)
 ];
@@ -74,30 +74,28 @@ export function resolveToolsTableColumnMinimums(
   return includeMeasure ? mins : mins.filter((_, index) => index !== 8);
 }
 
-/** Split extra width across columns using whole pixels so the sum matches exactly. */
+/**
+ * Compact columns stay at their minimum; NAME absorbs all leftover table width.
+ * When the pane is narrower than the sum of minimums, use minimums (horizontal scroll).
+ */
 export function distributeColumnWidths(
   availableWidth: number,
   mins: readonly number[],
+  flexIndex: number = TOOLS_TABLE_NAME_COLUMN_INDEX,
 ): number[] {
   const sumMin = mins.reduce((sum, min) => sum + min, 0);
   if (availableWidth <= sumMin) {
     return [...mins];
   }
 
-  const extra = availableWidth - sumMin;
-  const baseExtra = Math.floor(extra / mins.length);
-  let remainder = extra - baseExtra * mins.length;
+  const fixedTotal = sumMin - mins[flexIndex]!;
+  const flexWidth = availableWidth - fixedTotal;
 
-  return mins.map((min) => {
-    const bump = remainder > 0 ? 1 : 0;
-    if (remainder > 0) remainder -= 1;
-    return min + baseExtra + bump;
-  });
+  return mins.map((min, index) => (index === flexIndex ? flexWidth : min));
 }
 
 /**
- * Fixed-layout table columns: each gets its content minimum, then leftover width
- * is divided evenly across every column (not just NAME).
+ * Fixed-layout table: compact columns at content minimum, NAME takes remaining width.
  */
 export function useToolsTableColumnWidths(
   wrapperRef: RefObject<HTMLDivElement | null>,
