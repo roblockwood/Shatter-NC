@@ -78,15 +78,18 @@ export function measureNameColumnMinPx(table: HTMLTableElement): number {
   probe.value = 'W'.repeat(TOOL_NAME_MAX_LENGTH);
   probe.setAttribute('size', String(TOOL_NAME_MAX_LENGTH));
   probe.setAttribute('maxlength', String(TOOL_NAME_MAX_LENGTH));
+  // Measure with content-box 14ch so padding/border are additive (not subtracted).
   probe.style.position = 'absolute';
   probe.style.left = '-9999px';
   probe.style.top = '0';
   probe.style.visibility = 'hidden';
   probe.style.pointerEvents = 'none';
+  probe.style.boxSizing = 'content-box';
+  probe.style.width = '14ch';
+  probe.style.minWidth = '14ch';
+  probe.style.maxWidth = '14ch';
   table.appendChild(probe);
 
-  // Prefer scrollWidth of filled value (catches fonts that are wider than `ch`),
-  // then offsetWidth (includes padding/border from content-box 14ch rule).
   const textNeed = Math.ceil(probe.scrollWidth);
   const boxNeed = Math.ceil(probe.offsetWidth);
   table.removeChild(probe);
@@ -122,21 +125,35 @@ export function resolveToolsTableColumnMinimums(
 }
 
 /**
- * Columns stay at their content/header minimums. Surplus is not redistributed —
- * NAME is fixed at 14 chars, so leftover pane width stays empty beside the table.
+ * Columns keep content/header minimums. Leftover pane width is split evenly
+ * across every column (integer pixels) so the table fills the panel.
  */
 export function distributeColumnWidths(
-  _availableWidth: number,
+  availableWidth: number,
   mins: readonly number[],
 ): { widths: number[]; tableWidth: number } {
   const sumMin = mins.reduce((sum, min) => sum + min, 0);
-  // Always use mins; table width equals sum (never stretch columns to fill the pane).
-  return { widths: [...mins], tableWidth: sumMin };
+
+  if (availableWidth <= sumMin) {
+    return { widths: [...mins], tableWidth: sumMin };
+  }
+
+  const extra = availableWidth - sumMin;
+  const baseExtra = Math.floor(extra / mins.length);
+  let remainder = extra - baseExtra * mins.length;
+
+  const widths = mins.map((min) => {
+    const bump = remainder > 0 ? 1 : 0;
+    if (remainder > 0) remainder -= 1;
+    return min + baseExtra + bump;
+  });
+
+  return { widths, tableWidth: availableWidth };
 }
 
 /**
- * Fixed-layout table: NAME sized for 14 chars; other cols sized to fit content AND headers.
- * Table width equals the sum of column mins (empty space on the right if the pane is wider).
+ * Fixed-layout table: columns sized to content/header mins, then grow evenly
+ * to fill the pane width. NAME floor remains 14 characters.
  */
 export function useToolsTableColumnWidths(
   wrapperRef: RefObject<HTMLDivElement | null>,
@@ -157,12 +174,14 @@ export function useToolsTableColumnWidths(
       const mins = resolveToolsTableColumnMinimums(table, includeMeasure);
       if (cols.length !== mins.length) return;
 
-      const { widths, tableWidth } = distributeColumnWidths(table.clientWidth, mins);
+      // Use wrapper width so the table fills the panel (table.clientWidth can
+      // still reflect a previously pinned narrower width).
+      const available = Math.max(0, Math.floor(wrapper.clientWidth));
+      const { widths, tableWidth } = distributeColumnWidths(available, mins);
 
       cols.forEach((col, index) => {
         col.style.width = `${widths[index]!}px`;
       });
-      // Pin table to column sum so table-layout:fixed does not redistribute leftover width.
       table.style.width = `${tableWidth}px`;
       table.style.minWidth = `${tableWidth}px`;
     };
