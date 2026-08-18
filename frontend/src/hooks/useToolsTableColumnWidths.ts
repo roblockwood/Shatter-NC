@@ -10,7 +10,7 @@ export const TOOLS_TABLE_MEASURE_COLUMN_INDEX = 8;
  */
 export const TOOLS_TABLE_CONTENT_MIN_PX: readonly number[] = [
   34, // T# — T99 (+ optional ►)
-  154, // NAME fallback (14 chars — remeasured from font)
+  170, // NAME fallback (14ch content-box + chrome — remeasured from DOM)
   44, // D — 999.999
   48, // H — 999.999
   28, // LIFE — up to 3 digits
@@ -70,31 +70,29 @@ function cellHorizontalChrome(table: HTMLTableElement, selector: string): number
   return horizontalChrome(getComputedStyle(cell));
 }
 
-/** Measure NAME column width for exactly 14 mono characters + input/cell chrome. */
+/** Measure NAME column from a real 14ch content-box input in the table font. */
 export function measureNameColumnMinPx(table: HTMLTableElement): number {
-  const existingInput = table.querySelector<HTMLElement>('.tools-edit-input-name');
+  const probe = document.createElement('input');
+  probe.type = 'text';
+  probe.className = 'tools-edit-input tools-edit-input-name';
+  probe.value = 'W'.repeat(TOOL_NAME_MAX_LENGTH);
+  probe.setAttribute('size', String(TOOL_NAME_MAX_LENGTH));
+  probe.setAttribute('maxlength', String(TOOL_NAME_MAX_LENGTH));
+  probe.style.position = 'absolute';
+  probe.style.left = '-9999px';
+  probe.style.top = '0';
+  probe.style.visibility = 'hidden';
+  probe.style.pointerEvents = 'none';
+  table.appendChild(probe);
 
-  let inputStyle: CSSStyleDeclaration;
-  if (existingInput) {
-    inputStyle = getComputedStyle(existingInput);
-  } else {
-    const probe = document.createElement('input');
-    probe.type = 'text';
-    probe.className = 'tools-edit-input tools-edit-input-name';
-    probe.style.position = 'absolute';
-    probe.style.visibility = 'hidden';
-    probe.style.pointerEvents = 'none';
-    table.appendChild(probe);
-    inputStyle = getComputedStyle(probe);
-    table.removeChild(probe);
-  }
+  // Prefer scrollWidth of filled value (catches fonts that are wider than `ch`),
+  // then offsetWidth (includes padding/border from content-box 14ch rule).
+  const textNeed = Math.ceil(probe.scrollWidth);
+  const boxNeed = Math.ceil(probe.offsetWidth);
+  table.removeChild(probe);
 
-  const font = `${inputStyle.fontWeight} ${inputStyle.fontSize} ${inputStyle.fontFamily}`;
-  const textWidth = measureTextWidthPx(font, '0'.repeat(TOOL_NAME_MAX_LENGTH));
-
-  return Math.ceil(
-    textWidth + horizontalChrome(inputStyle) + cellHorizontalChrome(table, 'tools-col-name'),
-  );
+  const inputWidth = Math.max(textNeed, boxNeed) + 2; // caret / anti-alias cushion
+  return inputWidth + cellHorizontalChrome(table, 'tools-col-name');
 }
 
 /**
@@ -170,6 +168,11 @@ export function useToolsTableColumnWidths(
     };
 
     apply();
+    // Remeasure after webfonts load — first paint may use a narrower fallback.
+    const fontsReady =
+      typeof document !== 'undefined' && document.fonts?.ready
+        ? document.fonts.ready.then(apply).catch(() => undefined)
+        : Promise.resolve();
 
     const observer = new ResizeObserver(apply);
     observer.observe(wrapper);
@@ -177,6 +180,7 @@ export function useToolsTableColumnWidths(
       observer.disconnect();
       table.style.width = '';
       table.style.minWidth = '';
+      void fontsReady;
     };
   }, [wrapperRef, includeMeasure, enabled]);
 }
