@@ -1,9 +1,12 @@
 import { useLayoutEffect, type RefObject } from 'react';
 
+export const TOOL_NAME_MAX_LENGTH = 14;
+export const TOOLS_TABLE_NAME_COLUMN_INDEX = 1;
+
 /** Column order matches `<colgroup>` in ToolsPane. Mins = max input/content width + cell padding. */
 export const TOOLS_TABLE_COLUMN_MIN_PX: readonly number[] = [
   30, // T# (T99 + indicators)
-  98, // NAME (14 chars)
+  154, // NAME fallback (14 chars @ mono xs — remeasured from font in hook)
   52, // D (e.g. 999.999)
   52, // H
   36, // LIFE
@@ -14,9 +17,62 @@ export const TOOLS_TABLE_COLUMN_MIN_PX: readonly number[] = [
   76, // COLOR (swatch + label)
 ];
 
-const TOOLS_TABLE_COLUMN_MIN_PX_NO_MEASURE = TOOLS_TABLE_COLUMN_MIN_PX.filter(
-  (_, index) => index !== 8,
-);
+function horizontalChrome(style: CSSStyleDeclaration): number {
+  return (
+    (parseFloat(style.paddingLeft) || 0) +
+    (parseFloat(style.paddingRight) || 0) +
+    (parseFloat(style.borderLeftWidth) || 0) +
+    (parseFloat(style.borderRightWidth) || 0)
+  );
+}
+
+function measureTextWidthPx(font: string, text: string): number {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return text.length * 8;
+  ctx.font = font;
+  return ctx.measureText(text).width;
+}
+
+/** Measure NAME column min from the actual input font + cell padding (14-char tool names). */
+export function measureNameColumnMinPx(table: HTMLTableElement): number {
+  const existingInput = table.querySelector<HTMLElement>('.tools-edit-input-name');
+
+  let inputStyle: CSSStyleDeclaration;
+  if (existingInput) {
+    inputStyle = getComputedStyle(existingInput);
+  } else {
+    const probe = document.createElement('input');
+    probe.type = 'text';
+    probe.className = 'tools-edit-input tools-edit-input-name';
+    probe.style.position = 'absolute';
+    probe.style.visibility = 'hidden';
+    probe.style.pointerEvents = 'none';
+    table.appendChild(probe);
+    inputStyle = getComputedStyle(probe);
+    table.removeChild(probe);
+  }
+
+  const cellStyle = getComputedStyle(
+    table.querySelector('td.tools-col-name') ??
+      table.querySelector('th.tools-col-name') ??
+      table,
+  );
+
+  const font = `${inputStyle.fontWeight} ${inputStyle.fontSize} ${inputStyle.fontFamily}`;
+  const textWidth = measureTextWidthPx(font, '0'.repeat(TOOL_NAME_MAX_LENGTH));
+
+  return Math.ceil(textWidth + horizontalChrome(inputStyle) + horizontalChrome(cellStyle));
+}
+
+export function resolveToolsTableColumnMinimums(
+  table: HTMLTableElement,
+  includeMeasure: boolean,
+): number[] {
+  const mins = [...TOOLS_TABLE_COLUMN_MIN_PX];
+  mins[TOOLS_TABLE_NAME_COLUMN_INDEX] = measureNameColumnMinPx(table);
+  return includeMeasure ? mins : mins.filter((_, index) => index !== 8);
+}
 
 /** Split extra width across columns using whole pixels so the sum matches exactly. */
 export function distributeColumnWidths(
@@ -58,15 +114,10 @@ export function useToolsTableColumnWidths(
     const cols = wrapper.querySelectorAll<HTMLTableColElement>('table.tools-table colgroup col');
     if (!table || !cols.length) return;
 
-    const mins = includeMeasure
-      ? TOOLS_TABLE_COLUMN_MIN_PX
-      : TOOLS_TABLE_COLUMN_MIN_PX_NO_MEASURE;
-
-    if (cols.length !== mins.length) return;
-
     const apply = () => {
-      // Use the table's inner width (between borders), not the scroll wrapper —
-      // assigning col widths to wrapper.clientWidth ignores the table's own border box.
+      const mins = resolveToolsTableColumnMinimums(table, includeMeasure);
+      if (cols.length !== mins.length) return;
+
       const available = table.clientWidth;
       const widths = distributeColumnWidths(available, mins);
 
