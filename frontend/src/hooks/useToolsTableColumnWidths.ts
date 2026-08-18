@@ -18,6 +18,27 @@ const TOOLS_TABLE_COLUMN_MIN_PX_NO_MEASURE = TOOLS_TABLE_COLUMN_MIN_PX.filter(
   (_, index) => index !== 8,
 );
 
+/** Split extra width across columns using whole pixels so the sum matches exactly. */
+export function distributeColumnWidths(
+  availableWidth: number,
+  mins: readonly number[],
+): number[] {
+  const sumMin = mins.reduce((sum, min) => sum + min, 0);
+  if (availableWidth <= sumMin) {
+    return [...mins];
+  }
+
+  const extra = availableWidth - sumMin;
+  const baseExtra = Math.floor(extra / mins.length);
+  let remainder = extra - baseExtra * mins.length;
+
+  return mins.map((min) => {
+    const bump = remainder > 0 ? 1 : 0;
+    if (remainder > 0) remainder -= 1;
+    return min + baseExtra + bump;
+  });
+}
+
 /**
  * Fixed-layout table columns: each gets its content minimum, then leftover width
  * is divided evenly across every column (not just NAME).
@@ -33,8 +54,9 @@ export function useToolsTableColumnWidths(
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
 
+    const table = wrapper.querySelector<HTMLTableElement>('table.tools-table');
     const cols = wrapper.querySelectorAll<HTMLTableColElement>('table.tools-table colgroup col');
-    if (!cols.length) return;
+    if (!table || !cols.length) return;
 
     const mins = includeMeasure
       ? TOOLS_TABLE_COLUMN_MIN_PX
@@ -43,12 +65,13 @@ export function useToolsTableColumnWidths(
     if (cols.length !== mins.length) return;
 
     const apply = () => {
-      const totalWidth = wrapper.clientWidth;
-      const sumMin = mins.reduce((sum, min) => sum + min, 0);
-      const extraPerCol = Math.max(0, totalWidth - sumMin) / mins.length;
+      // Use the table's inner width (between borders), not the scroll wrapper —
+      // assigning col widths to wrapper.clientWidth ignores the table's own border box.
+      const available = table.clientWidth;
+      const widths = distributeColumnWidths(available, mins);
 
       cols.forEach((col, index) => {
-        col.style.width = `${mins[index]! + extraPerCol}px`;
+        col.style.width = `${widths[index]!}px`;
       });
     };
 

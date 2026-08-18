@@ -411,6 +411,7 @@
  */
 .tools-table {
   width: 100%;
+  box-sizing: border-box;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
