@@ -385,6 +385,16 @@ function findToolPotAssignment(
   return null;
 }
 
+function findToolTableEntry(
+  cache: UnifiedToolView,
+  pending: Map<string, PendingChange>,
+  toolNumber: number,
+): Tool | undefined {
+  const row = cache.tools.find((t) => t.tool_number === toolNumber);
+  if (!row) return undefined;
+  return mergeServerToolWithPending(unifiedRowAsTool(row), pending, 'tool');
+}
+
 function getPotOccupantTool(
   cache: UnifiedToolView,
   pending: Map<string, PendingChange>,
@@ -2059,7 +2069,11 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
     let items = unifiedCache.empty_pockets.map((pocket) => {
       const asTool = emptyPocketAsTool(pocket);
       const merged = mergeServerToolWithPending(asTool, pendingChanges, 'pocket');
-      return { pocket, merged };
+      const assignedToolNumber = merged.is_cap ? 0 : merged.tool_number;
+      const assignedTool = isRealAtcToolNumber(assignedToolNumber)
+        ? findToolTableEntry(unifiedCache, pendingChanges, assignedToolNumber)
+        : undefined;
+      return { pocket, merged, assignedTool };
     });
 
     if (searchQuery.trim()) {
@@ -2412,13 +2426,15 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                     </td>
                   </tr>
                 ) : showingEmptyPots ? (
-                  filteredAndSortedEmptyPockets.map(({ pocket, merged }, idx) => {
+                  filteredAndSortedEmptyPockets.map(({ pocket, merged, assignedTool }, idx) => {
                     const asTool = emptyPocketAsTool(pocket);
                     const hasPending = toolHasPending(asTool, 'pocket');
                     const pocketAssignPending = isToolFieldPending(asTool, 'pocket', (c) =>
                       c.operationType === 'tool_number' || c.operationType === 'cap',
                     );
                     const isEditable = !!machineId && useUnifiedView;
+                    const previewType = assignedTool?.tool_type ?? pocket.tool_type;
+                    const previewColor = assignedTool?.color ?? pocket.color;
                     return (
                       <tr
                         key={`empty-pot-${pocket.pot_number}-${idx}`}
@@ -2449,22 +2465,34 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                             '──'
                           )}
                         </td>
-                        <td className="tools-col-name">──</td>
-                        <td className="tools-col-diameter">──</td>
-                        <td className="tools-col-length">──</td>
-                        <td className="tools-col-life">──</td>
+                        <td className="tools-col-name">
+                          {assignedTool ? getToolDisplayName(assignedTool) || '──' : '──'}
+                        </td>
+                        <td className="tools-col-diameter">
+                          {assignedTool ? formatDimension(assignedTool.diameter, units) : '──'}
+                        </td>
+                        <td className="tools-col-length">
+                          {assignedTool ? formatDimension(assignedTool.length, units) : '──'}
+                        </td>
+                        <td className="tools-col-life">
+                          {assignedTool ? formatLife(assignedTool.life) : '──'}
+                        </td>
                         <td className="tools-col-pot tools-col-atc">
                           {formatPotDisplay(pocket.pot_number)}
                         </td>
-                        <td className="tools-col-group tools-col-atc">──</td>
+                        <td className="tools-col-group tools-col-atc">
+                          {assignedTool?.group != null && assignedTool.group !== ''
+                            ? String(assignedTool.group)
+                            : '──'}
+                        </td>
                         <td className="tools-col-type tools-col-atc">
-                          {formatToolType(pocket.tool_type)}
+                          {formatToolType(previewType)}
                         </td>
                         {machineId ? (
                           <td className="tools-col-measure tools-col-atc">──</td>
                         ) : null}
                         <td className="tools-col-color tools-col-atc">
-                          {pocket.color != null ? getColorInfo(pocket.color).name : '──'}
+                          {previewColor != null ? getColorInfo(previewColor).name : '──'}
                         </td>
                       </tr>
                     );
