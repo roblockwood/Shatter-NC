@@ -124,6 +124,9 @@ export function resolveToolsTableColumnMinimums(
     : mins.filter((_, index) => index !== TOOLS_TABLE_MEASURE_COLUMN_INDEX);
 }
 
+/** Subtract from wrapper width so table L/R borders + rounding don't force horizontal scroll. */
+export const TOOLS_TABLE_WIDTH_GUTTER_PX = 4;
+
 /**
  * Columns keep content/header minimums. Leftover pane width is split evenly
  * across every column (integer pixels) so the table fills the panel.
@@ -174,9 +177,12 @@ export function useToolsTableColumnWidths(
       const mins = resolveToolsTableColumnMinimums(table, includeMeasure);
       if (cols.length !== mins.length) return;
 
-      // Use wrapper width so the table fills the panel (table.clientWidth can
-      // still reflect a previously pinned narrower width).
-      const available = Math.max(0, Math.floor(wrapper.clientWidth));
+      // Wrapper clientWidth is the content box; table border sits inside/outside
+      // that and was causing ~2–4px horizontal overflow.
+      const available = Math.max(
+        0,
+        Math.floor(wrapper.clientWidth) - TOOLS_TABLE_WIDTH_GUTTER_PX,
+      );
       const { widths, tableWidth } = distributeColumnWidths(available, mins);
 
       cols.forEach((col, index) => {
