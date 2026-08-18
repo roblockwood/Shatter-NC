@@ -405,8 +405,8 @@
 }
 
 /*
- * Column widths from useToolsTableColumnWidths: compact columns stay at content
- * minimum; NAME absorbs all leftover pane width. Min widths below are fallbacks.
+ * Column widths from useToolsTableColumnWidths: tight numeric/ATC mins; surplus
+ * goes ~85% to NAME and ~15% to COLOR.
  */
 .tools-table {
   width: 100%;
@@ -485,7 +485,7 @@
 }
 
 .tools-col-number {
-  min-width: 30px;
+  min-width: 26px;
   text-align: right;
   white-space: nowrap;
   padding-left: 2px;
@@ -493,7 +493,7 @@
 }
 
 .tools-col-pot {
-  min-width: 72px;
+  min-width: 68px;
   text-align: right;
   white-space: nowrap;
   padding-left: 2px;
@@ -559,30 +559,42 @@
 
 .tools-col-diameter,
 .tools-col-length {
-  min-width: 48px;
+  min-width: 42px;
   text-align: right;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   padding-left: 2px;
   padding-right: 2px;
+}
+
+.tools-col-length {
+  min-width: 46px;
+}
+
+.tools-col-diameter .tools-edit-input,
+.tools-col-length .tools-edit-input {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .tools-col-group,
 .tools-col-life {
-  min-width: 26px;
+  min-width: 20px;
   text-align: center;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   padding-left: 2px;
   padding-right: 2px;
 }
 
 .tools-col-life {
-  min-width: 34px;
+  min-width: 24px;
 }
 
 .tools-col-type {
-  min-width: 38px;
+  min-width: 32px;
   text-align: center;
   white-space: nowrap;
   overflow: visible;
@@ -596,7 +608,7 @@
 }
 
 .tools-col-measure {
-  min-width: 22px;
+  min-width: 20px;
   text-align: center;
   white-space: nowrap;
   padding-left: 1px;
@@ -706,14 +718,27 @@
 }
 
 .tools-edit-input--pot-number {
-  width: 2.5rem;
-  max-width: 2.5rem;
+  width: 2.35rem;
+  max-width: 2.35rem;
   text-align: center;
 }
 
 .tools-edit-input--life {
-  max-width: 4rem;
+  width: 100%;
+  max-width: 2.25rem;
   text-align: center;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
+.tools-col-life .tools-edit-input--life:not(:focus) {
+  background: transparent;
+  border-color: transparent;
+}
+
+.tools-col-life .tools-edit-input--life:focus {
+  background: var(--color-bg-primary);
+  border-color: var(--color-border);
 }
 
 .tools-edit-input:focus {
@@ -791,9 +816,9 @@
 
 .tools-pot-cell {
   display: inline-grid;
-  grid-template-columns: 2.5rem 1rem 1rem;
+  grid-template-columns: 2.35rem 0.9rem 0.9rem;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   justify-content: center;
 }
 
@@ -928,12 +953,12 @@
 }
 
 .tools-pot-cell .tools-edit-input--pot-number {
-  width: 2.5rem;
-  max-width: 2.5rem;
+  width: 2.35rem;
+  max-width: 2.35rem;
 }
 
 .tools-col-color {
-  min-width: 76px;
+  min-width: 90px;
   text-align: left;
   padding: var(--spacing-xs) 2px;
   vertical-align: middle;
@@ -942,21 +967,38 @@
 
 .tools-col-color .color-select-wrapper {
   display: block;
-  max-width: 100%;
+  max-width: none;
   width: 100%;
   position: relative;
   z-index: 1;
 }
 
 .tools-col-color .color-select {
-  padding: 2px 14px 2px 4px;
+  padding: 2px 12px 2px 4px;
   gap: 2px;
 }
 
 .tools-col-color .color-select-value {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
+}
+
+/* Unassigned tools: ghost ATC columns; TOOL side stays readable */
+.tools-table tbody tr.tools-row-unassigned-atc .tools-col-atc:not(.tools-col-pot) {
+  opacity: 0.28;
+  color: var(--color-text-dim);
+}
+
+.tools-table tbody tr.tools-row-unassigned-atc:hover .tools-col-atc:not(.tools-col-pot) {
+  opacity: 0.45;
+}
+
+.tools-table tbody tr.tools-row-unassigned-atc.tools-state-spindle .tools-col-atc,
+.tools-table tbody tr.tools-row-unassigned-atc.tools-state-program .tools-col-atc,
+.tools-table tbody tr.tools-row-unassigned-atc.tools-state-program-atc .tools-col-atc {
+  opacity: 1;
+  color: inherit;
 }
 
 /* Dropdown menus are position:absolute — keep open row above neighbors */

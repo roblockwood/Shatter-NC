@@ -2805,7 +2805,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                       isMeasurementTool ? 'measurement-tool' : ''
                     } ${hasPending ? 'tools-row-pending' : ''} ${rowStateClass} ${
                       rowMagazineColored ? `tools-row-colored tool-color-${colorIdx}` : ''
-                    }`}
+                    } ${!isAtcAssigned ? 'tools-row-unassigned-atc' : ''}`}
                     onClick={(e) => handleRowClick(tool, e)}
                     style={{ cursor: hasMatch ? 'pointer' : 'default' }}
                     title={rowTitle}
@@ -2884,7 +2884,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                         formatPotDisplay(isAtcAssigned ? tool.pot_number : undefined)
                       )}
                     </td>
-                    <td className="tools-col-group tools-col-atc">{isAtcAssigned ? (tool.group ?? '──') : '──'}</td>
+                    <td className="tools-col-group tools-col-atc">{isAtcAssigned ? (tool.group ?? '──') : null}</td>
                     <td className="tools-col-type tools-col-atc" onClick={(e) => e.stopPropagation()}>
                       {isEditable && isAtcAssigned ? (
                         <Select
@@ -2895,7 +2895,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                           options={TOOL_TYPE_OPTIONS}
                         />
                       ) : (
-                        isAtcAssigned ? formatToolType(tool.tool_type) : '──'
+                        isAtcAssigned ? formatToolType(tool.tool_type) : null
                       )}
                     </td>
                     {machineId ? (
@@ -2915,9 +2915,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                           >
                             {isMeasurementTool ? '●' : '○'}
                           </button>
-                        ) : (
-                          '──'
-                        )}
+                        ) : null}
                       </td>
                     ) : null}
                     <td className="tools-col-color tools-col-atc" onClick={(e) => e.stopPropagation()}>
@@ -2927,9 +2925,7 @@ export const ToolsPane: React.FC<ToolsPaneProps> = ({
                           value={tool.color ?? 0}
                           onChange={(newColor) => handleColorChange(tool, newColor)}
                         />
-                      ) : (
-                        '──'
-                      )}
+                      ) : null}
                     </td>
                   </tr>
                 );
