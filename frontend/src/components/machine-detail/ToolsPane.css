@@ -444,6 +444,26 @@
   overflow: visible;
 }
 
+/* Match header justification to cell values / controls */
+.tools-table th.tools-col-number,
+.tools-table th.tools-col-diameter,
+.tools-table th.tools-col-length {
+  text-align: right;
+}
+
+.tools-table th.tools-col-life,
+.tools-table th.tools-col-group,
+.tools-table th.tools-col-type,
+.tools-table th.tools-col-measure,
+.tools-table th.tools-col-pot {
+  text-align: center;
+}
+
+.tools-table th.tools-col-name,
+.tools-table th.tools-col-color {
+  text-align: left;
+}
+
 .tools-table th:last-child {
   border-right: none;
 }
@@ -536,17 +556,24 @@
 }
 
 .tools-col-name {
-  min-width: 154px;
+  min-width: calc(14ch + 18px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: left;
 }
 
+/*
+ * Size the editable surface to 14 character cells of the mono font.
+ * content-box so padding/border are NOT subtracted from the 14ch content width
+ * (global .tools-edit-input uses border-box, which was clipping the 14th glyph).
+ */
 .tools-col-name .tools-edit-input-name {
   display: block;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
+  box-sizing: content-box;
+  width: 14ch;
+  min-width: 14ch;
+  max-width: 14ch;
 }
 
 .tools-col-diameter,
