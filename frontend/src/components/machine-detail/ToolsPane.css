@@ -405,8 +405,8 @@
 }
 
 /*
- * Column widths from useToolsTableColumnWidths: tight numeric/ATC mins; surplus
- * goes ~85% to NAME and ~15% to COLOR.
+ * Column widths from useToolsTableColumnWidths: NAME fixed at 14 chars;
+ * other cols = max(content, header). Table width = sum of mins (no stretch).
  */
 .tools-table {
   width: 100%;
@@ -440,16 +440,8 @@
   font-size: var(--font-xs);
   text-transform: uppercase;
   border-right: 1px solid var(--color-border);
-}
-
-.tools-table th.tools-col-number,
-.tools-table th.tools-col-group,
-.tools-table th.tools-col-life,
-.tools-table th.tools-col-measure,
-.tools-table th.tools-col-diameter,
-.tools-table th.tools-col-length {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: visible;
 }
 
 .tools-table th:last-child {
@@ -485,7 +477,7 @@
 }
 
 .tools-col-number {
-  min-width: 26px;
+  min-width: 34px;
   text-align: right;
   white-space: nowrap;
   padding-left: 2px;
@@ -559,7 +551,7 @@
 
 .tools-col-diameter,
 .tools-col-length {
-  min-width: 42px;
+  min-width: 44px;
   text-align: right;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -569,7 +561,7 @@
 }
 
 .tools-col-length {
-  min-width: 46px;
+  min-width: 48px;
 }
 
 .tools-col-diameter .tools-edit-input,
@@ -580,7 +572,7 @@
 
 .tools-col-group,
 .tools-col-life {
-  min-width: 20px;
+  min-width: 28px;
   text-align: center;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -590,11 +582,11 @@
 }
 
 .tools-col-life {
-  min-width: 24px;
+  min-width: 28px;
 }
 
 .tools-col-type {
-  min-width: 32px;
+  min-width: 40px;
   text-align: center;
   white-space: nowrap;
   overflow: visible;
@@ -608,7 +600,7 @@
 }
 
 .tools-col-measure {
-  min-width: 20px;
+  min-width: 22px;
   text-align: center;
   white-space: nowrap;
   padding-left: 1px;
@@ -958,7 +950,7 @@
 }
 
 .tools-col-color {
-  min-width: 90px;
+  min-width: 78px;
   text-align: left;
   padding: var(--spacing-xs) 2px;
   vertical-align: middle;
