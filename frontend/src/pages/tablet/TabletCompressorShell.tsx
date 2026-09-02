@@ -65,7 +65,7 @@ function TabletCompressorPaneContent({
             machineId={compressor.compressor_id}
             currentAlarms={compressor.alarms}
             pollTimestamp={pollTs}
-            pollIntervalSeconds={compressor.poll_interval_seconds ?? 5}
+            pollIntervalSeconds={compressor.poll_interval_seconds ?? 30}
           />
         </div>
       );

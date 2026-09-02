@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, model_validator
 class CompressorBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     ip_address: str = Field(..., description="SC2 host (for display / ops)")
-    poll_interval_seconds: int = Field(default=1, ge=1, le=300)
+    poll_interval_seconds: int = Field(default=30, ge=1, le=300)
     enabled: bool = Field(default=True)
     tags: List[str] = Field(default_factory=list)
     layout_config: Optional[Dict[str, Any]] = Field(default=None)
