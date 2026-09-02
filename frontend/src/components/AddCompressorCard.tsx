@@ -26,7 +26,7 @@ function emptyForm(): CompressorForm {
   return {
     name: '',
     ip_address: '',
-    poll_interval_seconds: 1,
+    poll_interval_seconds: 30,
     enabled: true,
     kaeser_connect_base_url: '',
     kaeser_username: '',
@@ -245,7 +245,7 @@ export const AddCompressorCard: React.FC<AddCompressorCardProps> = ({
               max={300}
               value={formData.poll_interval_seconds}
               onChange={(e) =>
-                setFormData({ ...formData, poll_interval_seconds: parseInt(e.target.value, 10) || 5 })
+                setFormData({ ...formData, poll_interval_seconds: parseInt(e.target.value, 10) || 30 })
               }
               disabled={isSaving}
             />
