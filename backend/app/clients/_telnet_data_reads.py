@@ -83,6 +83,7 @@ class CNCDataReadsMixin:
                                 f"Failed to load '{data_name}': command sent but no response "
                                 f"(possible CM7522 risk) — not retrying"
                             )
+                            await self.disconnect()
                             return None
                         elif status is None and attempt < max_retries:
                             # Connection-level failure BEFORE the command was sent.
@@ -102,19 +103,25 @@ class CNCDataReadsMixin:
                             continue
                         else:
                             logger.warning(f"Failed to load data '{data_name}': status {status}")
+                            self._connected = False
+                            await self.disconnect()
                             return None
                 except (ConnectionError, TimeoutError, asyncio.TimeoutError) as e:
                     if attempt < max_retries:
                         wait_time = 0.5 * (attempt + 1)
                         logger.warning(f"Connection error loading '{data_name}': {e}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
                         self._connected = False
+                        await self.disconnect()
                         await asyncio.sleep(wait_time)
                         continue
                     else:
                         logger.error(f"Error loading data '{data_name}' after {max_retries + 1} attempts: {e}")
+                        await self.disconnect()
                         return None
                 except Exception as e:
                     logger.error(f"Error loading data '{data_name}': {e}")
+                    self._connected = False
+                    await self.disconnect()
                     return None
 
         return None

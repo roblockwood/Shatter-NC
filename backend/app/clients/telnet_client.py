@@ -27,6 +27,7 @@ from app.clients._telnet_state import (
 )
 from app.clients._telnet_data_reads import CNCDataReadsMixin
 from app.clients._telnet_write_ops import CNCWriteOpsMixin
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +244,11 @@ class CNCTelnetClient(CNCDataReadsMixin, CNCWriteOpsMixin):
                     except Exception:
                         pass
 
+    async def _invalidate_connection(self):
+        """Mark connection dead and close sockets promptly (e.g. after read hang)."""
+        self._connected = False
+        await self.disconnect()
+
     # ------------------------------------------------------------------
     # Core send / receive
     # ------------------------------------------------------------------
@@ -275,14 +281,26 @@ class CNCTelnetClient(CNCDataReadsMixin, CNCWriteOpsMixin):
             if verbose:
                 logger.debug(f"[TELNET] Sending {command} to {self.ip_address}: args={repr(arguments)}")
             self.writer.write(frame)
-            await self.writer.drain()   # <-- machine has the command from this point on
+            await asyncio.wait_for(self.writer.drain(), timeout=self.timeout)
             command_sent = True
             self.last_command_time = asyncio.get_event_loop().time()
 
             response = b""
+            read_deadline = asyncio.get_event_loop().time() + settings.TELNET_READ_MAX_TOTAL_SECONDS
             while True:
+                remaining = read_deadline - asyncio.get_event_loop().time()
+                if remaining <= 0:
+                    logger.warning(
+                        f"Total read timeout ({settings.TELNET_READ_MAX_TOTAL_SECONDS}s) "
+                        f"for command {command} to {self.ip_address}"
+                    )
+                    await self._invalidate_connection()
+                    return False, "TIMEOUT", None
                 try:
-                    chunk = await asyncio.wait_for(self.reader.read(4096), timeout=read_timeout)
+                    chunk = await asyncio.wait_for(
+                        self.reader.read(4096),
+                        timeout=min(read_timeout, remaining),
+                    )
                     if not chunk:
                         break
                     response += chunk
@@ -299,9 +317,7 @@ class CNCTelnetClient(CNCDataReadsMixin, CNCWriteOpsMixin):
                         logger.warning(f"Socket timeout - no data received for command {command}")
                         if verbose:
                             logger.error(f"Command was: {command}, Arguments: '{arguments}'")
-                        # Return a sentinel that tells load_data the command reached the
-                        # machine.  Retrying would send a second LOD while the machine
-                        # is still processing the first one -- that triggers CM7522.
+                        await self._invalidate_connection()
                         return False, "TIMEOUT", None
 
             if not response:
@@ -353,12 +369,12 @@ class CNCTelnetClient(CNCDataReadsMixin, CNCWriteOpsMixin):
                 # pipe while reading the response).  Treat the same as TIMEOUT so the
                 # caller knows not to retry.
                 logger.error(f"Error reading response for {command}: {e}")
-                self._connected = False
+                await self._invalidate_connection()
                 return False, "TIMEOUT", None
             else:
                 # Exception before drain() -- machine never received the command.
                 logger.error(f"Error sending command {command}: {e}")
-                self._connected = False
+                await self._invalidate_connection()
                 return False, None, None
 
     async def _send_multipart_command(
@@ -397,15 +413,27 @@ class CNCTelnetClient(CNCDataReadsMixin, CNCWriteOpsMixin):
                 )
 
             self.writer.write(frame_bytes)
-            await self.writer.drain()
+            await asyncio.wait_for(self.writer.drain(), timeout=self.timeout)
             self.last_command_time = asyncio.get_event_loop().time()
 
             response = b""
             read_timeout = 1.0
+            read_deadline = asyncio.get_event_loop().time() + settings.TELNET_READ_MAX_TOTAL_SECONDS
 
             while True:
+                remaining = read_deadline - asyncio.get_event_loop().time()
+                if remaining <= 0:
+                    logger.warning(
+                        f"Total read timeout ({settings.TELNET_READ_MAX_TOTAL_SECONDS}s) "
+                        f"for multipart command {command} to {self.ip_address}"
+                    )
+                    await self._invalidate_connection()
+                    return False, None, None
                 try:
-                    chunk = await asyncio.wait_for(self.reader.read(4096), timeout=read_timeout)
+                    chunk = await asyncio.wait_for(
+                        self.reader.read(4096),
+                        timeout=min(read_timeout, remaining),
+                    )
                     if not chunk:
                         break
                     response += chunk
@@ -416,6 +444,7 @@ class CNCTelnetClient(CNCDataReadsMixin, CNCWriteOpsMixin):
                         break
                     else:
                         logger.error("Socket timeout - no data received")
+                        await self._invalidate_connection()
                         return False, None, None
 
             if not response:
@@ -458,6 +487,7 @@ class CNCTelnetClient(CNCDataReadsMixin, CNCWriteOpsMixin):
 
         except Exception as e:
             logger.error(f"Error in multipart command: {e}")
+            await self._invalidate_connection()
             return False, None, None
 
     # ------------------------------------------------------------------
