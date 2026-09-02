@@ -122,7 +122,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
   const [editFormData, setEditFormData] = useState<EditForm>({
     name: compressor.compressor_name,
     ip_address: compressor.ip_address,
-    poll_interval_seconds: compressor.poll_interval_seconds ?? 1,
+    poll_interval_seconds: compressor.poll_interval_seconds ?? 30,
     enabled: compressor.enabled !== false,
     kaeser_connect_base_url: compressor.kaeser_connect_base_url ?? '',
     kaeser_username: compressor.kaeser_username ?? '',
@@ -135,7 +135,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
       setEditFormData({
         name: compressor.compressor_name,
         ip_address: compressor.ip_address,
-        poll_interval_seconds: compressor.poll_interval_seconds ?? 1,
+        poll_interval_seconds: compressor.poll_interval_seconds ?? 30,
         enabled: compressor.enabled !== false,
         kaeser_connect_base_url: compressor.kaeser_connect_base_url ?? '',
         kaeser_username: compressor.kaeser_username ?? '',
@@ -171,7 +171,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
     return (
       editCompressorName !== compressor.compressor_name ||
       editFormData.ip_address !== compressor.ip_address ||
-      editFormData.poll_interval_seconds !== (compressor.poll_interval_seconds ?? 1) ||
+      editFormData.poll_interval_seconds !== (compressor.poll_interval_seconds ?? 30) ||
       editFormData.enabled !== (compressor.enabled !== false) ||
       editFormData.kaeser_connect_base_url.trim() !== (compressor.kaeser_connect_base_url ?? '').trim() ||
       editFormData.kaeser_username.trim() !== (compressor.kaeser_username ?? '').trim() ||
@@ -184,7 +184,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
     setEditFormData({
       name: compressor.compressor_name,
       ip_address: compressor.ip_address,
-      poll_interval_seconds: compressor.poll_interval_seconds ?? 1,
+      poll_interval_seconds: compressor.poll_interval_seconds ?? 30,
       enabled: compressor.enabled !== false,
       kaeser_connect_base_url: compressor.kaeser_connect_base_url ?? '',
       kaeser_username: compressor.kaeser_username ?? '',
@@ -526,7 +526,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
                     machineId={compressor.compressor_id}
                     currentAlarms={compressor.alarms}
                     pollTimestamp={pollTs}
-                    pollIntervalSeconds={compressor.poll_interval_seconds ?? 5}
+                    pollIntervalSeconds={compressor.poll_interval_seconds ?? 30}
                   />
                 ),
               },
@@ -692,7 +692,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
                 onChange={(e) =>
                   setEditFormData({
                     ...editFormData,
-                    poll_interval_seconds: parseInt(e.target.value, 10) || 1,
+                    poll_interval_seconds: parseInt(e.target.value, 10) || 30,
                   })
                 }
                 disabled={isEditSaving}

@@ -12,7 +12,7 @@ class Compressor(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, unique=True)
     ip_address = Column(String(45), nullable=False)
-    poll_interval_seconds = Column(Integer, nullable=False, default=5)
+    poll_interval_seconds = Column(Integer, nullable=False, default=30)
     enabled = Column(Boolean, nullable=False, default=True)
     tags = Column(JSON, nullable=True)
     layout_config = Column(JSON, nullable=True)
