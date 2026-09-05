@@ -82,3 +82,44 @@ def test_calculate_polling_stats():
     assert stats.failed_polls == 1
     assert stats.avg_response_time_ms == 15
     assert stats.current_streak == -1
+
+
+def test_compressor_sample_success_from_metrics():
+    from app.api.summary import _compressor_sample_success
+
+    online = MagicMock(metrics={"is_online": True}, status="load")
+    offline = MagicMock(metrics={"is_online": False}, status="offline")
+    assert _compressor_sample_success(online) is True
+    assert _compressor_sample_success(offline) is False
+
+
+def test_compressor_sample_success_from_status():
+    from app.api.summary import _compressor_sample_success
+
+    load = MagicMock(metrics=None, status="load")
+    off = MagicMock(metrics={}, status="offline")
+    assert _compressor_sample_success(load) is True
+    assert _compressor_sample_success(off) is False
+
+
+def test_duration_fields_online():
+    from app.api.summary import _duration_fields_for_asset
+
+    changed = datetime.utcnow() - timedelta(minutes=5)
+    online_fmt, offline_fmt, _ = _duration_fields_for_asset(
+        is_online=True,
+        backend_healthy=True,
+        last_seen_at=changed,
+        status_changed_at=changed,
+    )
+    assert online_fmt == "5m"
+    assert offline_fmt == ""
+
+
+def test_is_backend_healthy_compressor_only():
+    from app.api import summary as summary_mod
+
+    set_polling_service(None)
+    summary_mod.compressor_polling_service = MagicMock(is_running=True, pollers={1: MagicMock()})
+    assert is_backend_healthy() is True
+    summary_mod.compressor_polling_service = None

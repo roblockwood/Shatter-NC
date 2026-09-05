@@ -7,7 +7,8 @@ from pydantic import BaseModel
 
 from app.db.base import get_db
 from app.models.machine import Machine
-from app.models.event import ProductionRun, MachineStatusEvent
+from app.models.compressor import Compressor
+from app.models.event import ProductionRun, MachineStatusEvent, CompressorStatusEvent, CompressorStatusSample
 
 router = APIRouter()
 
@@ -15,11 +16,18 @@ router = APIRouter()
 # These are initialized in main.py and accessed as globals
 from app.api import websocket as websocket_api
 polling_service = None
+compressor_polling_service = None
 
 def set_polling_service(service):
     """Inject the polling service from main.py"""
     global polling_service
     polling_service = service
+
+
+def set_compressor_polling_service(service):
+    """Inject the compressor polling service from main.py"""
+    global compressor_polling_service
+    compressor_polling_service = service
 
 # Pydantic models for responses
 
@@ -61,9 +69,10 @@ class PollingStatsSummary(BaseModel):
     current_streak: int  # positive = consecutive successes, negative = consecutive failures
 
 class MachineStatusSummary(BaseModel):
-    """Unified machine status with polling data."""
-    machine_id: int
+    """Unified machine/compressor status with polling data."""
+    machine_id: int  # CNC machine_id or compressor_id (see asset_kind)
     machine_name: str
+    asset_kind: str = "cnc"  # "cnc" | "compressor"
     is_online: bool
     uptime_8h_percent: float  # % of successful polls in 8h window
     current_status: Optional[str] = None  # "running", "idle", "alarm", etc.
@@ -79,7 +88,7 @@ class MachineStatusSummary(BaseModel):
     polling_summary: PollingStatsSummary
 
 class MachinesSummary(BaseModel):
-    """Summary of all machine statuses."""
+    """Summary of all fleet asset statuses (CNC + compressors)."""
     total_machines: int
     online_count: int
     offline_count: int
@@ -136,12 +145,19 @@ def is_backend_healthy() -> bool:
     - Polling service is running
     - Polling service has been running long enough to have attempted at least one poll
       (allows for initial startup delay)
+
+    Compressors alone also count as healthy when compressor polling is active.
     """
+    compressor_ok = False
+    if compressor_polling_service and compressor_polling_service.is_running:
+        if len(getattr(compressor_polling_service, "pollers", {}) or {}) > 0:
+            compressor_ok = True
+
     if not polling_service:
-        return False
+        return compressor_ok
     
     if not polling_service.is_running:
-        return False
+        return compressor_ok
     
     # Check if we have any recent polling events (within last 2 polling intervals = 10 seconds)
     # This ensures the backend has actually been polling, not just started
@@ -159,7 +175,7 @@ def is_backend_healthy() -> bool:
         # If no recent polls, backend might have just started - give it a grace period
         # Check if polling service has pollers (means it's set up)
         if not recent_poll and len(polling_service.pollers) == 0:
-            return False
+            return compressor_ok
         
         # If we have pollers but no recent polls, backend might be starting up
         # Allow a grace period of 15 seconds after startup
@@ -168,7 +184,7 @@ def is_backend_healthy() -> bool:
             any_poll = db.query(PollingEvent).first()
             if not any_poll:
                 # No polls ever - backend just started, give it grace period
-                return False
+                return compressor_ok
         
         return True
     except Exception as e:
@@ -197,6 +213,80 @@ def get_polling_history(machine_id: int, db: Session, hours: int = 8) -> List[Po
         )
         for event in events
     ]
+
+
+def _compressor_sample_success(sample: CompressorStatusSample) -> bool:
+    """Treat a compressor status sample as a successful poll when online."""
+    metrics = sample.metrics if isinstance(sample.metrics, dict) else {}
+    if "is_online" in metrics:
+        return bool(metrics.get("is_online"))
+    status = (sample.status or "").lower()
+    return status not in ("offline", "off", "unreachable", "unknown")
+
+
+def get_compressor_polling_history(
+    compressor_id: int, db: Session, hours: int = 8
+) -> List[PollingDataPoint]:
+    """Build polling-style history from compressor_status_samples."""
+    now = datetime.utcnow()
+    time_ago = now - timedelta(hours=hours)
+
+    samples = (
+        db.query(CompressorStatusSample)
+        .filter(
+            CompressorStatusSample.compressor_id == compressor_id,
+            CompressorStatusSample.time >= time_ago,
+        )
+        .order_by(CompressorStatusSample.time)
+        .all()
+    )
+
+    history: List[PollingDataPoint] = []
+    for sample in samples:
+        metrics = sample.metrics if isinstance(sample.metrics, dict) else {}
+        response_ms = metrics.get("response_time_ms")
+        try:
+            response_ms = int(response_ms) if response_ms is not None else None
+        except (TypeError, ValueError):
+            response_ms = None
+        history.append(
+            PollingDataPoint(
+                time=sample.time,
+                success=_compressor_sample_success(sample),
+                response_time_ms=response_ms,
+            )
+        )
+    return history
+
+
+def _duration_fields_for_asset(
+    *,
+    is_online: bool,
+    backend_healthy: bool,
+    last_seen_at: Optional[datetime],
+    status_changed_at: Optional[datetime],
+) -> tuple[str, str, Optional[datetime]]:
+    """Return (online_duration_formatted, offline_duration_formatted, status_changed_at)."""
+    now = datetime.utcnow()
+    changed = status_changed_at or last_seen_at
+
+    if is_online:
+        if changed:
+            changed_naive = changed.replace(tzinfo=None) if changed.tzinfo else changed
+            duration_seconds = int((now - changed_naive).total_seconds())
+        else:
+            duration_seconds = 0
+        return format_duration(duration_seconds), "", changed
+
+    if backend_healthy:
+        if changed:
+            changed_naive = changed.replace(tzinfo=None) if changed.tzinfo else changed
+            duration_seconds = int((now - changed_naive).total_seconds())
+        else:
+            duration_seconds = 0
+        return "", format_duration(duration_seconds), changed
+
+    return "", "", changed
 
 def calculate_polling_stats(polling_history: List[PollingDataPoint]) -> PollingStatsSummary:
     """Calculate polling statistics from polling history."""
@@ -347,13 +437,11 @@ def get_machines_summary(
     time_range: str = Query("8h", description="Time range for polling history: 1h, 8h, 24h, 7d")
 ):
     """
-    Get unified machine status summary showing all enabled machines with polling data.
+    Get unified fleet status summary: enabled CNC machines and Kaeser compressors.
 
-    Returns all machines (online and offline) with polling history, uptime percentage,
-    and connection health indicators. This is a unified view replacing separate
-    online/offline summaries.
-
-    Uses the polling service as the source of truth for online status.
+    Returns all assets (online and offline) with polling history, uptime percentage,
+    and connection health indicators. Matches the dashboard ONLINE count
+    (machines + compressors).
     """
     # Parse time range to hours
     hours_map = {
@@ -363,140 +451,129 @@ def get_machines_summary(
         '7d': 168,  # 7 days = 168 hours
     }
     hours = hours_map.get(time_range, 8)
-    # Get all enabled machines
-    machines_query = db.query(Machine).filter(Machine.enabled == True).all()
 
-    machines_list = []
+    machines_query = db.query(Machine).filter(Machine.enabled == True).all()
+    compressors_query = db.query(Compressor).filter(Compressor.enabled == True).all()
+
+    assets_list: List[MachineStatusSummary] = []
     online_count = 0
     offline_count = 0
 
-    # Check if backend is healthy before marking machines as offline
     backend_healthy = is_backend_healthy()
-    
+    ws = websocket_api.websocket_manager
+
     for machine in machines_query:
-        # Use polling service as source of truth for online status
         is_online = False
         if polling_service:
             poller_status = polling_service.get_machine_status(machine.id)
             is_online = poller_status.get("is_online", False) if poller_status else False
-        
-        # Only mark as offline if backend is healthy AND machine is not responding
-        # If backend was down, we can't know machine status, so don't mark as offline
+
         if is_online:
             online_count += 1
         elif backend_healthy:
-            # Backend is healthy but machine is not responding - truly offline
             offline_count += 1
-        else:
-            # Backend is not healthy - can't determine machine status
-            # Don't count as offline, but also don't count as online
-            # This prevents false offline status when backend restarts
-            pass
 
-        # Get polling history for the specified time range
         polling_history = get_polling_history(machine.id, db, hours=hours)
-
-        # Also get 8-hour history for calculating full stats (for uptime percentage)
         polling_history_8h = get_polling_history(machine.id, db, hours=8)
-
-        # Calculate polling stats from full 8-hour history
         polling_stats = calculate_polling_stats(polling_history_8h)
-
-        # Calculate uptime percentage (same as success rate for 8h window)
         uptime_8h_percent = polling_stats.success_rate
 
-        # Calculate current duration (online or offline)
-        now = datetime.utcnow()
-
         if is_online:
-            # Calculate how long online
             online_since_query = db.query(MachineStatusEvent.time).filter(
                 MachineStatusEvent.machine_id == machine.id,
                 MachineStatusEvent.status.notin_(['error', 'alarm'])
             ).order_by(MachineStatusEvent.time.desc()).first()
-
-            online_since = online_since_query.time if online_since_query else machine.last_seen_at
-            status_changed_at = online_since
-
-            if online_since:
-                online_since_naive = online_since.replace(tzinfo=None) if online_since.tzinfo else online_since
-                duration_seconds = int((now - online_since_naive).total_seconds())
-            else:
-                duration_seconds = 0
-
-            online_duration_formatted = format_duration(duration_seconds)
-            offline_duration_formatted = ""
-        elif backend_healthy:
-            # Backend is healthy but machine is not responding - calculate offline duration
-            last_status_query = db.query(
-                MachineStatusEvent.time,
-                MachineStatusEvent.status
-            ).filter(
-                MachineStatusEvent.machine_id == machine.id
-            ).order_by(MachineStatusEvent.time.desc()).first()
-
-            offline_since = last_status_query.time if last_status_query else machine.last_seen_at
-            status_changed_at = offline_since
-
-            if offline_since:
-                offline_since_naive = offline_since.replace(tzinfo=None) if offline_since.tzinfo else offline_since
-                duration_seconds = int((now - offline_since_naive).total_seconds())
-            else:
-                duration_seconds = 0
-
-            online_duration_formatted = ""
-            offline_duration_formatted = format_duration(duration_seconds)
+            status_changed_at = online_since_query.time if online_since_query else machine.last_seen_at
         else:
-            # Backend is not healthy - can't determine machine status
-            # Use last known status but don't calculate offline duration
-            # This prevents false offline timestamps when backend was down
-            last_status_query = db.query(
-                MachineStatusEvent.time,
-                MachineStatusEvent.status
-            ).filter(
+            last_status_query = db.query(MachineStatusEvent.time).filter(
                 MachineStatusEvent.machine_id == machine.id
             ).order_by(MachineStatusEvent.time.desc()).first()
-
             status_changed_at = last_status_query.time if last_status_query else machine.last_seen_at
-            online_duration_formatted = ""
-            offline_duration_formatted = ""  # Don't show offline duration when backend was down
 
-        # Get current status from WebSocket cache
-        cached_status = websocket_api.websocket_manager.get_machine_status(machine.id) if websocket_api.websocket_manager else None
+        online_fmt, offline_fmt, status_changed_at = _duration_fields_for_asset(
+            is_online=is_online,
+            backend_healthy=backend_healthy,
+            last_seen_at=machine.last_seen_at,
+            status_changed_at=status_changed_at,
+        )
+
+        cached_status = ws.get_machine_status(machine.id) if ws else None
         current_status = cached_status.get("status") if cached_status else None
 
-        # Get connection health
-        connection_health = get_connection_health(machine.last_seen_at)
-
-        machines_list.append(MachineStatusSummary(
+        assets_list.append(MachineStatusSummary(
             machine_id=machine.id,
             machine_name=machine.name,
+            asset_kind="cnc",
             is_online=is_online,
             uptime_8h_percent=uptime_8h_percent,
             current_status=current_status,
-            connection_health=connection_health,
-            online_duration_formatted=online_duration_formatted,
-            offline_duration_formatted=offline_duration_formatted,
+            connection_health=get_connection_health(machine.last_seen_at),
+            online_duration_formatted=online_fmt,
+            offline_duration_formatted=offline_fmt,
             status_changed_at=status_changed_at,
             polling_history_8h=polling_history,
-            polling_summary=polling_stats
+            polling_summary=polling_stats,
         ))
 
-    # Sort by online status first (online machines first), then by current duration
-    machines_list.sort(
+    for compressor in compressors_query:
+        cached = ws.get_compressor_status(compressor.id) if ws else {}
+        is_online = bool(cached.get("is_online")) if cached else False
+
+        if is_online:
+            online_count += 1
+        elif backend_healthy:
+            offline_count += 1
+
+        polling_history = get_compressor_polling_history(compressor.id, db, hours=hours)
+        polling_history_8h = get_compressor_polling_history(compressor.id, db, hours=8)
+        polling_stats = calculate_polling_stats(polling_history_8h)
+        uptime_8h_percent = polling_stats.success_rate
+
+        last_event = (
+            db.query(CompressorStatusEvent.time)
+            .filter(CompressorStatusEvent.compressor_id == compressor.id)
+            .order_by(CompressorStatusEvent.time.desc())
+            .first()
+        )
+        status_changed_at = last_event.time if last_event else compressor.last_seen_at
+
+        online_fmt, offline_fmt, status_changed_at = _duration_fields_for_asset(
+            is_online=is_online,
+            backend_healthy=backend_healthy,
+            last_seen_at=compressor.last_seen_at,
+            status_changed_at=status_changed_at,
+        )
+
+        current_status = cached.get("status") if cached else None
+
+        assets_list.append(MachineStatusSummary(
+            machine_id=compressor.id,
+            machine_name=compressor.name,
+            asset_kind="compressor",
+            is_online=is_online,
+            uptime_8h_percent=uptime_8h_percent,
+            current_status=current_status,
+            connection_health=get_connection_health(compressor.last_seen_at),
+            online_duration_formatted=online_fmt,
+            offline_duration_formatted=offline_fmt,
+            status_changed_at=status_changed_at,
+            polling_history_8h=polling_history,
+            polling_summary=polling_stats,
+        ))
+
+    # Online first, then by uptime
+    assets_list.sort(
         key=lambda x: (
-            not x.is_online,  # False (online) sorts before True (offline)
-            -(
-                # Duration of current state
-                int(x.polling_summary.success_rate * 100) if x.is_online
-                else int(x.polling_summary.success_rate * 100)
-            )
+            not x.is_online,
+            -x.uptime_8h_percent,
+            x.machine_name.lower(),
         )
     )
 
+    total = len(machines_query) + len(compressors_query)
     return MachinesSummary(
-        total_machines=len(machines_query),
+        total_machines=total,
         online_count=online_count,
         offline_count=offline_count,
-        machines=machines_list
+        machines=assets_list,
     )
