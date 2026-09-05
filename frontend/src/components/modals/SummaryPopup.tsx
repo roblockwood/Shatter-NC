@@ -12,6 +12,7 @@ interface SummaryPopupProps {
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   onMachineClick?: (machineId: number) => void;
+  onAssetClick?: (asset: { kind: 'cnc' | 'compressor'; id: number }) => void;
 }
 
 export const SummaryPopup: React.FC<SummaryPopupProps> = ({
@@ -21,6 +22,7 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
   onMouseEnter,
   onMouseLeave,
   onMachineClick,
+  onAssetClick,
 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -147,11 +149,12 @@ export const SummaryPopup: React.FC<SummaryPopupProps> = ({
     }
     return machinesData.machines.map((machine) => (
       <MachineStatusRow
-        key={machine.machine_id}
+        key={`${machine.asset_kind ?? 'cnc'}-${machine.machine_id}`}
         machine={machine}
         compact={true}
         timeRange={timeRange}
         onMachineClick={onMachineClick}
+        onAssetClick={onAssetClick}
       />
     ));
   };

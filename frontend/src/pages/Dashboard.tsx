@@ -515,6 +515,21 @@ export const Dashboard = () => {
           onClose={() => setSummaryPopup({ isOpen: false, type: null })}
           onMouseEnter={() => handlePopupMouseEnter(summaryPopup.type as 'machines' | 'running')}
           onMouseLeave={handlePopupMouseLeave}
+          onAssetClick={(asset) => {
+            if (asset.kind === 'compressor') {
+              setExpandedCompressorId(asset.id);
+              setExpandedMachineId(null);
+              setScrollToStatusMachineId(null);
+            } else {
+              setExpandedMachineId(asset.id);
+              setExpandedCompressorId(null);
+              setScrollToStatusMachineId(asset.id);
+              setTimeout(() => {
+                setScrollToStatusMachineId(null);
+              }, 1000);
+            }
+            setSummaryPopup({ isOpen: false, type: null });
+          }}
           onMachineClick={(machineId) => {
             setExpandedMachineId(machineId);
             setExpandedCompressorId(null);

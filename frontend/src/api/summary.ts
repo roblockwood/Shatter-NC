@@ -42,6 +42,8 @@ export type PollingStatsSummary = {
 export type MachineStatusSummary = {
   machine_id: number;
   machine_name: string;
+  /** "cnc" (default) or "compressor" — fleet ONLINE popup includes both */
+  asset_kind?: 'cnc' | 'compressor';
   is_online: boolean;
   uptime_8h_percent: number;
   current_status?: string;

@@ -9,9 +9,26 @@ interface MachineStatusRowProps {
   compact?: boolean;
   timeRange?: '1h' | '8h' | '24h' | '7d';
   onMachineClick?: (machineId: number) => void;
+  onAssetClick?: (asset: { kind: 'cnc' | 'compressor'; id: number }) => void;
 }
 
-export const MachineStatusRow: React.FC<MachineStatusRowProps> = ({ machine, compact = false, timeRange = '8h', onMachineClick }) => {
+export const MachineStatusRow: React.FC<MachineStatusRowProps> = ({
+  machine,
+  compact = false,
+  timeRange = '8h',
+  onMachineClick,
+  onAssetClick,
+}) => {
+  const assetKind = machine.asset_kind ?? 'cnc';
+  const handleClick = (e: React.MouseEvent) => {
+    if (!onAssetClick && !onMachineClick) return;
+    e.stopPropagation();
+    if (onAssetClick) {
+      onAssetClick({ kind: assetKind, id: machine.machine_id });
+    } else if (assetKind === 'cnc' && onMachineClick) {
+      onMachineClick(machine.machine_id);
+    }
+  };
   const getStatusIcon = () => {
     if (machine.is_online) {
       return '●'; // Filled circle for online
@@ -68,7 +85,7 @@ export const MachineStatusRow: React.FC<MachineStatusRowProps> = ({ machine, com
         timeRange={timeRange}
         compact={compact}
         currentOnline={machine.is_online}
-        timeAxisStorageKey={`summary-polling-${machine.machine_id}`}
+        timeAxisStorageKey={`summary-polling-${assetKind}-${machine.machine_id}`}
       />
     );
   };
@@ -79,13 +96,8 @@ export const MachineStatusRow: React.FC<MachineStatusRowProps> = ({ machine, com
     return (
       <div 
         className="summary-row"
-        onClick={(e) => {
-          if (onMachineClick) {
-            e.stopPropagation();
-            onMachineClick(machine.machine_id);
-          }
-        }}
-        style={{ cursor: onMachineClick ? 'pointer' : 'default' }}
+        onClick={handleClick}
+        style={{ cursor: onAssetClick || onMachineClick ? 'pointer' : 'default' }}
       >
         <div className="summary-cell machine-name">
           <span className={getStatusColor()}>

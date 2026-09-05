@@ -165,13 +165,14 @@ export function runningSummary() {
 
 export function machinesSummary() {
   return {
-    total_machines: 3,
-    online_count: 3,
+    total_machines: 4,
+    online_count: 4,
     offline_count: 0,
     machines: [
       {
         machine_id: 1,
         machine_name: 'Mill-01',
+        asset_kind: 'cnc',
         is_online: true,
         uptime_8h_percent: 82,
         current_status: 'operating',
@@ -192,6 +193,7 @@ export function machinesSummary() {
       {
         machine_id: 2,
         machine_name: 'Mill-02',
+        asset_kind: 'cnc',
         is_online: true,
         uptime_8h_percent: 71,
         current_status: 'standby',
@@ -211,6 +213,7 @@ export function machinesSummary() {
       {
         machine_id: 3,
         machine_name: 'Mill-03',
+        asset_kind: 'cnc',
         is_online: true,
         uptime_8h_percent: 65,
         current_status: 'error',
@@ -225,6 +228,26 @@ export function machinesSummary() {
           success_rate: 92.0,
           avg_response_time_ms: 120,
           current_streak: 12,
+        },
+      },
+      {
+        machine_id: 1,
+        machine_name: 'Kaeser ASD',
+        asset_kind: 'compressor',
+        is_online: true,
+        uptime_8h_percent: 98,
+        current_status: 'load',
+        connection_health: 'healthy',
+        online_duration_formatted: '8h 0m',
+        offline_duration_formatted: '0m',
+        polling_history_8h: buildPollingHistory(8, 0.995),
+        polling_summary: {
+          total_polls: 960,
+          successful_polls: 950,
+          failed_polls: 10,
+          success_rate: 99.0,
+          avg_response_time_ms: 85,
+          current_streak: 40,
         },
       },
     ],
