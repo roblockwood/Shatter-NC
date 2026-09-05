@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS compressors (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
     ip_address VARCHAR(45) NOT NULL,
-    poll_interval_seconds INTEGER NOT NULL DEFAULT 5,
+    poll_interval_seconds INTEGER NOT NULL DEFAULT 30,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     tags JSONB,
     layout_config JSONB,

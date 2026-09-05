@@ -307,7 +307,7 @@ export const CompressorPanelPane: React.FC<CompressorPanelPaneProps> = ({ compre
   const led = readLedData(metrics.led_data);
 
   const pollTs = compressor.last_successful_poll_at || compressor.poll_timestamp;
-  const intervalS = compressor.poll_interval_seconds ?? 5;
+  const intervalS = compressor.poll_interval_seconds ?? 30;
 
   const pressure = readPressureLine(operational);
   const temp = readOutletTempLine(operational);

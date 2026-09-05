@@ -189,7 +189,7 @@ class CompressorPollingService:
                 db = SessionLocal()
                 try:
                     q = db.query(Compressor).filter(Compressor.enabled == True).all()
-                    min_iv = min((c.poll_interval_seconds for c in q), default=5)
+                    min_iv = min((c.poll_interval_seconds for c in q), default=30)
                 finally:
                     db.close()
                 await asyncio.sleep(min_iv)

@@ -109,7 +109,7 @@ export const CompressorOverviewPane: React.FC<CompressorOverviewPaneProps> = ({
       <PaneTerminalHeader label="COMPRESSOR OVERVIEW">
         <PollingStatusLight
           lastUpdatedAt={pollTs}
-          expectedIntervalMs={Math.max((compressor.poll_interval_seconds ?? 5) * 1000, 1000)}
+          expectedIntervalMs={Math.max((compressor.poll_interval_seconds ?? 30) * 1000, 1000)}
           ariaLabel="Compressor telemetry freshness"
         />
       </PaneTerminalHeader>
