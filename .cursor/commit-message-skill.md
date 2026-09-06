@@ -8,7 +8,7 @@ allowed-tools: Read, Write, Codebase Search
 
 ## Purpose
 
-Help format commit messages using conventional commits format to enable automatic versioning via semantic-release. This skill ensures commit messages are properly formatted and explains the version impact of each commit type.
+Help format commit messages using conventional commits format to enable automatic versioning via release-please. This skill ensures commit messages are properly formatted and explains the version impact of each commit type.
 
 ## When to Use
 
@@ -81,7 +81,7 @@ Closes #123
 - **Use When**: Dependency updates, build config, tooling changes
 - **Examples**:
   - `chore: update dependencies`
-  - `chore: configure semantic-release`
+  - `chore: configure release-please`
   - `chore: update Docker configuration`
 
 **`docs:` - Documentation**
@@ -210,14 +210,15 @@ Old endpoints /api/v1/auth are removed. Use /api/v2/auth instead."
 
 ## Automatic Versioning
 
-The project uses semantic-release on **`main`** (stable releases only):
+The project uses **release-please** on **`main`** (stable releases only):
 
-- Analyzes commits since last release tag (on promote from `beta` → `main`)
-- Determines highest version bump needed
-- Creates git tag, updates VERSION, CHANGELOG, and GitHub Release
-- Builds stable Docker images (`:latest`, `:vX.Y.Z`)
+- After promote `beta` → `main`, release-please opens a **Release PR** with VERSION / CHANGELOG bumps
+- Merging that Release PR creates the git tag and GitHub Release
+- Stable Docker images (`:latest`, `:vX.Y.Z`) build only when a release is created
 
 Integration PRs merge to **`beta`** first; they do not bump semver or move `:latest`.
+
+**PR titles** into `beta`/`main` must be conventional (CI enforces). Prefer squash-merge for feature PRs.
 
 **You don't need to:**
 - Manually update version numbers
@@ -225,9 +226,9 @@ Integration PRs merge to **`beta`** first; they do not bump semver or move `:lat
 - Write changelog entries
 
 **You do need to:**
-- Write commits in conventional format **on a feature branch** (never commit directly on `main` or `beta` — see [branch-commit-policy](rules/branch-commit-policy.mdc))
+- Write commits / PR titles in conventional format **on a feature branch** (never commit directly on `main` or `beta` — see [branch-commit-policy](rules/branch-commit-policy.mdc))
 - Merge feature PRs to **`beta`**
-- Let maintainers promote **`beta` → `main`** for stable releases
+- Let maintainers promote **`beta` → `main`**, then merge the **Release Please** PR
 
 See [docs/RELEASE_PROCESS.md](../docs/RELEASE_PROCESS.md).
 

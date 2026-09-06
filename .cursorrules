@@ -49,7 +49,7 @@ If the user asks to merge a feature branch **directly into `main`** (skipping `b
 
 ## Automatic Versioning
 
-The project uses **semantic-release** with **conventional commits** for stable releases on `main`. Integration work merges to **`beta`** first (Docker `:beta` tag); semver bumps happen when maintainers promote **`beta` → `main`**.
+The project uses **release-please** with **conventional commits** for stable releases on `main`. Integration work merges to **`beta`** first (Docker `:beta` tag); semver bumps happen via a **Release Please PR** after maintainers promote **`beta` → `main`**.
 
 **MANDATORY**: All commits MUST use conventional commit format:
 - `feat:` - New feature (minor version bump: 0.1.0 → 0.2.0)
@@ -61,7 +61,7 @@ The project uses **semantic-release** with **conventional commits** for stable r
 1. Use the commit message skill (`.cursor/commit-message-skill.md`) to format messages correctly
 2. Choose the appropriate commit type based on the changes
 3. Write commit message in conventional format
-4. The system will automatically handle versioning, tagging, and changelog generation
+4. Prefer squash-merge to `beta` with a conventional PR title (CI enforces titles)
 
 **Examples:**
 ```bash
@@ -83,4 +83,4 @@ git commit -m "docs: update README"
 
 ## Stable Release (Promote Beta to Main)
 
-When the user asks to **promote beta to main**, **cut a stable release**, **open a release PR**, or **ship to main**, follow [`.cursor/promote-release-skill.md`](.cursor/promote-release-skill.md). Do not manually bump `VERSION` or CHANGELOG — semantic-release runs on merge to `main`.
+When the user asks to **promote beta to main**, **cut a stable release**, **open a release PR**, or **ship to main**, follow [`.cursor/promote-release-skill.md`](.cursor/promote-release-skill.md). Do not manually bump `VERSION` or CHANGELOG — release-please opens a Release PR after promote; merging that PR cuts the release.
