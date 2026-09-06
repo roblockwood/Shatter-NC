@@ -742,7 +742,7 @@ This design system provides a unique, memorable identity while maintaining moder
 
 ### Application identity
 
-**Shatter** — CNC management platform for Brother machines. Version is shown in API metadata ([`config.py`](../backend/app/core/config.py)) and release tags (semantic-release).
+**Shatter** — CNC management platform for Brother machines. Version is shown in API metadata ([`config.py`](../backend/app/core/config.py)) and release tags (release-please).
 
 ### Icon (favicon)
 
@@ -766,4 +766,4 @@ Stack-light tower — manufacturing status colors:
 - Do not stretch the favicon; keep red-yellow-green vertical order
 - Match UI status colors to the palette above
 
-Version numbers are managed by semantic-release — do not hardcode in UI copy.
+Version numbers are managed by release-please — do not hardcode in UI copy.
