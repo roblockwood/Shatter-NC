@@ -707,7 +707,9 @@ Keep docs in sync with code changes. Key references:
 
 ## Versioning
 
-Shatter uses **semantic-release** with **conventional commits**. Version bumps, CHANGELOG updates, and GitHub Releases happen when changes are **promoted to `main`** (stable). Day-to-day merges to **`beta`** do not create releases.
+Shatter uses **release-please** with **conventional commits**. Version bumps, CHANGELOG updates, and GitHub Releases happen via a **Release Please PR** after changes are **promoted to `main`** (stable). Day-to-day merges to **`beta`** do not create releases.
+
+**PR titles** into `beta` / `main` must use conventional commit format (enforced by CI). Prefer squash-merge for feature PRs so the squash title is the releasable subject.
 
 See [RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) for the beta/stable branch model and Docker image channels.
 

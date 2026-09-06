@@ -1,0 +1,49 @@
+name: Conventional Commits
+
+# Enforce conventional commit-style PR titles into beta/main so release-please
+# can derive semver when changes are promoted to main.
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+    branches:
+      - beta
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
+jobs:
+  pr-title:
+    name: PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Align with CONTRIBUTING.md / commit-message skill
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            style
+            test
+            build
+            ci
+            chore
+            revert
+          # Allow release-please titles like: chore(main): release 1.4.0
+          requireScope: false
+          subjectPattern: ^.+$
+          subjectPatternError: |
+            The subject "{subject}" after the conventional type cannot be empty.
+          wip: true
