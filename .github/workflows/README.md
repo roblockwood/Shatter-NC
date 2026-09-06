@@ -5,7 +5,7 @@ Shatter publishes two Docker image channels on [GitHub Container Registry](https
 | Channel | Git branch | When images build | Tags pushed | Audience |
 |---------|------------|-------------------|-------------|----------|
 | **Beta** | `beta` | Push to `beta` (docker-related paths) | `:beta`, `:{sha}`, `:{date}-{sha}` | Maintainers / early adopters |
-| **Stable** | `main` | Push to `main` after semantic-release | `:latest`, `:vX.Y.Z`, `:{sha}`, `:{date}-{sha}` | Production shops |
+| **Stable** | `main` | After **Release Please** creates a release on `main` | `:latest`, `:vX.Y.Z`, `:{sha}`, `:{date}-{sha}` | Production shops |
 
 **`:latest` always tracks the latest stable release from `main`**, never beta integration builds.
 
@@ -19,6 +19,11 @@ See [docs/RELEASE_PROCESS.md](../docs/RELEASE_PROCESS.md) for branch workflow an
 
 - **Triggers:** Push and PR to `main` or `beta`
 - **Purpose:** Backend pytest with coverage floor
+
+### `conventional-commits.yml`
+
+- **Triggers:** PR to `main` or `beta` (opened/edited/synchronized)
+- **Purpose:** Require conventional commit-style **PR titles** (`feat:`, `fix:`, …) so release-please can version correctly
 
 ### `docker-build-push.yml`
 
@@ -35,8 +40,8 @@ See [docs/RELEASE_PROCESS.md](../docs/RELEASE_PROCESS.md) for branch workflow an
 
 - **Triggers:** Push to `main`
 - **Purpose:**
-  1. Run **semantic-release** (version bump, CHANGELOG, GitHub Release, git tag)
-  2. Build and push **stable** images when docker-related files changed
+  1. Run **release-please** (open/update Release PR, or create GitHub Release + tag when that PR merges)
+  2. Build and push **stable** images **only when** `release_created` is true
 
 ### `pages.yml`
 

@@ -23,7 +23,7 @@ Shatter uses [12-factor](https://12factor.net/config) configuration via `.env` f
 | `GITHUB_REPO` | `shatter-nc` | No | ghcr.io image repo name (lowercase) |
 | `IMAGE_TAG` | `latest` | No | Backend/frontend image tag: `vX.Y.Z` (stable, recommended), `latest` (stable), `beta` (integration), or commit SHA — see [RELEASE_PROCESS.md](RELEASE_PROCESS.md) |
 | `APP_NAME` | `Shatter` | No | Display name in logs |
-| `APP_VERSION` | from code | No | API metadata (semantic-release updates) |
+| `APP_VERSION` | from code | No | API metadata (release-please updates) |
 | `DEBUG` | `false` | No | Verbose debug mode |
 | `LOG_LEVEL` | `INFO` | No | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, …) |
 | `BACKEND_HOST` | `0.0.0.0` | No | API bind address |
