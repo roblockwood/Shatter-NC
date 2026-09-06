@@ -1,3 +1,19 @@
+## [1.4.0](https://github.com/roblockwood/Shatter-NC/compare/v1.3.0...v1.4.0) (2026-09-06)
+
+
+### Features
+
+* add GitHub Pages demo mode and restructure site layout ([46203aa](https://github.com/roblockwood/Shatter-NC/commit/46203aac5a0cbab532fde1c24edc9d6ecea41583))
+* migrate install kit generator to GitHub Pages ([1691e0d](https://github.com/roblockwood/Shatter-NC/commit/1691e0d46896e28305c7b75d7c0624b3de339090))
+
+
+### Bug Fixes
+
+* allow statuses write for conventional PR title check ([3fa7773](https://github.com/roblockwood/Shatter-NC/commit/3fa7773c72b81d3ff3b2bb0b2371b43d318a73ed))
+* grant PR write permission for conventional title check ([88095fe](https://github.com/roblockwood/Shatter-NC/commit/88095fe516eb4a3f9cf763e75cd5985ca2c97ef2))
+* theme RE-VALIDATE button and ban agent commits on main/beta ([8aada35](https://github.com/roblockwood/Shatter-NC/commit/8aada350d5ed4df357cf5aa6d2cec4708b2e05ea))
+* theme RE-VALIDATE button to match terminal chrome ([433f9d9](https://github.com/roblockwood/Shatter-NC/commit/433f9d97a0ee9f721a08b47808bf78792fa5c58f))
+
 # [1.3.0](https://github.com/roblockwood/Shatter-NC/compare/v1.2.0...v1.3.0) (2026-07-25)
 
 
