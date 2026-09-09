@@ -6,6 +6,7 @@ import { Select } from './ui/Select';
 import { AlarmPane } from './machine-detail/AlarmPane';
 import { StatusTimeline } from './machine-detail/StatusTimeline';
 import { ToolsPane } from './machine-detail/ToolsPane';
+import { ProbesPane } from './machine-detail/ProbesPane';
 import { CurrentProgramPane } from './machine-detail/CurrentProgramPane';
 import { ProductionRunsTimelinePane } from './machine-detail/ProductionRunsTimelinePane';
 import { StatusHistoryPane } from './machine-detail/StatusHistoryPane';
@@ -891,6 +892,18 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               macros={machine.macros}
             />
                   </div>
+                ),
+              },
+              {
+                id: PANE_IDS.PROBES,
+                component: (
+                  <ProbesPane
+                    machineId={machine.machine_id}
+                    macros={machine.macros}
+                    machineStatus={machine.status}
+                    pollTimestamp={fastPollLastSuccessAt(machine)}
+                    pollIntervalSeconds={machine.poll_interval_seconds ?? 5}
+                  />
                 ),
               },
               {

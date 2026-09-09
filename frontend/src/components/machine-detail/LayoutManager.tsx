@@ -21,6 +21,7 @@ const PANE_NAMES: Record<PaneId, string> = {
   alarms: 'Alarms',
   currentProgram: 'Current Program',
   tools: 'Tools',
+  probes: 'Probes',
   productionRuns: 'Production Runs',
   statusHistory: 'Status History',
   panel: 'Panel',

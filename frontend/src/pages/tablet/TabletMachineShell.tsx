@@ -11,6 +11,7 @@ import { ProductionRunsTimelinePane } from '../../components/machine-detail/Prod
 import { StatusHistoryPane } from '../../components/machine-detail/StatusHistoryPane';
 import { StatusTimeline } from '../../components/machine-detail/StatusTimeline';
 import { ToolsPane } from '../../components/machine-detail/ToolsPane';
+import { ProbesPane } from '../../components/machine-detail/ProbesPane';
 import { useWebSocketContext } from '../../contexts/WebSocketContext';
 import type { MachineStatus } from '../../hooks/useWebSocket';
 import { fastPollLastSuccessAt } from '../../utils/machinePollFreshness';
@@ -112,6 +113,18 @@ function TabletPaneContent({
             toolPollIntervalSeconds={machine.tool_poll_interval_seconds ?? 30}
             numPockets={machine.atc_pockets ?? 21}
             macros={machine.macros}
+          />
+        </div>
+      );
+    case 'probes':
+      return (
+        <div className="tablet-pane-root">
+          <ProbesPane
+            machineId={machine.machine_id}
+            macros={machine.macros}
+            machineStatus={machine.status}
+            pollTimestamp={pollAt}
+            pollIntervalSeconds={machine.poll_interval_seconds ?? 5}
           />
         </div>
       );

@@ -1168,8 +1168,9 @@ class CNCDataReadsMixin:
             if not connected:
                 return None
 
-        if start_macro < 500 or start_macro > 999:
-            logger.warning(f"Start macro {start_macro} out of range (500-999)")
+        # Common vars (#100+) for Blum results; job macros #500-999.
+        if start_macro < 100 or start_macro > 999:
+            logger.warning(f"Start macro {start_macro} out of range (100-999)")
             return None
 
         if data_size < 1 or data_size > 999:
@@ -1202,8 +1203,9 @@ class CNCDataReadsMixin:
             if not connected:
                 return None
 
-        if macro_number < 500 or macro_number > 999:
-            logger.warning(f"Macro number {macro_number} out of range (500-999)")
+        # Common vars (#100+) for Blum results; job macros #500-999.
+        if macro_number < 100 or macro_number > 999:
+            logger.warning(f"Macro number {macro_number} out of range (100-999)")
             return None
 
         try:
@@ -1229,7 +1231,7 @@ class CNCDataReadsMixin:
         Get macro variable value using REDMCNM command (single variable).
 
         Args:
-            macro_number: Macro variable number (500-999)
+            macro_number: Macro variable number (100-999; common + job macros)
             verbose: If True, log command details
 
         Returns:
@@ -1243,8 +1245,8 @@ class CNCDataReadsMixin:
                 if not connected:
                     return None
 
-            if macro_number < 500 or macro_number > 999:
-                logger.warning(f"Macro number {macro_number} out of range (500-999)")
+            if macro_number < 100 or macro_number > 999:
+                logger.warning(f"Macro number {macro_number} out of range (100-999)")
                 return None
 
             return await self._fetch_macro_variable_unlocked(macro_number, verbose=verbose)
@@ -1256,7 +1258,7 @@ class CNCDataReadsMixin:
         Get macro variable values in range using REDMCNM command (range).
 
         Args:
-            start_macro: Starting macro variable number (500-999)
+            start_macro: Starting macro variable number (100-999)
             data_size: Number of variables to read (1-999)
             verbose: If True, log command details
 
@@ -1271,8 +1273,8 @@ class CNCDataReadsMixin:
                 if not connected:
                     return None
 
-            if start_macro < 500 or start_macro > 999:
-                logger.warning(f"Start macro {start_macro} out of range (500-999)")
+            if start_macro < 100 or start_macro > 999:
+                logger.warning(f"Start macro {start_macro} out of range (100-999)")
                 return None
 
             if data_size < 1 or data_size > 999:
