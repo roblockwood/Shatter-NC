@@ -30,6 +30,8 @@ export interface ProbeCatalog {
   version: number;
   poison: Record<string, number>;
   result_macros: number[];
+  gate_program: number;
+  target_macro: number;
   fields: Record<string, ProbeFieldMeta>;
   categories: { id: string; label: string }[];
   routines: ProbeRoutine[];

@@ -31,12 +31,15 @@ type RunPhase =
   | 'idle'
   | 'confirm'
   | 'running'
+  | 'awaiting_m0'
   | 'complete'
   | 'error';
 
 interface ProbeRunResponse {
   ok: boolean;
   program?: number;
+  gate_program?: number;
+  target_program?: number;
   routine_id?: string;
   mode?: string;
   macros_written?: Record<string, number>;
@@ -170,12 +173,12 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
   const modeSelectValue =
     routineId === 'tool_length' && mode === 'measure' ? 'probe' : mode;
 
-  async function runCycle() {
+  async function armCycle() {
     setBusy(true);
     setPhase('running');
     setError(null);
     setResults(null);
-    setStatusLine('Writing macros / starting cycle…');
+    setStatusLine('Writing macros / starting O8099 gate…');
     try {
       const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/run`, {
         method: 'POST',
@@ -198,7 +201,50 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
         const msg =
           payload.error ||
           (typeof body.detail === 'string' ? body.detail : null) ||
-          `Probe failed (HTTP ${res.status})`;
+          `Arm failed (HTTP ${res.status})`;
+        setError(msg);
+        setPhase('error');
+        setStatusLine(`Failed at ${payload.phase ?? 'unknown'}`);
+        return;
+      }
+
+      setPhase('awaiting_m0');
+      const gate = payload.gate_program ?? probeCatalog.gate_program ?? 8099;
+      const target = payload.target_program ?? modeEntry?.program;
+      setStatusLine(
+        `ARMED O${String(gate).padStart(4, '0')} → target O${String(target ?? '').padStart(4, '0')} — Cycle Start past M0 on machine, then COLLECT`
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Arm request failed');
+      setPhase('error');
+      setStatusLine('Request error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function collectResults() {
+    setBusy(true);
+    setStatusLine('Waiting for idle / reading results…');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/collect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ poison: true }),
+      });
+      const body = (await res.json().catch(() => ({}))) as ProbeRunResponse & {
+        detail?: ProbeRunResponse | string;
+      };
+      const payload: ProbeRunResponse =
+        typeof body.detail === 'object' && body.detail != null
+          ? body.detail
+          : (body as ProbeRunResponse);
+
+      if (!res.ok || !payload.ok) {
+        const msg =
+          payload.error ||
+          (typeof body.detail === 'string' ? body.detail : null) ||
+          `Collect failed (HTTP ${res.status})`;
         setError(msg);
         setPhase('error');
         setStatusLine(`Failed at ${payload.phase ?? 'unknown'}`);
@@ -209,10 +255,10 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       setResults(payload.results ?? null);
       setPhase('complete');
       setStatusLine(
-        `Complete O${String(payload.program ?? '').padStart(4, '0')} in ${(payload.elapsed_s ?? 0).toFixed(1)}s — macros poisoned`
+        `Complete in ${(payload.elapsed_s ?? 0).toFixed(1)}s — macros poisoned`
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Probe request failed');
+      setError(e instanceof Error ? e.message : 'Collect request failed');
       setPhase('error');
       setStatusLine('Request error');
     } finally {
@@ -297,7 +343,11 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
 
           {modeEntry && (
             <div className="probes-meta">
-              PROGRAM O{String(modeEntry.program).padStart(4, '0')}
+              GATE O{String(probeCatalog.gate_program ?? 8099).padStart(4, '0')}
+              {' → '}
+              TARGET O{String(modeEntry.program).padStart(4, '0')}
+              {' | '}
+              #908={modeEntry.program}
               {' | '}
               MACROS {required.map((m) => `#${m}`).join(' ')}
               {' | '}
@@ -307,6 +357,10 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             </div>
           )}
 
+          <div className="probes-prereq">
+            * Shatter only starts O8099 (preview + M0). Load O8099 on the machine. Cycle Start
+            past M0 runs the target helper; then COLLECT.
+          </div>
           {routine?.prerequisites && (
             <div className="probes-prereq">* {routine.prerequisites}</div>
           )}
@@ -363,10 +417,19 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                   ? 'Machine is operating'
                   : !canRun
                     ? 'Fill valid non-poison params'
-                    : 'Write macros and start probe cycle'
+                    : 'Write macros and MEMSTRT O8099 gate only'
               }
             >
-              [ WRITE+RUN ]
+              [ WRITE+ARM ]
+            </button>
+            <button
+              type="button"
+              className="terminal-button-sm"
+              disabled={busy || phase !== 'awaiting_m0'}
+              onClick={() => void collectResults()}
+              title="After Cycle Start past M0 and probe finishes, read #100+ and poison"
+            >
+              [ COLLECT ]
             </button>
             <button
               type="button"
@@ -409,14 +472,16 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       {phase === 'confirm' && modeEntry && (
         <div className="probes-confirm-overlay" role="dialog" aria-modal="true">
           <div className="probes-confirm-box">
-            <div className="probes-confirm-title">CONFIRM PROBE CYCLE</div>
+            <div className="probes-confirm-title">CONFIRM ARM (O8099 GATE)</div>
             <div className="probes-confirm-body">
-              <div>This starts machine motion.</div>
+              <div>Shatter will ONLY start O8099. No Blum motion until you Cycle Start past M0.</div>
               <div>
-                O{String(modeEntry.program).padStart(4, '0')} · {mode.toUpperCase()} ·{' '}
+                GATE O{String(probeCatalog.gate_program ?? 8099).padStart(4, '0')} → TARGET O
+                {String(modeEntry.program).padStart(4, '0')} · {mode.toUpperCase()} ·{' '}
                 {routine?.label ?? routineId}
               </div>
               <div className="probes-confirm-params">
+                <div>#908 = {modeEntry.program}</div>
                 {required.map((m) => (
                   <div key={m}>
                     #{m} = {params[m]}
@@ -438,9 +503,9 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
               <button
                 type="button"
                 className="terminal-button-sm danger"
-                onClick={() => void runCycle()}
+                onClick={() => void armCycle()}
               >
-                [ START ]
+                [ ARM ]
               </button>
             </div>
           </div>

@@ -114,3 +114,10 @@ def test_catalog_for_api_shape():
     assert "routines" in payload
     assert "categories" in payload
     assert "fields" in payload
+    assert payload.get("gate_program") == 8099
+    assert payload.get("target_macro") == 908
+
+
+def test_poison_includes_target_macro():
+    poison = get_poison_values()
+    assert poison[908] == 0
