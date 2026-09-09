@@ -39,7 +39,7 @@ Protocol reference for Shatter's telnet client ([`telnet_client.py`](../backend/
 | REDTOFS | `get_tool_compensation()` | Tool comp |
 | REDTLLF | `get_tool_life()` | Tool life |
 | REDTOFM | `get_hd_modal()` | H/D modal |
-| REDMCNM | `get_macro_variable*` | Macros 500–999 |
+| REDMCNM | `get_macro_variable*` | Macros 100–999 (common + job; writes remain 500–999) |
 
 ---
 
@@ -54,6 +54,18 @@ Protocol reference for Shatter's telnet client ([`telnet_client.py`](../backend/
 | CLRTLLF | `clear_tool_life()` | Clear tool life |
 | *(FTP TOLN)* | `write_tool_names_via_ftp()` | Tool name (no telnet `WRT*`; patch `TOLNI1`/`TOLNM1` + upload). **Backs up and restores `ATCTL`/`ATCTLD` around the upload** — replacing TOLN clears magazine assignments on the control. |
 | WRTMCNM | `write_macro_variable()` | Macro variables 500–999 |
+
+### Program control / folders (productized for probe cycle)
+
+| Command | Method | Purpose |
+|---------|--------|---------|
+| CHGMODE | `change_mode()` | Switch MEM / EDIT / MDI / MNL (status `60` = already in mode → success) |
+| FLDCHG | `change_folder()` | Multipart cwd change (`PROGRAM`, `/`) |
+| FLDPWD | `get_working_folder()` | Read telnet cwd |
+| MEMSTRT | `start_memory_program()` | Start memory O-number (4-digit args) |
+| MEMSTOP | `memory_stop()` | Latch/clear feed hold (`ON` / `OFF`) |
+
+**Product API:** `GET/POST /api/machines/{id}/probe/*` — see [probe cycle](#probe-cycle-api) below. Orchestration: [`probe_cycle_service.py`](../backend/app/services/probe_cycle_service.py).
 
 ### ATC magazine (CHGMAG*)
 
@@ -95,6 +107,50 @@ The machine panel displays cap as tool **0**; Shatter maps UI `0` on empty-pot r
 
 ---
 
+## Program control & folders
+
+Client wrappers live in [`_telnet_write_ops.py`](../backend/app/clients/_telnet_write_ops.py). Layouts below were confirmed on a C00 Brother control. Frame format is the usual `%C` + 7-char command + 8-char args (see `_build_command`).
+
+### Mode / program select / start / stop
+
+| Command | Args (8-byte field) | Notes |
+|---------|---------------------|-------|
+| `CHGMODE` | `MEM`, `EDIT`, `MDI`, `MNL` (space-padded) | Status `60` if already in that mode |
+| `CHGOPTS` | `ON` / `OFF` | Optional stop (OP.STP). Same layout family as `CHGMODE`. Sibling keys (not all smoke-tested): `CHGDRYR`, `CHGSNGL`, `CHGBLKS`, `CHGMACL` |
+| `CHGPROG` | 4-digit O-number, e.g. `8112` | **Folder-scoped.** Only finds programs in the current telnet data directory. Not available during operation; Edit mode may return `31`. Not yet a named client method (scripts only). |
+| `MEMSTRT` | Optional 4-digit O-number, e.g. `8100` | Starts memory operation; with a number, bypasses external PRO select signals |
+| `MEMSTOP` | `ON` / `OFF` | Latches feed-hold when `ON` — must send `OFF` (or clear on panel) to resume |
+| `MEMQTST` | Optional 4-digit O-number | External start variant (pallet-param fallback if omitted); not smoke-tested |
+
+### Folder ops (multipart)
+
+| Command | Form | Notes |
+|---------|------|-------|
+| `FLDPWD` | Single-part, empty args | Returns cwd, e.g. `/\r\n…` or `/PROGRAM\r\n…` |
+| `FLDCHG` | **Multipart**: empty args + payload folder name (`PROGRAM`) or `/` | Changes telnet data cwd. **Must restore `/` after** — otherwise `LOD MEM` fails with status `07` |
+
+**Remote measure / probe sequence:** write job macros → `CHGMODE MEM` → `FLDCHG PROGRAM` → `MEMSTRT ####` → `FLDCHG /` → wait for PRD3 `operating` then idle → read results → poison macros.
+
+Live scripts:
+
+- [`backend/scripts/test_chgprog.py`](../backend/scripts/test_chgprog.py) — `CHGMODE` / `FLDCHG` / `CHGPROG` (no start)
+- [`backend/scripts/test_measure_tools.py`](../backend/scripts/test_measure_tools.py) — sequential `#920` + `MEMSTRT` measure cycles
+- [`backend/scripts/test_optstop.py`](../backend/scripts/test_optstop.py) — `CHGOPTS` ON/OFF (PANEL `opt_stop`)
+
+### Probe cycle API
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/machines/{id}/probe/catalog` | Blum routine catalog (`#900–#907`, O81xx/O82xx) |
+| `POST` | `/api/machines/{id}/probe/run` | Body `{ type, mode, params }` — write macros, MEMSTRT, wait, read `#100–#107`, poison |
+| `POST` | `/api/machines/{id}/probe/poison` | Force sentinel macros (`#900=0`, `#901–#907=999`, `#920=0`) |
+
+Catalog source: [`backend/app/data/probe_catalog.json`](../backend/app/data/probe_catalog.json) (mirrored in frontend). UI: **Probes** machine-detail pane / tablet `probes`.
+
+**Live smoke (C00):** stop the backend so telnet is free (`docker-compose -f docker-compose.dev.yml stop backend`), then exercise `POST .../probe/run` for e.g. `corner_xyz` / O8110 or `diameter_inside` / O8116 with the spindle probe positioned correctly. Restart backend afterward.
+
+---
+
 ## ATC Write Status Codes
 
 | Code | Meaning |
@@ -115,7 +171,9 @@ Writes use extended read timeout (~5s) and hold the machine lock for the full op
 
 ## Not Implemented (future / out of scope)
 
-Folder ops (FLDPWD, FLDCHG), telnet file upload (SAV), program control (MEMSTRT, MEMSTOP, CHGPROG), auto-notification (SNC/SND), and most directory variants (DRQSEL, DRQPRAL). File upload/download in Shatter uses **FTP**, not telnet SAV.
+Telnet file upload (SAV), auto-notification (SNC/SND), and most directory variants (DRQSEL, DRQPRAL). File upload/download in Shatter uses **FTP**, not telnet SAV.
+
+`CHGPROG` / `CHGOPTS` and related panel-key commands remain script-validated only (not probe-cycle product APIs).
 
 ---
 

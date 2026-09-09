@@ -162,6 +162,21 @@ def test_set_measurement_tool_route_registered():
     assert (frozenset({"PUT"}), "/{machine_id}/tools/measurement-tool") in sigs
 
 
+def test_probe_catalog_route_registered():
+    sigs = _route_signatures(status_module.router)
+    assert (frozenset({"GET"}), "/{machine_id}/probe/catalog") in sigs
+
+
+def test_probe_run_route_registered():
+    sigs = _route_signatures(status_module.router)
+    assert (frozenset({"POST"}), "/{machine_id}/probe/run") in sigs
+
+
+def test_probe_poison_route_registered():
+    sigs = _route_signatures(status_module.router)
+    assert (frozenset({"POST"}), "/{machine_id}/probe/poison") in sigs
+
+
 # ---------------------------------------------------------------------------
 # Route registration - file endpoints
 # ---------------------------------------------------------------------------
@@ -196,9 +211,9 @@ def test_upload_file_route_registered():
 # ---------------------------------------------------------------------------
 
 def test_total_route_count():
-    """Exactly 20 routes must be registered. Catches silent deletions during split."""
+    """Exactly 26 routes must be registered. Catches silent deletions during split."""
     sigs = _route_signatures(status_module.router)
-    assert len(sigs) == 23, f"Expected 23 routes, got {len(sigs)}: {sigs}"
+    assert len(sigs) == 26, f"Expected 26 routes, got {len(sigs)}: {sigs}"
 
 
 # ---------------------------------------------------------------------------

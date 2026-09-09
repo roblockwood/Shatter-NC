@@ -66,7 +66,8 @@ async def test_get_hd_modal():
 @pytest.mark.asyncio
 async def test_get_macro_variable_out_of_range():
     client, writer = _connected()
-    assert await client.get_macro_variable(100) is None
+    # Common vars start at #100; below that is rejected without a telnet send.
+    assert await client.get_macro_variable(99) is None
     assert writer.written == []
 
 

@@ -7,6 +7,7 @@ export type PaneId =
   | 'alarms'
   | 'currentProgram'
   | 'tools'
+  | 'probes'
   | 'productionRuns'
   | 'statusHistory'
   | 'panel'
@@ -42,6 +43,7 @@ export const PANE_IDS = {
   ALARMS: 'alarms' as const,
   CURRENT_PROGRAM: 'currentProgram' as const,
   TOOLS: 'tools' as const,
+  PROBES: 'probes' as const,
   PRODUCTION_RUNS: 'productionRuns' as const,
   STATUS_HISTORY: 'statusHistory' as const,
   PANEL: 'panel' as const,
@@ -173,9 +175,19 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
     visible: true,
   },
   {
-    i: PANE_IDS.PRODUCTION_RUNS,
+    i: PANE_IDS.PROBES,
     x: 12,
     y: 12,
+    w: 12,
+    h: 7,
+    minW: 6,
+    minH: 4,
+    visible: true,
+  },
+  {
+    i: PANE_IDS.PRODUCTION_RUNS,
+    x: 0,
+    y: 19,
     w: 12,
     h: 7,
     minW: 6,  // 25% minimum width (6/24 = 25%)
@@ -184,10 +196,10 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
   },
   {
     i: PANE_IDS.STATUS_HISTORY,
-    x: 0,
+    x: 12,
     y: 19,
-    w: 24,
-    h: 6,
+    w: 12,
+    h: 7,
     minW: 6,
     minH: 3,
     visible: true,
@@ -195,7 +207,7 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
   {
     i: PANE_IDS.PANEL,
     x: 0,
-    y: 25,
+    y: 26,
     w: 24,
     h: 8,
     minW: 3,  // 12.5% minimum width (3/24 = 12.5%) - allows single internal frame width
@@ -205,7 +217,7 @@ export const DEFAULT_LAYOUT: PaneLayout[] = [
   {
     i: PANE_IDS.FILE_MANAGER,
     x: 0,
-    y: 27,
+    y: 34,
     w: 24,
     h: 8,
     minW: 6,  // 25% minimum width (6/24 = 25%)

@@ -651,3 +651,144 @@ class CNCWriteOpsMixin:
             new_value=tool_number,
             verbose=verbose
         )
+
+    # ------------------------------------------------------------------
+    # Program control (CHGMODE / FLDCHG / MEMSTRT / MEMSTOP)
+    # ------------------------------------------------------------------
+
+    async def change_mode(self, mode: str, verbose: bool = False) -> Tuple[bool, Optional[str]]:
+        """
+        Switch NC mode via CHGMODE.
+
+        Args:
+            mode: One of MEM, EDIT, MDI, MNL (padded to 8-byte args by _send_command)
+            verbose: Log command details
+
+        Returns:
+            (success, status_code). Status 60 (already in mode) is treated as success.
+        """
+        if not self._connected:
+            connected = await self.connect()
+            if not connected:
+                return False, None
+
+        mode_arg = (mode or "").strip().upper()
+        if mode_arg not in ("MEM", "EDIT", "MDI", "MNL"):
+            logger.error(f"Invalid CHGMODE argument: {mode!r}")
+            return False, "30"
+
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        try:
+            async with machine_lock:
+                success, status, _ = await self._send_command(
+                    "CHGMODE", mode_arg, verbose=verbose
+                )
+                if success or status == "60":
+                    return True, status
+                return False, status
+        except Exception as e:
+            logger.error(f"Error in CHGMODE {mode_arg}: {e}")
+            return False, None
+
+    async def change_folder(
+        self, folder: str, verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Change telnet working folder via multipart FLDCHG.
+
+        Args:
+            folder: Folder name such as PROGRAM or /
+            verbose: Log command details
+
+        Returns:
+            (success, status_code)
+        """
+        if not self._connected:
+            connected = await self.connect()
+            if not connected:
+                return False, None
+
+        folder_payload = (folder or "").strip() or "/"
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        try:
+            async with machine_lock:
+                success, status, _ = await self._send_multipart_command(
+                    "FLDCHG", "", folder_payload, verbose=verbose
+                )
+                return success, status
+        except Exception as e:
+            logger.error(f"Error in FLDCHG {folder_payload!r}: {e}")
+            return False, None
+
+    async def get_working_folder(self, verbose: bool = False) -> Optional[str]:
+        """Read current telnet folder via FLDPWD."""
+        if not self._connected:
+            connected = await self.connect()
+            if not connected:
+                return None
+
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        try:
+            async with machine_lock:
+                success, _, data = await self._send_command("FLDPWD", "", verbose=verbose)
+                if not success or not data:
+                    return None
+                return data.split("\r")[0].split("\n")[0].strip() or None
+        except Exception as e:
+            logger.error(f"Error in FLDPWD: {e}")
+            return None
+
+    async def start_memory_program(
+        self, program: int, verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Start a memory program via MEMSTRT (4-digit O-number in args).
+
+        Caller must already be in MEM mode and the correct folder (e.g. PROGRAM).
+        Always restore folder to / after calling this when used for remote probing.
+        """
+        if not self._connected:
+            connected = await self.connect()
+            if not connected:
+                return False, None
+
+        if not 0 <= int(program) <= 9999:
+            logger.error(f"Invalid MEMSTRT program number: {program}")
+            return False, "30"
+
+        prog_arg = f"{int(program):04d}"
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        try:
+            async with machine_lock:
+                success, status, _ = await self._send_command(
+                    "MEMSTRT", prog_arg, verbose=verbose
+                )
+                return success, status
+        except Exception as e:
+            logger.error(f"Error in MEMSTRT {prog_arg}: {e}")
+            return False, None
+
+    async def memory_stop(
+        self, latch_on: bool = True, verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Latch or clear feed hold via MEMSTOP ON/OFF.
+
+        MEMSTOP ON latches hold; clear with MEMSTOP OFF or the panel.
+        """
+        if not self._connected:
+            connected = await self.connect()
+            if not connected:
+                return False, None
+
+        arg = "ON" if latch_on else "OFF"
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        try:
+            async with machine_lock:
+                success, status, _ = await self._send_command(
+                    "MEMSTOP", arg, verbose=verbose
+                )
+                return success, status
+        except Exception as e:
+            logger.error(f"Error in MEMSTOP {arg}: {e}")
+            return False, None
