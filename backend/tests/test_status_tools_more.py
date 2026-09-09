@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from app.api import _status_tools as tools
 import app.api._status_state as _state
+from app.services.macro_write_service import MacroWriteOutcome
 
 
 def _db(machine):
@@ -108,3 +109,48 @@ async def test_set_tool_life_machine_not_found():
     with pytest.raises(HTTPException) as ei:
         await tools.set_tool_life(99, 1, life_value=100, db=_db(None))
     assert ei.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_set_macro_variable_invalid_number():
+    with pytest.raises(HTTPException) as ei:
+        await tools.set_macro_variable(1, 100, value=5.0, db=_db(_machine()))
+    assert ei.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_set_macro_variable_success(monkeypatch):
+    outcome = MacroWriteOutcome(
+        success=True,
+        status_code="00",
+        verified_value=5.0,
+        status_data={"status": "standby"},
+    )
+    monkeypatch.setattr(
+        "app.services.macro_write_service.execute_macro_write",
+        AsyncMock(return_value=outcome),
+    )
+    monkeypatch.setattr("app.services.audit_logger.AuditLogger.log_tool_modification", MagicMock())
+
+    result = await tools.set_macro_variable(1, 920, value=5.0, db=_db(_machine()))
+    assert result["success"] is True
+    assert result["macro_number"] == 920
+
+
+@pytest.mark.asyncio
+async def test_set_measurement_tool_success(monkeypatch):
+    outcome = MacroWriteOutcome(
+        success=True,
+        status_code="00",
+        verified_value=12.0,
+        status_data={"status": "standby"},
+    )
+    monkeypatch.setattr(
+        "app.services.macro_write_service.execute_macro_write",
+        AsyncMock(return_value=outcome),
+    )
+    monkeypatch.setattr("app.services.audit_logger.AuditLogger.log_tool_modification", MagicMock())
+
+    result = await tools.set_measurement_tool(1, tool_number=12, db=_db(_machine()))
+    assert result["success"] is True
+    assert result["tool_number"] == 12

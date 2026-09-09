@@ -31,6 +31,14 @@ async def test_list_programs_returns_ftp_listing(monkeypatch):
     ftp_client = MagicMock()
     ftp_client.get_programs = AsyncMock(return_value=[{"name": "O1000.NC"}, {"name": "PARTS", "is_dir": True}])
     monkeypatch.setattr(files, "CNCFtpClient", MagicMock(return_value=ftp_client))
+    monkeypatch.setattr(
+        files,
+        "_attach_program_notes",
+        MagicMock(return_value=[
+            {"name": "O1000.NC", "program_note": None},
+            {"name": "PARTS", "is_dir": True, "program_note": None},
+        ]),
+    )
 
     result = await files.list_programs(1, "/PROGRAMS", _db(_machine()))
 
@@ -38,7 +46,10 @@ async def test_list_programs_returns_ftp_listing(monkeypatch):
         "machine_id": 1,
         "machine_name": "Mill",
         "current_path": "/PROGRAMS",
-        "programs": [{"name": "O1000.NC"}, {"name": "PARTS", "is_dir": True}],
+        "programs": [
+            {"name": "O1000.NC", "program_note": None},
+            {"name": "PARTS", "is_dir": True, "program_note": None},
+        ],
         "total_count": 2,
     }
     ftp_client.get_programs.assert_awaited_once_with("/PROGRAMS")
@@ -76,10 +87,23 @@ async def test_file_metadata_parses_tools_and_runtime(monkeypatch):
         "parse_gcode",
         MagicMock(return_value={"tools": [{"tool_number": 1}, {"tool_number": 7}], "estimated_runtime_seconds": 91.9}),
     )
+    persist = MagicMock(return_value="FACE OP")
+    monkeypatch.setattr(
+        files,
+        "ProgramService",
+        MagicMock(return_value=MagicMock(persist_comment_for_machine_file=persist)),
+    )
 
     result = await files.get_file_metadata(1, "/O1000.NC", _db(_machine()))
 
-    assert result == {"file_path": "/O1000.NC", "tools": [1, 7], "runtime_seconds": 91, "has_errors": False}
+    assert result == {
+        "file_path": "/O1000.NC",
+        "tools": [1, 7],
+        "runtime_seconds": 91,
+        "has_errors": False,
+        "program_note": "FACE OP",
+    }
+    persist.assert_called_once()
 
 
 @pytest.mark.asyncio

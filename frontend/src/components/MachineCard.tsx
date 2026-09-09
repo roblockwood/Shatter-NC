@@ -76,6 +76,29 @@ interface MachineStatus {
   counters?: Array<{ counter_number: number; count: number }>;
   tools?: Tool[];  // ATC data
   tool_table?: Tool[];  // TABLE data (TOLN)
+  tools_unified?: {
+    tools: Array<{
+      tool_number: number;
+      tool_name?: string;
+      diameter?: number;
+      length?: number;
+      life?: number;
+      in_atc?: boolean;
+      pot_number?: string | number;
+      group?: string | number;
+      tool_type?: number;
+      color?: number;
+    }>;
+    empty_pockets: Array<{ pot_number: number; tool_type?: number; color?: number }>;
+    spindle?: {
+      pot_number: 'SPINDLE';
+      tool_number: number;
+      tool_type?: number;
+      color?: number;
+      group?: string | number;
+    } | null;
+    atc_available: boolean;
+  };
   current_tool?: number;
   alarms?: Alarm[];
   panel?: PanelData;  // Panel data (doors, mode, overrides)
@@ -86,6 +109,7 @@ interface MachineStatus {
   tools_timestamp?: string | null;
   tool_table_timestamp?: string | null;
   macros_timestamp?: string | null;
+  macros?: Record<string, number>;
   response_time_ms?: number;
   tool_response_time_ms?: number;
   ip_address?: string;
@@ -96,6 +120,7 @@ interface MachineStatus {
   path?: string;
   poll_interval_seconds?: number;
   tool_poll_interval_seconds?: number;
+  atc_pockets?: number;
   part_display_mode?: 'cycle' | 'parts';
   ftp_sync_enabled?: boolean;
   enabled?: boolean;
@@ -379,6 +404,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
     path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
     poll_interval_seconds: machine.poll_interval_seconds || 5,
     tool_poll_interval_seconds: machine.tool_poll_interval_seconds || 30,
+    atc_pockets: machine.atc_pockets ?? 21,
     enabled: machine.enabled !== false,
     part_display_mode: machine.part_display_mode || 'parts',
     ftp_sync_enabled: machine.ftp_sync_enabled === true,
@@ -421,6 +447,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             path: fullMachineData.path !== undefined && fullMachineData.path !== null ? fullMachineData.path : '/',
             poll_interval_seconds: fullMachineData.poll_interval_seconds || 5,
             tool_poll_interval_seconds: fullMachineData.tool_poll_interval_seconds || 30,
+            atc_pockets: fullMachineData.atc_pockets ?? 21,
             enabled: fullMachineData.enabled !== false,
             part_display_mode: fullMachineData.part_display_mode || 'parts',
             ftp_sync_enabled: fullMachineData.ftp_sync_enabled === true,
@@ -534,6 +561,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
         path: machine.path !== undefined && machine.path !== null ? machine.path : '/',
         poll_interval_seconds: machine.poll_interval_seconds || 5,
         tool_poll_interval_seconds: machine.tool_poll_interval_seconds || 30,
+    atc_pockets: machine.atc_pockets ?? 21,
         enabled: machine.enabled !== false,
         part_display_mode: machine.part_display_mode || 'parts',
         ftp_sync_enabled: machine.ftp_sync_enabled === true,
@@ -844,6 +872,11 @@ export const MachineCard: React.FC<MachineCardProps> = ({
             <ToolsPane
               tools={machine.tools || []}
               toolTable={machine.tool_table || []}
+              toolsUnified={
+                machine.tools_unified
+                  ? { ...machine.tools_unified, spindle: machine.tools_unified.spindle ?? null }
+                  : undefined
+              }
               currentTool={machine.current_tool}
               machineId={machine.machine_id}
               units={machine.units ?? 'in'}
@@ -854,6 +887,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
               toolTableTimestamp={machine.tool_table_timestamp ?? undefined}
               toolPollIntervalSeconds={machine.tool_poll_interval_seconds ?? 30}
               programName={currentProgram ?? undefined}
+              numPockets={machine.atc_pockets ?? 21}
+              macros={machine.macros}
             />
                   </div>
                 ),
@@ -1157,6 +1192,26 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     <span className="input-metric">{(machine.tool_response_time_ms / 1000).toFixed(1)}s</span>
                   )}
                 </div>
+              </div>
+            </div>
+
+            <div className="form-row-inline">
+              <div>
+                <label>ATC POCKETS:</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={editFormData.atc_pockets}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      atc_pockets: parseInt(e.target.value, 10) || 21,
+                    })
+                  }
+                  disabled={isEditSaving}
+                  title="Magazine pocket count for this machine (e.g. 21 or 30)"
+                />
               </div>
             </div>
 
@@ -1750,6 +1805,11 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     variant="hover"
                     tools={machine.tools || []}
                     toolTable={machine.tool_table || []}
+                    toolsUnified={
+                      machine.tools_unified
+                        ? { ...machine.tools_unified, spindle: machine.tools_unified.spindle ?? null }
+                        : undefined
+                    }
                     currentTool={machine.current_tool}
                     machineId={machine.machine_id}
                     units={machine.units ?? 'in'}
@@ -1757,6 +1817,8 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     toolsTimestamp={machine.tools_timestamp ?? undefined}
                     toolTableTimestamp={machine.tool_table_timestamp ?? undefined}
                     toolPollIntervalSeconds={machine.tool_poll_interval_seconds ?? 30}
+                    numPockets={machine.atc_pockets ?? 21}
+                    macros={machine.macros}
                   />
                 </div>
               )}

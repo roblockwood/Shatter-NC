@@ -10,17 +10,81 @@ Routes:
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status, UploadFile, File
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+from typing import Optional, Tuple
 from app.db.base import get_db
 from app.models.machine import Machine
+from app.models.program import ProgramDeployment
 from app.utils.api_errors import public_error_detail
 from app.clients.ftp_client import CNCFtpClient
 from app.parsers.gcode_parser import parse_gcode
+from app.services.program_service import ProgramService
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _program_comment_from_metadata(program_metadata: Optional[dict]) -> Optional[str]:
+    if not program_metadata:
+        return None
+    comment = program_metadata.get("program_comment")
+    return comment if comment else None
+
+
+def _comment_lookup_for_machine(db: Session, machine_id: int) -> Tuple[dict, dict]:
+    """Build maps of deployed path / filename → program_comment for current deployments."""
+    deployments = (
+        db.query(ProgramDeployment)
+        .options(joinedload(ProgramDeployment.program))
+        .filter(
+            ProgramDeployment.machine_id == machine_id,
+            ProgramDeployment.is_current == True,
+        )
+        .all()
+    )
+    by_path: dict[str, Optional[str]] = {}
+    by_name: dict[str, Optional[str]] = {}
+    for deployment in deployments:
+        comment = None
+        if deployment.program is not None:
+            comment = _program_comment_from_metadata(deployment.program.program_metadata)
+        if deployment.deployed_path:
+            by_path[deployment.deployed_path.upper()] = comment
+        if deployment.deployed_filename:
+            by_name[deployment.deployed_filename.upper()] = comment
+    return by_path, by_name
+
+
+def _attach_program_notes(
+    db: Session,
+    machine_id: int,
+    programs: list,
+) -> list:
+    """Attach program_note from Shatter deployment metadata (no FTP downloads)."""
+    by_path, by_name = _comment_lookup_for_machine(db, machine_id)
+    enriched = []
+    for program in programs:
+        if program.get("is_directory"):
+            enriched.append({**program, "program_note": None})
+            continue
+        path_key = (program.get("path") or "").upper()
+        name_key = (program.get("name") or "").upper()
+        note = by_path.get(path_key)
+        if note is None and name_key:
+            note = by_name.get(name_key)
+        enriched.append({**program, "program_note": note})
+    return enriched
+
+
+def _program_note_for_path(db: Session, machine_id: int, file_path: str) -> Optional[str]:
+    by_path, by_name = _comment_lookup_for_machine(db, machine_id)
+    path_key = file_path.upper()
+    if path_key in by_path:
+        return by_path[path_key]
+    filename = file_path.rsplit("/", 1)[-1].upper()
+    return by_name.get(filename)
 
 
 @router.get("/{machine_id}/programs")
@@ -51,6 +115,7 @@ async def list_programs(
             password=db_machine.ftp_password,
         )
         programs = await ftp_client.get_programs(path)
+        programs = _attach_program_notes(db, machine_id, programs)
         return {
             "machine_id": machine_id,
             "machine_name": db_machine.name,
@@ -218,6 +283,17 @@ async def get_file_metadata(
         except Exception:
             text_content = str(file_content)
 
+        filename = file_path.rsplit("/", 1)[-1]
+        service = ProgramService(db)
+        program_note = service.persist_comment_for_machine_file(
+            machine_id=machine_id,
+            file_path=file_path,
+            gcode_content=text_content,
+            filename=filename,
+        )
+        if program_note is None:
+            program_note = _program_note_for_path(db, machine_id, file_path)
+
         parsed = parse_gcode(text_content)
 
         tools = [tool["tool_number"] for tool in parsed.get("tools", [])]
@@ -227,6 +303,7 @@ async def get_file_metadata(
             "tools": tools,
             "runtime_seconds": int(parsed.get("estimated_runtime_seconds", 0)),
             "has_errors": False,
+            "program_note": program_note,
         }
 
     except HTTPException:

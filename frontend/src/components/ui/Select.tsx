@@ -11,6 +11,8 @@ interface SelectProps {
   onChange: (value: string) => void;
   options: SelectOption[];
   disabled?: boolean;
+  /** Compact terminal styling for dense tables (matches ColorSelect). */
+  compact?: boolean;
   className?: string;
   id?: string;
 }
@@ -20,6 +22,7 @@ export const Select: React.FC<SelectProps> = ({
   onChange,
   options,
   disabled = false,
+  compact = false,
   className = '',
   id,
 }) => {
@@ -74,7 +77,8 @@ export const Select: React.FC<SelectProps> = ({
     }
   }, [isOpen]);
 
-  const handleToggle = () => {
+  const handleToggle = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (!disabled) {
       setIsOpen(!isOpen);
     }
@@ -115,11 +119,14 @@ export const Select: React.FC<SelectProps> = ({
   };
 
   return (
-    <div className={`custom-select-wrapper ${className}`}>
+    <div
+      className={`custom-select-wrapper ${compact ? 'custom-select-wrapper--compact' : ''} ${className}`.trim()}
+    >
       <div
         ref={selectRef}
         className={`custom-select ${isOpen ? 'open' : ''} ${disabled ? 'disabled' : ''}`}
         onClick={handleToggle}
+        onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
         tabIndex={disabled ? -1 : 0}
         role="combobox"

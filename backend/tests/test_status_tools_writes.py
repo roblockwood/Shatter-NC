@@ -33,21 +33,40 @@ def _patch_safe(monkeypatch, safe=True):
 
 def _patch_telnet(monkeypatch, **methods):
     telnet = MagicMock()
+    pot_state = {}
+
+    async def read_pot(pot_number, verbose=False):
+        return pot_state.get(pot_number, 0)
+
+    async def assign_tool_to_pot(pot_number, tool_number, verbose=False):
+        pot_state[pot_number] = tool_number
+        return True, "00"
+
+    async def remove_tool_from_pot(pot_number, tool_number, verbose=False):
+        pot_state[pot_number] = 0
+        return True, "00"
+
     # Default async methods used across write routes
     defaults = {
         "change_atc_tool": (True, "00"),
-        "assign_tool_to_pot": (True, "00"),
+        "assign_tool_to_pot": assign_tool_to_pot,
         "change_tool_type": (True, "00"),
-        "remove_tool_from_pot": (True, "00"),
+        "remove_tool_from_pot": remove_tool_from_pot,
         "change_spindle_tool": (True, "00"),
         "write_tool_life": (True, "00"),
         "write_tool_offset": (True, "00"),
+        "_read_pot_tool_number": read_pot,
+        "detect_control_type": "C00",
+        "get_atc_magazine_data": "",
         "disconnect": None,
     }
     defaults.update(methods)
+    telnet._pot_state = pot_state
     for name, ret in defaults.items():
         if ret is None:
             setattr(telnet, name, AsyncMock())
+        elif callable(ret):
+            setattr(telnet, name, AsyncMock(side_effect=ret))
         else:
             setattr(telnet, name, AsyncMock(return_value=ret))
     monkeypatch.setattr(
@@ -176,3 +195,164 @@ async def test_batch_change_colors_empty():
             1, BatchColorChangeRequest(changes=[]), db=_db(_machine())
         )
     assert ei.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_batch_apply_tool_changes_mixed_success(monkeypatch):
+    from app.api._status_state import BatchToolChangesRequest, ToolChangeItem
+
+    _patch_safe(monkeypatch)
+    telnet = _patch_telnet(monkeypatch)
+    pot_state = telnet._pot_state
+    pot_state[1] = 5
+    call_order = []
+
+    async def track_delete(pot_number, tool_number, verbose=False):
+        call_order.append("delete")
+        pot_state[pot_number] = 0
+        return True, "00"
+
+    async def track_assign(pot_number, tool_number, verbose=False):
+        call_order.append("assignment")
+        pot_state[pot_number] = tool_number
+        return True, "00"
+
+    async def track_color(*args, **kwargs):
+        call_order.append("color")
+        return True, "00"
+
+    async def track_offset(*args, **kwargs):
+        call_order.append("offset")
+        return True, "00"
+
+    telnet.remove_tool_from_pot = AsyncMock(side_effect=track_delete)
+    telnet.assign_tool_to_pot = AsyncMock(side_effect=track_assign)
+    telnet.change_atc_tool = AsyncMock(side_effect=track_color)
+    telnet.write_tool_offset = AsyncMock(side_effect=track_offset)
+
+    _state.polling_service = MagicMock()
+    _state.polling_service.refresh_tool_data = AsyncMock(return_value={})
+    req = BatchToolChangesRequest(
+        changes=[
+            ToolChangeItem(operation_type="color", pot_number=2, tool_number=6, color=3),
+            ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=10),
+            ToolChangeItem(operation_type="delete", pot_number=1, tool_number=5),
+            ToolChangeItem(operation_type="offset", tool_number=5, offset_type="H", value=1.5),
+        ]
+    )
+    try:
+        result = await tools.batch_apply_tool_changes(1, req, db=_db(_machine()))
+        assert result.successful == 4
+        assert result.failed == 0
+        assert call_order == ["delete", "assignment", "color", "offset"]
+    finally:
+        _state.polling_service = None
+
+
+@pytest.mark.asyncio
+async def test_batch_apply_tool_changes_unsafe_strict_op(monkeypatch):
+    from app.api._status_state import BatchToolChangesRequest, ToolChangeItem
+
+    _patch_safe(monkeypatch, safe=False)
+    req = BatchToolChangesRequest(
+        changes=[
+            ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=10),
+        ]
+    )
+    with pytest.raises(HTTPException) as ei:
+        await tools.batch_apply_tool_changes(1, req, db=_db(_machine()))
+    assert ei.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_batch_apply_tool_changes_partial_failure(monkeypatch):
+    from app.api._status_state import BatchToolChangesRequest, ToolChangeItem
+
+    _patch_safe(monkeypatch)
+    telnet = _patch_telnet(monkeypatch)
+    telnet.change_atc_tool = AsyncMock(side_effect=[(True, "00"), (False, "01")])
+
+    req = BatchToolChangesRequest(
+        changes=[
+            ToolChangeItem(operation_type="color", pot_number=1, tool_number=5, color=2),
+            ToolChangeItem(operation_type="color", pot_number=2, tool_number=6, color=3),
+        ]
+    )
+    result = await tools.batch_apply_tool_changes(1, req, db=_db(_machine()))
+    assert result.successful == 1
+    assert result.failed == 1
+    assert len(result.results) == 2
+
+
+def test_tool_write_service_validation_operation_type():
+    from app.api._status_state import ToolChangeItem
+    from app.services.tool_write_service import validation_operation_type
+
+    assert validation_operation_type([
+        ToolChangeItem(operation_type="color", pot_number=1, tool_number=1, color=1),
+    ]) == "tool_color"
+    assert validation_operation_type([
+        ToolChangeItem(operation_type="color", pot_number=1, tool_number=1, color=1),
+        ToolChangeItem(operation_type="offset", tool_number=5, offset_type="H", value=1.0),
+    ]) == "tool_offset"
+    assert validation_operation_type([
+        ToolChangeItem(operation_type="life", tool_number=5, life_value=100),
+        ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=10),
+    ]) == "tool_assignment"
+
+
+def test_validate_batch_pot_conflicts():
+    from app.api._status_state import ToolChangeItem
+    from app.services.tool_write_service import validate_batch_pot_conflicts
+
+    assert validate_batch_pot_conflicts([
+        ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=10),
+        ToolChangeItem(operation_type="cap", pot_number=2),
+    ]) is not None
+    assert validate_batch_pot_conflicts([
+        ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=10),
+        ToolChangeItem(operation_type="assignment", pot_number=3, tool_number=11),
+    ]) is None
+
+
+def test_pots_needing_preclear_swap():
+    from app.api._status_state import ToolChangeItem
+    from app.services.tool_write_service import pots_needing_preclear_before_assignments
+
+    atc = {1: 1, 2: 2}
+    changes = [
+        ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=1),
+        ToolChangeItem(operation_type="assignment", pot_number=1, tool_number=2),
+    ]
+    assert pots_needing_preclear_before_assignments(changes, atc) == [1, 2]
+
+
+def test_pots_needing_preclear_move_to_empty():
+    from app.api._status_state import ToolChangeItem
+    from app.services.tool_write_service import pots_needing_preclear_before_assignments
+
+    atc = {1: 5, 3: 0}
+    changes = [ToolChangeItem(operation_type="assignment", pot_number=3, tool_number=5)]
+    assert pots_needing_preclear_before_assignments(changes, atc) == [1]
+
+
+def test_pots_needing_preclear_skips_explicit_delete():
+    from app.api._status_state import ToolChangeItem
+    from app.services.tool_write_service import pots_needing_preclear_before_assignments
+
+    atc = {1: 5, 2: 0}
+    changes = [
+        ToolChangeItem(operation_type="delete", pot_number=1, tool_number=5),
+        ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=5),
+    ]
+    assert pots_needing_preclear_before_assignments(changes, atc) == []
+
+
+def test_pots_needing_preclear_move_into_occupied():
+    from app.api._status_state import ToolChangeItem
+    from app.services.tool_write_service import pots_needing_preclear_before_assignments
+
+    atc = {1: 1, 2: 2}
+    changes = [ToolChangeItem(operation_type="assignment", pot_number=2, tool_number=1)]
+    assert pots_needing_preclear_before_assignments(changes, atc) == [1, 2]
+

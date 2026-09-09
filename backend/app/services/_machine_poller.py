@@ -7,6 +7,12 @@ from app.parsers.tolni_parser_v2 import parse_tolni_v2
 from app.parsers.mem_parser_v2 import parse_mem_v2
 from app.utils.time_utils import format_cnc_time
 from app.parsers.atctl_parser_v2 import parse_atctl_v2
+from app.services.atc_tool_merge import merge_atc_tools_for_display
+from app.services.unified_tool_view import (
+    build_unified_tool_view,
+    merge_toln_fields_into_tool_table,
+    refresh_unified_toln_fields,
+)
 from app.parsers.panel_parser_v2 import parse_panel_v2
 from app.utils.alarm_code_lookup import enrich_alarm_with_lookup
 from app.parsers.montr_parser_v2 import parse_montr_v2
@@ -139,6 +145,34 @@ class MachinePoller:
             return False
         return self.consecutive_failures < self.offline_threshold
 
+    def _format_step_times(self, step_times: Dict[str, float]) -> str:
+        return ", ".join(
+            f"{step}: {time_ms * 1000:.1f}ms"
+            for step, time_ms in sorted(step_times.items(), key=lambda x: x[1], reverse=True)
+            if time_ms > 0.001
+        )
+
+    def _log_poll_step_times(self, operation: str, step_times: Dict[str, float], *, timed_out: bool = False) -> None:
+        summary = self._format_step_times(step_times)
+        if not summary:
+            return
+        if timed_out:
+            logger.warning(
+                "Machine %s (%s) %s timed out; step_times: %s",
+                self.machine.id,
+                self.machine.name,
+                operation,
+                summary,
+            )
+        else:
+            logger.warning(
+                "Machine %s (%s) %s failed; step_times: %s",
+                self.machine.id,
+                self.machine.name,
+                operation,
+                summary,
+            )
+
     def _finalize_poll_failure(
         self,
         exc: BaseException,
@@ -247,31 +281,41 @@ class MachinePoller:
 
         telnet_client = None
         try:
-            # Create an unconnected client.  The TCP connection is established lazily
-            # inside each load_data / get_macro_variable_range call, which holds the
-            # per-machine lock for the full duration and disconnects before releasing it.
-            # This prevents two poll tasks from ever having open sockets simultaneously
-            # — the root cause of CM7532 ("Ethernet communication error").
-            telnet_client = CNCTelnetClient(
-                ip_address=self.machine.ip_address,
-                port=10000,
-                timeout=10,
-            )
+            async def _fetch() -> Optional[str]:
+                nonlocal telnet_client
+                telnet_client = CNCTelnetClient(
+                    ip_address=self.machine.ip_address,
+                    port=10000,
+                    timeout=10,
+                )
 
-            mem_data = await telnet_client.get_memory_data(verbose=False)
-            if mem_data:
-                logger.debug(f"Machine {self.machine.id} - Raw MEM content: {repr(mem_data)}")
-                parsed_mem = parse_mem_v2(mem_data.encode('utf-8'), control_version=None)
-                program_name = parsed_mem.get("program_name")
-                if program_name:
-                    self.cached_program_name = program_name
-                    self.program_name_fetched = True
-                    logger.info(f"Machine {self.machine.id} - Fetched program_name from MEM via Telnet: {program_name}")
-                    return program_name
+                mem_data = await telnet_client.get_memory_data(verbose=False)
+                if mem_data:
+                    logger.debug(f"Machine {self.machine.id} - Raw MEM content: {repr(mem_data)}")
+                    parsed_mem = parse_mem_v2(mem_data.encode('utf-8'), control_version=None)
+                    program_name = parsed_mem.get("program_name")
+                    if program_name:
+                        self.cached_program_name = program_name
+                        self.program_name_fetched = True
+                        logger.info(f"Machine {self.machine.id} - Fetched program_name from MEM via Telnet: {program_name}")
+                        return program_name
+                    else:
+                        logger.debug(f"Machine {self.machine.id} - MEM parsed but no program_name found. Content: {repr(mem_data)}")
                 else:
-                    logger.debug(f"Machine {self.machine.id} - MEM parsed but no program_name found. Content: {repr(mem_data)}")
-            else:
-                logger.debug(f"Machine {self.machine.id} - MEM file not found or empty")
+                    logger.debug(f"Machine {self.machine.id} - MEM file not found or empty")
+                return None
+
+            return await asyncio.wait_for(
+                _fetch(),
+                timeout=settings.TELNET_POLL_FAST_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Machine %s (%s) fetch_program_name timed out after %.1fs",
+                self.machine.id,
+                self.machine.name,
+                settings.TELNET_POLL_FAST_TIMEOUT_SECONDS,
+            )
         except Exception as e:
             logger.warning(f"Machine {self.machine.id} - Failed to fetch program_name from MEM via Telnet: {e}")
         finally:
@@ -288,7 +332,7 @@ class MachinePoller:
         """
         try:
             from app.clients.ftp_client import CNCFtpClient
-            from app.services.notification_service import extract_nc_program_header
+            from app.parsers.nc_header_parser import extract_nc_program_header
 
             ftp = CNCFtpClient(
                 ip_address=self.machine.ip_address,
@@ -311,6 +355,36 @@ class MachinePoller:
             logger.warning(
                 f"Machine {self.machine.id}: could not fetch NC header for {deployed_path}: {e}"
             )
+
+    async def _fetch_atc_data_with_retry(
+        self,
+        telnet_client: CNCTelnetClient,
+        attempts: int = 3,
+        delay_seconds: float = 0.5,
+    ) -> Optional[str]:
+        """ATCTL can fail briefly after TOLN FTP uploads; retry before dropping magazine cache."""
+        for attempt in range(attempts):
+            atc_data = await telnet_client.get_atc_magazine_data(
+                control_version=self.machine.control_version,
+                verbose=False,
+            )
+            if atc_data:
+                return atc_data
+            if attempt < attempts - 1:
+                logger.debug(
+                    "Machine %s - ATCTL read failed (attempt %s/%s), retrying in %.1fs",
+                    self.machine.id,
+                    attempt + 1,
+                    attempts,
+                    delay_seconds,
+                )
+                await asyncio.sleep(delay_seconds)
+        return None
+
+    def _prior_tool_cache(self) -> dict:
+        if not self.websocket_manager:
+            return {}
+        return self.websocket_manager.get_machine_status(self.machine.id) or {}
 
     async def poll_tool_data(self) -> Dict[str, Any]:
         """
@@ -336,13 +410,22 @@ class MachinePoller:
             )
             return {}
 
+        # Skip expensive tool poll when machine is known unreachable
+        if self.consecutive_failures >= self.offline_threshold:
+            logger.debug(
+                f"[TOOL_POLL] Machine {self.machine.id} ({self.machine.name}) - "
+                "skipping tool poll: machine is offline"
+            )
+            return {}
+
         poll_start_time = time.time()
         poll_timestamp = datetime.utcnow()
-        tool_data = {}
-        step_times = {}
-        
+        step_times: Dict[str, float] = {}
         telnet_client = None
-        try:
+
+        async def _run_tool_poll() -> Dict[str, Any]:
+            nonlocal telnet_client
+            tool_data: Dict[str, Any] = {}
             logger.debug(f"[TOOL_POLL] Machine {self.machine.id} ({self.machine.name}) - Starting tool data poll")
 
 
@@ -371,11 +454,12 @@ class MachinePoller:
                 
                 # Get ATC magazine data (pot/tool mappings) for merging
                 step_start = time.time()
-                atc_data = await telnet_client.get_atc_magazine_data(control_version=self.machine.control_version, verbose=False)
+                atc_data = await self._fetch_atc_data_with_retry(telnet_client)
                 step_times['get_atc'] = time.time() - step_start
                 
                 # Start with pure TOLN (table) data
                 tool_table_tools = tool_table_parsed.get("tools", [])
+                prior_cache = self._prior_tool_cache()
                 
                 if atc_data:
                     step_start = time.time()
@@ -425,52 +509,54 @@ class MachinePoller:
                                 tool["color"] = atc_info["color"]
                     
                     # Merge ATC positions with tool details (forward merge: ATCTL -> TOLN)
-                    tools = []
-                    tool_lookup = {}
-                    
-                    # Create lookup by tool number from TOLN data
-                    for tool in tool_table_tools:
-                        tool_num = tool.get("tool_number")
-                        if tool_num:
-                            tool_lookup[tool_num] = tool
-                    
-                    # Merge ATC tools with tool details from TOLN
-                    # Match by tool_number to correlate pot position with tool data
-                    # Only include tools that have valid TOLN data
-                    for atc_tool in atc_parsed.get("tools", []):
-                        tool_num = atc_tool.get("tool_number")
-                        pot_number = atc_tool.get("pot_number")
-                        
-                        if tool_num and tool_num > 0 and tool_num != 255:  # Skip "not set" and "cap setting"
-                            if tool_num in tool_lookup:
-                                tol_tool = tool_lookup[tool_num]
-                                merged_tool = {
-                                    "pot_number": pot_number,
-                                    "tool_number": tool_num,
-                                    "tool_name": tol_tool.get("tool_name"),
-                                    "diameter": tol_tool.get("diameter"),
-                                    "length": tol_tool.get("length"),
-                                    "group": atc_tool.get("group"),
-                                    "life": None,  # Not in ATCTL
-                                    "tool_type": atc_tool.get("tool_type"),
-                                    "color": atc_tool.get("color"),
-                                }
-                                tools.append(merged_tool)
-                    
+                    tools = merge_atc_tools_for_display(
+                        atc_parsed,
+                        tool_table_tools,
+                        atc_pockets=self.machine.atc_pockets,
+                    )
+                    tools_unified = build_unified_tool_view(
+                        tool_table_tools,
+                        atc_parsed,
+                        atc_pockets=self.machine.atc_pockets,
+                    )
+
                     tool_data["tools"] = tools
+                    tool_data["tools_unified"] = tools_unified
                     tool_data["tools_timestamp"] = poll_timestamp.isoformat()
                     step_times['merge_tools'] = time.time() - step_start
                     logger.debug(f"Machine {self.machine.id} - Fetched {len(tools)} ATC tools and {len(tool_table_tools)} table tools via Telnet (slow poll)")
                 else:
-                    logger.warning(f"Machine {self.machine.id} - No ATC data available via Telnet")
-                    # ATC magazine file absent (status 07) — leave tools empty so the
-                    # frontend can show a proper "ATC unavailable" message rather than
-                    # displaying tool table data in the ATC pot view.
-                    tool_data["tools"] = []
+                    logger.warning(
+                        f"Machine {self.machine.id} - No ATC data available via Telnet after retries; "
+                        "preserving prior magazine cache when available"
+                    )
+                    prior_unified = prior_cache.get("tools_unified")
+                    prior_tools = prior_cache.get("tools")
+                    prior_table = prior_cache.get("tool_table")
+
+                    merged_table = merge_toln_fields_into_tool_table(
+                        tool_table_tools,
+                        prior_table,
+                    )
+                    tool_data["tool_table"] = merged_table
+
+                    if prior_unified and prior_unified.get("atc_available"):
+                        tool_data["tools_unified"] = refresh_unified_toln_fields(
+                            prior_unified,
+                            tool_table_tools,
+                        )
+                        tool_data["tools"] = prior_tools or []
+                        if prior_cache.get("current_tool") is not None:
+                            tool_data["current_tool"] = prior_cache["current_tool"]
+                    else:
+                        tool_data["tools"] = []
+                        tool_data["tools_unified"] = build_unified_tool_view(
+                            merged_table, None, atc_pockets=self.machine.atc_pockets
+                        )
                     tool_data["tools_timestamp"] = poll_timestamp.isoformat()
                 
-                # Store TABLE data with pot numbers merged (if ATC data was available)
-                tool_data["tool_table"] = tool_table_tools
+                if atc_data:
+                    tool_data["tool_table"] = tool_table_tools
                 tool_data["tool_table_timestamp"] = poll_timestamp.isoformat()
                 
                 # Update websocket manager cache with tool data so fast poll can use it
@@ -492,23 +578,39 @@ class MachinePoller:
                 logger.debug(f"[TOOL_POLL] Machine {self.machine.id} ({self.machine.name}) - Tool poll completed in {total_time_ms}ms | Steps: {step_summary}")
             else:
                 logger.warning(f"Machine {self.machine.id} - No tool table data available via Telnet")
+            return tool_data
+
+        try:
+            return await asyncio.wait_for(
+                _run_tool_poll(),
+                timeout=settings.TELNET_POLL_SLOW_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            self._log_poll_step_times("poll_slow", step_times, timed_out=True)
+            logger.warning(
+                "Machine %s (%s) tool poll timed out after %.1fs",
+                self.machine.id,
+                self.machine.name,
+                settings.TELNET_POLL_SLOW_TIMEOUT_SECONDS,
+            )
+            return {}
         except Exception as e:
+            self._log_poll_step_times("poll_slow", step_times, timed_out=False)
             logger.warning(f"Machine {self.machine.id} - Failed to fetch tool data via Telnet: {e}")
-            # Return empty dict on failure
+            return {}
         finally:
             if telnet_client:
                 await telnet_client.disconnect()
-
-        return tool_data
 
     async def poll(self) -> Dict[str, Any]:
         """Poll machine status and return data."""
         poll_start_time = time.time()
         poll_timestamp = datetime.utcnow()
-        step_times = {}
-
+        step_times: Dict[str, float] = {}
         telnet_client = None
-        try:
+
+        async def _run_fast_poll() -> Dict[str, Any]:
+            nonlocal telnet_client
             logger.debug(f"[POLL] Machine {self.machine.id} ({self.machine.name}) - Starting fast poll")
 
             # Phase 5: Migrate to Telnet for MONTR and PRD3 data (replaces HTTP get_status_overview)
@@ -676,7 +778,19 @@ class MachinePoller:
             # Get macro variables from Telnet (macros #500-999)
             try:
                 step_start = time.time()
-                macro_values = await telnet_client.get_macro_variable_range(500, 500, verbose=False)
+                try:
+                    macro_values = await asyncio.wait_for(
+                        telnet_client.get_macro_variable_range(500, 500, verbose=False),
+                        timeout=settings.TELNET_MACRO_TIMEOUT_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "Machine %s (%s) macro fetch timed out after %.1fs",
+                        self.machine.id,
+                        self.machine.name,
+                        settings.TELNET_MACRO_TIMEOUT_SECONDS,
+                    )
+                    macro_values = None
                 step_times['get_macros'] = time.time() - step_start
                 if macro_values:
                     # Convert list to dictionary mapping macro number to value
@@ -729,6 +843,8 @@ class MachinePoller:
                     status_data["tools"] = ws_status["tools"]
                 if "tool_table" in ws_status:
                     status_data["tool_table"] = ws_status["tool_table"]
+                if "tools_unified" in ws_status:
+                    status_data["tools_unified"] = ws_status["tools_unified"]
                 if "current_tool" in ws_status:
                     status_data["current_tool"] = ws_status["current_tool"]
                 if "tools_timestamp" in ws_status:
@@ -759,6 +875,7 @@ class MachinePoller:
                 "poll_timestamp": poll_timestamp.isoformat(),
                 "response_time_ms": response_time_ms,
                 "part_display_mode": getattr(self.machine, "part_display_mode", "parts"),
+                "atc_pockets": getattr(self.machine, "atc_pockets", 21) or 21,
             })
             
             # Ensure program_name is explicitly included (even if None)
@@ -784,7 +901,22 @@ class MachinePoller:
 
             return status_data
 
+        try:
+            return await asyncio.wait_for(
+                _run_fast_poll(),
+                timeout=settings.TELNET_POLL_FAST_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            self._log_poll_step_times("poll_fast", step_times, timed_out=True)
+            return self._finalize_poll_failure(
+                TimeoutError(
+                    f"poll_fast timed out after {settings.TELNET_POLL_FAST_TIMEOUT_SECONDS}s"
+                ),
+                poll_timestamp,
+                poll_start_time,
+            )
         except Exception as e:
+            self._log_poll_step_times("poll_fast", step_times, timed_out=False)
             return self._finalize_poll_failure(e, poll_timestamp, poll_start_time)
         finally:
             if telnet_client:

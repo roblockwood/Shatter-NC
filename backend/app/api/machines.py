@@ -100,6 +100,10 @@ async def update_machine(
                 poller.machine.part_display_mode = getattr(db_machine, "part_display_mode", "parts")
                 poller.machine.control_version = getattr(db_machine, "control_version", None)
                 poller.machine.units = getattr(db_machine, "units", "in")
+                poller.machine.atc_pockets = getattr(db_machine, "atc_pockets", 21) or 21
+                poller.machine.tool_poll_interval_seconds = getattr(
+                    db_machine, "tool_poll_interval_seconds", 30
+                )
     except Exception as e:
         logger.warning(f"Failed to update poller config for machine {machine_id}: {e}")
 
@@ -114,6 +118,8 @@ async def update_machine(
                 "part_display_mode": getattr(db_machine, "part_display_mode", "parts"),
                 "control_version": getattr(db_machine, "control_version", None),
                 "units": getattr(db_machine, "units", "in"),
+                "atc_pockets": getattr(db_machine, "atc_pockets", 21) or 21,
+                "tool_poll_interval_seconds": getattr(db_machine, "tool_poll_interval_seconds", 30),
             }
             await polling_service.websocket_manager.broadcast_status(merged)
     except Exception as e:

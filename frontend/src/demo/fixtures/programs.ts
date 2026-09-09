@@ -77,22 +77,22 @@ M30
 };
 
 export const DEMO_PROGRAMS_ROOT: Program[] = [
-  { name: 'O1234.NC', size: 412, modified: hoursAgo(6), is_directory: false, path: '/O1234.NC' },
-  { name: 'O2000.NC', size: 288, modified: daysAgo(2), is_directory: false, path: '/O2000.NC' },
-  { name: 'O3100.NC', size: 356, modified: daysAgo(1), is_directory: false, path: '/O3100.NC' },
-  { name: 'O5500.NC', size: 198, modified: daysAgo(5), is_directory: false, path: '/O5500.NC' },
+  { name: 'O1234.NC', size: 412, modified: hoursAgo(6), is_directory: false, path: '/O1234.NC', program_note: 'BRACKET POCKET' },
+  { name: 'O2000.NC', size: 288, modified: daysAgo(2), is_directory: false, path: '/O2000.NC', program_note: 'FACE OP' },
+  { name: 'O3100.NC', size: 356, modified: daysAgo(1), is_directory: false, path: '/O3100.NC', program_note: 'SECOND OP' },
+  { name: 'O5500.NC', size: 198, modified: daysAgo(5), is_directory: false, path: '/O5500.NC', program_note: 'LONG RUN JOB' },
   { name: 'SETUP.NC', size: 64, modified: daysAgo(14), is_directory: false, path: '/SETUP.NC' },
   { name: 'SUBPROGS', size: 0, modified: daysAgo(12), is_directory: true, path: '/SUBPROGS' },
   { name: 'ARCHIVE', size: 0, modified: daysAgo(30), is_directory: true, path: '/ARCHIVE' },
 ];
 
 export const DEMO_PROGRAMS_SUBPROGS: Program[] = [
-  { name: 'O1234S1.NC', size: 156, modified: daysAgo(12), is_directory: false, path: '/SUBPROGS/O1234S1.NC' },
+  { name: 'O1234S1.NC', size: 156, modified: daysAgo(12), is_directory: false, path: '/SUBPROGS/O1234S1.NC', program_note: 'SUB POCKET' },
   { name: 'O1234S2.NC', size: 140, modified: daysAgo(12), is_directory: false, path: '/SUBPROGS/O1234S2.NC' },
 ];
 
 export const DEMO_PROGRAMS_ARCHIVE: Program[] = [
-  { name: 'O8891.NC', size: 48, modified: daysAgo(45), is_directory: false, path: '/ARCHIVE/O8891.NC' },
+  { name: 'O8891.NC', size: 48, modified: daysAgo(45), is_directory: false, path: '/ARCHIVE/O8891.NC', program_note: 'LEGACY' },
   { name: 'O7720.NC', size: 920, modified: daysAgo(60), is_directory: false, path: '/ARCHIVE/O7720.NC' },
 ];
 
@@ -136,6 +136,7 @@ export function metadataForFile(filePath: string) {
     runtime_seconds: on === '1234' ? 420 : on === '2000' ? 180 : 540,
     has_errors: false,
     onumber: on ?? undefined,
+    program_note: on === '1234' ? 'BRACKET POCKET' : on === '2000' ? 'FACE OP' : on === '3100' ? 'SECOND OP' : on === '5500' ? 'LONG RUN JOB' : undefined,
   };
 }
 

@@ -203,6 +203,7 @@ Machine configuration and metadata.
 | `tags` | JSON | Yes | NULL | Machine tags (e.g., ["production", "floor-a"]) |
 | `poll_interval_seconds` | Integer | No | 5 | Fast status polling interval (seconds) |
 | `tool_poll_interval_seconds` | Integer | No | 30 | Tool table / ATC polling interval |
+| `atc_pockets` | Integer | No | 21 | ATC magazine pocket count (gap-fill empty-pocket views; Brother models vary 21/30/etc.) |
 | `enabled` | Boolean | No | TRUE | Enable/disable polling |
 | `units` | String(2) | No | "in" | Units of measurement (in/mm) |
 | `diameter_tolerance` | Float | No | 0.010 | Tool diameter tolerance (±inches) |

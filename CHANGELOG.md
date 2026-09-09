@@ -1,17 +1,3 @@
-# [1.3.0](https://github.com/roblockwood/Shatter-NC/compare/v1.2.0...v1.3.0) (2026-07-25)
-
-
-### Features
-
-* show [BETA] in UI for integration channel frontend builds ([7513330](https://github.com/roblockwood/Shatter-NC/commit/7513330c4726d67d3f910cc2ef12d1cd7a8fa9a8))
-
-# [1.2.0](https://github.com/roblockwood/Shatter-NC/compare/v1.1.1...v1.2.0) (2026-07-25)
-
-
-### Features
-
-* add beta/stable release channels for Docker images ([26f3fe9](https://github.com/roblockwood/Shatter-NC/commit/26f3fe9a0218e69c502402eca9d4d12b9fd7471d))
-
 ## [1.4.0](https://github.com/roblockwood/Shatter-NC/compare/v1.3.0...v1.4.0) (2026-09-06)
 
 
@@ -27,6 +13,20 @@
 * grant PR write permission for conventional title check ([88095fe](https://github.com/roblockwood/Shatter-NC/commit/88095fe516eb4a3f9cf763e75cd5985ca2c97ef2))
 * theme RE-VALIDATE button and ban agent commits on main/beta ([8aada35](https://github.com/roblockwood/Shatter-NC/commit/8aada350d5ed4df357cf5aa6d2cec4708b2e05ea))
 * theme RE-VALIDATE button to match terminal chrome ([433f9d9](https://github.com/roblockwood/Shatter-NC/commit/433f9d97a0ee9f721a08b47808bf78792fa5c58f))
+
+# [1.3.0](https://github.com/roblockwood/Shatter-NC/compare/v1.2.0...v1.3.0) (2026-07-25)
+
+
+### Features
+
+* show [BETA] in UI for integration channel frontend builds ([7513330](https://github.com/roblockwood/Shatter-NC/commit/7513330c4726d67d3f910cc2ef12d1cd7a8fa9a8))
+
+# [1.2.0](https://github.com/roblockwood/Shatter-NC/compare/v1.1.1...v1.2.0) (2026-07-25)
+
+
+### Features
+
+* add beta/stable release channels for Docker images ([26f3fe9](https://github.com/roblockwood/Shatter-NC/commit/26f3fe9a0218e69c502402eca9d4d12b9fd7471d))
 
 ## [1.1.1](https://github.com/roblockwood/Shatter-NC/compare/v1.1.0...v1.1.1) (2026-07-25)
 

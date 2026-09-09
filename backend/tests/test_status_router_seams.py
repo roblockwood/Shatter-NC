@@ -117,6 +117,11 @@ def test_batch_change_tool_colors_route_registered():
     assert (frozenset({"PUT"}), "/{machine_id}/tools/atc/colors/batch") in sigs
 
 
+def test_batch_apply_tool_changes_route_registered():
+    sigs = _route_signatures(status_module.router)
+    assert (frozenset({"PUT"}), "/{machine_id}/tools/changes/batch") in sigs
+
+
 def test_change_tool_assignment_route_registered():
     sigs = _route_signatures(status_module.router)
     assert (frozenset({"PUT"}), "/{machine_id}/tools/atc/pot/{pot_number}/tool") in sigs
@@ -145,6 +150,16 @@ def test_set_tool_life_route_registered():
 def test_set_tool_offset_route_registered():
     sigs = _route_signatures(status_module.router)
     assert (frozenset({"PUT"}), "/{machine_id}/tools/{tool_number}/offset") in sigs
+
+
+def test_set_macro_variable_route_registered():
+    sigs = _route_signatures(status_module.router)
+    assert (frozenset({"PUT"}), "/{machine_id}/macros/{macro_number}") in sigs
+
+
+def test_set_measurement_tool_route_registered():
+    sigs = _route_signatures(status_module.router)
+    assert (frozenset({"PUT"}), "/{machine_id}/tools/measurement-tool") in sigs
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +198,7 @@ def test_upload_file_route_registered():
 def test_total_route_count():
     """Exactly 20 routes must be registered. Catches silent deletions during split."""
     sigs = _route_signatures(status_module.router)
-    assert len(sigs) == 20, f"Expected 20 routes, got {len(sigs)}: {sigs}"
+    assert len(sigs) == 23, f"Expected 23 routes, got {len(sigs)}: {sigs}"
 
 
 # ---------------------------------------------------------------------------

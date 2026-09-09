@@ -45,7 +45,7 @@ async def test_on_machine(ip_address: str, port: int = 10000):
 
 If the user asks to merge a feature branch **directly into `main`** (skipping `beta`), warn and get explicit confirmation before proceeding. Do not hard-ban that path — just verify intent.
 
-**Reference**: See `.cursor/rules/branch-commit-policy.mdc` and [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md).
+**Reference**: See `.cursor/rules/branch-commit-policy.mdc`, `.cursor/rules/pr-merge-policy.mdc`, and [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md).
 
 ## Automatic Versioning
 

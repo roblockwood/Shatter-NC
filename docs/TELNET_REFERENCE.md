@@ -47,11 +47,13 @@ Protocol reference for Shatter's telnet client ([`telnet_client.py`](../backend/
 
 ### Tool table
 
-| Command | Purpose |
-|---------|---------|
-| WRTTOFS | Write tool offset |
-| WRTTLLF | Write tool life |
-| CLRTLLF | Clear tool life |
+| Command | Method | Purpose |
+|---------|--------|---------|
+| WRTTOFS | `write_tool_offset()` | Tool offset |
+| WRTTLLF | `write_tool_life()` | Tool life |
+| CLRTLLF | `clear_tool_life()` | Clear tool life |
+| *(FTP TOLN)* | `write_tool_names_via_ftp()` | Tool name (no telnet `WRT*`; patch `TOLNI1`/`TOLNM1` + upload). **Backs up and restores `ATCTL`/`ATCTLD` around the upload** — replacing TOLN clears magazine assignments on the control. |
+| WRTMCNM | `write_macro_variable()` | Macro variables 500–999 |
 
 ### ATC magazine (CHGMAG*)
 
@@ -65,18 +67,30 @@ Implemented in [`_telnet_write_ops.py`](../backend/app/clients/_telnet_write_ops
 | C | CHGMAGC | Tool color (0–7) |
 | D | CHGMAGD | Remove tool from pot |
 
-**Example — set pot 5 tool 42 to red (color 2):**
+**Argument layout (8-char field, space-padded):**
 
-```
-CHGMAGC 05 42 02
-```
+| Type | Example | Payload | Meaning |
+|------|---------|---------|---------|
+| M | CHGMAGM | `0407` | Pot 4 → tool 7 (C00: 2-digit tool) |
+| M | CHGMAGM | `02101` | Pot 2 → tool 101 (D00: 3-digit tool) |
+| S | CHGMAGS | `0012` | Spindle → tool 12 |
+| C | CHGMAGC | `023` | Pot 2 → color 3 |
+| K | CHGMAGK | `022` | Pot 2 → type 2 (Large) |
+| D | CHGMAGD | `05` | Clear pot 5 |
+
+Pots marked **Cap (255)** in ATCTL are not empty — run **CHGMAGD** first (`remove_tool_from_pot` /
+`clear_cap_from_pot`), then **CHGMAGM** to assign a tool. `assign_tool_to_pot(clear_cap=True)` does
+this automatically.
+
+To **set cap** on an empty pocket, use **CHGMAGM** with tool **255** (C00) or **999** (D00).
+The machine panel displays cap as tool **0**; Shatter maps UI `0` on empty-pot rows to this write
+(`set_cap_on_pot`).
 
 ### Other writes
 
 | Command | Purpose |
 |---------|---------|
 | WRTREL | Preset relative position |
-| WRTMCNM | Write macro variable |
 | IOCMOD | Write I/O signal (multipart) |
 
 ---

@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     DEFAULT_TOOL_POLL_INTERVAL: int = 30  # seconds (tool table/ATC polling, separate from fast status polling)
     HEARTBEAT_INTERVAL_MINUTES: int = 2  # minutes between status/heartbeat log events when status unchanged
 
+    # Telnet poll hard caps — a stuck CNC session must never block the API for minutes
+    TELNET_POLL_FAST_TIMEOUT_SECONDS: float = Field(default=30.0, ge=5.0, le=120.0)
+    TELNET_POLL_SLOW_TIMEOUT_SECONDS: float = Field(default=45.0, ge=5.0, le=180.0)
+    TELNET_MACRO_TIMEOUT_SECONDS: float = Field(default=10.0, ge=1.0, le=60.0)
+    TELNET_READ_MAX_TOTAL_SECONDS: float = Field(default=10.0, ge=1.0, le=60.0)
+
     # FTP folder sync
     FTP_SYNC_ENABLED: bool = True
     FTP_SYNC_LOCAL_WATCH_ENABLED: bool = False

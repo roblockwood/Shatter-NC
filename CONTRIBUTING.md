@@ -602,7 +602,7 @@ Automated tests do not replace integration checks for machine I/O and UI:
 1. **Initial Review**: Within 1-3 days of submitting PR
 2. **Feedback**: Maintainers may request changes or ask questions
 3. **Discussion**: Be open to feedback and willing to make adjustments
-4. **Approval**: Once approved, your PR will be merged
+4. **Approval**: Once approved **and required CI checks pass**, your PR will be merged
 5. **Thank You**: Your contribution will be acknowledged in release notes
 
 ### Review Criteria

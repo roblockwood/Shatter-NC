@@ -50,10 +50,11 @@ export const FileBrowser: React.FC = () => {
   const [expandedWCS, setExpandedWCS] = useState(false);
   // Search and sort state
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('name');
+  const [sortBy, setSortBy] = useState<'name' | 'comment' | 'size' | 'modified'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   // Deployment tracking - set of filenames that have deployments
   const [filesWithDeployments, setFilesWithDeployments] = useState<Set<string>>(new Set());
+  const [programsRefreshKey, setProgramsRefreshKey] = useState(0);
 
   // Keep URL params in primitive values so effects don't depend on mutable objects.
   const deepLinkMachineParam = searchParams.get('machine');
@@ -254,7 +255,7 @@ export const FileBrowser: React.FC = () => {
       });
 
     return () => controller.abort();
-  }, [selectedMachineId, currentPath, pathLoading]);
+  }, [selectedMachineId, currentPath, pathLoading, programsRefreshKey]);
 
   // Fetch deployments list for the machine to mark files with deployment data
   useEffect(() => {
@@ -454,6 +455,30 @@ export const FileBrowser: React.FC = () => {
 
       const data: FileMetadata = await response.json();
       setFileMetadata(data);
+      if (data.program_note && selectedMachineId) {
+        setPrograms((prev) =>
+          prev.map((p) =>
+            p.path === program.path && p.name === program.name
+              ? { ...p, program_note: data.program_note }
+              : p
+          )
+        );
+        const cacheKey = `programs_cache_${selectedMachineId}_${currentPath}`;
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const cacheData = JSON.parse(cached);
+            cacheData.programs = (cacheData.programs || []).map((p: Program) =>
+              p.path === program.path && p.name === program.name
+                ? { ...p, program_note: data.program_note }
+                : p
+            );
+            sessionStorage.setItem(cacheKey, JSON.stringify(cacheData));
+          } catch {
+            /* ignore stale cache */
+          }
+        }
+      }
     } catch (err) {
       console.error('Metadata error:', err);
       setFileMetadata(null);
@@ -603,6 +628,7 @@ export const FileBrowser: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           deployed_filename: program.name,
+          deployed_path: filePath,
           gcode_content: validationData.gcode_content,
           validation_results: validationData.validation
         })
@@ -611,6 +637,9 @@ export const FileBrowser: React.FC = () => {
       if (!deployResponse.ok) {
         console.warn('Failed to save validation to database');
       }
+
+      sessionStorage.removeItem(`programs_cache_${selectedMachineId}_${currentPath}`);
+      setProgramsRefreshKey((key) => key + 1);
 
       // Step 3: Refresh deployment details to show the new record
       await fetchDeploymentDetail(program);
@@ -715,6 +744,7 @@ export const FileBrowser: React.FC = () => {
       const query = searchQuery.toLowerCase();
       filtered = programs.filter(p => 
         p.name.toLowerCase().includes(query) ||
+        (p.program_note && p.program_note.toLowerCase().includes(query)) ||
         (p.is_directory && 'directory'.includes(query)) ||
         (!p.is_directory && 'file'.includes(query))
       );
@@ -730,6 +760,8 @@ export const FileBrowser: React.FC = () => {
       
       if (sortBy === 'name') {
         comparison = a.name.localeCompare(b.name);
+      } else if (sortBy === 'comment') {
+        comparison = (a.program_note ?? '').localeCompare(b.program_note ?? '');
       } else if (sortBy === 'size') {
         comparison = a.size - b.size;
       } else if (sortBy === 'modified') {
@@ -849,9 +881,10 @@ export const FileBrowser: React.FC = () => {
                   <Select
                     className="terminal-select-sm"
                     value={sortBy}
-                    onChange={(value) => setSortBy(value as 'name' | 'size' | 'modified')}
+                    onChange={(value) => setSortBy(value as 'name' | 'comment' | 'size' | 'modified')}
                     options={[
                       { value: 'name', label: 'NAME' },
+                      { value: 'comment', label: 'COMMENT' },
                       { value: 'size', label: 'SIZE' },
                       { value: 'modified', label: 'MODIFIED' },
                     ]}
@@ -867,6 +900,7 @@ export const FileBrowser: React.FC = () => {
               </div>
               <div className="table-header">
                 <div className="col-name">NAME</div>
+                <div className="col-comment">COMMENT</div>
                 <div className="col-size">SIZE</div>
                 <div className="col-modified">MODIFIED</div>
                 <div className="col-actions">ACTIONS</div>
@@ -895,6 +929,12 @@ export const FileBrowser: React.FC = () => {
                       {hasDeployment && (
                         <span className="deployment-indicator" title="Has deployment data">●</span>
                       )}
+                    </div>
+                    <div
+                      className="col-comment text-dim"
+                      title={program.program_note ?? undefined}
+                    >
+                      {program.program_note ?? (program.is_directory ? '' : '—')}
                     </div>
                     <div className="col-size">{program.is_directory ? '<DIR>' : formatBytes(program.size)}</div>
                     <div className="col-modified">{formatDate(program.modified)}</div>

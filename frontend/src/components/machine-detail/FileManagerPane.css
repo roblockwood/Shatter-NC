@@ -220,7 +220,7 @@
 
 .file-manager-table-header {
   display: grid;
-  grid-template-columns: 2fr 1fr 1.5fr 1fr;
+  grid-template-columns: 2fr 2fr 1fr 1.5fr 1fr;
   gap: var(--spacing-xs);
   padding: var(--spacing-xs) var(--spacing-sm);
   font-weight: 700;
@@ -247,7 +247,7 @@
 
 .file-manager-table-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1.5fr 1fr;
+  grid-template-columns: 2fr 2fr 1fr 1.5fr 1fr;
   gap: var(--spacing-xs);
   padding: 2px var(--spacing-sm);
   cursor: pointer;
@@ -269,6 +269,12 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
+}
+
+.file-manager-col-comment {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-manager-col-actions {

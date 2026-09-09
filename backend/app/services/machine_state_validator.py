@@ -4,6 +4,7 @@ Machine State Validation Service
 Validates machine state before allowing write operations (tool modifications, ATC changes, etc.).
 Ensures machine is in a safe state to prevent operations during active machining, editing, or error conditions.
 """
+from datetime import datetime, timezone
 from typing import Tuple, Optional, Dict, Any
 import logging
 from sqlalchemy.orm import Session
@@ -11,6 +12,79 @@ from sqlalchemy.orm import Session
 from app.models.machine import Machine
 
 logger = logging.getLogger(__name__)
+
+# Polled status older than this triggers a minimal live MEM/PRD3 read before macro write.
+MACRO_WRITE_CACHE_DEFAULT_MAX_AGE_SECONDS = 15
+
+
+# Operation status codes from MEM data (0=Reset, 1=Operation, 2=Temporary stop, 3=Block stop)
+UNSAFE_OPERATION_STATUSES = frozenset({1, 2, 3})
+
+
+def macro_write_cache_max_age_seconds(poll_interval_seconds: Optional[int]) -> int:
+    """Max age for trusting poller cache before a live macro-write safety check."""
+    interval = poll_interval_seconds if poll_interval_seconds and poll_interval_seconds > 0 else 5
+    return max(MACRO_WRITE_CACHE_DEFAULT_MAX_AGE_SECONDS, interval * 2)
+
+
+def _parse_cache_timestamp(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    text = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def cache_age_seconds(cached_status: Dict[str, Any]) -> Optional[float]:
+    """Seconds since last successful fast poll, or None if timestamp unavailable."""
+    ts = _parse_cache_timestamp(cached_status.get("last_successful_poll_at"))
+    if ts is None:
+        ts = _parse_cache_timestamp(cached_status.get("poll_timestamp"))
+    if ts is None:
+        return None
+    return (datetime.now(timezone.utc) - ts).total_seconds()
+
+
+def evaluate_macro_write_safety(
+    *,
+    machine_status: Optional[str],
+    mem_mode: Optional[int],
+    machine_id: int,
+    machine_name: str,
+    operation_status: Optional[int] = None,
+) -> Tuple[bool, Optional[str], Dict[str, Any]]:
+    """Apply macro-write block rules aligned with lenient batch ops (color, measurement)."""
+    status_data: Dict[str, Any] = {
+        "machine_id": machine_id,
+        "machine_name": machine_name,
+    }
+    if machine_status is not None:
+        status_data["status"] = machine_status
+    if mem_mode is not None:
+        status_data["mode"] = mem_mode
+    if operation_status is not None:
+        status_data["operation_status"] = operation_status
+
+    if machine_status == "operating":
+        return (
+            False,
+            "Machine is currently running a program. Stop the program before making changes.",
+            status_data,
+        )
+
+    actively_running = operation_status in UNSAFE_OPERATION_STATUSES
+    if mem_mode == 2 and actively_running:
+        return (
+            False,
+            "Machine is running a program. Stop the program before making changes.",
+            status_data,
+        )
+    return True, None, status_data
 
 
 class MachineStateValidator:
@@ -20,7 +94,87 @@ class MachineStateValidator:
     UNSAFE_MODES = {3, 4, 5}  # Edit, MDI manual, Memory edit
     
     # Operation status codes from MEM data (0=Reset, 1=Operation, 2=Temporary stop, 3=Block stop)
-    UNSAFE_OPERATION_STATUSES = {1, 2, 3}  # Operation, Temporary stop, Block stop
+    UNSAFE_OPERATION_STATUSES = UNSAFE_OPERATION_STATUSES
+
+    @staticmethod
+    def try_validate_macro_write_from_cache(
+        cached_status: Dict[str, Any],
+        machine_id: int,
+        machine_name: str,
+        max_age_seconds: int,
+    ) -> Tuple[Optional[bool], Optional[str], Dict[str, Any]]:
+        """
+        Validate macro write using poller cache when fresh enough.
+
+        Returns:
+            (True, None, status_data) when cache confirms safe
+            (False, message, status_data) when cache confirms unsafe
+            (None, None, status_data) when cache is stale or insufficient — caller should live-check
+        """
+        machine_status = cached_status.get("status")
+        mem_mode = cached_status.get("mem_mode")
+        mem_operation_status = cached_status.get("mem_operation_status")
+        status_data = {
+            "machine_id": machine_id,
+            "machine_name": machine_name,
+        }
+        if machine_status is not None:
+            status_data["status"] = machine_status
+        if mem_mode is not None:
+            status_data["mode"] = mem_mode
+        if mem_operation_status is not None:
+            status_data["operation_status"] = mem_operation_status
+
+        if machine_status is None and mem_mode is None:
+            return None, None, status_data
+
+        age = cache_age_seconds(cached_status)
+        if age is None or age > max_age_seconds:
+            return None, None, status_data
+
+        is_safe, error_message, evaluated = evaluate_macro_write_safety(
+            machine_status=machine_status,
+            mem_mode=mem_mode,
+            machine_id=machine_id,
+            machine_name=machine_name,
+            operation_status=mem_operation_status,
+        )
+        return is_safe, error_message, evaluated
+
+    async def validate_macro_write_live_minimal(
+        self,
+        telnet_client,
+        control_version: Optional[str],
+        machine_id: int,
+        machine_name: str,
+    ) -> Tuple[bool, Optional[str], Dict[str, Any]]:
+        """Read MEM + PRD3 on an open telnet session (no alarms, no control detect)."""
+        from app.parsers.mem_parser_v2 import parse_mem_v2
+        from app.parsers.prd3_parser_v2 import parse_prd3_v2
+
+        machine_status: Optional[str] = None
+        mem_mode: Optional[int] = None
+        operation_status: Optional[int] = None
+
+        mem_data = await telnet_client.get_memory_data(verbose=False)
+        if mem_data:
+            mem_parsed = parse_mem_v2(mem_data.encode("utf-8"), control_version=control_version)
+            mem_mode = mem_parsed.get("mode")
+            operation_status = mem_parsed.get("operation_status")
+
+        prd3_data = await telnet_client.get_prd3_data(control_version=control_version, verbose=False)
+        if prd3_data:
+            prd3_parsed = parse_prd3_v2(prd3_data.encode("utf-8"), control_version=control_version)
+            current = (prd3_parsed or {}).get("current_status") or {}
+            machine_status = current.get("status")
+
+        return evaluate_macro_write_safety(
+            machine_status=machine_status,
+            mem_mode=mem_mode,
+            machine_id=machine_id,
+            machine_name=machine_name,
+            operation_status=operation_status,
+        )
     
     async def validate_safe_for_write(
         self,
@@ -50,7 +204,7 @@ class MachineStateValidator:
         Args:
             machine_id: Machine ID to validate
             operation_type: Type of operation - "tool_color", "tool_assignment", "tool_delete", 
-                          "spindle_tool", "tool_type", "tool_life", "tool_offset"
+                          "spindle_tool", "tool_type", "tool_life", "tool_offset", "tool_name", "macro_write"
             db: Database session
             
         Returns:
@@ -66,8 +220,6 @@ class MachineStateValidator:
         
         telnet_client = None
         try:
-            # Get current machine status (includes PRD3, alarms)
-            # We need to extend this to also fetch MEM data for mode and operation_status
             from app.clients.telnet_client import create_fresh_connection
             from app.parsers.mem_parser_v2 import parse_mem_v2
 
@@ -138,16 +290,38 @@ class MachineStateValidator:
                 # Mode 2 = Memory operation (actively running program)
                 # Mode 3 = Edit, Mode 4 = MDI manual, Mode 5 = Memory edit (editing modes)
                 if mode is not None:
-                    if mode == 2:  # Memory operation - actively running
-                        return False, "Machine is running a program. Stop the program before making changes.", status_data
-                    elif mode in self.UNSAFE_MODES:  # Edit modes
-                        mode_names = {3: "Edit", 4: "MDI manual", 5: "Memory edit"}
-                        mode_name = mode_names.get(mode, f"Mode {mode}")
-                        # For color changes, edit modes might be OK, but for tool assignment, block
+                    mode_names = {2: "Memory", 3: "Edit", 4: "MDI manual", 5: "Memory edit"}
+                    mode_name = mode_names.get(mode, f"Mode {mode}")
+                    actively_running = operation_status in (1, 2, 3)
+                    lenient_ops = (
+                        "tool_color",
+                        "tool_type",
+                        "tool_life",
+                        "tool_offset",
+                        "tool_name",
+                        "macro_write",
+                        "measurement_tool",
+                    )
+                    if mode == 2 and actively_running:
+                        return False, (
+                            "Machine is running a program. Stop the program before making changes."
+                        ), status_data
+                    if mode == 2 and operation_type in lenient_ops:
+                        logger.info(
+                            "MEM mode 2 with operation_status=%s for %s — allowing (control will reject if unsafe)",
+                            operation_status,
+                            operation_type,
+                        )
+                    elif mode in self.UNSAFE_MODES:
                         if operation_type in ("tool_assignment", "tool_delete", "spindle_tool"):
-                            return False, f"Machine is in {mode_name} mode. Exit edit mode before making tool assignments.", status_data
-                        # For color changes, just warn but allow
-                        logger.info(f"Machine in {mode_name} mode for {operation_type} - allowing (machine will reject if unsafe)")
+                            return False, (
+                                f"Machine is in {mode_name} mode. Exit edit mode before making tool assignments."
+                            ), status_data
+                        logger.info(
+                            "Machine in %s mode for %s — allowing (machine will reject if unsafe)",
+                            mode_name,
+                            operation_type,
+                        )
                 
                 # Check operation_status - block if actively operating
                 if operation_status is not None and operation_status in self.UNSAFE_OPERATION_STATUSES:
@@ -170,7 +344,7 @@ class MachineStateValidator:
             # All checks passed
             status_data["alarms"] = alarms
             return True, None, status_data
-            
+
         except Exception as e:
             logger.error(f"Error validating machine state for machine {machine_id}: {e}")
             return False, f"Error checking machine state: {str(e)}", None

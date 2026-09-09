@@ -83,6 +83,7 @@ class CNCDataReadsMixin:
                                 f"Failed to load '{data_name}': command sent but no response "
                                 f"(possible CM7522 risk) — not retrying"
                             )
+                            await self.disconnect()
                             return None
                         elif status is None and attempt < max_retries:
                             # Connection-level failure BEFORE the command was sent.
@@ -102,19 +103,25 @@ class CNCDataReadsMixin:
                             continue
                         else:
                             logger.warning(f"Failed to load data '{data_name}': status {status}")
+                            self._connected = False
+                            await self.disconnect()
                             return None
                 except (ConnectionError, TimeoutError, asyncio.TimeoutError) as e:
                     if attempt < max_retries:
                         wait_time = 0.5 * (attempt + 1)
                         logger.warning(f"Connection error loading '{data_name}': {e}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
                         self._connected = False
+                        await self.disconnect()
                         await asyncio.sleep(wait_time)
                         continue
                     else:
                         logger.error(f"Error loading data '{data_name}' after {max_retries + 1} attempts: {e}")
+                        await self.disconnect()
                         return None
                 except Exception as e:
                     logger.error(f"Error loading data '{data_name}': {e}")
+                    self._connected = False
+                    await self.disconnect()
                     return None
 
         return None
@@ -1124,6 +1131,99 @@ class CNCDataReadsMixin:
                 logger.error(f"Error getting H/D modal: {e}")
                 return None
 
+    @staticmethod
+    def _parse_macro_range_response(data: str) -> Optional[list[float]]:
+        """Parse REDMCNM range response data into float values."""
+        if not data:
+            return None
+
+        data_line = data.replace("\n", "").replace("\r", "").strip()
+        if len(data_line) < 3:
+            return None
+
+        try:
+            returned_size = int(data_line[0:3])
+            values = []
+            offset = 3
+            for _ in range(returned_size):
+                if offset + 12 > len(data_line):
+                    break
+                value_str = data_line[offset : offset + 12].strip()
+                try:
+                    values.append(float(value_str))
+                except ValueError:
+                    values.append(0.0)
+                offset += 12
+            return values
+        except (ValueError, IndexError) as e:
+            logger.error(f"Error parsing REDMCNM range response: {e}")
+            return None
+
+    async def _fetch_macro_variable_range_unlocked(
+        self, start_macro: int, data_size: int, verbose: bool = False
+    ) -> Optional[list[float]]:
+        """Read macro variables via REDMCNM range; caller must hold the machine lock."""
+        if not self._connected:
+            connected = await self.connect()
+            if not connected:
+                return None
+
+        if start_macro < 500 or start_macro > 999:
+            logger.warning(f"Start macro {start_macro} out of range (500-999)")
+            return None
+
+        if data_size < 1 or data_size > 999:
+            logger.warning(f"Data size {data_size} out of range (1-999)")
+            return None
+
+        try:
+            macro_str = f"{start_macro:03d}"
+            arguments = f"{macro_str}     "[:8]
+            data_payload = f"\n{data_size:03d}\n"
+
+            success, status, data = await self._send_multipart_command(
+                "REDMCNM", arguments, data_payload, verbose=verbose
+            )
+            if not success:
+                logger.warning(f"Failed to get macro variable range: status {status}")
+                return None
+
+            return self._parse_macro_range_response(data or "")
+        except Exception as e:
+            logger.error(f"Error getting macro variable range: {e}")
+            return None
+
+    async def _fetch_macro_variable_unlocked(
+        self, macro_number: int, verbose: bool = False
+    ) -> Optional[float]:
+        """Read one macro via REDMCNM single-variable command; caller holds machine lock."""
+        if not self._connected:
+            connected = await self.connect()
+            if not connected:
+                return None
+
+        if macro_number < 500 or macro_number > 999:
+            logger.warning(f"Macro number {macro_number} out of range (500-999)")
+            return None
+
+        try:
+            macro_str = f"{macro_number:03d}"
+            arguments = f"{macro_str}     "[:8]
+            success, status, data = await self._send_command("REDMCNM", arguments, verbose=verbose)
+            if not success:
+                logger.warning(f"Failed to get macro variable: status {status}")
+                return None
+            if not data:
+                return None
+            value_str = data.replace("\n", "").replace("\r", "").strip()
+            return float(value_str)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Could not parse macro #{macro_number} value: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error getting macro variable #{macro_number}: {e}")
+            return None
+
     async def get_macro_variable(self, macro_number: int, verbose: bool = False) -> Optional[float]:
         """
         Get macro variable value using REDMCNM command (single variable).
@@ -1147,28 +1247,7 @@ class CNCDataReadsMixin:
                 logger.warning(f"Macro number {macro_number} out of range (500-999)")
                 return None
 
-            try:
-                macro_str = f"{macro_number:03d}"
-                arguments = f"{macro_str}     "[:8]
-
-                success, status, data = await self._send_command("REDMCNM", arguments, verbose=verbose)
-                if not success:
-                    logger.warning(f"Failed to get macro variable: status {status}")
-                    return None
-
-                if not data:
-                    return None
-
-                value_str = data.replace('\n', '').replace('\r', '').strip()
-                try:
-                    return float(value_str)
-                except ValueError:
-                    logger.warning(f"Could not parse macro value: {value_str}")
-                    return None
-
-            except Exception as e:
-                logger.error(f"Error getting macro variable: {e}")
-                return None
+            return await self._fetch_macro_variable_unlocked(macro_number, verbose=verbose)
 
     async def get_macro_variable_range(
         self, start_macro: int, data_size: int, verbose: bool = False
@@ -1200,47 +1279,6 @@ class CNCDataReadsMixin:
                 logger.warning(f"Data size {data_size} out of range (1-999)")
                 return None
 
-            try:
-                macro_str = f"{start_macro:03d}"
-                arguments = f"{macro_str}     "[:8]
-                data_payload = f"\n{data_size:03d}\n"
-
-                success, status, data = await self._send_multipart_command(
-                    "REDMCNM", arguments, data_payload, verbose=verbose
-                )
-                if not success:
-                    logger.warning(f"Failed to get macro variable range: status {status}")
-                    return None
-
-                if not data:
-                    return None
-
-                data_line = data.replace('\n', '').replace('\r', '').strip()
-
-                if len(data_line) < 3:
-                    return None
-
-                try:
-                    returned_size = int(data_line[0:3])
-
-                    values = []
-                    offset = 3
-                    for _ in range(returned_size):
-                        if offset + 12 > len(data_line):
-                            break
-                        value_str = data_line[offset:offset + 12].strip()
-                        try:
-                            values.append(float(value_str))
-                        except ValueError:
-                            values.append(0.0)
-                        offset += 12
-
-                    return values
-
-                except (ValueError, IndexError) as e:
-                    logger.error(f"Error parsing REDMCNM range response: {e}")
-                    return None
-
-            except Exception as e:
-                logger.error(f"Error getting macro variable range: {e}")
-                return None
+            return await self._fetch_macro_variable_range_unlocked(
+                start_macro, data_size, verbose=verbose
+            )

@@ -129,6 +129,7 @@ compressors.set_websocket_manager_for_compressors(websocket_manager)
 
 # Inject polling service into summary, machines, and status routers
 summary.set_polling_service(polling_service)
+summary.set_compressor_polling_service(compressor_polling_service)
 machines.set_polling_service(polling_service)
 status.set_polling_service(polling_service)
 ftp_sync.set_ftp_sync_service(ftp_sync_service)

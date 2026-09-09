@@ -45,34 +45,6 @@ def _format_pacific_time(value: Optional[datetime]) -> str:
     return pacific_dt.strftime("%d-%b-%y %H:%M %Z").upper()
 
 
-def extract_nc_program_header(content: str) -> dict:
-    """Extract program title and file label from an NC file's header comments."""
-    title: Optional[str] = None
-    file_label: Optional[str] = None
-    comment_re = re.compile(r"^\\(([^)]*)\\)\\s*$")
-
-    for line in content.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if stripped == "%" or re.match(r"^O\\d+\\b", stripped, re.IGNORECASE):
-            continue
-        m = comment_re.match(stripped)
-        if not m:
-            break
-        text = m.group(1).strip()
-        if not text:
-            continue
-        if title is None:
-            title = text
-        if file_label is None and text.upper().startswith("FILE:"):
-            file_label = text[5:].strip()
-        if title is not None and file_label is not None:
-            break
-
-    return {"title": title, "file_label": file_label}
-
-
 class NotificationService:
     """Delivers notifications via configured channels when machine status rules match."""
 

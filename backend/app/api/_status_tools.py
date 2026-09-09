@@ -3,15 +3,19 @@
 Routes:
     POST /{machine_id}/status/tools/refresh           — trigger polling refresh
     PUT  /{machine_id}/tools/atc/pot/{pot}/color      — single color change
-    PUT  /{machine_id}/tools/atc/colors/batch         — batch color change
+    PUT  /{machine_id}/tools/changes/batch            — unified batch tool writes
+    PUT  /{machine_id}/tools/atc/colors/batch         — batch color change (legacy)
     PUT  /{machine_id}/tools/atc/pot/{pot}/tool       — assign tool to pot
     PUT  /{machine_id}/tools/atc/pot/{pot}/type       — change tool type
     DELETE /{machine_id}/tools/atc/pot/{pot}          — remove tool from pot
     PUT  /{machine_id}/tools/spindle                  — change spindle tool
     PUT  /{machine_id}/tools/{tool_number}/life       — set tool life
     PUT  /{machine_id}/tools/{tool_number}/offset     — set tool offset
+    PUT  /{machine_id}/macros/{macro_number}          — set macro variable (#500-999)
+    PUT  /{machine_id}/tools/measurement-tool         — set macro #920 (measurement tool)
 """
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
 from sqlalchemy.orm import Session
 from app.db.base import get_db
@@ -19,6 +23,8 @@ from app.models.machine import Machine
 from app.api._status_state import (
     BatchColorChangeRequest,
     BatchColorChangeResponse,
+    BatchToolChangesRequest,
+    BatchToolChangesResponse,
     ColorChangeResult,
 )
 import app.api._status_state as _state
@@ -27,6 +33,71 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+MEASUREMENT_TOOL_MACRO = 920
+
+_MACRO_WRITE_RETRY_CODES = ("32", "36", "37", "63", "verify_failed", "verify_mismatch")
+
+
+async def _run_macro_write(
+    db_machine: Machine,
+    machine_id: int,
+    macro_number: int,
+    value: float,
+    operation_type: str,
+    operation_details: dict,
+    failure_message: str,
+) -> tuple[bool, Optional[str], Optional[float], dict]:
+    from app.clients.telnet_client import CNCTelnetClient
+    from app.services.audit_logger import AuditLogger
+    from app.services.macro_write_service import execute_macro_write
+
+    outcome = await execute_macro_write(
+        db_machine=db_machine,
+        machine_id=machine_id,
+        macro_number=macro_number,
+        value=value,
+    )
+
+    if outcome.error_message and not outcome.success and outcome.status_code is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail=outcome.error_message,
+        )
+
+    status_data = outcome.status_data
+    success = outcome.success
+    status_code = outcome.status_code
+    verified_value = outcome.verified_value
+
+    audit_details = {**operation_details, "verified_value": verified_value}
+
+    status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
+    AuditLogger.log_tool_modification(
+        machine_id=machine_id,
+        operation_type=operation_type,
+        operation_details=audit_details,
+        success=success,
+        error_message=status_desc or outcome.error_message,
+        machine_state=status_data,
+    )
+
+    if not success:
+        error_response = {
+            "error_code": status_code or "unknown",
+            "message": f"{failure_message}: {status_desc}",
+            "can_retry": status_code in _MACRO_WRITE_RETRY_CODES if status_code else False,
+        }
+        if status_data:
+            error_response["machine_state"] = status_data
+        if verified_value is not None:
+            error_response["verified_value"] = verified_value
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=error_response,
+        )
+
+    return success, status_code, verified_value, status_data
 
 
 @router.post("/{machine_id}/status/tools/refresh")
@@ -202,6 +273,58 @@ async def change_tool_color(
         )
 
 
+@router.put("/{machine_id}/tools/changes/batch", response_model=BatchToolChangesResponse)
+async def batch_apply_tool_changes(
+    machine_id: int,
+    request: BatchToolChangesRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Apply multiple tooling writes in one request.
+
+    Validates machine state once (strictest rule among pending ops), uses a single
+    telnet session, and processes changes in safe order: delete → assign/spindle →
+    type/color → offset/life.
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    if not request.changes:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="No changes provided",
+        )
+
+    try:
+        from app.services.tool_write_service import apply_tool_changes_batch_with_refresh
+
+        return await apply_tool_changes_batch_with_refresh(
+            db_machine, machine_id, request.changes, db
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except PermissionError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in batch tool changes for machine {machine_id}: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply tool changes: {str(e)}",
+        )
+
+
 @router.put("/{machine_id}/tools/atc/colors/batch", response_model=BatchColorChangeResponse)
 async def batch_change_tool_colors(
     machine_id: int,
@@ -243,110 +366,25 @@ async def batch_change_tool_colors(
                 detail=f"Invalid color value: {change.color} (must be 0-7)",
             )
 
-    telnet_client = None
     try:
-        from app.services.machine_state_validator import MachineStateValidator
-        validator = MachineStateValidator()
-        is_safe, error_message, status_data = await validator.validate_safe_for_write(
-            machine_id=machine_id,
-            operation_type="tool_color",
-            db=db
+        from app.services.tool_write_service import apply_color_changes_batch
+
+        results = await apply_color_changes_batch(
+            db_machine, machine_id, request.changes, db
         )
-
-        if not is_safe:
-            raise HTTPException(
-                status_code=http_status.HTTP_409_CONFLICT,
-                detail=error_message or "Machine is not in a safe state for this operation",
-            )
-
-        from app.clients.telnet_client import CNCTelnetClient, create_fresh_connection
-        from app.services.audit_logger import AuditLogger
-
-        telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
-            timeout=10
-        )
-
-        color_names = {0: "None", 1: "Blue", 2: "Red", 3: "Purple", 4: "Green", 5: "Light Blue", 6: "Yellow", 7: "White"}
-        results = []
-        successful = 0
-        failed = 0
-
-        for change in request.changes:
-            try:
-                success, status_code = await telnet_client.change_atc_tool(
-                    operation_type='C',
-                    magazine_pos=change.pot_number,
-                    tool_num=change.tool_number,
-                    new_value=change.color,
-                    verbose=False
-                )
-
-                status_desc = CNCTelnetClient.get_status_description(status_code or "00") if not success else None
-                AuditLogger.log_tool_modification(
-                    machine_id=machine_id,
-                    operation_type="tool_color",
-                    operation_details={
-                        "pot_number": change.pot_number,
-                        "tool_number": change.tool_number,
-                        "new_color": change.color,
-                        "new_color_name": color_names.get(change.color, "Unknown"),
-                    },
-                    success=success,
-                    error_message=status_desc,
-                    machine_state=None
-                )
-
-                if success:
-                    results.append(ColorChangeResult(
-                        pot_number=change.pot_number,
-                        tool_number=change.tool_number,
-                        color=change.color,
-                        success=True,
-                        message=f"Tool color changed to {color_names.get(change.color, 'Unknown')}"
-                    ))
-                    successful += 1
-                else:
-                    error_msg = status_desc or f"Failed with status code {status_code}"
-                    results.append(ColorChangeResult(
-                        pot_number=change.pot_number,
-                        tool_number=change.tool_number,
-                        color=change.color,
-                        success=False,
-                        error_code=status_code or "unknown",
-                        message=error_msg
-                    ))
-                    failed += 1
-                    logger.error(f"Failed to change tool color for pot {change.pot_number}, tool {change.tool_number}, color {change.color}: {error_msg}")
-
-            except Exception as e:
-                error_msg = str(e)
-                results.append(ColorChangeResult(
-                    pot_number=change.pot_number,
-                    tool_number=change.tool_number,
-                    color=change.color,
-                    success=False,
-                    error_code="exception",
-                    message=error_msg
-                ))
-                failed += 1
-                logger.error(f"Exception changing tool color for pot {change.pot_number}, tool {change.tool_number}: {e}")
-
-        if successful > 0 and _state.polling_service:
-            try:
-                await _state.polling_service.refresh_tool_data(machine_id)
-                logger.debug(f"Refreshed tool data for machine {machine_id} after batch color changes ({successful} successful)")
-            except Exception as e:
-                logger.warning(f"Failed to refresh tool data after batch color changes for machine {machine_id}: {e}")
-
+        successful = sum(1 for r in results if r.success)
+        failed = len(results) - successful
         return BatchColorChangeResponse(
             results=results,
             total=len(request.changes),
             successful=successful,
-            failed=failed
+            failed=failed,
         )
-
+    except PermissionError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -355,9 +393,6 @@ async def batch_change_tool_colors(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to batch change tool colors: {str(e)}",
         )
-    finally:
-        if telnet_client:
-            await telnet_client.disconnect()
 
 
 @router.put("/{machine_id}/tools/atc/pot/{pot_number}/tool")
@@ -1021,6 +1056,117 @@ async def set_tool_offset(
         raise
     except Exception as e:
         logger.error(f"Error setting tool offset: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.put("/{machine_id}/macros/{macro_number}")
+async def set_macro_variable(
+    machine_id: int,
+    macro_number: int,
+    value: float = Query(..., description="Macro variable value to write"),
+    db: Session = Depends(get_db),
+):
+    """
+    Write a macro variable (#500-999) on the control via WRTMCNM.
+
+    Verifies the write by reading the value back with REDMCNM.
+    """
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    if not 500 <= macro_number <= 999:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid macro number: {macro_number} (must be 500-999)",
+        )
+
+    try:
+        _, _, verified_value, _ = await _run_macro_write(
+            db_machine=db_machine,
+            machine_id=machine_id,
+            macro_number=macro_number,
+            value=value,
+            operation_type="macro_write",
+            operation_details={
+                "macro_number": macro_number,
+                "new_value": value,
+            },
+            failure_message=f"Failed to write macro #{macro_number}",
+        )
+
+        return {
+            "success": True,
+            "macro_number": macro_number,
+            "value": value,
+            "verified_value": verified_value,
+            "message": f"Macro #{macro_number} set to {verified_value if verified_value is not None else value}",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error writing macro #{macro_number} for machine {machine_id}: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.put("/{machine_id}/tools/measurement-tool")
+async def set_measurement_tool(
+    machine_id: int,
+    tool_number: int = Query(..., description="Tool number to measure (1-999)"),
+    db: Session = Depends(get_db),
+):
+    """
+    Set macro #920 to the selected tool number (tool measurement selection).
+    """
+    if not 1 <= tool_number <= 999:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid tool number: {tool_number} (must be 1-999)",
+        )
+
+    db_machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    if not db_machine:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Machine with id {machine_id} not found",
+        )
+
+    try:
+        _, _, verified_value, _ = await _run_macro_write(
+            db_machine=db_machine,
+            machine_id=machine_id,
+            macro_number=MEASUREMENT_TOOL_MACRO,
+            value=float(tool_number),
+            operation_type="measurement_tool",
+            operation_details={
+                "macro_number": MEASUREMENT_TOOL_MACRO,
+                "tool_number": tool_number,
+            },
+            failure_message="Failed to set measurement tool",
+        )
+
+        return {
+            "success": True,
+            "tool_number": tool_number,
+            "macro_number": MEASUREMENT_TOOL_MACRO,
+            "verified_value": verified_value,
+            "message": f"Measurement tool set to T{tool_number:02d}",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting measurement tool for machine {machine_id}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),

@@ -466,6 +466,8 @@ async def get_tools(
             from app.clients.telnet_client import create_fresh_connection
             from app.parsers.atctl_parser_v2 import parse_atctl_v2
             from app.parsers.tolni_parser_v2 import parse_tolni_v2
+            from app.services.atc_tool_merge import merge_atc_tools_for_display
+            from app.services.unified_tool_view import build_unified_tool_view
 
             if raw_html:
                 http_client = CNCHttpClient(db_machine.ip_address, port=db_machine.http_port)
@@ -516,48 +518,37 @@ async def get_tools(
             if tool_table_content is None:
                 logger.warning(f"TOLN data ({data_name}) not available for ATC merge - ATC tools will have pot/tool mappings but no diameter/length/name")
 
-            tools = []
-            tool_lookup = {}
-
+            tool_table_tools: list = []
             if tool_table_content:
                 tool_table_parsed = parse_tolni_v2(
                     tool_table_content.encode('utf-8'),
                     units=db_machine.units,
                     control_version=atc_parsed.get("control_version")
                 )
-                logger.debug(f"Loaded {len(tool_table_parsed.get('tools', []))} tools from {data_name} for ATC merge (units={db_machine.units})")
-
-                for tool in tool_table_parsed.get("tools", []):
-                    tool_num = tool.get("tool_number")
-                    if tool_num:
-                        tool_lookup[tool_num] = tool
-                        logger.debug(f"Added tool {tool_num} to lookup: name={tool.get('tool_name')}, diameter={tool.get('diameter')}, length={tool.get('length')}")
+                tool_table_tools = tool_table_parsed.get("tools", [])
+                logger.debug(
+                    f"Loaded {len(tool_table_tools)} tools from {data_name} for ATC merge "
+                    f"(units={db_machine.units})"
+                )
             else:
-                logger.warning(f"No TOLN data available for ATC merge - ATC tools will have no diameter/length/name")
+                logger.warning(
+                    f"No TOLN data available for ATC merge - ATC tools will have no diameter/length/name"
+                )
 
-            for atc_tool in atc_parsed.get("tools", []):
-                tool_num = atc_tool.get("tool_number")
-                if tool_num and tool_num > 0 and tool_num != 255:
-                    if tool_num in tool_lookup:
-                        tol_tool = tool_lookup[tool_num]
-                        merged_tool = {
-                            "pot_number": atc_tool.get("pot_number"),
-                            "tool_number": tool_num,
-                            "tool_name": tol_tool.get("tool_name"),
-                            "diameter": tol_tool.get("diameter"),
-                            "length": tol_tool.get("length"),
-                            "group": atc_tool.get("group"),
-                            "life": None,
-                            "tool_type": atc_tool.get("tool_type"),
-                            "color": atc_tool.get("color"),
-                        }
-                        logger.debug(f"Merged ATC pot {merged_tool.get('pot_number')} tool {tool_num}: diameter={merged_tool['diameter']}, length={merged_tool['length']}, units={db_machine.units}, toln_source={data_name}")
-                        tools.append(merged_tool)
-                    else:
-                        logger.debug(f"Tool {tool_num} in ATC pot {atc_tool.get('pot_number')} not found in TOLN data ({data_name}) - skipping")
+            tools = merge_atc_tools_for_display(
+                atc_parsed,
+                tool_table_tools,
+                atc_pockets=db_machine.atc_pockets,
+            )
+            tools_unified = build_unified_tool_view(
+                tool_table_tools,
+                atc_parsed,
+                atc_pockets=db_machine.atc_pockets,
+            )
 
             data = {
                 "tools": tools,
+                "tools_unified": tools_unified,
                 "machine_id": machine_id,
                 "source": "atc",
                 "protocol": "telnet",

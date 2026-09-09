@@ -13,6 +13,29 @@ export interface MachineStatus {
   counters?: Array<{ counter_number: number; count: number }>;
   tools?: Array<{ tool_number: number; tool_name?: string; diameter?: number; length?: number; pot_number?: string | number }>;
   tool_table?: Array<{ tool_number: number; tool_name?: string; diameter?: number; length?: number; pot_number?: string | number }>;
+  tools_unified?: {
+    tools: Array<{
+      tool_number: number;
+      tool_name?: string;
+      diameter?: number;
+      length?: number;
+      life?: number;
+      in_atc?: boolean;
+      pot_number?: string | number;
+      group?: string | number;
+      tool_type?: number;
+      color?: number;
+    }>;
+    empty_pockets: Array<{ pot_number: number; tool_type?: number; color?: number }>;
+    spindle?: {
+      pot_number: 'SPINDLE';
+      tool_number: number;
+      tool_type?: number;
+      color?: number;
+      group?: string | number;
+    } | null;
+    atc_available: boolean;
+  };
   current_tool?: number;
   alarms?: Array<{
     code: string;
@@ -33,6 +56,7 @@ export interface MachineStatus {
   tools_timestamp?: string | null;
   tool_table_timestamp?: string | null;
   macros_timestamp?: string | null;
+  macros?: Record<string, number>;
   ip_address?: string;
   ftp_username?: string;
   ftp_password?: string;
@@ -41,6 +65,7 @@ export interface MachineStatus {
   location?: string;
   poll_interval_seconds?: number;
   tool_poll_interval_seconds?: number;
+  atc_pockets?: number;
   enabled?: boolean;
   part_display_mode?: 'cycle' | 'parts';
   layout_config?: Record<string, unknown> | null;
