@@ -95,6 +95,36 @@ The machine panel displays cap as tool **0**; Shatter maps UI `0` on empty-pot r
 
 ---
 
+## Program control & folders (validated live; not productized)
+
+These commands are **not** wrapped in the telnet client API yet. Layouts below were confirmed on a C00 Brother control with live smoke scripts under [`backend/scripts/`](../backend/scripts/). Frame format is the usual `%C` + 7-char command + 8-char args (see `_build_command`).
+
+### Mode / program select / start / stop
+
+| Command | Args (8-byte field) | Notes |
+|---------|---------------------|-------|
+| `CHGMODE` | `MEM`, `EDIT`, `MDI`, `MNL` (space-padded) | Status `60` if already in that mode |
+| `CHGPROG` | 4-digit O-number, e.g. `8112` | **Folder-scoped.** Only finds programs in the current telnet data directory. Not available during operation; Edit mode may return `31` |
+| `MEMSTRT` | Optional 4-digit O-number, e.g. `8100` | Starts memory operation; with a number, bypasses external PRO select signals |
+| `MEMSTOP` | `ON` / `OFF` | Latches feed-hold when `ON` — must send `OFF` (or clear on panel) to resume |
+| `MEMQTST` | Optional 4-digit O-number | External start variant (pallet-param fallback if omitted); not smoke-tested |
+
+### Folder ops (multipart)
+
+| Command | Form | Notes |
+|---------|------|-------|
+| `FLDPWD` | Single-part, empty args | Returns cwd, e.g. `/\r\n…` or `/PROGRAM\r\n…` |
+| `FLDCHG` | **Multipart**: empty args + payload folder name (`PROGRAM`) or `/` | Changes telnet data cwd. **Must restore `/` after** — otherwise `LOD MEM` fails with status `07` |
+
+**Remote measure sequence (validated):** write macro `#920` (tool number) → `CHGMODE MEM` → `FLDCHG PROGRAM` → `MEMSTRT 8100` → `FLDCHG /` → wait for PRD3 `operating` then idle.
+
+Live scripts:
+
+- [`backend/scripts/test_chgprog.py`](../backend/scripts/test_chgprog.py) — `CHGMODE` / `FLDCHG` / `CHGPROG` (no start)
+- [`backend/scripts/test_measure_tools.py`](../backend/scripts/test_measure_tools.py) — sequential `#920` + `MEMSTRT` measure cycles
+
+---
+
 ## ATC Write Status Codes
 
 | Code | Meaning |
@@ -115,7 +145,9 @@ Writes use extended read timeout (~5s) and hold the machine lock for the full op
 
 ## Not Implemented (future / out of scope)
 
-Folder ops (FLDPWD, FLDCHG), telnet file upload (SAV), program control (MEMSTRT, MEMSTOP, CHGPROG), auto-notification (SNC/SND), and most directory variants (DRQSEL, DRQPRAL). File upload/download in Shatter uses **FTP**, not telnet SAV.
+Telnet file upload (SAV), auto-notification (SNC/SND), and most directory variants (DRQSEL, DRQPRAL). File upload/download in Shatter uses **FTP**, not telnet SAV.
+
+Program control / folder ops (`CHGMODE`, `CHGPROG`, `MEMSTRT`, `MEMSTOP`, `FLDPWD`, `FLDCHG`) are **protocol-validated** (see above) but not yet exposed as product APIs.
 
 ---
 
