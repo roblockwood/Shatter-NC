@@ -1,0 +1,174 @@
+.probe-cycle-preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0%;
+  border: 1px solid #2a2a2a;
+  background: #0a0a0a;
+  padding: 4px 6px;
+  box-sizing: border-box;
+}
+
+.probe-cycle-preview--compact {
+  flex: 0 0 auto;
+  max-height: 140px;
+}
+
+.probe-cycle-preview-title {
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.probe-cycle-preview-svg {
+  width: 100%;
+  flex: 1 1 0%;
+  min-height: 120px;
+  /* Grow with the pane — no hard cap that shoves the viz into a strip */
+  max-height: none;
+  height: 100%;
+}
+
+.probe-cycle-preview--compact .probe-cycle-preview-svg {
+  max-height: 110px;
+  min-height: 72px;
+  height: auto;
+}
+
+.probe-preview-feature {
+  fill: none;
+  stroke: #00ff00;
+  stroke-width: 0.55;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.85;
+}
+
+.probe-preview-clearance {
+  fill: none;
+  stroke: #33ff33;
+  stroke-width: 0.4;
+  stroke-dasharray: 1.6 1.4;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.28;
+}
+
+.probe-preview-path {
+  fill: none;
+  stroke: #33ff33;
+  stroke-width: 0.4;
+  stroke-dasharray: 1.4 1.1;
+  opacity: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.probe-preview-axis {
+  fill: none;
+  stroke-width: 0.45;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.55;
+}
+
+.probe-preview-axis--x {
+  stroke: #ff6666;
+}
+
+.probe-preview-axis--y {
+  stroke: #66ff66;
+}
+
+.probe-preview-axis--z {
+  stroke: #6699ff;
+}
+
+.probe-preview-label {
+  fill: #66ff66;
+  font-size: 2.6px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.probe-preview-hit-mark {
+  fill: none;
+  stroke: #ffaa00;
+  stroke-width: 0.35;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.7;
+}
+
+.probe-preview-stem {
+  fill: none;
+  stroke: #66ff66;
+  stroke-width: 0.55;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.9;
+}
+
+.probe-preview-motion-shaft {
+  fill: none;
+  stroke-width: 0.7;
+  vector-effect: non-scaling-stroke;
+}
+
+.probe-preview-motion-head {
+  stroke: none;
+}
+
+/* Axis colors applied inline for single / split combined moves */
+
+.probe-preview-tool-edge {
+  fill: none;
+  stroke: #33ff33;
+  stroke-width: 0.5;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.95;
+}
+
+.probe-preview-tool-shank {
+  fill: none;
+  stroke: #66ff66;
+  stroke-width: 0.45;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.8;
+}
+
+.probe-preview-tool-tip {
+  fill: none;
+  stroke: #ffaa00;
+  stroke-width: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+
+.probe-preview-tool-contact {
+  fill: #ffaa00;
+  stroke: none;
+}
+
+.probe-preview-tool--hit .probe-preview-tool-tip {
+  stroke: #ff0000;
+}
+
+.probe-preview-stylus {
+  fill: #ff0000;
+  stroke: none;
+}
+
+.probe-preview-stylus--hit {
+  fill: #ff4444;
+  filter: drop-shadow(0 0 3px #ff2200);
+}
+
+.probe-preview-stylus-ring {
+  fill: none;
+  stroke: #ff3300;
+  stroke-width: 0.55;
+  vector-effect: non-scaling-stroke;
+  /* opacity set inline for expanding blip */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .probe-preview-stylus--hit {
+    filter: none;
+  }
+}

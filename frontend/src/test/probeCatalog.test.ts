@@ -69,4 +69,10 @@ describe('probeCatalog', () => {
     expect(probeCatalog.target_macro).toBe(908);
     expect(probeCatalog.poison['908']).toBe(0);
   });
+
+  it('routines expose glyph_id and view plane', () => {
+    const corner = probeCatalog.routines.find((r) => r.id === 'corner_xyz');
+    expect(corner?.glyph_id).toBe('corner_xyz');
+    expect(corner?.view).toBe('xy');
+  });
 });

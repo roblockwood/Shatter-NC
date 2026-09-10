@@ -330,7 +330,18 @@ interface StatusTimelineProps {
 - Color is not the only indicator (status labels provide context)
 
 **Note on Aesthetic Exception:**
-This is the **only component** that breaks from the strict ASCII/terminal aesthetic. The smooth SVG rendering provides a more analog, oscilloscope-like feel that enhances the visualization of status transitions over time. All other components maintain the ASCII/box-drawing character aesthetic.
+The oscilloscope was the first pane to break from strict ASCII with smooth SVG traces. Flat `currentColor` SVGs are also used for compressor tiles and the Probes glyph/cycle preview (see below). Remaining chrome stays box-drawing / monospace.
+
+---
+
+### Probe cycle preview (SVG exception)
+
+The **Probes** pane uses flat phosphor SVG for:
+
+1. **Glyph picker tiles** — Blum-inspired schematic icons (`ProbeGlyph`), `currentColor`, compressor-tile style
+2. **Cycle preview** — isometric NC-inspired 3D toolpath from helper/`O8701`/`O8702`/`O8711` motion order. Param-scaled feature wireframes; red stylus with **+Z stem** and a **motion-axis arrow** from the tip; **pulse + HIT** on G31 touch. Amber rings mark expected hits. Preview `z=0` = jog/clearance; plunge only when the helper passes `#903` (machine stays at jog Z when Z is omitted).
+
+Respect `prefers-reduced-motion` (static stylus). Do not embed vendor PDF art; glyphs are hand-authored. Keep chrome terminal (tabs, fields, WRITE+ARM) — preview is educational only, not live kinematics.
 
 ---
 

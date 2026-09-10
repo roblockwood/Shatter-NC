@@ -16,6 +16,8 @@ import {
   type ProbeMode,
   type ProbeRoutine,
 } from '../../data/probeCatalog';
+import { ProbeGlyph } from './probe/ProbeGlyph';
+import { ProbeCyclePreview } from './probe/ProbeCyclePreview';
 import './ProbesPane.css';
 
 export interface ProbesPaneProps {
@@ -64,7 +66,10 @@ function defaultParamsFor(macros: string[]): Record<string, number> {
   for (const m of macros) {
     if (m === '900') out[m] = 54;
     else if (m === '920') out[m] = 1;
-    else out[m] = 1;
+    else if (m === '904') out[m] = 50;
+    else if (m === '905' || m === '906' || m === '907') {
+      out[m] = m === '905' ? 0 : m === '906' ? 120 : 240;
+    } else out[m] = 10;
   }
   return out;
 }
@@ -83,6 +88,17 @@ function resultLabel(macro: string): string {
   return map[macro] ?? `#${macro}`;
 }
 
+function shortCategoryLabel(label: string): string {
+  return label
+    .replace('TOOL SETTER', 'TOOL')
+    .replace('SINGLE FACE', 'FACE')
+    .replace('INSIDE + OBSTACLE', 'OBST')
+    .replace('3-POINT DIA', '3-PT')
+    .replace('DIAMETERS', 'DIA')
+    .replace('CORNERS', 'CORNER')
+    .replace('WIDTHS', 'WIDTH');
+}
+
 export const ProbesPane: React.FC<ProbesPaneProps> = ({
   machineId,
   macros,
@@ -91,14 +107,12 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
   pollIntervalSeconds = 5,
 }) => {
   const [mode, setMode] = useState<ProbeMode>('probe');
-  const [category, setCategory] = useState(probeCatalog.categories[0]?.id ?? 'corner');
+  const [category, setCategory] = useState('corner');
   const routinesInCat = useMemo(
     () => getRoutinesForCategory(category).filter((r) => r.modes[mode] != null),
     [category, mode]
   );
-  const [routineId, setRoutineId] = useState(
-    () => getRoutinesForCategory(probeCatalog.categories[0]?.id ?? 'corner')[0]?.id ?? 'corner_xyz'
-  );
+  const [routineId, setRoutineId] = useState('corner_xyz');
   const [params, setParams] = useState<Record<string, number>>({});
   const [phase, setPhase] = useState<RunPhase>('idle');
   const [statusLine, setStatusLine] = useState<string>('Ready');
@@ -110,11 +124,9 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
   const modeEntry = resolveProgram(routineId, mode);
   const required = requiredMacros(routineId, mode);
 
-  // When mode/category changes, keep a valid routine selected
   useEffect(() => {
     const list = getRoutinesForCategory(category).filter((r) => r.modes[mode] != null);
     if (!list.length) {
-      // Prefer first category that has routines for this mode
       const fallbackCat = probeCatalog.categories.find((c) =>
         getRoutinesForCategory(c.id).some((r) => r.modes[mode] != null)
       );
@@ -128,13 +140,12 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     }
   }, [category, mode, routineId]);
 
-  // Reset form defaults when routine/mode changes
   useEffect(() => {
     const macrosNeeded = requiredMacros(routineId, mode);
     setParams(defaultParamsFor(macrosNeeded));
     setResults(null);
     setError(null);
-    if (phase !== 'running' && phase !== 'confirm') {
+    if (phase !== 'running' && phase !== 'confirm' && phase !== 'awaiting_m0') {
       setPhase('idle');
       setStatusLine('Ready');
     }
@@ -155,21 +166,15 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       return true;
     });
 
-  const categoryOptions = probeCatalog.categories
-    .filter((c) => getRoutinesForCategory(c.id).some((r) => r.modes[mode] != null))
-    .map((c) => ({ value: c.id, label: c.label }));
-
-  const routineOptions = routinesInCat.map((r) => ({
-    value: r.id,
-    label: r.label.toUpperCase(),
-  }));
+  const categoriesForMode = probeCatalog.categories.filter((c) =>
+    getRoutinesForCategory(c.id).some((r) => r.modes[mode] != null)
+  );
 
   const modeOptions = [
     { value: 'probe', label: 'PROBE (SET WCS)' },
     { value: 'measure', label: 'MEASURE (CHECK)' },
   ];
 
-  // Tool length only supports probe — coerce mode display
   const modeSelectValue =
     routineId === 'tool_length' && mode === 'measure' ? 'probe' : mode;
 
@@ -212,7 +217,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       const gate = payload.gate_program ?? probeCatalog.gate_program ?? 8099;
       const target = payload.target_program ?? modeEntry?.program;
       setStatusLine(
-        `ARMED O${String(gate).padStart(4, '0')} → target O${String(target ?? '').padStart(4, '0')} — Cycle Start past M0 on machine, then COLLECT`
+        `ARMED O${String(gate).padStart(4, '0')} → O${String(target ?? '').padStart(4, '0')} — Cycle Start past M0, then COLLECT`
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Arm request failed');
@@ -275,18 +280,20 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        const detail = (body as { detail?: { error?: string } | string })?.detail;
         const msg =
-          (body as { detail?: { error?: string } | string })?.detail &&
-          typeof (body as { detail: unknown }).detail === 'object'
-            ? ((body as { detail: { error?: string } }).detail.error ?? 'Poison failed')
-            : 'Poison failed';
-        setError(msg);
+          typeof detail === 'string'
+            ? detail
+            : detail && typeof detail === 'object'
+              ? detail.error
+              : null;
+        setError(msg || `Poison failed (HTTP ${res.status})`);
         setPhase('error');
+        setStatusLine('Poison failed');
         return;
       }
       setStatusLine('Macros poisoned');
       setPhase('idle');
-      setResults(null);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Poison request failed');
@@ -319,26 +326,41 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             />
           </div>
 
-          <div className="probes-row">
-            <span className="probes-label">CATEGORY</span>
-            <Select
-              compact
-              value={category}
-              onChange={setCategory}
-              options={categoryOptions}
-              disabled={busy}
-            />
+          <div className="probes-cat-tabs" role="tablist" aria-label="Probe category">
+            {categoriesForMode.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                role="tab"
+                aria-selected={category === c.id}
+                className={`probes-cat-tab${category === c.id ? ' probes-cat-tab--active' : ''}`}
+                disabled={busy}
+                onClick={() => setCategory(c.id)}
+              >
+                {shortCategoryLabel(c.label)}
+              </button>
+            ))}
           </div>
 
-          <div className="probes-row">
-            <span className="probes-label">TYPE</span>
-            <Select
-              compact
-              value={routineId}
-              onChange={setRoutineId}
-              options={routineOptions}
-              disabled={busy || routineOptions.length === 0}
-            />
+          <div className="probes-glyph-grid" role="listbox" aria-label="Probe type">
+            {routinesInCat.map((r) => {
+              const selected = r.id === routineId;
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  className={`probes-glyph-tile${selected ? ' probes-glyph-tile--selected' : ''}`}
+                  disabled={busy}
+                  title={r.label}
+                  onClick={() => setRoutineId(r.id)}
+                >
+                  <ProbeGlyph glyphId={r.glyph_id} className="probe-glyph" />
+                  <span className="probes-glyph-caption">{r.label.toUpperCase()}</span>
+                </button>
+              );
+            })}
           </div>
 
           {modeEntry && (
@@ -347,10 +369,6 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
               {' → '}
               TARGET O{String(modeEntry.program).padStart(4, '0')}
               {' | '}
-              #908={modeEntry.program}
-              {' | '}
-              MACROS {required.map((m) => `#${m}`).join(' ')}
-              {' | '}
               <span className={`probes-freshness probes-freshness--${freshness.toLowerCase()}`}>
                 {freshness}
               </span>
@@ -358,52 +376,55 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
           )}
 
           <div className="probes-prereq">
-            * Shatter only starts O8099 (preview + M0). Load O8099 on the machine. Cycle Start
-            past M0 runs the target helper; then COLLECT.
+            * O8099 gate only. Cycle Start past M0, then COLLECT.
           </div>
           {routine?.prerequisites && (
             <div className="probes-prereq">* {routine.prerequisites}</div>
           )}
 
-          <div className="probes-fields">
-            {required.map((macro) => {
-              const label = routine
-                ? fieldLabelFor(routine, macro)
-                : probeCatalog.fields[macro]?.label ?? `#${macro}`;
-              const unit = probeCatalog.fields[macro]?.unit ?? '';
-              const live = liveMacro(macros, macro);
-              return (
-                <label key={macro} className="probes-field">
-                  <span className="probes-field-label">
-                    {label}
-                    {unit ? ` (${unit})` : ''}
-                    <span className="probes-field-macro"> #{macro}</span>
-                  </span>
-                  <input
-                    className="probes-input"
-                    type="number"
-                    step="any"
-                    value={params[macro] ?? ''}
-                    disabled={busy}
-                    onChange={(e) => {
-                      const n = Number.parseFloat(e.target.value);
-                      setParams((prev) => ({
-                        ...prev,
-                        [macro]: Number.isFinite(n) ? n : 0,
-                      }));
-                    }}
-                  />
-                  <span className="probes-live">
-                    LIVE:{' '}
-                    {live == null
-                      ? '──'
-                      : isPoisonValue(macro, live)
-                        ? `${live} (POISON)`
-                        : live}
-                  </span>
-                </label>
-              );
-            })}
+          <div className="probes-main">
+            <div className="probes-fields">
+              {required.map((macro) => {
+                const label = routine
+                  ? fieldLabelFor(routine, macro)
+                  : probeCatalog.fields[macro]?.label ?? `#${macro}`;
+                const unit = probeCatalog.fields[macro]?.unit ?? '';
+                const live = liveMacro(macros, macro);
+                return (
+                  <label key={macro} className="probes-field">
+                    <span className="probes-field-label">
+                      {label}
+                      {unit ? ` (${unit})` : ''}
+                      <span className="probes-field-macro"> #{macro}</span>
+                    </span>
+                    <input
+                      className="probes-input"
+                      type="number"
+                      step="any"
+                      value={params[macro] ?? ''}
+                      disabled={busy}
+                      onChange={(e) => {
+                        const n = Number.parseFloat(e.target.value);
+                        setParams((prev) => ({
+                          ...prev,
+                          [macro]: Number.isFinite(n) ? n : 0,
+                        }));
+                      }}
+                    />
+                    <span className="probes-live">
+                      LIVE:{' '}
+                      {live == null
+                        ? '──'
+                        : isPoisonValue(macro, live)
+                          ? `${live} (POISON)`
+                          : live}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <ProbeCyclePreview routineId={routineId} params={params} />
           </div>
 
           <div className="probes-actions">
@@ -474,12 +495,18 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
           <div className="probes-confirm-box">
             <div className="probes-confirm-title">CONFIRM ARM (O8099 GATE)</div>
             <div className="probes-confirm-body">
-              <div>Shatter will ONLY start O8099. No Blum motion until you Cycle Start past M0.</div>
+              <div>Shatter will ONLY start O8099. No Blum motion until Cycle Start past M0.</div>
               <div>
                 GATE O{String(probeCatalog.gate_program ?? 8099).padStart(4, '0')} → TARGET O
                 {String(modeEntry.program).padStart(4, '0')} · {mode.toUpperCase()} ·{' '}
                 {routine?.label ?? routineId}
               </div>
+              <ProbeCyclePreview
+                routineId={routineId}
+                params={params}
+                compact
+                className="probes-confirm-preview"
+              />
               <div className="probes-confirm-params">
                 <div>#908 = {modeEntry.program}</div>
                 {required.map((m) => (

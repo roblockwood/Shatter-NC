@@ -151,6 +151,12 @@ def validate_run_params(
                 raise ProbeCatalogError(err)
 
     writes = {int(m): normalized[m] for m in required}
+
+    # O8702 inside+Z requires R < 0. UI stores positive obstacle clearance;
+    # negate on write so the machine selects inside+Z kinematics.
+    if str(routine_id).startswith("obstacle_") and 905 in writes and writes[905] > 0:
+        writes[905] = -abs(writes[905])
+
     return resolved, writes
 
 

@@ -121,3 +121,20 @@ def test_catalog_for_api_shape():
 def test_poison_includes_target_macro():
     poison = get_poison_values()
     assert poison[908] == 0
+
+
+def test_obstacle_r_negated_on_write():
+    """O8702 inside+Z needs R < 0; UI enters positive clearance."""
+    _, writes = validate_run_params(
+        "obstacle_inside_dia",
+        "probe",
+        {"900": 54, "903": -5, "904": 40, "905": 8},
+    )
+    assert writes[905] == -8.0
+    # Already-negative values stay negative (not double-flipped)
+    _, writes2 = validate_run_params(
+        "obstacle_inside_dia",
+        "probe",
+        {"900": 54, "903": -5, "904": 40, "905": -6},
+    )
+    assert writes2[905] == -6.0

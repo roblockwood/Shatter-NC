@@ -160,7 +160,8 @@ button.tablet-machine-shell-title:hover {
 .tablet-machine-shell-body .tablet-pane-root > .tools-pane.terminal-box,
 .tablet-machine-shell-body .tablet-pane-root > .production-runs-pane.terminal-box,
 .tablet-machine-shell-body .tablet-pane-root > .status-history-pane.terminal-box,
-.tablet-machine-shell-body .tablet-pane-root > .terminal-box.file-manager-terminal-box {
+.tablet-machine-shell-body .tablet-pane-root > .terminal-box.file-manager-terminal-box,
+.tablet-machine-shell-body .tablet-pane-root > .probes-pane {
   flex: 1 1 0%;
   min-height: 0;
   min-width: 0;

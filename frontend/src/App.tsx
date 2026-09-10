@@ -16,6 +16,7 @@ import { WebSocketProvider } from './contexts/WebSocketContext';
 import { ExpandedMachineProvider } from './contexts/ExpandedMachineContext';
 import { DemoMonitorFrame } from './components/DemoMonitorFrame';
 import { IS_DEMO_MODE } from './config/demo';
+import { ProbeUiPreviewPage } from './pages/ProbeUiPreviewPage';
 import './App.css';
 
 // Get version from environment variable (set at build time via Vite)
@@ -32,6 +33,9 @@ function Navigation() {
 
   // Tablet kiosk routes are fullscreen and should not show the standard header/nav chrome.
   if (location.pathname.startsWith('/tablet')) {
+    return null;
+  }
+  if (location.pathname.startsWith('/probe-preview')) {
     return null;
   }
 
@@ -117,6 +121,7 @@ function App() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/files" element={<FileBrowser />} />
                 <Route path="/sync" element={<Navigate to="/" replace />} />
+                <Route path="/probe-preview" element={<ProbeUiPreviewPage />} />
                 <Route
                   path="/notifications"
                   element={

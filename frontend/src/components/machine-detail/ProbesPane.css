@@ -42,6 +42,95 @@
   letter-spacing: 0.04em;
 }
 
+.probes-cat-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.probes-cat-tab {
+  background: #0a0a0a;
+  border: 1px solid #2a2a2a;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  letter-spacing: 0.04em;
+  padding: 3px 6px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.probes-cat-tab:hover:not(:disabled) {
+  border-color: #00ff00;
+  color: #00ff00;
+}
+
+.probes-cat-tab--active {
+  border-color: #ffaa00;
+  color: #ffaa00;
+}
+
+.probes-cat-tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.probes-glyph-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+  max-height: 132px;
+  overflow: auto;
+  padding: 2px 0;
+}
+
+.probes-glyph-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: #0a0a0a;
+  border: 1px solid #2a2a2a;
+  color: #00ff00;
+  padding: 4px 2px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.probes-glyph-tile:hover:not(:disabled) {
+  border-color: #33ff33;
+}
+
+.probes-glyph-tile--selected {
+  border-color: #ffaa00;
+  box-shadow: inset 0 0 0 1px #ffaa00;
+  color: #ffaa00;
+}
+
+.probes-glyph-tile:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.probe-glyph {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
+.probes-glyph-caption {
+  font-size: 9px;
+  line-height: 1.15;
+  text-align: center;
+  letter-spacing: 0.02em;
+  color: inherit;
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
 .probes-meta {
   color: var(--color-text-muted);
   font-size: var(--font-xs);
@@ -73,22 +162,36 @@
   font-size: var(--font-xs);
 }
 
+.probes-main {
+  display: grid;
+  /* Compact params column | cycle preview fills the rest */
+  grid-template-columns: minmax(132px, 168px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 .probes-fields {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 4px;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
 }
 
 .probes-field {
-  display: grid;
-  grid-template-columns: minmax(110px, 1.2fr) minmax(80px, 1fr) minmax(90px, 1fr);
-  gap: 6px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
 }
 
 .probes-field-label {
   color: var(--color-text-primary);
+  font-size: var(--font-xs);
+  line-height: 1.25;
 }
 
 .probes-field-macro {
@@ -103,7 +206,9 @@
   font-family: var(--font-mono);
   font-size: var(--font-sm);
   padding: 3px 6px;
-  min-width: 0;
+  width: 5.75rem;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .probes-input:focus {
@@ -119,14 +224,21 @@
   color: var(--color-text-muted);
   font-size: var(--font-xs);
   white-space: nowrap;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.probes-main > .probe-cycle-preview {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
 }
 
 .probes-actions {
   display: flex;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 2px;
   flex-wrap: wrap;
 }
 
@@ -182,10 +294,12 @@
   background: #0a0a0a;
   color: #00ff00;
   padding: 12px 14px;
-  max-width: 420px;
+  max-width: 440px;
   width: 100%;
   font-family: var(--font-mono);
   box-shadow: 0 0 12px rgba(255, 170, 0, 0.25);
+  max-height: 100%;
+  overflow: auto;
 }
 
 .probes-confirm-title {
@@ -202,6 +316,10 @@
   gap: 6px;
 }
 
+.probes-confirm-preview {
+  margin: 4px 0;
+}
+
 .probes-confirm-params {
   color: var(--color-text-muted);
   font-size: var(--font-xs);
@@ -214,8 +332,25 @@
   margin-top: 12px;
 }
 
-@media (max-width: 520px) {
-  .probes-field {
+@media (max-width: 420px) {
+  .probes-main {
     grid-template-columns: 1fr;
+    flex: 0 1 auto;
+  }
+
+  .probes-main > .probe-cycle-preview {
+    min-height: 140px;
+  }
+
+  .probes-glyph-grid {
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    max-height: 160px;
+  }
+}
+
+/* Short panes: keep glyph grid tight; preview still shares the row */
+@media (max-height: 420px) {
+  .probes-glyph-grid {
+    max-height: 88px;
   }
 }
