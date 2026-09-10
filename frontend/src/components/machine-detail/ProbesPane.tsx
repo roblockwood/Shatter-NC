@@ -109,8 +109,8 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
   const [mode, setMode] = useState<ProbeMode>('probe');
   const [category, setCategory] = useState('corner');
   const routinesInCat = useMemo(
-    () => getRoutinesForCategory(category).filter((r) => r.modes[mode] != null),
-    [category, mode]
+    () => getRoutinesForCategory(category),
+    [category]
   );
   const [routineId, setRoutineId] = useState('corner_xyz');
   const [params, setParams] = useState<Record<string, number>>({});
@@ -121,27 +121,35 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
   const [busy, setBusy] = useState(false);
 
   const routine: ProbeRoutine | undefined = getRoutine(routineId);
-  const modeEntry = resolveProgram(routineId, mode);
-  const required = requiredMacros(routineId, mode);
+  const availableModes = useMemo((): ProbeMode[] => {
+    if (!routine) return ['probe'];
+    return (['probe', 'measure'] as ProbeMode[]).filter((m) => routine.modes[m] != null);
+  }, [routine]);
+  const showModeSelect = availableModes.length > 1;
+  const effectiveMode: ProbeMode =
+    routine?.modes[mode] != null ? mode : availableModes[0] ?? 'probe';
+  const modeEntry = resolveProgram(routineId, effectiveMode);
+  const required = requiredMacros(routineId, effectiveMode);
 
+  // Category change may leave routine elsewhere — pick first in category only
   useEffect(() => {
-    const list = getRoutinesForCategory(category).filter((r) => r.modes[mode] != null);
-    if (!list.length) {
-      const fallbackCat = probeCatalog.categories.find((c) =>
-        getRoutinesForCategory(c.id).some((r) => r.modes[mode] != null)
-      );
-      if (fallbackCat && fallbackCat.id !== category) {
-        setCategory(fallbackCat.id);
-      }
-      return;
-    }
-    if (!list.some((r) => r.id === routineId)) {
+    const list = getRoutinesForCategory(category);
+    if (!list.some((r) => r.id === routineId) && list[0]) {
       setRoutineId(list[0].id);
     }
-  }, [category, mode, routineId]);
+  }, [category, routineId]);
+
+  // If the selected routine does not support the current mode, snap mode
+  // (never change the routine underneath the user).
+  useEffect(() => {
+    if (!routine) return;
+    if (routine.modes[mode] == null && availableModes[0]) {
+      setMode(availableModes[0]);
+    }
+  }, [routine, mode, availableModes]);
 
   useEffect(() => {
-    const macrosNeeded = requiredMacros(routineId, mode);
+    const macrosNeeded = requiredMacros(routineId, effectiveMode);
     setParams(defaultParamsFor(macrosNeeded));
     setResults(null);
     setError(null);
@@ -150,7 +158,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       setStatusLine('Ready');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on routine/mode
-  }, [routineId, mode]);
+  }, [routineId, effectiveMode]);
 
   const freshness = assessMacroFreshness(required, params, macros);
   const operating = (machineStatus || '').toLowerCase() === 'operating';
@@ -166,17 +174,10 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       return true;
     });
 
-  const categoriesForMode = probeCatalog.categories.filter((c) =>
-    getRoutinesForCategory(c.id).some((r) => r.modes[mode] != null)
-  );
-
-  const modeOptions = [
-    { value: 'probe', label: 'PROBE (SET WCS)' },
-    { value: 'measure', label: 'MEASURE (CHECK)' },
-  ];
-
-  const modeSelectValue =
-    routineId === 'tool_length' && mode === 'measure' ? 'probe' : mode;
+  const modeOptions = availableModes.map((m) => ({
+    value: m,
+    label: m === 'probe' ? 'PROBE · SET WCS' : 'MEASURE · CHECK',
+  }));
 
   async function armCycle() {
     setBusy(true);
@@ -190,7 +191,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: routineId,
-          mode: routineId === 'tool_length' ? 'probe' : mode,
+          mode: effectiveMode,
           params,
         }),
       });
@@ -315,19 +316,8 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
         </PaneTerminalHeader>
 
         <div className="terminal-box-content probes-pane-content">
-          <div className="probes-row">
-            <span className="probes-label">MODE</span>
-            <Select
-              compact
-              value={modeSelectValue}
-              onChange={(v) => setMode(v as ProbeMode)}
-              options={modeOptions}
-              disabled={busy || routineId === 'tool_length'}
-            />
-          </div>
-
           <div className="probes-cat-tabs" role="tablist" aria-label="Probe category">
-            {categoriesForMode.map((c) => (
+            {probeCatalog.categories.map((c) => (
               <button
                 key={c.id}
                 type="button"
@@ -375,15 +365,21 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             </div>
           )}
 
-          <div className="probes-prereq">
-            * O8099 gate only. Cycle Start past M0, then COLLECT.
-          </div>
-          {routine?.prerequisites && (
-            <div className="probes-prereq">* {routine.prerequisites}</div>
-          )}
-
           <div className="probes-main">
             <div className="probes-fields">
+              {showModeSelect && (
+                <label className="probes-field probes-field--mode">
+                  <span className="probes-field-label">MODE</span>
+                  <Select
+                    compact
+                    className="probes-mode-select"
+                    value={effectiveMode}
+                    onChange={(v) => setMode(v as ProbeMode)}
+                    options={modeOptions}
+                    disabled={busy}
+                  />
+                </label>
+              )}
               {required.map((macro) => {
                 const label = routine
                   ? fieldLabelFor(routine, macro)
@@ -496,9 +492,15 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             </button>
           </div>
 
-          <div className="probes-status">
-            STATUS: {statusLine}
-            {operating ? ' | MACHINE OPERATING' : ''}
+          <div className="probes-footer">
+            <div className="probes-status">
+              STATUS: {statusLine}
+              {operating ? ' | MACHINE OPERATING' : ''}
+            </div>
+            <div className="probes-prereq">
+              * O8099 gate only. Cycle Start past M0, then COLLECT.
+              {routine?.prerequisites ? ` · ${routine.prerequisites}` : ''}
+            </div>
           </div>
           {error && <div className="probes-error">!! {error}</div>}
 
@@ -511,12 +513,6 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                   <span>{v == null ? '──' : v}</span>
                 </div>
               ))}
-            </div>
-          )}
-
-          {routineId === 'tool_length' && (
-            <div className="probes-note">
-              Note: ToolsPane also sets #920 as the measurement tool.
             </div>
           )}
         </div>
@@ -532,7 +528,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
               <div>Shatter will ONLY start O8099. No Blum motion until Cycle Start past M0.</div>
               <div>
                 GATE O{String(probeCatalog.gate_program ?? 8099).padStart(4, '0')} → TARGET O
-                {String(modeEntry.program).padStart(4, '0')} · {mode.toUpperCase()} ·{' '}
+                {String(modeEntry.program).padStart(4, '0')} · {effectiveMode.toUpperCase()} ·{' '}
                 {routine?.label ?? routineId}
               </div>
               <ProbeCyclePreview

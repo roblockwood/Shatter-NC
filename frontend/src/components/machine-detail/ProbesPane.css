@@ -29,19 +29,6 @@
   font-size: var(--font-sm);
 }
 
-.probes-row {
-  display: grid;
-  grid-template-columns: 88px 1fr;
-  gap: 8px;
-  align-items: center;
-}
-
-.probes-label {
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
 .probes-cat-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -163,14 +150,15 @@
 .probes-prereq {
   color: var(--color-warning, #ffaa00);
   font-size: var(--font-xs);
+  line-height: 1.35;
 }
 
 .probes-main {
   display: grid;
-  /* Compact params column | cycle preview fills the rest */
-  grid-template-columns: minmax(132px, 168px) minmax(0, 1fr);
+  /* Compact params column | fixed-size cycle preview */
+  grid-template-columns: minmax(148px, 188px) minmax(0, 1fr);
   gap: 10px;
-  align-items: stretch;
+  align-items: start;
   min-height: 0;
   flex: 1 1 auto;
 }
@@ -189,6 +177,28 @@
   flex-direction: column;
   gap: 2px;
   align-items: flex-start;
+}
+
+.probes-field--mode {
+  width: 100%;
+}
+
+.probes-mode-select {
+  width: 100%;
+  max-width: 100%;
+}
+
+.probes-mode-select .custom-select {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: var(--font-xs);
+  min-height: 1.75rem;
+}
+
+.probes-mode-select .custom-select-dropdown {
+  min-width: 100%;
+  width: max-content;
+  max-width: 16rem;
 }
 
 .probes-field-label {
@@ -310,8 +320,8 @@
 
 .probes-main > .probe-cycle-preview {
   min-width: 0;
-  min-height: 0;
-  height: 100%;
+  /* Height locked in ProbeCyclePreview.css — do not stretch with fields */
+  justify-self: stretch;
 }
 
 .probes-actions {
@@ -319,6 +329,14 @@
   gap: 8px;
   margin-top: 2px;
   flex-wrap: wrap;
+}
+
+.probes-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+  min-width: 0;
 }
 
 .probes-status {
@@ -349,12 +367,6 @@
   grid-template-columns: 1fr auto;
   gap: 8px;
   font-size: var(--font-sm);
-}
-
-.probes-note {
-  color: var(--color-text-muted);
-  font-size: var(--font-xs);
-  margin-top: 4px;
 }
 
 .probes-confirm-overlay {
@@ -415,10 +427,6 @@
   .probes-main {
     grid-template-columns: 1fr;
     flex: 0 1 auto;
-  }
-
-  .probes-main > .probe-cycle-preview {
-    min-height: 140px;
   }
 
   .probes-glyph-grid {
