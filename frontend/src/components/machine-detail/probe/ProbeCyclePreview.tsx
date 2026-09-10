@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   buildProbeSim3D,
-  collectSimPoints,
   motionAxes,
   motionLabel,
   pathCycleDurationMs,
@@ -20,9 +19,9 @@ const STEM_LEN = 12;
 const ARROW_LEN = 5;
 
 const AXIS_COLOR: Record<MotionAxisId, string> = {
-  x: '#ff6666',
-  y: '#ffaa00', // amber/yellow — reads as Y in split arrows (triad stays green)
-  z: '#6699ff',
+  x: '#ff2200',
+  y: '#00ff00',
+  z: '#3399ff',
 };
 
 /** Screen-space radius for a world-space sphere of radius r at point p. */
@@ -69,7 +68,8 @@ function featureEdges(f: Feature3D): [Vec3, Vec3][] {
       ]);
     }
   } else if (f.kind === 'cylinder') {
-    const n = 16;
+    // Octagon — schematic, not smooth CAD
+    const n = 8;
     const ring = (z: number) =>
       Array.from({ length: n }, (_, i) => {
         const a = (i / n) * Math.PI * 2;
@@ -84,7 +84,7 @@ function featureEdges(f: Feature3D): [Vec3, Vec3][] {
     for (let i = 0; i < n; i++) {
       edges.push([bot[i], bot[(i + 1) % n]]);
       edges.push([top[i], top[(i + 1) % n]]);
-      if (i % 4 === 0) edges.push([bot[i], top[i]]);
+      if (i % 2 === 0) edges.push([bot[i], top[i]]);
     }
   } else if (f.kind === 'plane') {
     if (f.axis === 'x') {
@@ -256,7 +256,7 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
 
   const [t, setT] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [pulsePhase, setPulsePhase] = useState(0);
+  const [hitBlink, setHitBlink] = useState(true);
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -275,10 +275,13 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
     }
     let raf = 0;
     const start = performance.now();
+    // Stepped clock — dated CNC display, not smooth CAD playback
+    const FRAME_MS = 55;
     const tick = (now: number) => {
-      const elapsed = (now - start) % cycleMs;
+      const stepped = Math.floor((now - start) / FRAME_MS) * FRAME_MS;
+      const elapsed = stepped % cycleMs;
       setT(elapsed / cycleMs);
-      setPulsePhase(((now - start) % 280) / 280);
+      setHitBlink(Math.floor((now - start) / 100) % 2 === 0);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -306,13 +309,25 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
   }, [sample.pos, motion]);
 
   const projected = useMemo(() => {
-    // Fixed viewBox for this cycle — include stem + tip-arrow envelope at every
-    // path waypoint so the camera does not zoom as the stylus animates.
-    const world: Vec3[] = collectSimPoints(sim);
+    // Fit the camera to the probe path + triad — not the full stock/feature
+    // envelope (that zooms out too far and wastes the frame on buffer).
+    const world: Vec3[] = sim.path.map((p) => ({ x: p.x, y: p.y, z: p.z }));
+    let minWx = Infinity;
+    let minWy = Infinity;
+    let minWz = Infinity;
+    let maxWx = -Infinity;
+    let maxWy = -Infinity;
+    let maxWz = -Infinity;
     for (const p of sim.path) {
+      minWx = Math.min(minWx, p.x);
+      minWy = Math.min(minWy, p.y);
+      minWz = Math.min(minWz, p.z);
+      maxWx = Math.max(maxWx, p.x);
+      maxWy = Math.max(maxWy, p.y);
+      maxWz = Math.max(maxWz, p.z);
       const top: Vec3 = { x: p.x, y: p.y, z: p.z + STEM_LEN };
       world.push(top);
-      // Fixed 3 mm tip footprint so viewBox does not clip the probe
+      // Tip + motion-arrow envelope so the stylus never clips mid-cycle
       world.push({ x: p.x + PROBE_R_MM, y: p.y, z: p.z });
       world.push({ x: p.x - PROBE_R_MM, y: p.y, z: p.z });
       world.push({ x: p.x, y: p.y + PROBE_R_MM, z: p.z });
@@ -324,6 +339,16 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
       world.push({ x: p.x, y: p.y, z: p.z + ARROW_LEN });
       world.push({ x: p.x, y: p.y, z: p.z - ARROW_LEN });
     }
+    const span = Number.isFinite(minWx)
+      ? Math.hypot(maxWx - minWx, maxWy - minWy, maxWz - minWz)
+      : 20;
+    // Keep the coordinate triad in frame at a size tied to the move, not the stock
+    const triadLen = Math.min(18, Math.max(8, span * 0.28));
+    world.push({ x: 0, y: 0, z: 0 });
+    world.push({ x: triadLen, y: 0, z: 0 });
+    world.push({ x: 0, y: triadLen, z: 0 });
+    world.push({ x: 0, y: 0, z: triadLen });
+
     const pts = world.map((p) => projectView(p));
     let minX = Infinity;
     let minY = Infinity;
@@ -336,14 +361,21 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
       maxY = Math.max(maxY, p.y);
     }
     if (!Number.isFinite(minX)) {
-      return { minX: -20, minY: -20, w: 40, h: 40 };
+      return { minX: -20, minY: -20, w: 40, h: 40, triadLen: 12 };
     }
-    const pad = 8;
+    // Tight square frame — small pad only for stroke/label breathing room
+    const pad = 3;
+    const contentW = Math.max(maxX - minX, 16);
+    const contentH = Math.max(maxY - minY, 16);
+    const side = Math.max(contentW, contentH) + 2 * pad;
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
     return {
-      minX: minX - pad,
-      minY: minY - pad,
-      w: Math.max(maxX - minX + 2 * pad, 24),
-      h: Math.max(maxY - minY + 2 * pad, 24),
+      minX: cx - side / 2,
+      minY: cy - side / 2,
+      w: side,
+      h: side,
+      triadLen,
     };
   }, [sim]);
 
@@ -359,16 +391,11 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
   const stylus = projectView(sample.pos);
   const stemTop2 = projectView(stem.top);
   const arrowEnd2 = projectView(stem.arrowEnd);
-  const probeR = screenRadiusAt(sample.pos, PROBE_R_MM);
-  const pulse =
-    sample.onHit && !reducedMotion ? 1 + 0.55 * Math.sin(pulsePhase * Math.PI * 2) : 1;
-  const stylusR = probeR * pulse;
-  const blipRingR =
-    sample.onHit && !reducedMotion
-      ? probeR * (2.1 + 1.4 * pulsePhase)
-      : stylusR * 2.2;
-  const blipRingOpacity =
-    sample.onHit && !reducedMotion ? Math.max(0.15, 0.9 * (1 - pulsePhase)) : 0.55;
+  const probeR = Math.max(1.1, screenRadiusAt(sample.pos, PROBE_R_MM));
+  // Hard on/off phosphor flash on hit — no soft sine bloom
+  const stylusR = sample.onHit && !reducedMotion && hitBlink ? probeR * 1.35 : probeR;
+  const blipRingR = sample.onHit && !reducedMotion ? probeR * 2.4 : stylusR * 2;
+  const blipRingOpacity = sample.onHit && !reducedMotion ? (hitBlink ? 0.9 : 0.25) : 0.5;
 
   // Arrowhead in screen space along projected motion axis (from tip center)
   const arrowHead = useMemo(() => {
@@ -419,10 +446,11 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
     const r = 2.2;
     const shankTop = STEM_LEN;
     const bodyH = STEM_LEN * 0.45;
+    // Square-ish tool body — schematic, not fluted CAD
     const corners = (z: number, rad: number): Vec3[] => {
       const pts: Vec3[] = [];
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
         pts.push({
           x: tip.x + rad * Math.cos(a),
           y: tip.y + rad * Math.sin(a),
@@ -455,6 +483,7 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
         className="probe-cycle-preview-svg"
         viewBox={`${projected.minX} ${projected.minY} ${projected.w} ${projected.h}`}
         preserveAspectRatio="xMidYMid meet"
+        shapeRendering="crispEdges"
         role="img"
         aria-label={
           isTool
@@ -462,7 +491,7 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
             : 'Isometric probe cycle schematic from Blum helper motion'
         }
       >
-        {axisTriad(Math.max(projected.w, projected.h) * 0.12).map(([a, b, label], i) => {
+        {axisTriad(projected.triadLen).map(([a, b, label], i) => {
           const pa = projectView(a);
           const pb = projectView(b);
           return (
@@ -505,14 +534,12 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
 
         {hitMarkers.map((h, i) => {
           const p = projectView(h);
+          const s = probeR * 0.95;
           return (
-            <circle
-              key={`hit${i}`}
-              cx={p.x}
-              cy={p.y}
-              r={probeR * 0.85}
-              className="probe-preview-hit-mark"
-            />
+            <g key={`hit${i}`} className="probe-preview-hit-mark">
+              <line x1={p.x - s} y1={p.y} x2={p.x + s} y2={p.y} />
+              <line x1={p.x} y1={p.y - s} x2={p.x} y2={p.y + s} />
+            </g>
           );
         })}
 
@@ -679,17 +706,19 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
                 />
               );
             })}
-            <circle
-              cx={stylus.x}
-              cy={stylus.y}
-              r={stylusR * 0.85}
+            <rect
+              x={stylus.x - stylusR * 0.85}
+              y={stylus.y - stylusR * 0.85}
+              width={stylusR * 1.7}
+              height={stylusR * 1.7}
               className={`probe-preview-tool-contact${sample.onHit ? ' probe-preview-stylus--hit' : ''}`}
             />
             {sample.onHit && (
-              <circle
-                cx={stylus.x}
-                cy={stylus.y}
-                r={blipRingR}
+              <rect
+                x={stylus.x - blipRingR}
+                y={stylus.y - blipRingR}
+                width={blipRingR * 2}
+                height={blipRingR * 2}
                 className="probe-preview-stylus-ring"
                 opacity={blipRingOpacity}
               />
@@ -705,17 +734,19 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
               y2={stemTop2.y}
               className="probe-preview-stem"
             />
-            <circle
-              cx={stylus.x}
-              cy={stylus.y}
-              r={stylusR}
+            <rect
+              x={stylus.x - stylusR}
+              y={stylus.y - stylusR}
+              width={stylusR * 2}
+              height={stylusR * 2}
               className={`probe-preview-stylus${sample.onHit ? ' probe-preview-stylus--hit' : ''}`}
             />
             {sample.onHit && (
-              <circle
-                cx={stylus.x}
-                cy={stylus.y}
-                r={blipRingR}
+              <rect
+                x={stylus.x - blipRingR}
+                y={stylus.y - blipRingR}
+                width={blipRingR * 2}
+                height={blipRingR * 2}
                 className="probe-preview-stylus-ring"
                 opacity={blipRingOpacity}
               />
@@ -723,6 +754,7 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
           </>
         )}
       </svg>
+      <div className="probe-cycle-preview-scan" aria-hidden />
     </div>
   );
 };

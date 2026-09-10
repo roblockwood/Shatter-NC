@@ -1,148 +1,186 @@
+/* Fixed frame — phosphor schematic, intentionally low-fi / terminal-era */
 .probe-cycle-preview {
+  --probe-preview-h: 220px;
+  position: relative;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  height: var(--probe-preview-h);
   min-width: 0;
-  min-height: 0;
-  flex: 1 1 0%;
+  min-height: var(--probe-preview-h);
+  max-height: var(--probe-preview-h);
+  flex: 0 0 var(--probe-preview-h);
   border: 1px solid #2a2a2a;
-  background: #0a0a0a;
+  background: #050805;
   padding: 4px 6px;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .probe-cycle-preview--compact {
-  flex: 0 0 auto;
-  max-height: 140px;
+  --probe-preview-h: 120px;
 }
 
 .probe-cycle-preview-title {
-  color: var(--color-text-muted);
+  flex: 0 0 auto;
+  color: #3a6a3a;
   font-size: var(--font-xs);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   margin-bottom: 2px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
 }
 
 .probe-cycle-preview-svg {
   width: 100%;
   flex: 1 1 0%;
-  min-height: 120px;
-  /* Grow with the pane — no hard cap that shoves the viz into a strip */
+  min-height: 0;
+  height: auto;
   max-height: none;
-  height: 100%;
+  display: block;
+  /* Chunkier CRT-era strokes — no soft AA polish */
+  shape-rendering: crispEdges;
+  image-rendering: crisp-edges;
+  -webkit-image-rendering: crisp-edges;
 }
 
-.probe-cycle-preview--compact .probe-cycle-preview-svg {
-  max-height: 110px;
-  min-height: 72px;
-  height: auto;
+/* Scanline / phosphor grit overlay */
+.probe-cycle-preview-scan {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.18;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      rgba(0, 0, 0, 0.55) 1px,
+      rgba(0, 0, 0, 0.55) 2px
+    ),
+    radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.35) 100%);
 }
 
 .probe-preview-feature {
   fill: none;
-  stroke: #00ff00;
-  stroke-width: 0.55;
+  stroke: #00cc00;
+  stroke-width: 1.15;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
   vector-effect: non-scaling-stroke;
-  opacity: 0.85;
+  opacity: 0.75;
 }
 
 .probe-preview-clearance {
   fill: none;
-  stroke: #33ff33;
-  stroke-width: 0.4;
-  stroke-dasharray: 1.6 1.4;
+  stroke: #228822;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  stroke-linecap: square;
   vector-effect: non-scaling-stroke;
-  opacity: 0.28;
+  opacity: 0.45;
 }
 
 .probe-preview-path {
   fill: none;
   stroke: #33ff33;
-  stroke-width: 0.4;
-  stroke-dasharray: 1.4 1.1;
-  opacity: 0.5;
+  stroke-width: 1.1;
+  stroke-dasharray: 3 2;
+  stroke-linecap: square;
+  opacity: 0.55;
   vector-effect: non-scaling-stroke;
 }
 
 .probe-preview-axis {
   fill: none;
-  stroke-width: 0.45;
+  stroke-width: 1.2;
+  stroke-linecap: square;
   vector-effect: non-scaling-stroke;
-  opacity: 0.55;
+  opacity: 0.7;
 }
 
 .probe-preview-axis--x {
-  stroke: #ff6666;
+  stroke: #ff2200;
 }
 
 .probe-preview-axis--y {
-  stroke: #66ff66;
+  stroke: #00ff00;
 }
 
 .probe-preview-axis--z {
-  stroke: #6699ff;
+  stroke: #3399ff;
 }
 
 .probe-preview-label {
-  fill: #66ff66;
-  font-size: 2.6px;
-  font-family: 'IBM Plex Mono', monospace;
+  fill: #00ff00;
+  font-size: 3.2px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  letter-spacing: 0.04em;
 }
 
 .probe-preview-hit-mark {
   fill: none;
   stroke: #ffaa00;
-  stroke-width: 0.35;
+  stroke-width: 1.2;
+  stroke-linecap: square;
   vector-effect: non-scaling-stroke;
-  opacity: 0.7;
+  opacity: 0.85;
 }
 
 .probe-preview-stem {
   fill: none;
-  stroke: #66ff66;
-  stroke-width: 0.55;
+  stroke: #00ff00;
+  stroke-width: 1.35;
+  stroke-linecap: square;
   vector-effect: non-scaling-stroke;
-  opacity: 0.9;
+  opacity: 0.95;
 }
 
 .probe-preview-motion-shaft {
   fill: none;
-  stroke-width: 0.7;
+  stroke-width: 1.5;
+  stroke-linecap: square;
   vector-effect: non-scaling-stroke;
 }
 
 .probe-preview-motion-head {
   stroke: none;
+  stroke-linejoin: miter;
 }
-
-/* Axis colors applied inline for single / split combined moves */
 
 .probe-preview-tool-edge {
   fill: none;
-  stroke: #33ff33;
-  stroke-width: 0.5;
+  stroke: #00cc00;
+  stroke-width: 1.2;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
   vector-effect: non-scaling-stroke;
-  opacity: 0.95;
+  opacity: 0.9;
 }
 
 .probe-preview-tool-shank {
   fill: none;
-  stroke: #66ff66;
-  stroke-width: 0.45;
+  stroke: #00ff00;
+  stroke-width: 1.1;
+  stroke-linecap: square;
   vector-effect: non-scaling-stroke;
-  opacity: 0.8;
+  opacity: 0.75;
 }
 
 .probe-preview-tool-tip {
   fill: none;
   stroke: #ffaa00;
-  stroke-width: 0.55;
+  stroke-width: 1.25;
+  stroke-linecap: square;
   vector-effect: non-scaling-stroke;
 }
 
 .probe-preview-tool-contact {
   fill: #ffaa00;
-  stroke: none;
+  stroke: #884400;
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
 }
 
 .probe-preview-tool--hit .probe-preview-tool-tip {
@@ -151,24 +189,28 @@
 
 .probe-preview-stylus {
   fill: #ff0000;
-  stroke: none;
+  stroke: #880000;
+  stroke-width: 0.9;
+  vector-effect: non-scaling-stroke;
 }
 
 .probe-preview-stylus--hit {
-  fill: #ff4444;
-  filter: drop-shadow(0 0 3px #ff2200);
+  fill: #ff3300;
+  /* Hard phosphor flash — no soft glow */
+  filter: none;
 }
 
 .probe-preview-stylus-ring {
   fill: none;
-  stroke: #ff3300;
-  stroke-width: 0.55;
+  stroke: #ff2200;
+  stroke-width: 1.3;
+  stroke-linecap: square;
+  stroke-dasharray: 2 1.5;
   vector-effect: non-scaling-stroke;
-  /* opacity set inline for expanding blip */
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .probe-preview-stylus--hit {
-    filter: none;
+  .probe-cycle-preview-scan {
+    opacity: 0.1;
   }
 }
