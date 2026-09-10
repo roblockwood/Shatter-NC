@@ -129,7 +129,7 @@ Client wrappers live in [`_telnet_write_ops.py`](../backend/app/clients/_telnet_
 | `FLDPWD` | Single-part, empty args | Returns cwd, e.g. `/\r\n…` or `/PROGRAM\r\n…` |
 | `FLDCHG` | **Multipart**: empty args + payload folder name (`PROGRAM`) or `/` | Changes telnet data cwd. **Must restore `/` after** — otherwise `LOD MEM` fails with status `07` |
 
-**Remote measure / probe sequence:** write job macros → `CHGMODE MEM` → `FLDCHG PROGRAM` → `MEMSTRT ####` → `FLDCHG /` → wait for PRD3 `operating` then idle → read results → poison macros.
+**Remote measure / probe sequence (gated):** write job macros + `#908`=target O-number → `CHGMODE MEM` → `FLDCHG PROGRAM` → `MEMSTRT 8099` only → `FLDCHG /` → wait for M0 → (operator Cycle Start) → wait idle → read results → poison.
 
 Live scripts:
 
@@ -142,12 +142,13 @@ Live scripts:
 | Method | Path | Purpose |
 |--------|------|---------|
 | `GET` | `/api/machines/{id}/probe/catalog` | Blum routine catalog (`#900–#907`, O81xx/O82xx) |
-| `POST` | `/api/machines/{id}/probe/run` | Body `{ type, mode, params }` — write macros, MEMSTRT, wait, read `#100–#107`, poison |
-| `POST` | `/api/machines/{id}/probe/poison` | Force sentinel macros (`#900=0`, `#901–#907=999`, `#920=0`) |
+| `POST` | `/api/machines/{id}/probe/run` | Arm only: write macros + `#908` target + **MEMSTRT O8099 only**; wait for M0. Never starts Blum O81xx directly. |
+| `POST` | `/api/machines/{id}/probe/collect` | After operator Cycle-Starts past M0: wait idle, read `#100–#107`, poison |
+| `POST` | `/api/machines/{id}/probe/poison` | Force sentinel macros (`#900=0`, `#901–#907=999`, `#908=0`, `#920=0`) |
 
-Catalog source: [`backend/app/data/probe_catalog.json`](../backend/app/data/probe_catalog.json) (mirrored in frontend). UI: **Probes** machine-detail pane / tablet `probes`.
+Catalog source: [`backend/app/data/probe_catalog.json`](../backend/app/data/probe_catalog.json) (mirrored in frontend). Gate NC: [`docs/nc/O8099.NC`](nc/O8099.NC) (also in Blum USB deploy `PROGRAM/`). UI: **Probes** pane — WRITE+ARM → confirm at M0 on machine → COLLECT.
 
-**Live smoke (C00):** stop the backend so telnet is free (`docker-compose -f docker-compose.dev.yml stop backend`), then exercise `POST .../probe/run` for e.g. `corner_xyz` / O8110 or `diameter_inside` / O8116 with the spindle probe positioned correctly. Restart backend afterward.
+**Live smoke (C00):** load O8099 to `/PROGRAM`, stop backend, arm via `POST .../probe/run`, Cycle Start past M0 on the control, then `POST .../probe/collect`. Restart backend afterward.
 
 ---
 

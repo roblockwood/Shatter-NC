@@ -63,4 +63,16 @@ describe('probeCatalog', () => {
     expect(ids).toContain('diameter');
     expect(probeCatalog.routines.length).toBeGreaterThanOrEqual(20);
   });
+
+  it('gate program and target macro are set', () => {
+    expect(probeCatalog.gate_program).toBe(8099);
+    expect(probeCatalog.target_macro).toBe(908);
+    expect(probeCatalog.poison['908']).toBe(0);
+  });
+
+  it('routines expose glyph_id and view plane', () => {
+    const corner = probeCatalog.routines.find((r) => r.id === 'corner_xyz');
+    expect(corner?.glyph_id).toBe('corner_xyz');
+    expect(corner?.view).toBe('xy');
+  });
 });

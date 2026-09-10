@@ -17,10 +17,14 @@ export interface ProbeModeEntry {
   macros: string[];
 }
 
+export type ProbeViewPlane = 'xy' | 'xz' | 'yz' | 'tool';
+
 export interface ProbeRoutine {
   id: string;
   category: string;
   label: string;
+  glyph_id: string;
+  view: ProbeViewPlane;
   prerequisites?: string;
   field_labels?: Record<string, string>;
   modes: Partial<Record<ProbeMode, ProbeModeEntry>>;
@@ -30,6 +34,8 @@ export interface ProbeCatalog {
   version: number;
   poison: Record<string, number>;
   result_macros: number[];
+  gate_program: number;
+  target_macro: number;
   fields: Record<string, ProbeFieldMeta>;
   categories: { id: string; label: string }[];
   routines: ProbeRoutine[];

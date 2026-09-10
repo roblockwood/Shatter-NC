@@ -1,8 +1,9 @@
-"""Probe cycle API — catalog, run, poison.
+"""Probe cycle API — catalog, arm (O8099 gate), collect, poison.
 
 Routes:
-    GET  /{machine_id}/probe/catalog  — Blum routine catalog
-    POST /{machine_id}/probe/run      — write macros + MEMSTRT + wait + results + poison
+    GET  /{machine_id}/probe/catalog  — Blum routine catalog (+ gate_program)
+    POST /{machine_id}/probe/run      — write macros + MEMSTRT O8099 only; wait for M0
+    POST /{machine_id}/probe/collect  — wait idle after M0, read results, poison
     POST /{machine_id}/probe/poison   — force sentinel macros
 """
 from __future__ import annotations
@@ -16,7 +17,11 @@ from sqlalchemy.orm import Session
 from app.db.base import get_db
 from app.models.machine import Machine
 from app.services.probe_catalog import catalog_for_api
-from app.services.probe_cycle_service import poison_probe_macros, run_probe_cycle
+from app.services.probe_cycle_service import (
+    arm_probe_cycle,
+    collect_probe_results,
+    poison_probe_macros,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -30,6 +35,13 @@ class ProbeRunRequest(BaseModel):
     params: Dict[str, float] = Field(
         default_factory=dict,
         description="Macro values keyed by number (900) or field key (wcs)",
+    )
+
+
+class ProbeCollectRequest(BaseModel):
+    poison: bool = Field(
+        True,
+        description="Poison job macros after reading results (default true)",
     )
 
 
@@ -47,6 +59,8 @@ def _result_payload(result: Any) -> Dict[str, Any]:
     return {
         "ok": result.ok,
         "program": result.program,
+        "gate_program": result.gate_program,
+        "target_program": result.target_program,
         "routine_id": result.routine_id,
         "mode": result.mode,
         "macros_written": {str(k): v for k, v in (result.macros_written or {}).items()},
@@ -72,19 +86,20 @@ async def post_probe_run(
     db: Session = Depends(get_db),
 ):
     """
-    Run a remote Blum probe cycle.
+    Arm a gated probe cycle.
 
-    Starts machine motion. Always restores telnet folder to / and poisons
-    job macros after success or failure.
+    Writes job macros + #908 (target O-number), MEMSTRTs **O8099 only**, waits
+    until M0 / message stop. Does not start Blum helpers directly and does not
+    poison macros (operator must Cycle Start past M0 on the control).
     """
     machine = _get_machine(db, machine_id)
     logger.info(
-        "Probe run requested machine=%s type=%s mode=%s",
+        "Probe arm requested machine=%s type=%s mode=%s",
         machine_id,
         body.type,
         body.mode,
     )
-    result = await run_probe_cycle(
+    result = await arm_probe_cycle(
         db_machine=machine,
         machine_id=machine_id,
         routine_id=body.type,
@@ -110,9 +125,32 @@ async def post_probe_run(
     return payload
 
 
+@router.post("/{machine_id}/probe/collect")
+async def post_probe_collect(
+    machine_id: int,
+    body: Optional[ProbeCollectRequest] = None,
+    db: Session = Depends(get_db),
+):
+    """Wait for idle after operator confirms past M0, read #100+, optionally poison."""
+    machine = _get_machine(db, machine_id)
+    poison = True if body is None else body.poison
+    result = await collect_probe_results(
+        db_machine=machine,
+        machine_id=machine_id,
+        poison=poison,
+    )
+    payload = _result_payload(result)
+    if not result.ok:
+        raise HTTPException(
+            status_code=http_status.HTTP_502_BAD_GATEWAY,
+            detail=payload,
+        )
+    return payload
+
+
 @router.post("/{machine_id}/probe/poison")
 async def post_probe_poison(machine_id: int, db: Session = Depends(get_db)):
-    """Write sentinel values to probe job macros (#900-907, #920)."""
+    """Write sentinel values to probe job macros (#900-908, #920)."""
     machine = _get_machine(db, machine_id)
     result = await poison_probe_macros(machine)
     payload = _result_payload(result)

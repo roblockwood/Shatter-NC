@@ -32,6 +32,16 @@ def get_result_macro_numbers() -> List[int]:
     return [int(n) for n in load_probe_catalog().get("result_macros") or []]
 
 
+def get_gate_program() -> int:
+    """O-number Shatter is allowed to MEMSTRT for probing (preview + M0 gate)."""
+    return int(load_probe_catalog().get("gate_program") or 8099)
+
+
+def get_target_macro() -> int:
+    """Macro that holds the Blum/tool helper O-number for O8099 to M98."""
+    return int(load_probe_catalog().get("target_macro") or 908)
+
+
 def list_routines() -> List[Dict[str, Any]]:
     return list(load_probe_catalog().get("routines") or [])
 
@@ -141,6 +151,12 @@ def validate_run_params(
                 raise ProbeCatalogError(err)
 
     writes = {int(m): normalized[m] for m in required}
+
+    # O8702 inside+Z requires R < 0. UI stores positive obstacle clearance;
+    # negate on write so the machine selects inside+Z kinematics.
+    if str(routine_id).startswith("obstacle_") and 905 in writes and writes[905] > 0:
+        writes[905] = -abs(writes[905])
+
     return resolved, writes
 
 
@@ -151,6 +167,8 @@ def catalog_for_api() -> Dict[str, Any]:
         "version": cat.get("version", 1),
         "poison": cat.get("poison"),
         "result_macros": cat.get("result_macros"),
+        "gate_program": cat.get("gate_program", 8099),
+        "target_macro": cat.get("target_macro", 908),
         "fields": cat.get("fields"),
         "categories": cat.get("categories"),
         "routines": cat.get("routines"),

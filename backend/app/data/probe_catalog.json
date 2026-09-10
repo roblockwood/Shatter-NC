@@ -9,9 +9,21 @@
     "905": 999,
     "906": 999,
     "907": 999,
+    "908": 0,
     "920": 0
   },
-  "result_macros": [100, 101, 102, 103, 104, 105, 106, 107],
+  "gate_program": 8099,
+  "target_macro": 908,
+  "result_macros": [
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107
+  ],
   "fields": {
     "900": {
       "key": "wcs",
@@ -47,7 +59,7 @@
       "key": "macro_905",
       "label": "CLR/ANG1",
       "unit": "",
-      "help": "Obstacle clearance (R) or first 3-point angle (H)"
+      "help": "Obstacle: positive clearance mm (Shatter writes −R for O8702 inside+Z). 3-pt: first angle H (deg)"
     },
     "906": {
       "key": "ang2",
@@ -69,13 +81,34 @@
     }
   },
   "categories": [
-    { "id": "tool", "label": "TOOL SETTER" },
-    { "id": "single_face", "label": "SINGLE FACE" },
-    { "id": "corner", "label": "CORNERS" },
-    { "id": "width", "label": "WIDTHS" },
-    { "id": "diameter", "label": "DIAMETERS" },
-    { "id": "obstacle", "label": "INSIDE + OBSTACLE" },
-    { "id": "three_point", "label": "3-POINT DIA" }
+    {
+      "id": "tool",
+      "label": "TOOL SETTER"
+    },
+    {
+      "id": "single_face",
+      "label": "SINGLE FACE"
+    },
+    {
+      "id": "corner",
+      "label": "CORNERS"
+    },
+    {
+      "id": "width",
+      "label": "WIDTHS"
+    },
+    {
+      "id": "diameter",
+      "label": "DIAMETERS"
+    },
+    {
+      "id": "obstacle",
+      "label": "INSIDE + OBSTACLE"
+    },
+    {
+      "id": "three_point",
+      "label": "3-POINT DIA"
+    }
   ],
   "routines": [
     {
@@ -83,10 +116,19 @@
       "category": "tool",
       "label": "Tool length",
       "prerequisites": "Tool in spindle or ATC; table tool setter clear",
-      "field_labels": { "920": "TOOL" },
+      "field_labels": {
+        "920": "TOOL"
+      },
       "modes": {
-        "probe": { "program": 8100, "macros": ["920"] }
-      }
+        "probe": {
+          "program": 8100,
+          "macros": [
+            "920"
+          ]
+        }
+      },
+      "glyph_id": "tool_length",
+      "view": "tool"
     },
     {
       "id": "single_face_x_plus",
@@ -94,9 +136,21 @@
       "label": "X+ face",
       "prerequisites": "Jog probe ~15 mm from X+ surface before start",
       "modes": {
-        "probe": { "program": 8103, "macros": ["900"] },
-        "measure": { "program": 8203, "macros": ["900"] }
-      }
+        "probe": {
+          "program": 8103,
+          "macros": [
+            "900"
+          ]
+        },
+        "measure": {
+          "program": 8203,
+          "macros": [
+            "900"
+          ]
+        }
+      },
+      "glyph_id": "face_x_plus",
+      "view": "xy"
     },
     {
       "id": "single_face_x_minus",
@@ -104,9 +158,21 @@
       "label": "X- face",
       "prerequisites": "Jog probe ~15 mm from X- surface before start",
       "modes": {
-        "probe": { "program": 8104, "macros": ["900"] },
-        "measure": { "program": 8204, "macros": ["900"] }
-      }
+        "probe": {
+          "program": 8104,
+          "macros": [
+            "900"
+          ]
+        },
+        "measure": {
+          "program": 8204,
+          "macros": [
+            "900"
+          ]
+        }
+      },
+      "glyph_id": "face_x_minus",
+      "view": "xy"
     },
     {
       "id": "single_face_y_plus",
@@ -114,9 +180,21 @@
       "label": "Y+ face",
       "prerequisites": "Jog probe ~15 mm from Y+ surface before start",
       "modes": {
-        "probe": { "program": 8105, "macros": ["900"] },
-        "measure": { "program": 8205, "macros": ["900"] }
-      }
+        "probe": {
+          "program": 8105,
+          "macros": [
+            "900"
+          ]
+        },
+        "measure": {
+          "program": 8205,
+          "macros": [
+            "900"
+          ]
+        }
+      },
+      "glyph_id": "face_y_plus",
+      "view": "xy"
     },
     {
       "id": "single_face_y_minus",
@@ -124,9 +202,21 @@
       "label": "Y- face",
       "prerequisites": "Jog probe ~15 mm from Y- surface before start",
       "modes": {
-        "probe": { "program": 8106, "macros": ["900"] },
-        "measure": { "program": 8206, "macros": ["900"] }
-      }
+        "probe": {
+          "program": 8106,
+          "macros": [
+            "900"
+          ]
+        },
+        "measure": {
+          "program": 8206,
+          "macros": [
+            "900"
+          ]
+        }
+      },
+      "glyph_id": "face_y_minus",
+      "view": "xy"
     },
     {
       "id": "single_face_z",
@@ -134,9 +224,21 @@
       "label": "Z face",
       "prerequisites": "Jog probe ~15 mm above Z face before start",
       "modes": {
-        "probe": { "program": 8107, "macros": ["900"] },
-        "measure": { "program": 8207, "macros": ["900"] }
-      }
+        "probe": {
+          "program": 8107,
+          "macros": [
+            "900"
+          ]
+        },
+        "measure": {
+          "program": 8207,
+          "macros": [
+            "900"
+          ]
+        }
+      },
+      "glyph_id": "face_z",
+      "view": "xz"
     },
     {
       "id": "corner_xy",
@@ -144,9 +246,25 @@
       "label": "XY corner",
       "prerequisites": "Position probe at corner; enter signed approach distances",
       "modes": {
-        "probe": { "program": 8108, "macros": ["900", "901", "902"] },
-        "measure": { "program": 8208, "macros": ["900", "901", "902"] }
-      }
+        "probe": {
+          "program": 8108,
+          "macros": [
+            "900",
+            "901",
+            "902"
+          ]
+        },
+        "measure": {
+          "program": 8208,
+          "macros": [
+            "900",
+            "901",
+            "902"
+          ]
+        }
+      },
+      "glyph_id": "corner_xy",
+      "view": "xy"
     },
     {
       "id": "corner_xz",
@@ -154,9 +272,25 @@
       "label": "XZ corner",
       "prerequisites": "Position probe at corner above Z surface",
       "modes": {
-        "probe": { "program": 8109, "macros": ["900", "901", "903"] },
-        "measure": { "program": 8209, "macros": ["900", "901", "903"] }
-      }
+        "probe": {
+          "program": 8109,
+          "macros": [
+            "900",
+            "901",
+            "903"
+          ]
+        },
+        "measure": {
+          "program": 8209,
+          "macros": [
+            "900",
+            "901",
+            "903"
+          ]
+        }
+      },
+      "glyph_id": "corner_xz",
+      "view": "xz"
     },
     {
       "id": "corner_xyz",
@@ -164,9 +298,27 @@
       "label": "XYZ corner",
       "prerequisites": "Position probe at corner above Z surface",
       "modes": {
-        "probe": { "program": 8110, "macros": ["900", "901", "902", "903"] },
-        "measure": { "program": 8210, "macros": ["900", "901", "902", "903"] }
-      }
+        "probe": {
+          "program": 8110,
+          "macros": [
+            "900",
+            "901",
+            "902",
+            "903"
+          ]
+        },
+        "measure": {
+          "program": 8210,
+          "macros": [
+            "900",
+            "901",
+            "902",
+            "903"
+          ]
+        }
+      },
+      "glyph_id": "corner_xyz",
+      "view": "xy"
     },
     {
       "id": "corner_yz",
@@ -174,130 +326,363 @@
       "label": "YZ corner",
       "prerequisites": "Position probe at corner above Z surface",
       "modes": {
-        "probe": { "program": 8111, "macros": ["900", "902", "903"] },
-        "measure": { "program": 8211, "macros": ["900", "902", "903"] }
-      }
+        "probe": {
+          "program": 8111,
+          "macros": [
+            "900",
+            "902",
+            "903"
+          ]
+        },
+        "measure": {
+          "program": 8211,
+          "macros": [
+            "900",
+            "902",
+            "903"
+          ]
+        }
+      },
+      "glyph_id": "corner_yz",
+      "view": "yz"
     },
     {
       "id": "width_inside_x",
       "category": "width",
       "label": "Inside width X",
       "prerequisites": "Position probe at pocket center in X",
-      "field_labels": { "904": "WIDTH" },
+      "field_labels": {
+        "904": "WIDTH"
+      },
       "modes": {
-        "probe": { "program": 8112, "macros": ["900", "904"] },
-        "measure": { "program": 8212, "macros": ["900", "904"] }
-      }
+        "probe": {
+          "program": 8112,
+          "macros": [
+            "900",
+            "904"
+          ]
+        },
+        "measure": {
+          "program": 8212,
+          "macros": [
+            "900",
+            "904"
+          ]
+        }
+      },
+      "glyph_id": "width_in_x",
+      "view": "xy"
     },
     {
       "id": "width_inside_y",
       "category": "width",
       "label": "Inside width Y",
       "prerequisites": "Position probe at pocket center in Y",
-      "field_labels": { "904": "WIDTH" },
+      "field_labels": {
+        "904": "WIDTH"
+      },
       "modes": {
-        "probe": { "program": 8113, "macros": ["900", "904"] },
-        "measure": { "program": 8213, "macros": ["900", "904"] }
-      }
+        "probe": {
+          "program": 8113,
+          "macros": [
+            "900",
+            "904"
+          ]
+        },
+        "measure": {
+          "program": 8213,
+          "macros": [
+            "900",
+            "904"
+          ]
+        }
+      },
+      "glyph_id": "width_in_y",
+      "view": "xy"
     },
     {
       "id": "width_outside_x",
       "category": "width",
       "label": "Outside width X",
       "prerequisites": "Position probe at boss center in X",
-      "field_labels": { "904": "WIDTH" },
+      "field_labels": {
+        "904": "WIDTH"
+      },
       "modes": {
-        "probe": { "program": 8114, "macros": ["900", "903", "904"] },
-        "measure": { "program": 8214, "macros": ["900", "903", "904"] }
-      }
+        "probe": {
+          "program": 8114,
+          "macros": [
+            "900",
+            "903",
+            "904"
+          ]
+        },
+        "measure": {
+          "program": 8214,
+          "macros": [
+            "900",
+            "903",
+            "904"
+          ]
+        }
+      },
+      "glyph_id": "width_out_x",
+      "view": "xy"
     },
     {
       "id": "width_outside_y",
       "category": "width",
       "label": "Outside width Y",
       "prerequisites": "Position probe at boss center in Y",
-      "field_labels": { "904": "WIDTH" },
+      "field_labels": {
+        "904": "WIDTH"
+      },
       "modes": {
-        "probe": { "program": 8115, "macros": ["900", "903", "904"] },
-        "measure": { "program": 8215, "macros": ["900", "903", "904"] }
-      }
+        "probe": {
+          "program": 8115,
+          "macros": [
+            "900",
+            "903",
+            "904"
+          ]
+        },
+        "measure": {
+          "program": 8215,
+          "macros": [
+            "900",
+            "903",
+            "904"
+          ]
+        }
+      },
+      "glyph_id": "width_out_y",
+      "view": "xy"
     },
     {
       "id": "diameter_inside",
       "category": "diameter",
       "label": "Inside diameter",
       "prerequisites": "Position probe at bore center",
-      "field_labels": { "904": "DIA" },
+      "field_labels": {
+        "904": "DIA"
+      },
       "modes": {
-        "probe": { "program": 8116, "macros": ["900", "904"] },
-        "measure": { "program": 8216, "macros": ["900", "904"] }
-      }
+        "probe": {
+          "program": 8116,
+          "macros": [
+            "900",
+            "904"
+          ]
+        },
+        "measure": {
+          "program": 8216,
+          "macros": [
+            "900",
+            "904"
+          ]
+        }
+      },
+      "glyph_id": "dia_in",
+      "view": "xy"
     },
     {
       "id": "diameter_outside",
       "category": "diameter",
       "label": "Outside diameter",
       "prerequisites": "Position probe at boss center",
-      "field_labels": { "904": "DIA" },
+      "field_labels": {
+        "904": "DIA"
+      },
       "modes": {
-        "probe": { "program": 8117, "macros": ["900", "903", "904"] },
-        "measure": { "program": 8217, "macros": ["900", "903", "904"] }
-      }
+        "probe": {
+          "program": 8117,
+          "macros": [
+            "900",
+            "903",
+            "904"
+          ]
+        },
+        "measure": {
+          "program": 8217,
+          "macros": [
+            "900",
+            "903",
+            "904"
+          ]
+        }
+      },
+      "glyph_id": "dia_out",
+      "view": "xy"
     },
     {
       "id": "obstacle_inside_dia",
       "category": "obstacle",
       "label": "Inside dia + obstacle",
       "prerequisites": "Center of bore; set clearance around central obstacle",
-      "field_labels": { "904": "DIA", "905": "OBSTACLE CLR" },
+      "field_labels": {
+        "904": "DIA",
+        "905": "OBSTACLE CLR"
+      },
       "modes": {
-        "probe": { "program": 8118, "macros": ["900", "903", "904", "905"] },
-        "measure": { "program": 8218, "macros": ["900", "903", "904", "905"] }
-      }
+        "probe": {
+          "program": 8118,
+          "macros": [
+            "900",
+            "903",
+            "904",
+            "905"
+          ]
+        },
+        "measure": {
+          "program": 8218,
+          "macros": [
+            "900",
+            "903",
+            "904",
+            "905"
+          ]
+        }
+      },
+      "glyph_id": "obstacle_dia",
+      "view": "xy"
     },
     {
       "id": "obstacle_inside_width_x",
       "category": "obstacle",
       "label": "Inside width X + obstacle",
       "prerequisites": "Pocket center in X; set obstacle clearance",
-      "field_labels": { "904": "WIDTH", "905": "OBSTACLE CLR" },
+      "field_labels": {
+        "904": "WIDTH",
+        "905": "OBSTACLE CLR"
+      },
       "modes": {
-        "probe": { "program": 8119, "macros": ["900", "903", "904", "905"] },
-        "measure": { "program": 8219, "macros": ["900", "903", "904", "905"] }
-      }
+        "probe": {
+          "program": 8119,
+          "macros": [
+            "900",
+            "903",
+            "904",
+            "905"
+          ]
+        },
+        "measure": {
+          "program": 8219,
+          "macros": [
+            "900",
+            "903",
+            "904",
+            "905"
+          ]
+        }
+      },
+      "glyph_id": "obstacle_w_x",
+      "view": "xy"
     },
     {
       "id": "obstacle_inside_width_y",
       "category": "obstacle",
       "label": "Inside width Y + obstacle",
       "prerequisites": "Pocket center in Y; set obstacle clearance",
-      "field_labels": { "904": "WIDTH", "905": "OBSTACLE CLR" },
+      "field_labels": {
+        "904": "WIDTH",
+        "905": "OBSTACLE CLR"
+      },
       "modes": {
-        "probe": { "program": 8120, "macros": ["900", "903", "904", "905"] },
-        "measure": { "program": 8220, "macros": ["900", "903", "904", "905"] }
-      }
+        "probe": {
+          "program": 8120,
+          "macros": [
+            "900",
+            "903",
+            "904",
+            "905"
+          ]
+        },
+        "measure": {
+          "program": 8220,
+          "macros": [
+            "900",
+            "903",
+            "904",
+            "905"
+          ]
+        }
+      },
+      "glyph_id": "obstacle_w_y",
+      "view": "xy"
     },
     {
       "id": "three_point_inside",
       "category": "three_point",
       "label": "Inside 3-point dia",
       "prerequisites": "Bore center; set three probe angles",
-      "field_labels": { "904": "DIA", "905": "ANG 1", "906": "ANG 2", "907": "ANG 3" },
+      "field_labels": {
+        "904": "DIA",
+        "905": "ANG 1",
+        "906": "ANG 2",
+        "907": "ANG 3"
+      },
       "modes": {
-        "probe": { "program": 8121, "macros": ["900", "904", "905", "906", "907"] },
-        "measure": { "program": 8221, "macros": ["900", "904", "905", "906", "907"] }
-      }
+        "probe": {
+          "program": 8121,
+          "macros": [
+            "900",
+            "904",
+            "905",
+            "906",
+            "907"
+          ]
+        },
+        "measure": {
+          "program": 8221,
+          "macros": [
+            "900",
+            "904",
+            "905",
+            "906",
+            "907"
+          ]
+        }
+      },
+      "glyph_id": "three_in",
+      "view": "xy"
     },
     {
       "id": "three_point_outside",
       "category": "three_point",
       "label": "Outside 3-point dia",
       "prerequisites": "Boss center; set Z depth and three angles",
-      "field_labels": { "904": "DIA", "905": "ANG 1", "906": "ANG 2", "907": "ANG 3" },
+      "field_labels": {
+        "904": "DIA",
+        "905": "ANG 1",
+        "906": "ANG 2",
+        "907": "ANG 3"
+      },
       "modes": {
-        "probe": { "program": 8122, "macros": ["900", "903", "904", "905", "906", "907"] },
-        "measure": { "program": 8222, "macros": ["900", "903", "904", "905", "906", "907"] }
-      }
+        "probe": {
+          "program": 8122,
+          "macros": [
+            "900",
+            "903",
+            "904",
+            "905",
+            "906",
+            "907"
+          ]
+        },
+        "measure": {
+          "program": 8222,
+          "macros": [
+            "900",
+            "903",
+            "904",
+            "905",
+            "906",
+            "907"
+          ]
+        }
+      },
+      "glyph_id": "three_out",
+      "view": "xy"
     }
   ]
 }

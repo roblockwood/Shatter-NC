@@ -177,6 +177,11 @@ def test_probe_poison_route_registered():
     assert (frozenset({"POST"}), "/{machine_id}/probe/poison") in sigs
 
 
+def test_probe_collect_route_registered():
+    sigs = _route_signatures(status_module.router)
+    assert (frozenset({"POST"}), "/{machine_id}/probe/collect") in sigs
+
+
 # ---------------------------------------------------------------------------
 # Route registration - file endpoints
 # ---------------------------------------------------------------------------
@@ -211,9 +216,9 @@ def test_upload_file_route_registered():
 # ---------------------------------------------------------------------------
 
 def test_total_route_count():
-    """Exactly 26 routes must be registered. Catches silent deletions during split."""
+    """Exactly 27 routes must be registered. Catches silent deletions during split."""
     sigs = _route_signatures(status_module.router)
-    assert len(sigs) == 26, f"Expected 26 routes, got {len(sigs)}: {sigs}"
+    assert len(sigs) == 27, f"Expected 27 routes, got {len(sigs)}: {sigs}"
 
 
 # ---------------------------------------------------------------------------
