@@ -33,12 +33,14 @@ export function ProbeGlyph({ glyphId, className }: { glyphId: string; className?
     case 'tool_length':
       return (
         <Frame className={className}>
-          {/* table tool setter pad */}
-          <rect x="5" y="18" width="14" height="3" />
-          {/* end mill: shank + fluted body + tip */}
-          <rect x="10" y="3" width="4" height="6" />
-          <path d="M9 9 L9 15 L12 17 L15 15 L15 9 Z" />
-          <line x1="12" y1="9" x2="12" y2="16" />
+          {/* Blum Z-Nano: base flange + body + flat measuring pad */}
+          <ellipse cx="12" cy="20" rx="8" ry="2.2" />
+          <path d="M4 20 L4 10 Q4 7 12 7 Q20 7 20 10 L20 20" />
+          <ellipse cx="12" cy="7" rx="6" ry="1.8" />
+          <ellipse cx="12" cy="5.2" rx="4.5" ry="1.3" />
+          {/* tool tip approaching −Z */}
+          <line x1="12" y1="1" x2="12" y2="4.2" />
+          <Tip x={12} y={4.2} />
         </Frame>
       );
     case 'face_x_plus':
