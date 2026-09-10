@@ -397,20 +397,54 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                       {unit ? ` (${unit})` : ''}
                       <span className="probes-field-macro"> #{macro}</span>
                     </span>
-                    <input
-                      className="probes-input"
-                      type="number"
-                      step="any"
-                      value={params[macro] ?? ''}
-                      disabled={busy}
-                      onChange={(e) => {
-                        const n = Number.parseFloat(e.target.value);
-                        setParams((prev) => ({
-                          ...prev,
-                          [macro]: Number.isFinite(n) ? n : 0,
-                        }));
-                      }}
-                    />
+                    <span className="probes-input-wrap">
+                      <input
+                        className="probes-input"
+                        type="number"
+                        step={macro === '900' ? 1 : 'any'}
+                        value={params[macro] ?? ''}
+                        disabled={busy}
+                        onChange={(e) => {
+                          const n = Number.parseFloat(e.target.value);
+                          setParams((prev) => ({
+                            ...prev,
+                            [macro]: Number.isFinite(n) ? n : 0,
+                          }));
+                        }}
+                      />
+                      <span className="probes-spin">
+                        <button
+                          type="button"
+                          className="probes-spin-btn"
+                          tabIndex={-1}
+                          disabled={busy}
+                          aria-label={`Increase ${label}`}
+                          onClick={() => {
+                            setParams((prev) => ({
+                              ...prev,
+                              [macro]: (prev[macro] ?? 0) + 1,
+                            }));
+                          }}
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          className="probes-spin-btn"
+                          tabIndex={-1}
+                          disabled={busy}
+                          aria-label={`Decrease ${label}`}
+                          onClick={() => {
+                            setParams((prev) => ({
+                              ...prev,
+                              [macro]: (prev[macro] ?? 0) - 1,
+                            }));
+                          }}
+                        >
+                          ▼
+                        </button>
+                      </span>
+                    </span>
                     <span className="probes-live">
                       LIVE:{' '}
                       {live == null

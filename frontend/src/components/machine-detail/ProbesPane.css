@@ -76,11 +76,12 @@
 }
 
 .probes-glyph-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-  gap: 6px;
-  max-height: 132px;
-  overflow: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  /* Never scroll — all glyphs in a category must fit */
+  overflow: visible;
+  max-height: none;
   padding: 2px 0;
 }
 
@@ -88,13 +89,15 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   background: #0a0a0a;
   border: 1px solid #2a2a2a;
   color: #00ff00;
-  padding: 4px 2px;
+  padding: 8px 6px;
   cursor: pointer;
-  min-width: 0;
+  flex: 0 0 auto;
+  width: 5.5rem;
+  box-sizing: border-box;
 }
 
 .probes-glyph-tile:hover:not(:disabled) {
@@ -113,8 +116,8 @@
 }
 
 .probe-glyph {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: block;
 }
 
@@ -206,9 +209,85 @@
   font-family: var(--font-mono);
   font-size: var(--font-sm);
   padding: 3px 6px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  /* Native steppers replaced by .probes-spin */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.probes-input::-webkit-outer-spin-button,
+.probes-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.probes-input-wrap {
+  display: flex;
+  align-items: stretch;
   width: 5.75rem;
   max-width: 100%;
+  border: 1px solid #2a2a2a;
+  background: #0a0a0a;
   box-sizing: border-box;
+}
+
+.probes-input-wrap:focus-within {
+  border-color: #00ff00;
+}
+
+.probes-input-wrap .probes-input {
+  border: none;
+  background: transparent;
+  padding: 3px 4px 3px 6px;
+}
+
+.probes-input-wrap .probes-input:focus {
+  outline: none;
+  border: none;
+}
+
+.probes-spin {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  border-left: 1px solid #2a2a2a;
+  width: 1.1rem;
+}
+
+.probes-spin-btn {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: #0a0a0a;
+  color: #00ff00;
+  font-size: 7px;
+  line-height: 1;
+  cursor: pointer;
+  min-height: 0;
+}
+
+.probes-spin-btn + .probes-spin-btn {
+  border-top: 1px solid #2a2a2a;
+}
+
+.probes-spin-btn:hover:not(:disabled) {
+  background: #121212;
+  color: #33ff33;
+}
+
+.probes-spin-btn:active:not(:disabled) {
+  color: #ffaa00;
+}
+
+.probes-spin-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .probes-input:focus {
@@ -343,14 +422,19 @@
   }
 
   .probes-glyph-grid {
-    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
-    max-height: 160px;
+    gap: 8px;
   }
 }
 
-/* Short panes: keep glyph grid tight; preview still shares the row */
+/* Short panes: still no glyph scroll — wrap and shrink padding only */
 @media (max-height: 420px) {
-  .probes-glyph-grid {
-    max-height: 88px;
+  .probes-glyph-tile {
+    padding: 6px 4px;
+    width: 5rem;
+  }
+
+  .probe-glyph {
+    width: 28px;
+    height: 28px;
   }
 }

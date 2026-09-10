@@ -781,11 +781,26 @@ function threePoint(
   };
 }
 
-/** Tool setter schematic (O8100 / O8915) — not spindle-probe kinematics. */
+/**
+ * Tool setter schematic (O8100) — Blum Z-Nano style table probe.
+ * Compact cylindrical body (≈Ø34 class) with exchangeable flat measuring
+ * surface on top; tool approaches in −Z onto the pad. Not spindle-probe kinematics.
+ */
 function toolLength(): ProbeSim3D {
   const path: Waypoint[] = startCycle();
   plungeBookendToJog(path);
-  plungeToMeasure(path, -15);
+
+  // Preview scale (mm-ish): body ~Ø18, pad slightly smaller, hit on pad top
+  const bodyR = 9;
+  const padR = 6.5;
+  const bodyH = 20;
+  const padH = 1.6;
+  const baseH = 3;
+  const baseR = 11;
+  const padTop = -6; // measure surface
+  const hitZ = padTop;
+
+  plungeToMeasure(path, hitZ);
   const last = path[path.length - 1];
   if (last) {
     last.kind = 'touch';
@@ -793,13 +808,46 @@ function toolLength(): ProbeSim3D {
   }
   retractToClearance(path);
   endCycle(path);
+
+  const padBot = padTop - padH;
+  const bodyTop = padBot;
+  const bodyBot = bodyTop - bodyH;
+  const baseTop = bodyBot;
+  const baseBot = baseTop - baseH;
+
   return {
     path,
     features: [
-      clearancePlaneFeature(24),
-      { kind: 'box', cx: 0, cy: 0, cz: -16, sx: 22, sy: 22, sz: 4 },
+      clearancePlaneFeature(28),
+      // Mounting flange / base
+      {
+        kind: 'cylinder',
+        cx: 0,
+        cy: 0,
+        cz: (baseTop + baseBot) / 2,
+        r: baseR,
+        h: baseH,
+      },
+      // Z-Nano housing
+      {
+        kind: 'cylinder',
+        cx: 0,
+        cy: 0,
+        cz: (bodyTop + bodyBot) / 2,
+        r: bodyR,
+        h: bodyH,
+      },
+      // Exchangeable flat measuring surface
+      {
+        kind: 'cylinder',
+        cx: 0,
+        cy: 0,
+        cz: (padTop + padBot) / 2,
+        r: padR,
+        h: padH,
+      },
     ],
-    labels: [{ text: 'TOOL', at: { x: 0, y: 0, z: 4 } }],
+    labels: [{ text: 'Z-NANO', at: { x: 0, y: bodyR + 4, z: (bodyTop + bodyBot) / 2 } }],
   };
 }
 
