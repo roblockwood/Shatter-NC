@@ -362,20 +362,20 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     setWizardStep('write');
     setStepUi('ready');
     setStepLog('');
-    setActivityLog(seedActivity('Wizard open — run each step when ready'));
+    setActivityLog(seedActivity('EXECUTE — starting write macros'));
     setPhase('wizard');
-    setStatusLine('EXECUTE wizard open — walk each step');
+    setStatusLine('Wizard: writing macros…');
+    void runWizardStep('write', { force: true });
   }
 
   function openPoisonDialog() {
     setError(null);
     setStepUi('ready');
     setStepLog('');
-    setActivityLog(
-      seedActivity('POISON dialog open — confirm to write sentinel macros')
-    );
+    setActivityLog(seedActivity('POISON — starting sentinel write'));
     setPhase('poison');
-    setStatusLine('POISON dialog open');
+    setStatusLine('Poisoning macros…');
+    void runPoison({ force: true });
   }
 
   function abortDialog() {
@@ -401,10 +401,19 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     setStepUi('ready');
     setStepLog('');
     lastLoggedLive.current = null;
+    // Salt has no immediate motion — start collect as soon as we land on the step.
+    if (next === 'salt') {
+      void runWizardStep('salt', { force: true });
+    }
   }
 
-  async function runWizardStep() {
-    if (busy || stepUi === 'busy' || stepUi === 'ok') return;
+  async function runWizardStep(
+    stepOverride?: WizardStep,
+    opts?: { force?: boolean }
+  ) {
+    if (busy) return;
+    if (!opts?.force && (stepUi === 'busy' || stepUi === 'ok')) return;
+    const step = stepOverride ?? wizardStep;
     setBusy(true);
     setStepUi('busy');
     setStepLog('Working…');
@@ -412,7 +421,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     lastLoggedLive.current = null;
     busyStartedAt.current = Date.now();
     try {
-      if (wizardStep === 'write') {
+      if (step === 'write') {
         setStatusLine('Wizard: writing macros…');
         appendActivity('WRITE — opening telnet session');
         appendActivity('WRITE — safety check (block if operating)');
@@ -455,7 +464,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
         return;
       }
 
-      if (wizardStep === 'motion') {
+      if (step === 'motion') {
         const targetPad = String(modeEntry?.program ?? '').padStart(4, '0');
         setStatusLine('Wizard: MEMSTRT — machine moving…');
         appendActivity('MOTION — opening telnet session');
@@ -563,8 +572,9 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     }
   }
 
-  async function runPoison() {
-    if (busy || stepUi === 'busy' || stepUi === 'ok') return;
+  async function runPoison(opts?: { force?: boolean }) {
+    if (busy) return;
+    if (!opts?.force && (stepUi === 'busy' || stepUi === 'ok')) return;
     setBusy(true);
     setStepUi('busy');
     setStepLog('Working…');
@@ -848,7 +858,8 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
               {operating ? ' | MACHINE OPERATING' : ''}
             </div>
             <div className="probes-prereq">
-              * EXECUTE / POISON open confirm dialogs with live ACTIVITY.
+              * EXECUTE starts write immediately; motion still needs confirm. POISON starts
+              on click.
               {routine?.prerequisites ? ` · ${routine.prerequisites}` : ''}
             </div>
           </div>
@@ -971,7 +982,8 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                 [ ABORT ]
               </button>
 
-              {(stepUi === 'ready' || stepUi === 'fail') && (
+              {(stepUi === 'fail' ||
+                (stepUi === 'ready' && wizardStep === 'motion')) && (
                 <button
                   type="button"
                   className={`terminal-button-sm${wizardStep === 'motion' ? ' danger' : ''}`}
@@ -983,11 +995,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                 >
                   {stepUi === 'fail'
                     ? '[ RETRY ]'
-                    : wizardStep === 'write'
-                      ? '[ WRITE MACROS ]'
-                      : wizardStep === 'motion'
-                        ? '[ START MOTION ]'
-                        : '[ COLLECT + SALT ]'}
+                    : '[ START MOTION ]'}
                 </button>
               )}
 
@@ -1037,7 +1045,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             <div className="probes-confirm-body">
               <div className="probes-confirm-warn">
                 Writes sentinel values so a stale probe cycle cannot re-run. No MEMSTRT /
-                no axis motion.
+                no axis motion. Started automatically from [ POISON ].
               </div>
               <div className="probes-confirm-params">
                 {Object.entries(probeCatalog.poison).map(([m, v]) => (
@@ -1072,17 +1080,17 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                 </button>
               )}
 
-              {(stepUi === 'ready' || stepUi === 'fail') && (
+              {stepUi === 'fail' && (
                 <button
                   type="button"
                   className="terminal-button-sm danger"
                   disabled={busy}
                   onClick={() => {
                     if (busy) return;
-                    void runPoison();
+                    void runPoison({ force: true });
                   }}
                 >
-                  {stepUi === 'fail' ? '[ RETRY ]' : '[ POISON NOW ]'}
+                  [ RETRY ]
                 </button>
               )}
 
