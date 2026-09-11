@@ -1,11 +1,12 @@
 """Tests for stepped probe_cycle_service (write / start / collect)."""
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
 from app.services.probe_cycle_service import (
     _Snap,
+    _is_cycle_complete,
     _is_idle,
     _is_running,
     _memstrt_catalog_target,
@@ -22,6 +23,10 @@ def test_idle_running_predicates():
     assert not _is_idle(_Snap(prd3_status="operating", operation_status=1))
     assert _is_running(_Snap(prd3_status="operating", operation_status=0))
     assert not _is_idle(_Snap(prd3_status=None, operation_status=None))
+    assert _is_cycle_complete(_Snap(prd3_status="standby", operation_status=0))
+    assert _is_cycle_complete(_Snap(prd3_status="operating", operation_status=2))
+    assert not _is_cycle_complete(_Snap(prd3_status="operating", operation_status=1))
+    assert not _is_cycle_complete(_Snap())
 
 
 @pytest.mark.asyncio
@@ -75,7 +80,6 @@ async def test_write_macros_no_memstrt(monkeypatch):
         "app.services.probe_cycle_service._cached_machine_status",
         lambda _mid: {},
     )
-    # Do NOT mock _ensure_safety — that hid the MachineStateValidator ctor bug.
     monkeypatch.setattr(
         "app.services.machine_state_validator.MachineStateValidator.validate_macro_write_live_minimal",
         fake_live,
@@ -139,8 +143,8 @@ async def test_start_memstrt_catalog_target(monkeypatch):
     client.get_status_description = MagicMock(return_value="OK")
 
     snaps = [
-        _Snap(prd3_status="standby", operation_status=0),
-        _Snap(prd3_status="operating", operation_status=1),
+        _Snap(prd3_status="standby", operation_status=0),  # idle before MEMSTRT
+        _Snap(prd3_status="operating", operation_status=1),  # after MEMSTRT
     ]
 
     async def fake_snapshot(c, cv):
@@ -195,11 +199,22 @@ async def test_collect_probe_results(monkeypatch):
     client = MagicMock()
     client.disconnect = AsyncMock()
     client.change_folder = AsyncMock(return_value=(True, "00"))
+    client.get_macro_variable_range = AsyncMock(
+        return_value=[100.0, 101.0, 102.0, 103.0, 104.0, 105.0, 106.0, 107.0]
+    )
     client.get_macro_variable = AsyncMock(side_effect=lambda n, verbose=False: float(n))
     client.write_macro_variable = AsyncMock(return_value=(True, "00", None))
     client.get_status_description = MagicMock(return_value="OK")
 
+    snaps = [
+        _Snap(prd3_status="operating", operation_status=1),
+        _Snap(prd3_status="standby", operation_status=0),
+        _Snap(prd3_status="standby", operation_status=0),  # post-settle running check
+    ]
+
     async def fake_snapshot(c, cv):
+        if snaps:
+            return snaps.pop(0)
         return _Snap(prd3_status="standby", operation_status=0)
 
     async def fake_create(*args, **kwargs):
@@ -213,6 +228,10 @@ async def test_collect_probe_results(monkeypatch):
         "app.services.probe_cycle_service._snapshot",
         fake_snapshot,
     )
+    monkeypatch.setattr(
+        "app.services.probe_cycle_service.POST_CYCLE_SETTLE_S",
+        0,
+    )
 
     result = await collect_probe_results(
         db_machine=machine,
@@ -220,10 +239,47 @@ async def test_collect_probe_results(monkeypatch):
         cycle_timeout_s=5,
         poll_s=0.01,
     )
-    assert result.ok is True
+    assert result.ok is True, result.error
     assert result.phase == "complete"
     assert result.results["100"] == 100.0
+    client.get_macro_variable_range.assert_awaited()
     client.change_folder.assert_awaited_with("/", verbose=False)
+    assert client.write_macro_variable.await_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_collect_does_not_poison_on_wait_failure(monkeypatch):
+    machine = SimpleNamespace(id=1, ip_address="10.0.0.1", control_version="C00")
+    client = MagicMock()
+    client.disconnect = AsyncMock()
+    client.change_folder = AsyncMock(return_value=(True, "00"))
+    client.write_macro_variable = AsyncMock(return_value=(True, "00", None))
+    client.get_status_description = MagicMock(return_value="OK")
+
+    async def always_running(c, cv):
+        return _Snap(prd3_status="operating", operation_status=1)
+
+    async def fake_create(*args, **kwargs):
+        return client
+
+    monkeypatch.setattr(
+        "app.clients.telnet_client.create_fresh_connection",
+        fake_create,
+    )
+    monkeypatch.setattr(
+        "app.services.probe_cycle_service._snapshot",
+        always_running,
+    )
+
+    result = await collect_probe_results(
+        db_machine=machine,
+        machine_id=1,
+        cycle_timeout_s=0.05,
+        poll_s=0.01,
+    )
+    assert result.ok is False
+    assert result.phase == "waiting_complete"
+    client.write_macro_variable.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -264,7 +320,9 @@ async def test_poison_probe_macros(monkeypatch):
     machine = SimpleNamespace(id=1, ip_address="10.0.0.1", control_version="C00")
     client = MagicMock()
     client.disconnect = AsyncMock()
+    client.change_folder = AsyncMock(return_value=(True, "00"))
     client.write_macro_variable = AsyncMock(return_value=(True, "00", None))
+    client.get_status_description = MagicMock(return_value="OK")
 
     async def fake_create(*args, **kwargs):
         return client
@@ -278,3 +336,4 @@ async def test_poison_probe_macros(monkeypatch):
     assert result.ok is True
     assert result.phase == "poisoned"
     assert client.write_macro_variable.await_count >= 1
+    assert call("/", verbose=False) in client.change_folder.await_args_list

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Select } from '../ui';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
@@ -34,6 +34,15 @@ type RunPhase = 'idle' | 'wizard' | 'complete' | 'error';
 type WizardStep = 'write' | 'motion' | 'salt';
 type StepUi = 'ready' | 'busy' | 'ok' | 'fail';
 
+type ActivityLevel = 'info' | 'ok' | 'warn' | 'fail';
+
+interface ActivityLine {
+  id: number;
+  at: string;
+  msg: string;
+  level: ActivityLevel;
+}
+
 const WIZARD_STEPS: WizardStep[] = ['write', 'motion', 'salt'];
 
 function wizardStepTitle(step: WizardStep): string {
@@ -45,6 +54,15 @@ function wizardStepTitle(step: WizardStep): string {
     case 'salt':
       return '3 / 3  COLLECT + SALT';
   }
+}
+
+function formatActivityTime(d = new Date()): string {
+  return d.toLocaleTimeString([], {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }
 
 interface ProbeRunResponse {
@@ -131,9 +149,14 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
   const [wizardStep, setWizardStep] = useState<WizardStep>('write');
   const [stepUi, setStepUi] = useState<StepUi>('ready');
   const [stepLog, setStepLog] = useState<string>('');
+  const [activityLog, setActivityLog] = useState<ActivityLine[]>([]);
   const [macrosWritten, setMacrosWritten] = useState<Record<string, number> | null>(
     null
   );
+  const activitySeq = useRef(0);
+  const activityScrollRef = useRef<HTMLDivElement | null>(null);
+  const lastLoggedStatus = useRef<string | null>(null);
+  const busyStartedAt = useRef<number | null>(null);
 
   const routine: ProbeRoutine | undefined = getRoutine(routineId);
   const availableModes = useMemo((): ProbeMode[] => {
@@ -174,6 +197,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       setWizardStep('write');
       setStepUi('ready');
       setStepLog('');
+      setActivityLog([]);
       setMacrosWritten(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on routine/mode
@@ -209,6 +233,55 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       : (body as ProbeRunResponse);
   }
 
+  const appendActivity = useCallback((msg: string, level: ActivityLevel = 'info') => {
+    activitySeq.current += 1;
+    const line: ActivityLine = {
+      id: activitySeq.current,
+      at: formatActivityTime(),
+      msg,
+      level,
+    };
+    setActivityLog((prev) => [...prev, line]);
+  }, []);
+
+  useEffect(() => {
+    const el = activityScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [activityLog]);
+
+  // Live machine status from the poller while a wizard request is in flight.
+  useEffect(() => {
+    if (phase !== 'wizard' || stepUi !== 'busy') return;
+    const st = (machineStatus || '').trim();
+    if (!st) return;
+    if (lastLoggedStatus.current === st) return;
+    lastLoggedStatus.current = st;
+    appendActivity(`Poller status: ${st.toUpperCase()}`);
+  }, [machineStatus, phase, stepUi, appendActivity]);
+
+  // Honest heartbeat while waiting on a long server call (esp. collect).
+  useEffect(() => {
+    if (phase !== 'wizard' || stepUi !== 'busy') {
+      busyStartedAt.current = null;
+      return;
+    }
+    if (busyStartedAt.current == null) {
+      busyStartedAt.current = Date.now();
+    }
+    let lastBeatSec = 0;
+    const id = window.setInterval(() => {
+      const started = busyStartedAt.current;
+      if (started == null) return;
+      const sec = Math.floor((Date.now() - started) / 1000);
+      if (sec >= 5 && sec - lastBeatSec >= 5) {
+        lastBeatSec = sec;
+        appendActivity(`Still waiting on server… ${sec}s`);
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [phase, stepUi, appendActivity]);
+
   function openWizard() {
     setError(null);
     setResults(null);
@@ -216,12 +289,32 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     setWizardStep('write');
     setStepUi('ready');
     setStepLog('');
+    activitySeq.current = 0;
+    lastLoggedStatus.current = (machineStatus || '').trim() || null;
+    const seed: ActivityLine[] = [
+      {
+        id: ++activitySeq.current,
+        at: formatActivityTime(),
+        msg: 'Wizard open — run each step when ready',
+        level: 'info',
+      },
+    ];
+    if (machineStatus) {
+      seed.push({
+        id: ++activitySeq.current,
+        at: formatActivityTime(),
+        msg: `Machine status now: ${machineStatus.toUpperCase()}`,
+        level: 'info',
+      });
+    }
+    setActivityLog(seed);
     setPhase('wizard');
     setStatusLine('EXECUTE wizard open — walk each step');
   }
 
   function abortWizard() {
     if (busy) return;
+    appendActivity('Aborted by operator', 'warn');
     setPhase('idle');
     setWizardStep('write');
     setStepUi('ready');
@@ -236,9 +329,12 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       setStatusLine('Probe sequence complete');
       return;
     }
-    setWizardStep(WIZARD_STEPS[idx + 1]);
+    const next = WIZARD_STEPS[idx + 1];
+    appendActivity(`—— ${wizardStepTitle(next)} ——`);
+    setWizardStep(next);
     setStepUi('ready');
     setStepLog('');
+    lastLoggedStatus.current = null;
   }
 
   async function runWizardStep() {
@@ -247,9 +343,14 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     setStepUi('busy');
     setStepLog('Working…');
     setError(null);
+    lastLoggedStatus.current = null;
+    busyStartedAt.current = Date.now();
     try {
       if (wizardStep === 'write') {
         setStatusLine('Wizard: writing macros…');
+        appendActivity('WRITE — opening telnet session');
+        appendActivity('WRITE — safety check (block if operating)');
+        appendActivity('WRITE — FLDCHG / then WRTMCNM job macros (no MEMSTRT)');
         const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/write`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -259,9 +360,14 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             params,
           }),
         });
+        appendActivity(`WRITE — response HTTP ${res.status}`);
         const payload = await parseProbeResponse(res);
         if (!res.ok || !payload.ok) {
           const msg = payload.error || `Write failed (HTTP ${res.status})`;
+          appendActivity(
+            `WRITE failed @ ${payload.phase ?? 'unknown'}: ${msg}`,
+            'fail'
+          );
           setStepUi('fail');
           setStepLog(msg);
           setError(msg);
@@ -273,6 +379,10 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
         const lines = Object.entries(written)
           .map(([k, v]) => `#${k}=${v}`)
           .join(' · ');
+        appendActivity(
+          `WRITE ok in ${(payload.elapsed_s ?? 0).toFixed(1)}s${lines ? ` — ${lines}` : ''}`,
+          'ok'
+        );
         setStepUi('ok');
         setStepLog(`OK — macros written${lines ? `: ${lines}` : ''}`);
         setStatusLine('Macros written — continue to motion step');
@@ -280,7 +390,14 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       }
 
       if (wizardStep === 'motion') {
+        const targetPad = String(modeEntry?.program ?? '').padStart(4, '0');
         setStatusLine('Wizard: MEMSTRT — machine moving…');
+        appendActivity('MOTION — opening telnet session');
+        appendActivity('MOTION — safety check + wait idle');
+        appendActivity(
+          `MOTION — CHGMODE MEM → FLDCHG PROGRAM → MEMSTRT O${targetPad}`
+        );
+        appendActivity('MOTION — machine will move when MEMSTRT succeeds', 'warn');
         const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -290,9 +407,14 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             params,
           }),
         });
+        appendActivity(`MOTION — response HTTP ${res.status}`);
         const payload = await parseProbeResponse(res);
         if (!res.ok || !payload.ok) {
           const msg = payload.error || `Start failed (HTTP ${res.status})`;
+          appendActivity(
+            `MOTION failed @ ${payload.phase ?? 'unknown'}: ${msg}`,
+            'fail'
+          );
           setStepUi('fail');
           setStepLog(msg);
           setError(msg);
@@ -300,6 +422,10 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
           return;
         }
         const target = payload.target_program ?? modeEntry?.program;
+        appendActivity(
+          `MOTION ok — O${String(target ?? '').padStart(4, '0')} started (${(payload.elapsed_s ?? 0).toFixed(1)}s)`,
+          'ok'
+        );
         setStepUi('ok');
         setStepLog(
           `OK — MEMSTRT O${String(target ?? '').padStart(4, '0')} started (${(payload.elapsed_s ?? 0).toFixed(1)}s)`
@@ -312,22 +438,46 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
 
       // salt = collect + poison
       setStatusLine('Wizard: waiting idle / collect + salt…');
+      appendActivity('SALT — opening telnet session');
+      appendActivity(
+        'SALT — waiting for cycle complete (server polls MEM/PRD3; may take a while)'
+      );
+      appendActivity('SALT — then REDMCNM #100–#107, then poison job macros');
       const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/collect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ poison: true }),
       });
+      appendActivity(`SALT — response HTTP ${res.status}`);
       const payload = await parseProbeResponse(res);
       if (!res.ok || !payload.ok) {
         const msg = payload.error || `Collect failed (HTTP ${res.status})`;
+        appendActivity(
+          `SALT failed @ ${payload.phase ?? 'unknown'}: ${msg}`,
+          'fail'
+        );
+        if (payload.results) {
+          setResults(payload.results);
+          appendActivity('Partial results were returned — see RESULTS below', 'warn');
+        }
         setStepUi('fail');
         setStepLog(msg);
         setError(msg);
-        if (payload.results) setResults(payload.results);
         setStatusLine(`Collect failed at ${payload.phase ?? 'unknown'}`);
         return;
       }
       setResults(payload.results ?? null);
+      const resultSummary = Object.entries(payload.results ?? {})
+        .map(([k, v]) => `#${k}=${v ?? '──'}`)
+        .join(' · ');
+      if (resultSummary) {
+        appendActivity(`SALT — results ${resultSummary}`);
+      }
+      const poisoned = Object.keys(payload.macros_written ?? {}).length;
+      appendActivity(
+        `SALT ok in ${(payload.elapsed_s ?? 0).toFixed(1)}s — salted ${poisoned} macros`,
+        'ok'
+      );
       setStepUi('ok');
       setStepLog(
         `OK — results read · macros salted (${(payload.elapsed_s ?? 0).toFixed(1)}s)`
@@ -337,6 +487,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Request failed';
+      appendActivity(`Request error: ${msg}`, 'fail');
       setStepUi('fail');
       setStepLog(msg);
       setError(msg);
@@ -670,6 +821,33 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                 </>
               )}
 
+              <div className="probes-wizard-activity">
+                <div className="probes-wizard-activity-title">ACTIVITY</div>
+                <div
+                  className="probes-wizard-activity-scroll"
+                  ref={activityScrollRef}
+                  role="log"
+                  aria-live="polite"
+                  aria-relevant="additions"
+                >
+                  {activityLog.length === 0 ? (
+                    <div className="probes-wizard-activity-line probes-wizard-activity-line--info">
+                      — waiting —
+                    </div>
+                  ) : (
+                    activityLog.map((line) => (
+                      <div
+                        key={line.id}
+                        className={`probes-wizard-activity-line probes-wizard-activity-line--${line.level}`}
+                      >
+                        <span className="probes-wizard-activity-time">{line.at}</span>
+                        <span className="probes-wizard-activity-msg">{line.msg}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
               {stepLog && (
                 <div
                   className={`probes-wizard-log probes-wizard-log--${stepUi}`}
@@ -739,6 +917,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                     setWizardStep('write');
                     setStepUi('ready');
                     setStepLog('');
+                    appendActivity('Sequence complete', 'ok');
                   }}
                 >
                   [ DONE ]

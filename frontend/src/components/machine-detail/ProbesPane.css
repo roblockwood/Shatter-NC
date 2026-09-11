@@ -409,7 +409,7 @@
   background: #0a0a0a;
   color: #00ff00;
   padding: 12px 14px;
-  max-width: 440px;
+  max-width: 520px;
   width: 100%;
   font-family: var(--font-mono);
   box-shadow: 0 0 12px rgba(255, 170, 0, 0.25);
@@ -489,6 +489,57 @@
 .probes-wizard-log--fail {
   color: #ff4444;
   border-color: #660000;
+}
+
+.probes-wizard-activity {
+  margin-top: 8px;
+  border: 1px solid #333;
+  background: #050505;
+}
+
+.probes-wizard-activity-title {
+  padding: 4px 8px;
+  color: #ffaa00;
+  font-size: var(--font-xs);
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid #333;
+}
+
+.probes-wizard-activity-scroll {
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 4px 0;
+  font-size: var(--font-xs);
+}
+
+.probes-wizard-activity-line {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 8px;
+  padding: 2px 8px;
+  color: #9f9;
+  word-break: break-word;
+}
+
+.probes-wizard-activity-time {
+  color: #666;
+  font-variant-numeric: tabular-nums;
+}
+
+.probes-wizard-activity-line--ok {
+  color: #00ff00;
+}
+
+.probes-wizard-activity-line--warn {
+  color: #ffaa00;
+}
+
+.probes-wizard-activity-line--fail {
+  color: #ff4444;
+}
+
+.probes-wizard-activity-line--info {
+  color: #8f8;
 }
 
 @media (max-width: 420px) {
