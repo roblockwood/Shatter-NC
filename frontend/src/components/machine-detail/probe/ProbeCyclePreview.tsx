@@ -243,6 +243,8 @@ export interface ProbeCyclePreviewProps {
   routineId: string;
   params: Record<string, number>;
   compact?: boolean;
+  /** Freeze animation (e.g. confirm dialog static frame) */
+  paused?: boolean;
   className?: string;
 }
 
@@ -250,6 +252,7 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
   routineId,
   params,
   compact = false,
+  paused = false,
   className,
 }) => {
   const sim = useMemo(() => buildProbeSim3D(routineId, params), [routineId, params]);
@@ -269,7 +272,7 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
   const cycleMs = useMemo(() => pathCycleDurationMs(sim.path), [sim.path]);
 
   useEffect(() => {
-    if (reducedMotion || sim.path.length < 2) {
+    if (paused || reducedMotion || sim.path.length < 2) {
       setT(0.2);
       return;
     }
@@ -286,11 +289,11 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [reducedMotion, sim.path, routineId, cycleMs]);
+  }, [paused, reducedMotion, sim.path, routineId, cycleMs]);
 
   const sample = useMemo(
-    () => samplePath(sim.path, reducedMotion ? 0.35 : t),
-    [sim.path, t, reducedMotion]
+    () => samplePath(sim.path, paused || reducedMotion ? 0.35 : t),
+    [sim.path, t, reducedMotion, paused]
   );
 
   const motion = useMemo(() => motionAxes(sample.dir), [sample.dir]);

@@ -1,13 +1,15 @@
-"""Probe cycle API — catalog, arm (O8099 gate), collect, poison.
+"""Probe cycle API — stepped write / start / collect / poison.
 
 Routes:
-    GET  /{machine_id}/probe/catalog  — Blum routine catalog (+ gate_program)
-    POST /{machine_id}/probe/run      — write macros + MEMSTRT O8099 only; wait for M0
-    POST /{machine_id}/probe/collect  — wait idle after M0, read results, poison
+    GET  /{machine_id}/probe/catalog  — Blum routine catalog
+    POST /{machine_id}/probe/write    — write job macros only (no motion)
+    POST /{machine_id}/probe/start    — MEMSTRT catalog target (motion)
+    POST /{machine_id}/probe/collect  — wait idle, read #100+, poison
     POST /{machine_id}/probe/poison   — force sentinel macros
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status as http_status
@@ -18,11 +20,11 @@ from app.db.base import get_db
 from app.models.machine import Machine
 from app.services.probe_catalog import catalog_for_api
 from app.services.probe_cycle_service import (
-    arm_probe_cycle,
     collect_probe_results,
     poison_probe_macros,
+    start_probe_program,
+    write_probe_macros,
 )
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +74,25 @@ def _result_payload(result: Any) -> Dict[str, Any]:
     }
 
 
+def _raise_for_result(result: Any, payload: Dict[str, Any]) -> None:
+    if result.ok:
+        return
+    if result.phase == "validate":
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=payload,
+        )
+    if result.phase == "safety":
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail=payload,
+        )
+    raise HTTPException(
+        status_code=http_status.HTTP_502_BAD_GATEWAY,
+        detail=payload,
+    )
+
+
 @router.get("/{machine_id}/probe/catalog")
 async def get_probe_catalog(machine_id: int, db: Session = Depends(get_db)):
     """Return Blum probe/measure routine catalog for the Probes pane."""
@@ -79,27 +100,21 @@ async def get_probe_catalog(machine_id: int, db: Session = Depends(get_db)):
     return catalog_for_api()
 
 
-@router.post("/{machine_id}/probe/run")
-async def post_probe_run(
+@router.post("/{machine_id}/probe/write")
+async def post_probe_write(
     machine_id: int,
     body: ProbeRunRequest,
     db: Session = Depends(get_db),
 ):
-    """
-    Arm a gated probe cycle.
-
-    Writes job macros + #908 (target O-number), MEMSTRTs **O8099 only**, waits
-    until M0 / message stop. Does not start Blum helpers directly and does not
-    poison macros (operator must Cycle Start past M0 on the control).
-    """
+    """Write job macros only. Does not MEMSTRT or cause axis motion."""
     machine = _get_machine(db, machine_id)
     logger.info(
-        "Probe arm requested machine=%s type=%s mode=%s",
+        "Probe write requested machine=%s type=%s mode=%s",
         machine_id,
         body.type,
         body.mode,
     )
-    result = await arm_probe_cycle(
+    result = await write_probe_macros(
         db_machine=machine,
         machine_id=machine_id,
         routine_id=body.type,
@@ -107,21 +122,37 @@ async def post_probe_run(
         params=body.params or {},
     )
     payload = _result_payload(result)
-    if not result.ok and result.phase == "validate":
-        raise HTTPException(
-            status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail=payload,
-        )
-    if not result.ok and result.phase == "safety":
-        raise HTTPException(
-            status_code=http_status.HTTP_409_CONFLICT,
-            detail=payload,
-        )
-    if not result.ok:
-        raise HTTPException(
-            status_code=http_status.HTTP_502_BAD_GATEWAY,
-            detail=payload,
-        )
+    _raise_for_result(result, payload)
+    return payload
+
+
+@router.post("/{machine_id}/probe/start")
+async def post_probe_start(
+    machine_id: int,
+    body: ProbeRunRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    MEMSTRT the catalog target program (machine will move).
+
+    Allowlisted O-numbers only. Call /probe/write first so macros are current.
+    """
+    machine = _get_machine(db, machine_id)
+    logger.info(
+        "Probe start requested machine=%s type=%s mode=%s",
+        machine_id,
+        body.type,
+        body.mode,
+    )
+    result = await start_probe_program(
+        db_machine=machine,
+        machine_id=machine_id,
+        routine_id=body.type,
+        mode=body.mode,
+        params=body.params or {},
+    )
+    payload = _result_payload(result)
+    _raise_for_result(result, payload)
     return payload
 
 
@@ -131,7 +162,7 @@ async def post_probe_collect(
     body: Optional[ProbeCollectRequest] = None,
     db: Session = Depends(get_db),
 ):
-    """Wait for idle after operator confirms past M0, read #100+, optionally poison."""
+    """Wait for idle after motion, read #100+, optionally poison."""
     machine = _get_machine(db, machine_id)
     poison = True if body is None else body.poison
     result = await collect_probe_results(

@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 CATALOG_PATH = Path(__file__).resolve().parent.parent / "data" / "probe_catalog.json"
 
@@ -32,13 +32,24 @@ def get_result_macro_numbers() -> List[int]:
     return [int(n) for n in load_probe_catalog().get("result_macros") or []]
 
 
+def get_allowed_start_programs() -> Set[int]:
+    """O-numbers Shatter may MEMSTRT for probing (catalog targets only)."""
+    allowed: Set[int] = set()
+    for routine in list_routines():
+        modes = routine.get("modes") or {}
+        for entry in modes.values():
+            if entry and entry.get("program") is not None:
+                allowed.add(int(entry["program"]))
+    return allowed
+
+
 def get_gate_program() -> int:
-    """O-number Shatter is allowed to MEMSTRT for probing (preview + M0 gate)."""
+    """Deprecated O8099 gate — kept for catalog JSON compatibility."""
     return int(load_probe_catalog().get("gate_program") or 8099)
 
 
 def get_target_macro() -> int:
-    """Macro that holds the Blum/tool helper O-number for O8099 to M98."""
+    """Deprecated #908 target macro — gate/M98 abandoned."""
     return int(load_probe_catalog().get("target_macro") or 908)
 
 

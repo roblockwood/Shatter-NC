@@ -331,6 +331,24 @@
   flex-wrap: wrap;
 }
 
+.probes-actions .terminal-button-sm:disabled,
+.probes-actions .terminal-button-sm.danger:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  border-color: #333;
+  color: #555;
+  box-shadow: none;
+  background: transparent;
+}
+
+.probes-actions .terminal-button-sm:disabled:hover,
+.probes-actions .terminal-button-sm.danger:disabled:hover {
+  border-color: #333;
+  color: #555;
+  box-shadow: none;
+  background: transparent;
+}
+
 .probes-footer {
   display: flex;
   flex-direction: column;
@@ -367,6 +385,12 @@
   grid-template-columns: 1fr auto;
   gap: 8px;
   font-size: var(--font-sm);
+}
+
+.probes-confirm-warn {
+  color: var(--color-error, #ff0000);
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .probes-confirm-overlay {
