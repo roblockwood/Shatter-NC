@@ -129,11 +129,12 @@ Client wrappers live in [`_telnet_write_ops.py`](../backend/app/clients/_telnet_
 | `FLDPWD` | Single-part, empty args | Returns cwd, e.g. `/\r\n…` or `/PROGRAM\r\n…` |
 | `FLDCHG` | **Multipart**: empty args + payload folder name (`PROGRAM`) or `/` | Changes telnet data cwd. **Must restore `/` after** — otherwise `LOD MEM` fails with status `07` |
 
-**Remote measure / probe sequence (stepped):** Shatter UI confirms each stage.
+**Remote measure / probe sequence (stepped):** Shatter **EXECUTE** wizard confirms each stage in one dialog.
 1. `POST .../probe/write` — write job macros only (no MEMSTRT)
-2. Operator confirms in Shatter
+2. Operator confirms success, then next step
 3. `POST .../probe/start` — `CHGMODE MEM` → `FLDCHG PROGRAM` → `MEMSTRT` catalog target → `FLDCHG /`
-4. `POST .../probe/collect` — wait idle → read `#100–#107` → poison
+4. Operator confirms motion started, then next step
+5. `POST .../probe/collect` — wait idle → read `#100–#107` → poison (salt)
 
 Live scripts:
 
@@ -151,7 +152,7 @@ Live scripts:
 | `POST` | `/api/machines/{id}/probe/collect` | Wait idle, read `#100–#107`, poison |
 | `POST` | `/api/machines/{id}/probe/poison` | Force sentinel macros (`#900=0`, `#901–#907=999`, `#908=0`, `#920=0`) |
 
-Catalog source: [`backend/app/data/probe_catalog.json`](../backend/app/data/probe_catalog.json) (mirrored in frontend). UI: **Probes** pane — WRITE MACROS → START MOTION → COLLECT. O8099 gate/M98 is abandoned (`docs/nc/O8099.NC` kept as archive only).
+Catalog source: [`backend/app/data/probe_catalog.json`](../backend/app/data/probe_catalog.json) (mirrored in frontend). UI: **Probes** pane — **EXECUTE** opens a confirm wizard (write macros → start motion → collect + salt). O8099 gate/M98 is abandoned (`docs/nc/O8099.NC` kept as archive only).
 
 **Live smoke (C00):** stop backend, `POST .../probe/write`, confirm, `POST .../probe/start` for target O81xx, then `POST .../probe/collect`. Restart backend afterward.
 

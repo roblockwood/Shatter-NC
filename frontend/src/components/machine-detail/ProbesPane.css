@@ -447,6 +447,50 @@
   margin-top: 12px;
 }
 
+.probes-wizard-progress {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.probes-wizard-pip {
+  flex: 1;
+  height: 3px;
+  background: #333;
+}
+
+.probes-wizard-pip--active {
+  background: #ffaa00;
+}
+
+.probes-wizard-pip--done {
+  background: #00ff00;
+}
+
+.probes-wizard-log {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 1px solid #333;
+  font-size: var(--font-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.probes-wizard-log--busy {
+  color: #ffaa00;
+  border-color: #664400;
+}
+
+.probes-wizard-log--ok {
+  color: #00ff00;
+  border-color: #006600;
+}
+
+.probes-wizard-log--fail {
+  color: #ff4444;
+  border-color: #660000;
+}
+
 @media (max-width: 420px) {
   .probes-main {
     grid-template-columns: 1fr;
