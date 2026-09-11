@@ -134,14 +134,28 @@ async def _wait_until(
 async def _ensure_safety(
     db_machine: Machine, machine_id: int, client: Any
 ) -> tuple[bool, Optional[str], Dict[str, Any]]:
+    """Cache-then-live macro-write safety check on an open telnet session."""
     cached = _cached_machine_status(machine_id)
     max_age = macro_write_cache_max_age_seconds(db_machine.poll_interval_seconds or 5)
-    validator = MachineStateValidator(db_machine)
-    return await validator.validate_for_macro_write(
-        client=client,
-        cached_status=cached or None,
-        cache_max_age_seconds=max_age,
+    validator = MachineStateValidator()
+    cache_safe, cache_error, status_data = validator.try_validate_macro_write_from_cache(
+        cached_status=cached,
+        machine_id=machine_id,
+        machine_name=db_machine.name,
+        max_age_seconds=max_age,
     )
+    if cache_safe is True:
+        return True, None, status_data
+
+    is_safe, live_error, status_data = await validator.validate_macro_write_live_minimal(
+        telnet_client=client,
+        control_version=db_machine.control_version,
+        machine_id=machine_id,
+        machine_name=db_machine.name,
+    )
+    if not is_safe:
+        return False, live_error or cache_error or "Machine not safe for macro write", status_data
+    return True, None, status_data
 
 
 async def _write_macros(client: Any, writes: Dict[int, float]) -> None:

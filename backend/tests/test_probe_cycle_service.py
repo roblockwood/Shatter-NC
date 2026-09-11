@@ -200,6 +200,39 @@ async def test_collect_probe_results(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_ensure_safety_uses_validator_no_ctor_args(monkeypatch):
+    """Regression: MachineStateValidator() takes no args; no validate_for_macro_write."""
+    from app.services.probe_cycle_service import _ensure_safety
+
+    machine = SimpleNamespace(
+        id=1,
+        name="Mill",
+        poll_interval_seconds=5,
+        control_version="C00",
+    )
+    client = MagicMock()
+
+    monkeypatch.setattr(
+        "app.services.probe_cycle_service._cached_machine_status",
+        lambda _mid: {},
+    )
+
+    async def fake_live(self, **kwargs):
+        assert kwargs["telnet_client"] is client
+        return True, None, {"status": "standby"}
+
+    monkeypatch.setattr(
+        "app.services.machine_state_validator.MachineStateValidator.validate_macro_write_live_minimal",
+        fake_live,
+    )
+
+    ok, err, data = await _ensure_safety(machine, 1, client)
+    assert ok is True
+    assert err is None
+    assert data.get("status") == "standby"
+
+
+@pytest.mark.asyncio
 async def test_poison_probe_macros(monkeypatch):
     machine = SimpleNamespace(id=1, ip_address="10.0.0.1", control_version="C00")
     client = MagicMock()
