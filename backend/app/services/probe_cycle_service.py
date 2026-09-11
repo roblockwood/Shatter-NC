@@ -34,8 +34,10 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_FOLDER = "PROGRAM"
 DEFAULT_POLL_S = 0.5
+DEFAULT_COLLECT_POLL_S = 1.0
 DEFAULT_START_TIMEOUT_S = 30.0
 DEFAULT_CYCLE_TIMEOUT_S = 180.0
+POST_CYCLE_SETTLE_S = 0.75
 
 IDLE_STATUSES = frozenset({"standby", "stopped", "off"})
 ACTIVE_STATUSES = frozenset({"operating"})
@@ -91,6 +93,23 @@ def _is_idle(snap: _Snap) -> bool:
 
 def _is_running(snap: _Snap) -> bool:
     return snap.prd3_status in ACTIVE_STATUSES or snap.operation_status == 1
+
+
+def _is_cycle_complete(snap: _Snap) -> bool:
+    """True when probe motion has stopped enough to read #100+ / salt.
+
+    Stricter than "not operating": still blocks active cutting (op=1), but
+    allows M0/temp-stop/block-stop so results can be collected after a pause.
+    """
+    if snap.prd3_status is None and snap.operation_status is None:
+        return False
+    if snap.prd3_status in FATAL_STATUSES:
+        return False
+    if snap.operation_status == 1:
+        return False
+    if snap.prd3_status in ACTIVE_STATUSES and snap.operation_status in (None, 1):
+        return False
+    return True
 
 
 async def _snapshot(client: Any, control_version: str) -> _Snap:
@@ -202,7 +221,8 @@ async def _poison_macros(
     if targets is None:
         targets = set(poison.keys())
     written: Dict[int, float] = {}
-    for macro in targets:
+    await _ensure_root_folder(client)
+    for macro in sorted(targets):
         if macro not in poison:
             continue
         value = poison[macro]
@@ -215,15 +235,31 @@ async def _poison_macros(
         if ok:
             written[macro] = value
         else:
-            logger.warning("Failed to poison macro #%s: %s", macro, status)
+            desc = client.get_status_description(status or "00")
+            logger.warning("Failed to poison macro #%s: %s (%s)", macro, status, desc)
+        await asyncio.sleep(0.05)
     return written
 
 
 async def _read_results(client: Any) -> Dict[str, Optional[float]]:
-    results: Dict[str, Optional[float]] = {}
-    for num in get_result_macro_numbers():
-        value = await client.get_macro_variable(num, verbose=False)
-        results[str(num)] = value
+    """Read Blum result macros (#100–#107) via one REDMCNM range when possible."""
+    nums = get_result_macro_numbers()
+    results: Dict[str, Optional[float]] = {str(n): None for n in nums}
+    if not nums:
+        return results
+
+    start = min(nums)
+    size = max(nums) - start + 1
+    values = await client.get_macro_variable_range(start, size, verbose=False)
+    if values is not None:
+        for num in nums:
+            idx = num - start
+            if 0 <= idx < len(values):
+                results[str(num)] = values[idx]
+        return results
+
+    for num in nums:
+        results[str(num)] = await client.get_macro_variable(num, verbose=False)
     return results
 
 
@@ -253,6 +289,13 @@ async def poison_probe_macros(db_machine: Machine) -> ProbeCycleResult:
             timeout=15,
         )
         written = await _poison_macros(client)
+        if not written:
+            return ProbeCycleResult(
+                ok=False,
+                phase="poisoning",
+                error="No poison macros were written (WRTMCNM failed)",
+                elapsed_s=time.perf_counter() - t0,
+            )
         return ProbeCycleResult(
             ok=True,
             phase="poisoned",
@@ -447,14 +490,35 @@ async def start_probe_program(
             await client.change_folder("/", verbose=False)
 
         phase = "running"
-        await _wait_until(
-            client,
-            control_version,
-            predicate=_is_running,
-            label="probe program start",
-            timeout_s=start_timeout_s,
-            poll_s=poll_s,
-        )
+        # Short Blum cycles can finish before the first poll sees "operating".
+        # Wait at least 1s before treating idle as "already done" so we don't
+        # race the MEMSTRT start latch.
+        memstrt_at = time.perf_counter()
+        start_deadline = memstrt_at + start_timeout_s
+        saw_running = False
+        last = _Snap()
+        while time.perf_counter() < start_deadline:
+            last = await _snapshot(client, control_version)
+            if _snap_unreadable(last):
+                await asyncio.sleep(poll_s)
+                continue
+            if last.prd3_status in FATAL_STATUSES:
+                raise RuntimeError("Machine error while waiting for probe program start")
+            if _is_running(last):
+                saw_running = True
+                break
+            if (
+                _is_cycle_complete(last)
+                and (time.perf_counter() - memstrt_at) >= 1.0
+            ):
+                saw_running = True
+                break
+            await asyncio.sleep(poll_s)
+        if not saw_running:
+            raise TimeoutError(
+                "Timeout waiting for probe program start "
+                f"(prd3={last.prd3_status!r} op={last.operation_status!r})"
+            )
 
         return ProbeCycleResult(
             ok=True,
@@ -497,17 +561,22 @@ async def collect_probe_results(
     db_machine: Machine,
     machine_id: int,
     *,
-    poll_s: float = DEFAULT_POLL_S,
+    poll_s: float = DEFAULT_COLLECT_POLL_S,
     cycle_timeout_s: float = DEFAULT_CYCLE_TIMEOUT_S,
     poison: bool = True,
 ) -> ProbeCycleResult:
-    """Wait for idle after motion, read #100+, optionally poison."""
+    """Wait for cycle complete, read #100+, optionally poison.
+
+    Does not poison on wait/read failure — that previously blasted WRTMCNM while
+    the control was busy and could trigger CM7522 (abnormal end command).
+    """
     from app.clients.telnet_client import create_fresh_connection
 
     t0 = time.perf_counter()
     control_version = db_machine.control_version or "C00"
     client = None
     phase = "connect"
+    results: Dict[str, Optional[float]] = {}
 
     try:
         client = await create_fresh_connection(
@@ -522,11 +591,15 @@ async def collect_probe_results(
         await _wait_until(
             client,
             control_version,
-            predicate=_is_idle,
+            predicate=_is_cycle_complete,
             label="cycle complete",
             timeout_s=cycle_timeout_s,
             poll_s=poll_s,
         )
+
+        # Let M30 / mode settle before REDMCNM / WRTMCNM bursts.
+        await asyncio.sleep(POST_CYCLE_SETTLE_S)
+        await _ensure_root_folder(client)
 
         phase = "reading"
         results = await _read_results(client)
@@ -534,7 +607,28 @@ async def collect_probe_results(
         macros_written: Dict[int, float] = {}
         if poison:
             phase = "poisoning"
+            # Refuse salt while still cutting — avoids CM7522 / status 32 storms.
+            snap = await _snapshot(client, control_version)
+            if _is_running(snap):
+                return ProbeCycleResult(
+                    ok=False,
+                    results=results,
+                    phase=phase,
+                    error=(
+                        "Results read, but machine still running — "
+                        "skipped salt/poison. Retry when idle."
+                    ),
+                    elapsed_s=time.perf_counter() - t0,
+                )
             macros_written = await _poison_macros(client)
+            if not macros_written:
+                return ProbeCycleResult(
+                    ok=False,
+                    results=results,
+                    phase=phase,
+                    error="Results read, but salt/poison wrote no macros",
+                    elapsed_s=time.perf_counter() - t0,
+                )
 
         return ProbeCycleResult(
             ok=True,
@@ -545,13 +639,9 @@ async def collect_probe_results(
         )
     except Exception as e:
         logger.exception("probe collect failed machine=%s phase=%s", machine_id, phase)
-        if client is not None and poison:
-            try:
-                await _poison_macros(client)
-            except Exception:
-                logger.warning("post-collect poison failed for machine %s", machine_id)
         return ProbeCycleResult(
             ok=False,
+            results=results or {},
             phase=phase,
             error=str(e),
             elapsed_s=time.perf_counter() - t0,
