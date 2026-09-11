@@ -18,18 +18,25 @@ import {
 } from '../../data/probeCatalog';
 import { ProbeGlyph } from './probe/ProbeGlyph';
 import { ProbeCyclePreview } from './probe/ProbeCyclePreview';
+import {
+  formatMemMode,
+  formatMemOperationStatus,
+} from '../../utils/machineMemLabels';
 import './ProbesPane.css';
 
 export interface ProbesPaneProps {
   machineId: number;
   macros?: Record<string, number>;
   machineStatus?: string;
+  memMode?: number;
+  memOperationStatus?: number;
+  alarms?: Array<{ code: string; message?: string; stop_level?: string }>;
   pollTimestamp?: string | null;
   pollIntervalSeconds?: number;
   onExpand?: () => void;
 }
 
-type RunPhase = 'idle' | 'wizard' | 'complete' | 'error';
+type RunPhase = 'idle' | 'wizard' | 'poison' | 'complete' | 'error';
 
 type WizardStep = 'write' | 'motion' | 'salt';
 type StepUi = 'ready' | 'busy' | 'ok' | 'fail';
@@ -63,6 +70,31 @@ function formatActivityTime(d = new Date()): string {
     minute: '2-digit',
     second: '2-digit',
   });
+}
+
+/** Honest live line from poller fields — not just PRD3 status (often sticky ERROR). */
+function formatLiveMachineLine(
+  status?: string,
+  memMode?: number,
+  memOp?: number,
+  alarms?: Array<{ code: string; stop_level?: string }>
+): string {
+  const st = (status || 'unknown').trim().toUpperCase() || 'UNKNOWN';
+  const parts = [
+    st,
+    `MEM ${formatMemMode(memMode)}`,
+    `op ${formatMemOperationStatus(memOp)}`,
+  ];
+  const codes = (alarms || [])
+    .map((a) => (a.code || '').trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  if (codes.length) {
+    parts.push(`alarms ${codes.join(',')}`);
+  } else if (st === 'ERROR') {
+    parts.push('PRD3 code 5 (panel may show soft CM alarm)');
+  }
+  return `Live: ${parts.join(' · ')}`;
 }
 
 interface ProbeRunResponse {
@@ -130,6 +162,9 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
   machineId,
   macros,
   machineStatus,
+  memMode,
+  memOperationStatus,
+  alarms,
   pollTimestamp,
   pollIntervalSeconds = 5,
 }) => {
@@ -155,7 +190,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
   );
   const activitySeq = useRef(0);
   const activityScrollRef = useRef<HTMLDivElement | null>(null);
-  const lastLoggedStatus = useRef<string | null>(null);
+  const lastLoggedLive = useRef<string | null>(null);
   const busyStartedAt = useRef<number | null>(null);
 
   const routine: ProbeRoutine | undefined = getRoutine(routineId);
@@ -191,7 +226,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     setParams(defaultParamsFor(macrosNeeded));
     setResults(null);
     setError(null);
-    if (phase !== 'wizard') {
+    if (phase !== 'wizard' && phase !== 'poison') {
       setPhase('idle');
       setStatusLine('Ready');
       setWizardStep('write');
@@ -217,7 +252,8 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       return true;
     });
 
-  const controlsDisabled = busy || phase === 'wizard';
+  const dialogOpen = phase === 'wizard' || phase === 'poison';
+  const controlsDisabled = busy || dialogOpen;
 
   const modeOptions = availableModes.map((m) => ({
     value: m,
@@ -250,19 +286,31 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     el.scrollTop = el.scrollHeight;
   }, [activityLog]);
 
-  // Live machine status from the poller while a wizard request is in flight.
+  // Live machine snapshot from the poller while a dialog request is in flight.
   useEffect(() => {
-    if (phase !== 'wizard' || stepUi !== 'busy') return;
-    const st = (machineStatus || '').trim();
-    if (!st) return;
-    if (lastLoggedStatus.current === st) return;
-    lastLoggedStatus.current = st;
-    appendActivity(`Poller status: ${st.toUpperCase()}`);
-  }, [machineStatus, phase, stepUi, appendActivity]);
+    if (!dialogOpen || stepUi !== 'busy') return;
+    const line = formatLiveMachineLine(
+      machineStatus,
+      memMode,
+      memOperationStatus,
+      alarms
+    );
+    if (lastLoggedLive.current === line) return;
+    lastLoggedLive.current = line;
+    appendActivity(line);
+  }, [
+    machineStatus,
+    memMode,
+    memOperationStatus,
+    alarms,
+    dialogOpen,
+    stepUi,
+    appendActivity,
+  ]);
 
-  // Honest heartbeat while waiting on a long server call (esp. collect).
+  // Honest heartbeat while waiting on a long server call.
   useEffect(() => {
-    if (phase !== 'wizard' || stepUi !== 'busy') {
+    if (!dialogOpen || stepUi !== 'busy') {
       busyStartedAt.current = null;
       return;
     }
@@ -280,7 +328,32 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       }
     }, 1000);
     return () => window.clearInterval(id);
-  }, [phase, stepUi, appendActivity]);
+  }, [dialogOpen, stepUi, appendActivity]);
+
+  function seedActivity(banner: string): ActivityLine[] {
+    activitySeq.current = 0;
+    const live = formatLiveMachineLine(
+      machineStatus,
+      memMode,
+      memOperationStatus,
+      alarms
+    );
+    lastLoggedLive.current = live;
+    return [
+      {
+        id: ++activitySeq.current,
+        at: formatActivityTime(),
+        msg: banner,
+        level: 'info',
+      },
+      {
+        id: ++activitySeq.current,
+        at: formatActivityTime(),
+        msg: live,
+        level: 'info',
+      },
+    ];
+  }
 
   function openWizard() {
     setError(null);
@@ -289,30 +362,23 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     setWizardStep('write');
     setStepUi('ready');
     setStepLog('');
-    activitySeq.current = 0;
-    lastLoggedStatus.current = (machineStatus || '').trim() || null;
-    const seed: ActivityLine[] = [
-      {
-        id: ++activitySeq.current,
-        at: formatActivityTime(),
-        msg: 'Wizard open — run each step when ready',
-        level: 'info',
-      },
-    ];
-    if (machineStatus) {
-      seed.push({
-        id: ++activitySeq.current,
-        at: formatActivityTime(),
-        msg: `Machine status now: ${machineStatus.toUpperCase()}`,
-        level: 'info',
-      });
-    }
-    setActivityLog(seed);
+    setActivityLog(seedActivity('Wizard open — run each step when ready'));
     setPhase('wizard');
     setStatusLine('EXECUTE wizard open — walk each step');
   }
 
-  function abortWizard() {
+  function openPoisonDialog() {
+    setError(null);
+    setStepUi('ready');
+    setStepLog('');
+    setActivityLog(
+      seedActivity('POISON dialog open — confirm to write sentinel macros')
+    );
+    setPhase('poison');
+    setStatusLine('POISON dialog open');
+  }
+
+  function abortDialog() {
     if (busy) return;
     appendActivity('Aborted by operator', 'warn');
     setPhase('idle');
@@ -334,7 +400,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     setWizardStep(next);
     setStepUi('ready');
     setStepLog('');
-    lastLoggedStatus.current = null;
+    lastLoggedLive.current = null;
   }
 
   async function runWizardStep() {
@@ -343,7 +409,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     setStepUi('busy');
     setStepLog('Working…');
     setError(null);
-    lastLoggedStatus.current = null;
+    lastLoggedLive.current = null;
     busyStartedAt.current = Date.now();
     try {
       if (wizardStep === 'write') {
@@ -497,37 +563,97 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     }
   }
 
-  async function poisonMacros() {
+  async function runPoison() {
+    if (busy || stepUi === 'busy' || stepUi === 'ok') return;
     setBusy(true);
+    setStepUi('busy');
+    setStepLog('Working…');
+    setError(null);
+    lastLoggedLive.current = null;
+    busyStartedAt.current = Date.now();
     setStatusLine('Poisoning macros…');
     try {
+      appendActivity('POISON — opening telnet session');
+      appendActivity('POISON — FLDCHG / then WRTMCNM sentinel values');
+      const targets = Object.entries(probeCatalog.poison)
+        .map(([k, v]) => `#${k}=${v}`)
+        .join(' · ');
+      if (targets) {
+        appendActivity(`POISON — targets ${targets}`);
+      }
       const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/poison`, {
         method: 'POST',
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const detail = (body as { detail?: { error?: string } | string })?.detail;
+      appendActivity(`POISON — response HTTP ${res.status}`);
+      const payload = await parseProbeResponse(res);
+      if (!res.ok || payload.ok === false) {
         const msg =
-          typeof detail === 'string'
-            ? detail
-            : detail && typeof detail === 'object'
-              ? detail.error
-              : null;
-        setError(msg || `Poison failed (HTTP ${res.status})`);
-        setPhase('error');
+          payload.error ||
+          `Poison failed (HTTP ${res.status})`;
+        appendActivity(
+          `POISON failed @ ${payload.phase ?? 'unknown'}: ${msg}`,
+          'fail'
+        );
+        setStepUi('fail');
+        setStepLog(msg);
+        setError(msg);
         setStatusLine('Poison failed');
         return;
       }
+      const written = payload.macros_written ?? {};
+      const lines = Object.entries(written)
+        .map(([k, v]) => `#${k}=${v}`)
+        .join(' · ');
+      appendActivity(
+        `POISON ok in ${(payload.elapsed_s ?? 0).toFixed(1)}s${lines ? ` — ${lines}` : ''}`,
+        'ok'
+      );
+      setStepUi('ok');
+      setStepLog(
+        `OK — macros poisoned${lines ? `: ${lines}` : ''} (${(payload.elapsed_s ?? 0).toFixed(1)}s)`
+      );
       setStatusLine('Macros poisoned');
-      setPhase('idle');
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Poison request failed');
-      setPhase('error');
+      const msg = e instanceof Error ? e.message : 'Poison request failed';
+      appendActivity(`Request error: ${msg}`, 'fail');
+      setStepUi('fail');
+      setStepLog(msg);
+      setError(msg);
+      setStatusLine('Poison failed');
     } finally {
       setBusy(false);
     }
   }
+
+  const activityPanel = (
+    <div className="probes-wizard-activity">
+      <div className="probes-wizard-activity-title">ACTIVITY</div>
+      <div
+        className="probes-wizard-activity-scroll"
+        ref={activityScrollRef}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+      >
+        {activityLog.length === 0 ? (
+          <div className="probes-wizard-activity-line probes-wizard-activity-line--info">
+            — waiting —
+          </div>
+        ) : (
+          activityLog.map((line) => (
+            <div
+              key={line.id}
+              className={`probes-wizard-activity-line probes-wizard-activity-line--${line.level}`}
+            >
+              <span className="probes-wizard-activity-time">{line.at}</span>
+              <span className="probes-wizard-activity-msg">{line.msg}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="probes-pane">
@@ -586,6 +712,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                 {freshness}
               </span>
               {phase === 'wizard' ? ` | WIZARD · ${wizardStepTitle(wizardStep)}` : ''}
+              {phase === 'poison' ? ' | POISON' : ''}
               {phase === 'complete' ? ' | COMPLETE' : ''}
             </div>
           )}
@@ -686,9 +813,9 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             <button
               type="button"
               className="terminal-button-sm danger"
-              disabled={!canRun || busy || phase === 'wizard'}
+              disabled={!canRun || busy || dialogOpen}
               onClick={() => {
-                if (!canRun || busy || phase === 'wizard') return;
+                if (!canRun || busy || dialogOpen) return;
                 openWizard();
               }}
               title={
@@ -704,12 +831,12 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             <button
               type="button"
               className="terminal-button-sm"
-              disabled={busy || phase === 'wizard'}
+              disabled={busy || dialogOpen}
               onClick={() => {
-                if (busy || phase === 'wizard') return;
-                void poisonMacros();
+                if (busy || dialogOpen) return;
+                openPoisonDialog();
               }}
-              title="Poison probe macros"
+              title="Open poison confirm dialog"
             >
               [ POISON ]
             </button>
@@ -721,7 +848,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
               {operating ? ' | MACHINE OPERATING' : ''}
             </div>
             <div className="probes-prereq">
-              * EXECUTE opens a confirm wizard: write macros → start motion → collect + salt.
+              * EXECUTE / POISON open confirm dialogs with live ACTIVITY.
               {routine?.prerequisites ? ` · ${routine.prerequisites}` : ''}
             </div>
           </div>
@@ -821,32 +948,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                 </>
               )}
 
-              <div className="probes-wizard-activity">
-                <div className="probes-wizard-activity-title">ACTIVITY</div>
-                <div
-                  className="probes-wizard-activity-scroll"
-                  ref={activityScrollRef}
-                  role="log"
-                  aria-live="polite"
-                  aria-relevant="additions"
-                >
-                  {activityLog.length === 0 ? (
-                    <div className="probes-wizard-activity-line probes-wizard-activity-line--info">
-                      — waiting —
-                    </div>
-                  ) : (
-                    activityLog.map((line) => (
-                      <div
-                        key={line.id}
-                        className={`probes-wizard-activity-line probes-wizard-activity-line--${line.level}`}
-                      >
-                        <span className="probes-wizard-activity-time">{line.at}</span>
-                        <span className="probes-wizard-activity-msg">{line.msg}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+              {activityPanel}
 
               {stepLog && (
                 <div
@@ -864,7 +966,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                 type="button"
                 className="terminal-button-sm"
                 disabled={busy}
-                onClick={() => abortWizard()}
+                onClick={() => abortDialog()}
               >
                 [ ABORT ]
               </button>
@@ -918,6 +1020,88 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                     setStepUi('ready');
                     setStepLog('');
                     appendActivity('Sequence complete', 'ok');
+                  }}
+                >
+                  [ DONE ]
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {phase === 'poison' && (
+        <div className="probes-confirm-overlay" role="dialog" aria-modal="true">
+          <div className="probes-confirm-box probes-wizard-box">
+            <div className="probes-confirm-title">POISON MACROS</div>
+            <div className="probes-confirm-body">
+              <div className="probes-confirm-warn">
+                Writes sentinel values so a stale probe cycle cannot re-run. No MEMSTRT /
+                no axis motion.
+              </div>
+              <div className="probes-confirm-params">
+                {Object.entries(probeCatalog.poison).map(([m, v]) => (
+                  <div key={m}>
+                    #{m} → {v}
+                  </div>
+                ))}
+              </div>
+
+              {activityPanel}
+
+              {stepLog && (
+                <div
+                  className={`probes-wizard-log probes-wizard-log--${stepUi}`}
+                  role="status"
+                >
+                  {stepUi === 'ok' ? '✓ ' : stepUi === 'fail' ? '✗ ' : ''}
+                  {stepLog}
+                </div>
+              )}
+            </div>
+
+            <div className="probes-confirm-actions">
+              {stepUi !== 'ok' && (
+                <button
+                  type="button"
+                  className="terminal-button-sm"
+                  disabled={busy}
+                  onClick={() => abortDialog()}
+                >
+                  [ ABORT ]
+                </button>
+              )}
+
+              {(stepUi === 'ready' || stepUi === 'fail') && (
+                <button
+                  type="button"
+                  className="terminal-button-sm danger"
+                  disabled={busy}
+                  onClick={() => {
+                    if (busy) return;
+                    void runPoison();
+                  }}
+                >
+                  {stepUi === 'fail' ? '[ RETRY ]' : '[ POISON NOW ]'}
+                </button>
+              )}
+
+              {stepUi === 'busy' && (
+                <button type="button" className="terminal-button-sm" disabled>
+                  [ WORKING… ]
+                </button>
+              )}
+
+              {stepUi === 'ok' && (
+                <button
+                  type="button"
+                  className="terminal-button-sm"
+                  disabled={busy}
+                  onClick={() => {
+                    setPhase('idle');
+                    setStepUi('ready');
+                    setStepLog('');
+                    setStatusLine('Macros poisoned');
                   }}
                 >
                   [ DONE ]

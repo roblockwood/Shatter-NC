@@ -123,6 +123,9 @@ function TabletPaneContent({
             machineId={machine.machine_id}
             macros={machine.macros}
             machineStatus={machine.status}
+            memMode={machine.mem_mode}
+            memOperationStatus={machine.mem_operation_status}
+            alarms={machine.alarms}
             pollTimestamp={pollAt}
             pollIntervalSeconds={machine.poll_interval_seconds ?? 5}
           />
