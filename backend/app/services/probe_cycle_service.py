@@ -107,6 +107,18 @@ async def _snapshot(client: Any, control_version: str) -> _Snap:
     return snap
 
 
+def _snap_unreadable(snap: _Snap) -> bool:
+    return snap.prd3_status is None and snap.operation_status is None
+
+
+async def _ensure_root_folder(client: Any) -> None:
+    """LOD MEM/PRD3 fail with status 07 unless telnet cwd is `/`."""
+    ok, status = await client.change_folder("/", verbose=False)
+    if not ok:
+        desc = client.get_status_description(status or "00")
+        raise RuntimeError(f"FLDCHG / failed: {status} ({desc})")
+
+
 async def _wait_until(
     client: Any,
     control_version: str,
@@ -115,11 +127,23 @@ async def _wait_until(
     label: str,
     timeout_s: float,
     poll_s: float,
+    unreadable_limit: int = 5,
 ) -> _Snap:
     deadline = time.perf_counter() + timeout_s
     last = _Snap()
+    unreadable_streak = 0
     while time.perf_counter() < deadline:
         last = await _snapshot(client, control_version)
+        if _snap_unreadable(last):
+            unreadable_streak += 1
+            if unreadable_streak >= unreadable_limit:
+                raise RuntimeError(
+                    f"Could not read MEM/PRD3 while waiting for {label} "
+                    f"(prd3={last.prd3_status!r} op={last.operation_status!r}). "
+                    "Ensure telnet folder is / and the machine responds to LOD."
+                )
+        else:
+            unreadable_streak = 0
         if last.prd3_status in FATAL_STATUSES:
             raise RuntimeError(f"Machine error while waiting for {label}")
         if predicate(last):
@@ -254,9 +278,6 @@ async def write_probe_macros(
     routine_id: str,
     mode: str,
     params: Dict[str, float],
-    *,
-    start_timeout_s: float = DEFAULT_START_TIMEOUT_S,
-    poll_s: float = DEFAULT_POLL_S,
 ) -> ProbeCycleResult:
     """Validate + write job macros only. Does not MEMSTRT / cause motion."""
     from app.clients.telnet_client import create_fresh_connection
@@ -275,7 +296,6 @@ async def write_probe_macros(
         )
 
     target_program = int(resolved["program"])
-    control_version = db_machine.control_version or "C00"
     client = None
     phase = "connect"
 
@@ -300,21 +320,10 @@ async def write_probe_macros(
                 elapsed_s=time.perf_counter() - t0,
             )
 
-        pwd = await client.get_working_folder(verbose=False)
-        if pwd and pwd != "/":
-            await client.change_folder("/", verbose=False)
-
-        phase = "idle_wait"
-        await _wait_until(
-            client,
-            control_version,
-            predicate=_is_idle,
-            label="idle before macro write",
-            timeout_s=start_timeout_s,
-            poll_s=poll_s,
-        )
-
+        # Same gate as execute_macro_write: safety already blocks operating.
+        # Do not idle-poll here — empty MEM/PRD3 reads never look "idle" and hang.
         phase = "writing"
+        await _ensure_root_folder(client)
         await _write_macros(client, writes)
 
         return ProbeCycleResult(
@@ -409,9 +418,7 @@ async def start_probe_program(
                 elapsed_s=time.perf_counter() - t0,
             )
 
-        pwd = await client.get_working_folder(verbose=False)
-        if pwd and pwd != "/":
-            await client.change_folder("/", verbose=False)
+        await _ensure_root_folder(client)
 
         phase = "idle_wait"
         await _wait_until(
@@ -508,6 +515,8 @@ async def collect_probe_results(
             port=10000,
             timeout=15,
         )
+
+        await _ensure_root_folder(client)
 
         phase = "waiting_complete"
         await _wait_until(
