@@ -4,7 +4,7 @@ Routes are split across focused sub-modules:
   _status_reads.py  — GET status, running-log, counters, alarms/live, tools
   _status_tools.py  — POST refresh, PUT/DELETE ATC writes, life, offset
   _status_files.py  — GET programs/position/download/metadata/view, POST upload
-  _probe.py         — GET probe/catalog, POST probe/run, POST probe/poison
+  _probe.py         — GET probe/catalog, POST probe/write|start|collect|poison
 
 All routes and all public import paths are preserved unchanged.
 """

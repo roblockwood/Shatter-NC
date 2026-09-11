@@ -331,6 +331,24 @@
   flex-wrap: wrap;
 }
 
+.probes-actions .terminal-button-sm:disabled,
+.probes-actions .terminal-button-sm.danger:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  border-color: #333;
+  color: #555;
+  box-shadow: none;
+  background: transparent;
+}
+
+.probes-actions .terminal-button-sm:disabled:hover,
+.probes-actions .terminal-button-sm.danger:disabled:hover {
+  border-color: #333;
+  color: #555;
+  box-shadow: none;
+  background: transparent;
+}
+
 .probes-footer {
   display: flex;
   flex-direction: column;
@@ -367,6 +385,12 @@
   grid-template-columns: 1fr auto;
   gap: 8px;
   font-size: var(--font-sm);
+}
+
+.probes-confirm-warn {
+  color: var(--color-error, #ff0000);
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .probes-confirm-overlay {
@@ -421,6 +445,50 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 12px;
+}
+
+.probes-wizard-progress {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.probes-wizard-pip {
+  flex: 1;
+  height: 3px;
+  background: #333;
+}
+
+.probes-wizard-pip--active {
+  background: #ffaa00;
+}
+
+.probes-wizard-pip--done {
+  background: #00ff00;
+}
+
+.probes-wizard-log {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 1px solid #333;
+  font-size: var(--font-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.probes-wizard-log--busy {
+  color: #ffaa00;
+  border-color: #664400;
+}
+
+.probes-wizard-log--ok {
+  color: #00ff00;
+  border-color: #006600;
+}
+
+.probes-wizard-log--fail {
+  color: #ff4444;
+  border-color: #660000;
 }
 
 @media (max-width: 420px) {

@@ -29,18 +29,27 @@ export interface ProbesPaneProps {
   onExpand?: () => void;
 }
 
-type RunPhase =
-  | 'idle'
-  | 'confirm'
-  | 'running'
-  | 'awaiting_m0'
-  | 'complete'
-  | 'error';
+type RunPhase = 'idle' | 'wizard' | 'complete' | 'error';
+
+type WizardStep = 'write' | 'motion' | 'salt';
+type StepUi = 'ready' | 'busy' | 'ok' | 'fail';
+
+const WIZARD_STEPS: WizardStep[] = ['write', 'motion', 'salt'];
+
+function wizardStepTitle(step: WizardStep): string {
+  switch (step) {
+    case 'write':
+      return '1 / 3  WRITE MACROS';
+    case 'motion':
+      return '2 / 3  START MOTION';
+    case 'salt':
+      return '3 / 3  COLLECT + SALT';
+  }
+}
 
 interface ProbeRunResponse {
   ok: boolean;
   program?: number;
-  gate_program?: number;
   target_program?: number;
   routine_id?: string;
   mode?: string;
@@ -119,6 +128,12 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, number | null> | null>(null);
   const [busy, setBusy] = useState(false);
+  const [wizardStep, setWizardStep] = useState<WizardStep>('write');
+  const [stepUi, setStepUi] = useState<StepUi>('ready');
+  const [stepLog, setStepLog] = useState<string>('');
+  const [macrosWritten, setMacrosWritten] = useState<Record<string, number> | null>(
+    null
+  );
 
   const routine: ProbeRoutine | undefined = getRoutine(routineId);
   const availableModes = useMemo((): ProbeMode[] => {
@@ -153,9 +168,13 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     setParams(defaultParamsFor(macrosNeeded));
     setResults(null);
     setError(null);
-    if (phase !== 'running' && phase !== 'confirm' && phase !== 'awaiting_m0') {
+    if (phase !== 'wizard') {
       setPhase('idle');
       setStatusLine('Ready');
+      setWizardStep('write');
+      setStepUi('ready');
+      setStepLog('');
+      setMacrosWritten(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on routine/mode
   }, [routineId, effectiveMode]);
@@ -174,98 +193,153 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       return true;
     });
 
+  const controlsDisabled = busy || phase === 'wizard';
+
   const modeOptions = availableModes.map((m) => ({
     value: m,
     label: m === 'probe' ? 'PROBE · SET WCS' : 'MEASURE · CHECK',
   }));
 
-  async function armCycle() {
-    setBusy(true);
-    setPhase('running');
+  async function parseProbeResponse(res: Response): Promise<ProbeRunResponse> {
+    const body = (await res.json().catch(() => ({}))) as ProbeRunResponse & {
+      detail?: ProbeRunResponse | string;
+    };
+    return typeof body.detail === 'object' && body.detail != null
+      ? body.detail
+      : (body as ProbeRunResponse);
+  }
+
+  function openWizard() {
     setError(null);
     setResults(null);
-    setStatusLine('Writing macros / starting O8099 gate…');
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: routineId,
-          mode: effectiveMode,
-          params,
-        }),
-      });
-      const body = (await res.json().catch(() => ({}))) as ProbeRunResponse & {
-        detail?: ProbeRunResponse | string;
-      };
-      const payload: ProbeRunResponse =
-        typeof body.detail === 'object' && body.detail != null
-          ? body.detail
-          : (body as ProbeRunResponse);
+    setMacrosWritten(null);
+    setWizardStep('write');
+    setStepUi('ready');
+    setStepLog('');
+    setPhase('wizard');
+    setStatusLine('EXECUTE wizard open — walk each step');
+  }
 
-      if (!res.ok || !payload.ok) {
-        const msg =
-          payload.error ||
-          (typeof body.detail === 'string' ? body.detail : null) ||
-          `Arm failed (HTTP ${res.status})`;
-        setError(msg);
-        setPhase('error');
-        setStatusLine(`Failed at ${payload.phase ?? 'unknown'}`);
+  function abortWizard() {
+    if (busy) return;
+    setPhase('idle');
+    setWizardStep('write');
+    setStepUi('ready');
+    setStepLog('');
+    setStatusLine('Ready');
+  }
+
+  function advanceWizard() {
+    const idx = WIZARD_STEPS.indexOf(wizardStep);
+    if (idx < 0 || idx >= WIZARD_STEPS.length - 1) {
+      setPhase('complete');
+      setStatusLine('Probe sequence complete');
+      return;
+    }
+    setWizardStep(WIZARD_STEPS[idx + 1]);
+    setStepUi('ready');
+    setStepLog('');
+  }
+
+  async function runWizardStep() {
+    if (busy || stepUi === 'busy' || stepUi === 'ok') return;
+    setBusy(true);
+    setStepUi('busy');
+    setStepLog('Working…');
+    setError(null);
+    try {
+      if (wizardStep === 'write') {
+        setStatusLine('Wizard: writing macros…');
+        const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/write`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: routineId,
+            mode: effectiveMode,
+            params,
+          }),
+        });
+        const payload = await parseProbeResponse(res);
+        if (!res.ok || !payload.ok) {
+          const msg = payload.error || `Write failed (HTTP ${res.status})`;
+          setStepUi('fail');
+          setStepLog(msg);
+          setError(msg);
+          setStatusLine(`Write failed at ${payload.phase ?? 'unknown'}`);
+          return;
+        }
+        const written = payload.macros_written ?? {};
+        setMacrosWritten(written);
+        const lines = Object.entries(written)
+          .map(([k, v]) => `#${k}=${v}`)
+          .join(' · ');
+        setStepUi('ok');
+        setStepLog(`OK — macros written${lines ? `: ${lines}` : ''}`);
+        setStatusLine('Macros written — continue to motion step');
         return;
       }
 
-      setPhase('awaiting_m0');
-      const gate = payload.gate_program ?? probeCatalog.gate_program ?? 8099;
-      const target = payload.target_program ?? modeEntry?.program;
-      setStatusLine(
-        `ARMED O${String(gate).padStart(4, '0')} → O${String(target ?? '').padStart(4, '0')} — Cycle Start past M0, then COLLECT`
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Arm request failed');
-      setPhase('error');
-      setStatusLine('Request error');
-    } finally {
-      setBusy(false);
-    }
-  }
+      if (wizardStep === 'motion') {
+        setStatusLine('Wizard: MEMSTRT — machine moving…');
+        const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: routineId,
+            mode: effectiveMode,
+            params,
+          }),
+        });
+        const payload = await parseProbeResponse(res);
+        if (!res.ok || !payload.ok) {
+          const msg = payload.error || `Start failed (HTTP ${res.status})`;
+          setStepUi('fail');
+          setStepLog(msg);
+          setError(msg);
+          setStatusLine(`Start failed at ${payload.phase ?? 'unknown'}`);
+          return;
+        }
+        const target = payload.target_program ?? modeEntry?.program;
+        setStepUi('ok');
+        setStepLog(
+          `OK — MEMSTRT O${String(target ?? '').padStart(4, '0')} started (${(payload.elapsed_s ?? 0).toFixed(1)}s)`
+        );
+        setStatusLine(
+          `Running O${String(target ?? '').padStart(4, '0')} — continue to collect when ready`
+        );
+        return;
+      }
 
-  async function collectResults() {
-    setBusy(true);
-    setStatusLine('Waiting for idle / reading results…');
-    try {
+      // salt = collect + poison
+      setStatusLine('Wizard: waiting idle / collect + salt…');
       const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/collect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ poison: true }),
       });
-      const body = (await res.json().catch(() => ({}))) as ProbeRunResponse & {
-        detail?: ProbeRunResponse | string;
-      };
-      const payload: ProbeRunResponse =
-        typeof body.detail === 'object' && body.detail != null
-          ? body.detail
-          : (body as ProbeRunResponse);
-
+      const payload = await parseProbeResponse(res);
       if (!res.ok || !payload.ok) {
-        const msg =
-          payload.error ||
-          (typeof body.detail === 'string' ? body.detail : null) ||
-          `Collect failed (HTTP ${res.status})`;
+        const msg = payload.error || `Collect failed (HTTP ${res.status})`;
+        setStepUi('fail');
+        setStepLog(msg);
         setError(msg);
-        setPhase('error');
-        setStatusLine(`Failed at ${payload.phase ?? 'unknown'}`);
         if (payload.results) setResults(payload.results);
+        setStatusLine(`Collect failed at ${payload.phase ?? 'unknown'}`);
         return;
       }
-
       setResults(payload.results ?? null);
-      setPhase('complete');
+      setStepUi('ok');
+      setStepLog(
+        `OK — results read · macros salted (${(payload.elapsed_s ?? 0).toFixed(1)}s)`
+      );
       setStatusLine(
         `Complete in ${(payload.elapsed_s ?? 0).toFixed(1)}s — macros poisoned`
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Collect request failed');
-      setPhase('error');
+      const msg = e instanceof Error ? e.message : 'Request failed';
+      setStepUi('fail');
+      setStepLog(msg);
+      setError(msg);
       setStatusLine('Request error');
     } finally {
       setBusy(false);
@@ -324,7 +398,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                 role="tab"
                 aria-selected={category === c.id}
                 className={`probes-cat-tab${category === c.id ? ' probes-cat-tab--active' : ''}`}
-                disabled={busy}
+                disabled={controlsDisabled}
                 onClick={() => setCategory(c.id)}
               >
                 {shortCategoryLabel(c.label)}
@@ -342,7 +416,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                   role="option"
                   aria-selected={selected}
                   className={`probes-glyph-tile${selected ? ' probes-glyph-tile--selected' : ''}`}
-                  disabled={busy}
+                  disabled={controlsDisabled}
                   title={r.label}
                   onClick={() => setRoutineId(r.id)}
                 >
@@ -355,13 +429,13 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
 
           {modeEntry && (
             <div className="probes-meta">
-              GATE O{String(probeCatalog.gate_program ?? 8099).padStart(4, '0')}
-              {' → '}
               TARGET O{String(modeEntry.program).padStart(4, '0')}
               {' | '}
               <span className={`probes-freshness probes-freshness--${freshness.toLowerCase()}`}>
                 {freshness}
               </span>
+              {phase === 'wizard' ? ` | WIZARD · ${wizardStepTitle(wizardStep)}` : ''}
+              {phase === 'complete' ? ' | COMPLETE' : ''}
             </div>
           )}
 
@@ -376,7 +450,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                     value={effectiveMode}
                     onChange={(v) => setMode(v as ProbeMode)}
                     options={modeOptions}
-                    disabled={busy}
+                    disabled={controlsDisabled}
                   />
                 </label>
               )}
@@ -399,7 +473,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                         type="number"
                         step={macro === '900' ? 1 : 'any'}
                         value={params[macro] ?? ''}
-                        disabled={busy}
+                        disabled={controlsDisabled}
                         onChange={(e) => {
                           const n = Number.parseFloat(e.target.value);
                           setParams((prev) => ({
@@ -413,7 +487,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                           type="button"
                           className="probes-spin-btn"
                           tabIndex={-1}
-                          disabled={busy}
+                          disabled={controlsDisabled}
                           aria-label={`Increase ${label}`}
                           onClick={() => {
                             setParams((prev) => ({
@@ -428,7 +502,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                           type="button"
                           className="probes-spin-btn"
                           tabIndex={-1}
-                          disabled={busy}
+                          disabled={controlsDisabled}
                           aria-label={`Decrease ${label}`}
                           onClick={() => {
                             setParams((prev) => ({
@@ -461,32 +535,30 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             <button
               type="button"
               className="terminal-button-sm danger"
-              disabled={!canRun}
-              onClick={() => setPhase('confirm')}
+              disabled={!canRun || busy || phase === 'wizard'}
+              onClick={() => {
+                if (!canRun || busy || phase === 'wizard') return;
+                openWizard();
+              }}
               title={
                 operating
                   ? 'Machine is operating'
                   : !canRun
                     ? 'Fill valid non-poison params'
-                    : 'Write macros and MEMSTRT O8099 gate only'
+                    : 'Open stepped execute wizard'
               }
             >
-              [ WRITE+ARM ]
+              [ EXECUTE ]
             </button>
             <button
               type="button"
               className="terminal-button-sm"
-              disabled={busy || phase !== 'awaiting_m0'}
-              onClick={() => void collectResults()}
-              title="After Cycle Start past M0 and probe finishes, read #100+ and poison"
-            >
-              [ COLLECT ]
-            </button>
-            <button
-              type="button"
-              className="terminal-button-sm"
-              disabled={busy}
-              onClick={() => void poisonMacros()}
+              disabled={busy || phase === 'wizard'}
+              onClick={() => {
+                if (busy || phase === 'wizard') return;
+                void poisonMacros();
+              }}
+              title="Poison probe macros"
             >
               [ POISON ]
             </button>
@@ -498,7 +570,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
               {operating ? ' | MACHINE OPERATING' : ''}
             </div>
             <div className="probes-prereq">
-              * O8099 gate only. Cycle Start past M0, then COLLECT.
+              * EXECUTE opens a confirm wizard: write macros → start motion → collect + salt.
               {routine?.prerequisites ? ` · ${routine.prerequisites}` : ''}
             </div>
           </div>
@@ -520,50 +592,158 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
         <PaneTerminalFooter />
       </div>
 
-      {phase === 'confirm' && modeEntry && (
+      {phase === 'wizard' && modeEntry && (
         <div className="probes-confirm-overlay" role="dialog" aria-modal="true">
-          <div className="probes-confirm-box">
-            <div className="probes-confirm-title">CONFIRM ARM (O8099 GATE)</div>
-            <div className="probes-confirm-body">
-              <div>Shatter will ONLY start O8099. No Blum motion until Cycle Start past M0.</div>
-              <div>
-                GATE O{String(probeCatalog.gate_program ?? 8099).padStart(4, '0')} → TARGET O
-                {String(modeEntry.program).padStart(4, '0')} · {effectiveMode.toUpperCase()} ·{' '}
-                {routine?.label ?? routineId}
-              </div>
-              <ProbeCyclePreview
-                routineId={routineId}
-                params={params}
-                compact
-                className="probes-confirm-preview"
-              />
-              <div className="probes-confirm-params">
-                <div>#908 = {modeEntry.program}</div>
-                {required.map((m) => (
-                  <div key={m}>
-                    #{m} = {params[m]}
-                  </div>
-                ))}
-              </div>
+          <div className="probes-confirm-box probes-wizard-box">
+            <div className="probes-confirm-title">{wizardStepTitle(wizardStep)}</div>
+
+            <div className="probes-wizard-progress" aria-hidden="true">
+              {WIZARD_STEPS.map((s) => {
+                const idx = WIZARD_STEPS.indexOf(s);
+                const cur = WIZARD_STEPS.indexOf(wizardStep);
+                const done = idx < cur || (idx === cur && stepUi === 'ok');
+                const active = idx === cur;
+                return (
+                  <span
+                    key={s}
+                    className={`probes-wizard-pip${active ? ' probes-wizard-pip--active' : ''}${done ? ' probes-wizard-pip--done' : ''}`}
+                  />
+                );
+              })}
             </div>
+
+            <div className="probes-confirm-body">
+              {wizardStep === 'write' && (
+                <>
+                  <div>Shatter will write job macros only. No axis motion.</div>
+                  <div>
+                    TARGET O{String(modeEntry.program).padStart(4, '0')} ·{' '}
+                    {effectiveMode.toUpperCase()} · {routine?.label ?? routineId}
+                  </div>
+                  <div className="probes-confirm-params">
+                    {required.map((m) => (
+                      <div key={m}>
+                        #{m} = {params[m]}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {wizardStep === 'motion' && (
+                <>
+                  <div className="probes-confirm-warn">
+                    MACHINE WILL MOVE. Shatter will MEMSTRT O
+                    {String(modeEntry.program).padStart(4, '0')} now.
+                  </div>
+                  <div>
+                    {effectiveMode.toUpperCase()} · {routine?.label ?? routineId}
+                  </div>
+                  <ProbeCyclePreview
+                    routineId={routineId}
+                    params={params}
+                    compact
+                    className="probes-confirm-preview"
+                  />
+                  {macrosWritten && (
+                    <div className="probes-confirm-params">
+                      {Object.entries(macrosWritten).map(([m, v]) => (
+                        <div key={m}>
+                          #{m} = {v}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {wizardStep === 'salt' && (
+                <>
+                  <div>
+                    Wait until the machine is idle, then read result macros (#100+) and
+                    poison/salt the job macros so a stale cycle cannot re-run.
+                  </div>
+                  <div>
+                    TARGET was O{String(modeEntry.program).padStart(4, '0')} ·{' '}
+                    {effectiveMode.toUpperCase()} · {routine?.label ?? routineId}
+                  </div>
+                </>
+              )}
+
+              {stepLog && (
+                <div
+                  className={`probes-wizard-log probes-wizard-log--${stepUi}`}
+                  role="status"
+                >
+                  {stepUi === 'ok' ? '✓ ' : stepUi === 'fail' ? '✗ ' : ''}
+                  {stepLog}
+                </div>
+              )}
+            </div>
+
             <div className="probes-confirm-actions">
               <button
                 type="button"
                 className="terminal-button-sm"
-                onClick={() => {
-                  setPhase('idle');
-                  setStatusLine('Ready');
-                }}
+                disabled={busy}
+                onClick={() => abortWizard()}
               >
-                [ CANCEL ]
+                [ ABORT ]
               </button>
-              <button
-                type="button"
-                className="terminal-button-sm danger"
-                onClick={() => void armCycle()}
-              >
-                [ ARM ]
-              </button>
+
+              {(stepUi === 'ready' || stepUi === 'fail') && (
+                <button
+                  type="button"
+                  className={`terminal-button-sm${wizardStep === 'motion' ? ' danger' : ''}`}
+                  disabled={busy}
+                  onClick={() => {
+                    if (busy) return;
+                    void runWizardStep();
+                  }}
+                >
+                  {stepUi === 'fail'
+                    ? '[ RETRY ]'
+                    : wizardStep === 'write'
+                      ? '[ WRITE MACROS ]'
+                      : wizardStep === 'motion'
+                        ? '[ START MOTION ]'
+                        : '[ COLLECT + SALT ]'}
+                </button>
+              )}
+
+              {stepUi === 'busy' && (
+                <button type="button" className="terminal-button-sm" disabled>
+                  [ WORKING… ]
+                </button>
+              )}
+
+              {stepUi === 'ok' && wizardStep !== 'salt' && (
+                <button
+                  type="button"
+                  className="terminal-button-sm danger"
+                  disabled={busy}
+                  onClick={() => advanceWizard()}
+                >
+                  [ NEXT ]
+                </button>
+              )}
+
+              {stepUi === 'ok' && wizardStep === 'salt' && (
+                <button
+                  type="button"
+                  className="terminal-button-sm"
+                  disabled={busy}
+                  onClick={() => {
+                    setPhase('complete');
+                    setStatusLine('Probe sequence complete');
+                    setWizardStep('write');
+                    setStepUi('ready');
+                    setStepLog('');
+                  }}
+                >
+                  [ DONE ]
+                </button>
+              )}
             </div>
           </div>
         </div>

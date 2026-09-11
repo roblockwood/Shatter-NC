@@ -1,8 +1,11 @@
-"""Orchestrate gated Blum probe cycles via O8099 only.
+"""Stepped Blum probe cycles — Shatter confirms each stage before motion.
 
-Shatter never MEMSTRTs Blum O81xx/O82xx/O8100 directly. It writes job macros,
-sets #908 to the target helper O-number, and MEMSTRTs O8099 (preview + M0).
-After the operator Cycle-Starts past M0, collect() waits for idle and reads results.
+Flow (each step is a separate API call / UI GO):
+  1. write  — validate + write job macros only (no MEMSTRT)
+  2. start  — MEMSTRT catalog target O-number only (allowlisted)
+  3. collect — wait idle, read #100+, poison
+
+O8099 gate / M98 is abandoned. Motion only happens on an explicit start call.
 """
 from __future__ import annotations
 
@@ -10,7 +13,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Set
 
 from app.models.machine import Machine
 from app.parsers.mem_parser_v2 import parse_mem_v2
@@ -21,10 +24,9 @@ from app.services.machine_state_validator import (
 )
 from app.services.probe_catalog import (
     ProbeCatalogError,
-    get_gate_program,
+    get_allowed_start_programs,
     get_poison_values,
     get_result_macro_numbers,
-    get_target_macro,
     validate_run_params,
 )
 
@@ -34,20 +36,16 @@ DEFAULT_FOLDER = "PROGRAM"
 DEFAULT_POLL_S = 0.5
 DEFAULT_START_TIMEOUT_S = 30.0
 DEFAULT_CYCLE_TIMEOUT_S = 180.0
-DEFAULT_M0_TIMEOUT_S = 60.0
 
 IDLE_STATUSES = frozenset({"standby", "stopped", "off"})
 ACTIVE_STATUSES = frozenset({"operating"})
 FATAL_STATUSES = frozenset({"error"})
-# Brother MEM: 2=Temporary stop, 3=Block stop (typical at M0 / #3006)
-M0_OPERATION_STATUSES = frozenset({2, 3})
 
 
 @dataclass
 class ProbeCycleResult:
     ok: bool
     program: Optional[int] = None
-    gate_program: Optional[int] = None
     target_program: Optional[int] = None
     routine_id: Optional[str] = None
     mode: Optional[str] = None
@@ -57,6 +55,8 @@ class ProbeCycleResult:
     error: Optional[str] = None
     status_data: Dict[str, Any] = field(default_factory=dict)
     elapsed_s: float = 0.0
+    # Deprecated — kept for API compatibility with older clients
+    gate_program: Optional[int] = None
 
 
 def _cached_machine_status(machine_id: int) -> Dict[str, Any]:
@@ -93,11 +93,6 @@ def _is_running(snap: _Snap) -> bool:
     return snap.prd3_status in ACTIVE_STATUSES or snap.operation_status == 1
 
 
-def _is_m0_hold(snap: _Snap) -> bool:
-    """True when NC has paused for operator (M0 / message stop)."""
-    return snap.operation_status in M0_OPERATION_STATUSES
-
-
 async def _snapshot(client: Any, control_version: str) -> _Snap:
     snap = _Snap()
     mem_raw = await client.get_memory_data(verbose=False)
@@ -121,47 +116,36 @@ async def _wait_until(
     timeout_s: float,
     poll_s: float,
 ) -> _Snap:
-    deadline = time.monotonic() + timeout_s
+    deadline = time.perf_counter() + timeout_s
     last = _Snap()
-    while True:
+    while time.perf_counter() < deadline:
         last = await _snapshot(client, control_version)
+        if last.prd3_status in FATAL_STATUSES:
+            raise RuntimeError(f"Machine error while waiting for {label}")
         if predicate(last):
             return last
-        if last.prd3_status in FATAL_STATUSES:
-            raise RuntimeError(f"machine error while waiting for {label}")
-        if time.monotonic() >= deadline:
-            raise TimeoutError(f"timeout waiting for {label}")
         await asyncio.sleep(poll_s)
+    raise TimeoutError(
+        f"Timeout waiting for {label} "
+        f"(prd3={last.prd3_status!r} op={last.operation_status!r})"
+    )
 
 
 async def _ensure_safety(
-    db_machine: Machine,
-    machine_id: int,
-    telnet_client: Any,
-) -> Tuple[bool, Optional[str], Dict[str, Any]]:
-    validator = MachineStateValidator()
-    max_age = macro_write_cache_max_age_seconds(db_machine.poll_interval_seconds)
+    db_machine: Machine, machine_id: int, client: Any
+) -> tuple[bool, Optional[str], Dict[str, Any]]:
     cached = _cached_machine_status(machine_id)
-
-    cache_safe, cache_error, status_data = validator.try_validate_macro_write_from_cache(
-        cached_status=cached,
-        machine_id=machine_id,
-        machine_name=db_machine.name,
-        max_age_seconds=max_age,
-    )
-    if cache_safe is True:
-        return True, None, status_data
-
-    return await validator.validate_macro_write_live_minimal(
-        telnet_client=telnet_client,
-        control_version=db_machine.control_version,
-        machine_id=machine_id,
-        machine_name=db_machine.name,
+    max_age = macro_write_cache_max_age_seconds(db_machine.poll_interval_seconds or 5)
+    validator = MachineStateValidator(db_machine)
+    return await validator.validate_for_macro_write(
+        client=client,
+        cached_status=cached or None,
+        cache_max_age_seconds=max_age,
     )
 
 
 async def _write_macros(client: Any, writes: Dict[int, float]) -> None:
-    for macro, value in sorted(writes.items()):
+    for macro, value in writes.items():
         ok, status, _ = await client.write_macro_variable(
             macro_number=macro,
             value=value,
@@ -170,12 +154,15 @@ async def _write_macros(client: Any, writes: Dict[int, float]) -> None:
         )
         if not ok:
             desc = client.get_status_description(status or "00")
-            raise RuntimeError(f"macro #{macro} write failed: {status} ({desc})")
+            raise RuntimeError(f"Failed writing #{macro}={value}: {status} ({desc})")
 
 
-async def _poison_macros(client: Any, macros: Optional[List[int]] = None) -> Dict[int, float]:
+async def _poison_macros(
+    client: Any, targets: Optional[Set[int]] = None
+) -> Dict[int, float]:
     poison = get_poison_values()
-    targets = macros if macros is not None else list(poison.keys())
+    if targets is None:
+        targets = set(poison.keys())
     written: Dict[int, float] = {}
     for macro in targets:
         if macro not in poison:
@@ -202,17 +189,17 @@ async def _read_results(client: Any) -> Dict[str, Optional[float]]:
     return results
 
 
-async def _memstrt_gate_only(client: Any, gate_program: int) -> None:
-    """Hard allowlist: probing may only start the Shatter gate program."""
-    allowed = get_gate_program()
-    if int(gate_program) != int(allowed):
+async def _memstrt_catalog_target(client: Any, program: int) -> None:
+    """Hard allowlist: only MEMSTRT O-numbers that appear in the probe catalog."""
+    allowed = get_allowed_start_programs()
+    if int(program) not in allowed:
         raise RuntimeError(
-            f"refusing MEMSTRT O{gate_program:04d}: probing allowlist is O{allowed:04d} only"
+            f"refusing MEMSTRT O{program:04d}: not in probe catalog allowlist"
         )
-    ok, status = await client.start_memory_program(gate_program, verbose=False)
+    ok, status = await client.start_memory_program(program, verbose=False)
     if not ok:
         desc = client.get_status_description(status or "00")
-        raise RuntimeError(f"MEMSTRT {gate_program:04d} failed: {status} ({desc})")
+        raise RuntimeError(f"MEMSTRT {program:04d} failed: {status} ({desc})")
 
 
 async def poison_probe_macros(db_machine: Machine) -> ProbeCycleResult:
@@ -232,7 +219,6 @@ async def poison_probe_macros(db_machine: Machine) -> ProbeCycleResult:
             ok=True,
             phase="poisoned",
             macros_written=written,
-            gate_program=get_gate_program(),
             elapsed_s=time.perf_counter() - t0,
         )
     except Exception as e:
@@ -248,30 +234,20 @@ async def poison_probe_macros(db_machine: Machine) -> ProbeCycleResult:
             await client.disconnect()
 
 
-async def arm_probe_cycle(
+async def write_probe_macros(
     db_machine: Machine,
     machine_id: int,
     routine_id: str,
     mode: str,
     params: Dict[str, float],
     *,
-    folder: str = DEFAULT_FOLDER,
-    poll_s: float = DEFAULT_POLL_S,
     start_timeout_s: float = DEFAULT_START_TIMEOUT_S,
-    m0_timeout_s: float = DEFAULT_M0_TIMEOUT_S,
+    poll_s: float = DEFAULT_POLL_S,
 ) -> ProbeCycleResult:
-    """
-    Arm gated probe: write macros + #908 target, MEMSTRT O8099 only, wait for M0.
-
-    Does **not** poison (operator must still Cycle Start past M0).
-    Does **not** MEMSTRT Blum helpers directly.
-    """
+    """Validate + write job macros only. Does not MEMSTRT / cause motion."""
     from app.clients.telnet_client import create_fresh_connection
 
     t0 = time.perf_counter()
-    gate_program = get_gate_program()
-    target_macro = get_target_macro()
-
     try:
         resolved, writes = validate_run_params(routine_id, mode, params)
     except ProbeCatalogError as e:
@@ -279,14 +255,12 @@ async def arm_probe_cycle(
             ok=False,
             routine_id=routine_id,
             mode=mode,
-            gate_program=gate_program,
             phase="validate",
             error=str(e),
             elapsed_s=time.perf_counter() - t0,
         )
 
     target_program = int(resolved["program"])
-    writes[target_macro] = float(target_program)
     control_version = db_machine.control_version or "C00"
     client = None
     phase = "connect"
@@ -303,13 +277,11 @@ async def arm_probe_cycle(
         if not safe:
             return ProbeCycleResult(
                 ok=False,
-                program=gate_program,
-                gate_program=gate_program,
                 target_program=target_program,
                 routine_id=routine_id,
                 mode=mode,
                 phase=phase,
-                error=err or "Machine not safe for probe arm",
+                error=err or "Machine not safe for macro write",
                 status_data=status_data,
                 elapsed_s=time.perf_counter() - t0,
             )
@@ -323,7 +295,7 @@ async def arm_probe_cycle(
             client,
             control_version,
             predicate=_is_idle,
-            label="idle before probe arm",
+            label="idle before macro write",
             timeout_s=start_timeout_s,
             poll_s=poll_s,
         )
@@ -331,73 +303,26 @@ async def arm_probe_cycle(
         phase = "writing"
         await _write_macros(client, writes)
 
-        phase = "starting"
-        ok, status = await client.change_mode("MEM", verbose=False)
-        if not ok:
-            desc = client.get_status_description(status or "00")
-            raise RuntimeError(f"CHGMODE MEM failed: {status} ({desc})")
-
-        ok, status = await client.change_folder(folder, verbose=False)
-        if not ok:
-            desc = client.get_status_description(status or "00")
-            raise RuntimeError(f"FLDCHG {folder} failed: {status} ({desc})")
-
-        try:
-            await _memstrt_gate_only(client, gate_program)
-        finally:
-            await client.change_folder("/", verbose=False)
-
-        phase = "running"
-        await _wait_until(
-            client,
-            control_version,
-            predicate=_is_running,
-            label="gate program start",
-            timeout_s=start_timeout_s,
-            poll_s=poll_s,
-        )
-
-        phase = "awaiting_m0"
-        await _wait_until(
-            client,
-            control_version,
-            predicate=_is_m0_hold,
-            label="M0 / operator confirm",
-            timeout_s=m0_timeout_s,
-            poll_s=poll_s,
-        )
-
         return ProbeCycleResult(
             ok=True,
-            program=gate_program,
-            gate_program=gate_program,
+            program=target_program,
             target_program=target_program,
             routine_id=routine_id,
             mode=mode,
             macros_written=writes,
-            phase="awaiting_m0",
+            phase="written",
             status_data=status_data,
             elapsed_s=time.perf_counter() - t0,
         )
     except Exception as e:
         logger.exception(
-            "probe arm failed machine=%s routine=%s phase=%s",
+            "probe write failed machine=%s routine=%s phase=%s",
             machine_id,
             routine_id,
             phase,
         )
-        if client is not None:
-            try:
-                await client.change_folder("/", verbose=False)
-            except Exception:
-                pass
-            # Do not poison on arm failure after write — operator may still be reviewing.
-            # Explicit POISON endpoint remains available.
-
         return ProbeCycleResult(
             ok=False,
-            program=gate_program,
-            gate_program=gate_program,
             target_program=target_program,
             routine_id=routine_id,
             mode=mode,
@@ -411,9 +336,140 @@ async def arm_probe_cycle(
             await client.disconnect()
 
 
-# Back-compat alias used by older imports / tests
-async def run_probe_cycle(*args: Any, **kwargs: Any) -> ProbeCycleResult:
-    return await arm_probe_cycle(*args, **kwargs)
+async def start_probe_program(
+    db_machine: Machine,
+    machine_id: int,
+    routine_id: str,
+    mode: str,
+    params: Dict[str, float],
+    *,
+    folder: str = DEFAULT_FOLDER,
+    poll_s: float = DEFAULT_POLL_S,
+    start_timeout_s: float = DEFAULT_START_TIMEOUT_S,
+) -> ProbeCycleResult:
+    """
+    MEMSTRT the catalog target program (motion). Allowlisted O-numbers only.
+
+    Does not rewrite macros — call write_probe_macros first. Waits until the
+    program is observed running, then returns so the UI can COLLECT later.
+    """
+    from app.clients.telnet_client import create_fresh_connection
+
+    t0 = time.perf_counter()
+    try:
+        resolved, _writes = validate_run_params(routine_id, mode, params)
+    except ProbeCatalogError as e:
+        return ProbeCycleResult(
+            ok=False,
+            routine_id=routine_id,
+            mode=mode,
+            phase="validate",
+            error=str(e),
+            elapsed_s=time.perf_counter() - t0,
+        )
+
+    target_program = int(resolved["program"])
+    control_version = db_machine.control_version or "C00"
+    client = None
+    phase = "connect"
+
+    try:
+        client = await create_fresh_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=15,
+        )
+
+        phase = "safety"
+        safe, err, status_data = await _ensure_safety(db_machine, machine_id, client)
+        if not safe:
+            return ProbeCycleResult(
+                ok=False,
+                program=target_program,
+                target_program=target_program,
+                routine_id=routine_id,
+                mode=mode,
+                phase=phase,
+                error=err or "Machine not safe for probe start",
+                status_data=status_data,
+                elapsed_s=time.perf_counter() - t0,
+            )
+
+        pwd = await client.get_working_folder(verbose=False)
+        if pwd and pwd != "/":
+            await client.change_folder("/", verbose=False)
+
+        phase = "idle_wait"
+        await _wait_until(
+            client,
+            control_version,
+            predicate=_is_idle,
+            label="idle before MEMSTRT",
+            timeout_s=start_timeout_s,
+            poll_s=poll_s,
+        )
+
+        phase = "starting"
+        ok, status = await client.change_mode("MEM", verbose=False)
+        if not ok:
+            desc = client.get_status_description(status or "00")
+            raise RuntimeError(f"CHGMODE MEM failed: {status} ({desc})")
+
+        ok, status = await client.change_folder(folder, verbose=False)
+        if not ok:
+            desc = client.get_status_description(status or "00")
+            raise RuntimeError(f"FLDCHG {folder} failed: {status} ({desc})")
+
+        try:
+            await _memstrt_catalog_target(client, target_program)
+        finally:
+            await client.change_folder("/", verbose=False)
+
+        phase = "running"
+        await _wait_until(
+            client,
+            control_version,
+            predicate=_is_running,
+            label="probe program start",
+            timeout_s=start_timeout_s,
+            poll_s=poll_s,
+        )
+
+        return ProbeCycleResult(
+            ok=True,
+            program=target_program,
+            target_program=target_program,
+            routine_id=routine_id,
+            mode=mode,
+            phase="running",
+            status_data=status_data,
+            elapsed_s=time.perf_counter() - t0,
+        )
+    except Exception as e:
+        logger.exception(
+            "probe start failed machine=%s routine=%s phase=%s",
+            machine_id,
+            routine_id,
+            phase,
+        )
+        if client is not None:
+            try:
+                await client.change_folder("/", verbose=False)
+            except Exception:
+                pass
+        return ProbeCycleResult(
+            ok=False,
+            program=target_program,
+            target_program=target_program,
+            routine_id=routine_id,
+            mode=mode,
+            phase=phase,
+            error=str(e),
+            elapsed_s=time.perf_counter() - t0,
+        )
+    finally:
+        if client:
+            await client.disconnect()
 
 
 async def collect_probe_results(
@@ -424,13 +480,10 @@ async def collect_probe_results(
     cycle_timeout_s: float = DEFAULT_CYCLE_TIMEOUT_S,
     poison: bool = True,
 ) -> ProbeCycleResult:
-    """
-    After operator confirms past M0 and probing finishes: wait idle, read #100+, poison.
-    """
+    """Wait for idle after motion, read #100+, optionally poison."""
     from app.clients.telnet_client import create_fresh_connection
 
     t0 = time.perf_counter()
-    gate_program = get_gate_program()
     control_version = db_machine.control_version or "C00"
     client = None
     phase = "connect"
@@ -447,7 +500,7 @@ async def collect_probe_results(
             client,
             control_version,
             predicate=_is_idle,
-            label="cycle complete after M0",
+            label="cycle complete",
             timeout_s=cycle_timeout_s,
             poll_s=poll_s,
         )
@@ -462,8 +515,6 @@ async def collect_probe_results(
 
         return ProbeCycleResult(
             ok=True,
-            program=gate_program,
-            gate_program=gate_program,
             results=results,
             macros_written=macros_written,
             phase="complete",
@@ -478,8 +529,6 @@ async def collect_probe_results(
                 logger.warning("post-collect poison failed for machine %s", machine_id)
         return ProbeCycleResult(
             ok=False,
-            program=gate_program,
-            gate_program=gate_program,
             phase=phase,
             error=str(e),
             elapsed_s=time.perf_counter() - t0,
