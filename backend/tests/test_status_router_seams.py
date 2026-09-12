@@ -192,6 +192,11 @@ def test_probe_exclusive_route_registered():
     assert (frozenset({"POST"}), "/{machine_id}/probe/exclusive") in sigs
 
 
+def test_probe_tool_batch_route_registered():
+    sigs = _route_signatures(status_module.router)
+    assert (frozenset({"POST"}), "/{machine_id}/probe/tool-batch") in sigs
+
+
 # ---------------------------------------------------------------------------
 # Route registration - file endpoints
 # ---------------------------------------------------------------------------
@@ -226,9 +231,9 @@ def test_upload_file_route_registered():
 # ---------------------------------------------------------------------------
 
 def test_total_route_count():
-    """Exactly 29 routes must be registered. Catches silent deletions during split."""
+    """Exactly 30 routes must be registered. Catches silent deletions during split."""
     sigs = _route_signatures(status_module.router)
-    assert len(sigs) == 29, f"Expected 29 routes, got {len(sigs)}: {sigs}"
+    assert len(sigs) == 30, f"Expected 30 routes, got {len(sigs)}: {sigs}"
 
 
 # ---------------------------------------------------------------------------

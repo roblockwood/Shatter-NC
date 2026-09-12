@@ -11,7 +11,7 @@ Routes:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status as http_status
 from pydantic import BaseModel, Field
@@ -23,6 +23,7 @@ from app.services.probe_catalog import catalog_for_api
 from app.services.probe_cycle_service import (
     collect_probe_results,
     poison_probe_macros,
+    run_tool_length_batch,
     start_probe_program,
     write_probe_macros,
 )
@@ -67,6 +68,18 @@ class ProbeExclusiveRequest(BaseModel):
 
 
 class ProbePoisonRequest(BaseModel):
+    client_run_id: Optional[str] = Field(
+        None,
+        description="Optional client UUID to filter probe_progress WebSocket events",
+    )
+
+
+class ProbeToolBatchRequest(BaseModel):
+    tools: List[int] = Field(
+        ...,
+        description="Tool numbers to measure in order (O8100 sequenced per tool)",
+        min_length=1,
+    )
     client_run_id: Optional[str] = Field(
         None,
         description="Optional client UUID to filter probe_progress WebSocket events",
@@ -247,4 +260,53 @@ async def post_probe_poison(
             status_code=http_status.HTTP_502_BAD_GATEWAY,
             detail=payload,
         )
+    return payload
+
+
+@router.post("/{machine_id}/probe/tool-batch")
+async def post_probe_tool_batch(
+    machine_id: int,
+    body: ProbeToolBatchRequest,
+    db: Session = Depends(get_db),
+):
+    """Sequence O8100 for each tool (#920 write → MEMSTRT → wait). Aborts on first failure."""
+    machine = _get_machine(db, machine_id)
+    await _touch_and_sweep(machine_id)
+    logger.info(
+        "Probe tool-batch requested machine=%s tools=%s",
+        machine_id,
+        body.tools,
+    )
+    result = await run_tool_length_batch(
+        db_machine=machine,
+        machine_id=machine_id,
+        tools=body.tools,
+        client_run_id=body.client_run_id,
+    )
+    payload = {
+        "ok": result.ok,
+        "phase": result.phase,
+        "error": result.error,
+        "elapsed_s": result.elapsed_s,
+        "aborted": result.aborted,
+        "tools": [
+            {
+                "tool": item.tool,
+                "ok": item.ok,
+                "detail": item.detail,
+                "elapsed_s": item.elapsed_s,
+                "index": item.index,
+            }
+            for item in result.tools
+        ],
+    }
+    if not result.ok:
+        status = (
+            http_status.HTTP_400_BAD_REQUEST
+            if result.phase == "validate"
+            else http_status.HTTP_409_CONFLICT
+            if result.phase == "safety"
+            else http_status.HTTP_502_BAD_GATEWAY
+        )
+        raise HTTPException(status_code=status, detail=payload)
     return payload

@@ -10,9 +10,11 @@ from app.services.probe_cycle_service import (
     _is_idle,
     _is_running,
     _memstrt_catalog_target,
+    _normalize_tool_list,
     _wait_until,
     collect_probe_results,
     poison_probe_macros,
+    run_tool_length_batch,
     start_probe_program,
     write_probe_macros,
 )
@@ -337,3 +339,141 @@ async def test_poison_probe_macros(monkeypatch):
     assert result.phase == "poisoned"
     assert client.write_macro_variable.await_count >= 1
     assert call("/", verbose=False) in client.change_folder.await_args_list
+
+
+@pytest.mark.asyncio
+async def test_poison_emits_per_macro_progress(monkeypatch):
+    machine = SimpleNamespace(id=7, ip_address="10.0.0.1", control_version="C00")
+    client = MagicMock()
+    client.disconnect = AsyncMock()
+    client.change_folder = AsyncMock(return_value=(True, "00"))
+    client.write_macro_variable = AsyncMock(return_value=(True, "00", None))
+    client.get_status_description = MagicMock(return_value="OK")
+
+    messages = []
+
+    async def capture_progress(ctx, phase, message, **kwargs):
+        messages.append((phase, message))
+
+    monkeypatch.setattr(
+        "app.clients.telnet_client.create_fresh_connection",
+        AsyncMock(return_value=client),
+    )
+    monkeypatch.setattr(
+        "app.services.probe_cycle_service.emit_probe_progress",
+        capture_progress,
+    )
+    monkeypatch.setattr(
+        "app.services.probe_cycle_service.asyncio.sleep",
+        AsyncMock(),
+    )
+
+    result = await poison_probe_macros(machine, client_run_id="run-1")
+    assert result.ok is True
+    poison_msgs = [m for phase, m in messages if phase == "poisoning"]
+    # Banner + one start/finish pair per poison macro (#900–908, #920)
+    assert any("Writing sentinel" in m for m in poison_msgs)
+    assert any("WRTMCNM #900=" in m for m in poison_msgs)
+    assert any("Wrote #900=" in m for m in poison_msgs)
+    assert any("WRTMCNM #920=" in m for m in poison_msgs)
+    assert any("Wrote #920=" in m for m in poison_msgs)
+    assert sum(1 for m in poison_msgs if m.startswith("WRTMCNM #")) == 10
+    assert sum(1 for m in poison_msgs if m.startswith("Wrote #")) == 10
+    assert messages[-1][0] == "complete"
+
+
+def test_normalize_tool_list_dedupes_and_rejects():
+    assert _normalize_tool_list([3, 1, 3, 2]) == [3, 1, 2]
+    with pytest.raises(ValueError, match="Invalid"):
+        _normalize_tool_list([0])
+    with pytest.raises(ValueError, match="Invalid"):
+        _normalize_tool_list([255])
+    with pytest.raises(ValueError, match="at least one"):
+        _normalize_tool_list([])
+
+
+@pytest.mark.asyncio
+async def test_tool_length_batch_validate_error():
+    machine = SimpleNamespace(id=1, ip_address="10.0.0.1", control_version="C00")
+    result = await run_tool_length_batch(
+        db_machine=machine,
+        machine_id=1,
+        tools=[],
+    )
+    assert result.ok is False
+    assert result.phase == "validate"
+
+
+@pytest.mark.asyncio
+async def test_tool_length_batch_aborts_on_first_failure(monkeypatch):
+    machine = SimpleNamespace(
+        id=1,
+        name="Mill",
+        ip_address="10.0.0.1",
+        poll_interval_seconds=5,
+        control_version="C00",
+    )
+    client = MagicMock()
+    client.disconnect = AsyncMock()
+    client.change_mode = AsyncMock(return_value=(True, "00"))
+    client.change_folder = AsyncMock(return_value=(True, "00"))
+    client.start_memory_program = AsyncMock(return_value=(True, "00"))
+    client.get_status_description = MagicMock(return_value="OK")
+
+    writes = []
+
+    async def fake_write(macro_number, value, verbose=False, verify=True):
+        writes.append((macro_number, int(value)))
+        if int(value) == 2:
+            return False, "30", None
+        return True, "00", float(value)
+
+    client.write_macro_variable = AsyncMock(side_effect=fake_write)
+
+    async def fake_create(*args, **kwargs):
+        return client
+
+    monkeypatch.setattr(
+        "app.clients.telnet_client.create_fresh_connection",
+        fake_create,
+    )
+    monkeypatch.setattr(
+        "app.services.probe_cycle_service._ensure_safety",
+        AsyncMock(return_value=(True, None, {"status": "standby"})),
+    )
+    monkeypatch.setattr(
+        "app.services.probe_cycle_service._wait_until",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "app.services.probe_cycle_service._snapshot",
+        AsyncMock(
+            return_value=_Snap(prd3_status="operating", operation_status=1)
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.probe_exclusive.collect_poll_seconds",
+        lambda mid, default: 0.01,
+    )
+    monkeypatch.setattr(
+        "app.services.probe_cycle_service.asyncio.sleep",
+        AsyncMock(),
+    )
+
+    result = await run_tool_length_batch(
+        db_machine=machine,
+        machine_id=1,
+        tools=[1, 2, 3],
+        start_timeout_s=5,
+        cycle_timeout_s=5,
+        poll_s=0.01,
+    )
+
+    assert result.ok is False
+    assert result.aborted is True
+    assert [item.tool for item in result.tools] == [1, 2]
+    assert result.tools[0].ok is True
+    assert result.tools[1].ok is False
+    assert writes == [(920, 1), (920, 2)]
+    # First tool completed MEMSTRT; second failed before start
+    assert client.start_memory_program.await_count == 1

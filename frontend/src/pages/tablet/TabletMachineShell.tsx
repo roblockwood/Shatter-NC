@@ -128,6 +128,15 @@ function TabletPaneContent({
             alarms={machine.alarms}
             pollTimestamp={pollAt}
             pollIntervalSeconds={machine.poll_interval_seconds ?? 5}
+            toolsUnified={
+              machine.tools_unified
+                ? {
+                    ...machine.tools_unified,
+                    spindle: machine.tools_unified.spindle ?? null,
+                  }
+                : null
+            }
+            atcPockets={machine.atc_pockets ?? 21}
           />
         </div>
       );

@@ -254,8 +254,20 @@ async def _ensure_safety(
     return True, None, status_data
 
 
-async def _write_macros(client: Any, writes: Dict[int, float]) -> None:
-    for macro, value in writes.items():
+async def _write_macros(
+    client: Any,
+    writes: Dict[int, float],
+    *,
+    progress: Optional[ProbeProgressCtx] = None,
+) -> None:
+    items = list(writes.items())
+    total = len(items)
+    for i, (macro, value) in enumerate(items, start=1):
+        await emit_probe_progress(
+            progress,
+            "writing",
+            f"WRTMCNM #{macro}={value:g} ({i}/{total})…",
+        )
         ok, status, verified = await client.write_macro_variable(
             macro_number=macro,
             value=value,
@@ -268,20 +280,33 @@ async def _write_macros(client: Any, writes: Dict[int, float]) -> None:
             if status == "verify_mismatch" and verified is not None:
                 detail += f" read_back={verified}"
             raise RuntimeError(detail)
+        await emit_probe_progress(
+            progress,
+            "writing",
+            f"Wrote #{macro}={value:g} ({i}/{total})",
+        )
 
 
 async def _poison_macros(
-    client: Any, targets: Optional[Set[int]] = None
+    client: Any,
+    targets: Optional[Set[int]] = None,
+    *,
+    progress: Optional[ProbeProgressCtx] = None,
 ) -> Dict[int, float]:
     poison = get_poison_values()
     if targets is None:
         targets = set(poison.keys())
+    ordered = sorted(m for m in targets if m in poison)
     written: Dict[int, float] = {}
     await _ensure_root_folder(client)
-    for macro in sorted(targets):
-        if macro not in poison:
-            continue
+    total = len(ordered)
+    for i, macro in enumerate(ordered, start=1):
         value = poison[macro]
+        await emit_probe_progress(
+            progress,
+            "poisoning",
+            f"WRTMCNM #{macro}={value:g} ({i}/{total})…",
+        )
         ok, status, _ = await client.write_macro_variable(
             macro_number=macro,
             value=value,
@@ -290,9 +315,19 @@ async def _poison_macros(
         )
         if ok:
             written[macro] = value
+            await emit_probe_progress(
+                progress,
+                "poisoning",
+                f"Wrote #{macro}={value:g} ({i}/{total})",
+            )
         else:
             desc = client.get_status_description(status or "00")
             logger.warning("Failed to poison macro #%s: %s (%s)", macro, status, desc)
+            await emit_probe_progress(
+                progress,
+                "poisoning",
+                f"Failed #{macro}={value:g}: {status} ({desc}) ({i}/{total})",
+            )
         await asyncio.sleep(0.05)
     return written
 
@@ -356,7 +391,7 @@ async def poison_probe_macros(
             timeout=15,
         )
         await emit_probe_progress(progress, "poisoning", "Writing sentinel macros…")
-        written = await _poison_macros(client)
+        written = await _poison_macros(client, progress=progress)
         if not written:
             await emit_probe_progress(
                 progress,
@@ -466,7 +501,7 @@ async def write_probe_macros(
         phase = "writing"
         await emit_probe_progress(progress, "writing", "Writing job macros…")
         await _ensure_root_folder(client)
-        await _write_macros(client, writes)
+        await _write_macros(client, writes, progress=progress)
 
         await emit_probe_progress(
             progress,
@@ -792,7 +827,7 @@ async def collect_probe_results(
                     ),
                     elapsed_s=time.perf_counter() - t0,
                 )
-            macros_written = await _poison_macros(client)
+            macros_written = await _poison_macros(client, progress=progress)
             if not macros_written:
                 await emit_probe_progress(
                     progress,
@@ -833,4 +868,299 @@ async def collect_probe_results(
         )
     finally:
         if client:
+            await client.disconnect()
+
+
+MEASUREMENT_TOOL_MACRO = 920
+TOOL_LENGTH_PROGRAM = 8100
+
+
+@dataclass
+class ToolBatchItemResult:
+    tool: int
+    ok: bool
+    detail: str
+    elapsed_s: float = 0.0
+    index: int = 0
+
+
+@dataclass
+class ToolBatchResult:
+    ok: bool
+    tools: list = field(default_factory=list)
+    phase: str = "idle"
+    error: Optional[str] = None
+    elapsed_s: float = 0.0
+    aborted: bool = False
+
+
+def _normalize_tool_list(tools: list) -> list:
+    out = []
+    seen: Set[int] = set()
+    for raw in tools:
+        t = int(raw)
+        if t <= 0 or t in (255, 999):
+            raise ValueError(f"Invalid tool number {t}")
+        if t in seen:
+            continue
+        seen.add(t)
+        out.append(t)
+    if not out:
+        raise ValueError("Select at least one tool")
+    if len(out) > 99:
+        raise ValueError("Too many tools in one batch (max 99)")
+    return out
+
+
+async def run_tool_length_batch(
+    db_machine: Machine,
+    machine_id: int,
+    tools: list,
+    *,
+    folder: str = DEFAULT_FOLDER,
+    poll_s: float = DEFAULT_POLL_S,
+    start_timeout_s: float = DEFAULT_START_TIMEOUT_S,
+    cycle_timeout_s: float = DEFAULT_CYCLE_TIMEOUT_S,
+    client_run_id: Optional[str] = None,
+) -> ToolBatchResult:
+    """Measure multiple tools by sequencing O8100 (write #920 → MEMSTRT → wait).
+
+    Aborts remaining tools on the first failure.
+    """
+    from app.clients.telnet_client import create_fresh_connection
+    from app.services.probe_exclusive import collect_poll_seconds
+
+    t0 = time.perf_counter()
+    progress = ProbeProgressCtx(
+        machine_id=machine_id,
+        api_step="tool_batch",
+        client_run_id=client_run_id,
+        t0=t0,
+    )
+    try:
+        tool_list = _normalize_tool_list(list(tools))
+    except ValueError as e:
+        await emit_probe_progress(progress, "error", str(e), final=True)
+        return ToolBatchResult(ok=False, phase="validate", error=str(e), elapsed_s=0.0)
+
+    wait_poll = collect_poll_seconds(machine_id, poll_s)
+    control_version = db_machine.control_version or "C00"
+    client = None
+    items: list = []
+    phase = "connect"
+
+    try:
+        await emit_probe_progress(
+            progress,
+            "connect",
+            f"Connecting for multi-tool measure ({len(tool_list)} tools)…",
+        )
+        client = await create_fresh_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=15,
+        )
+
+        phase = "safety"
+        await emit_probe_progress(progress, "safety", "Checking machine safety…")
+        safe, err, _status = await _ensure_safety(db_machine, machine_id, client)
+        if not safe:
+            msg = err or "Machine not safe for tool measure"
+            await emit_probe_progress(progress, "error", msg, final=True)
+            return ToolBatchResult(
+                ok=False,
+                phase=phase,
+                error=msg,
+                elapsed_s=time.perf_counter() - t0,
+            )
+
+        await _ensure_root_folder(client)
+
+        for idx, tool in enumerate(tool_list):
+            item_t0 = time.perf_counter()
+            label = f"Tool {idx + 1}/{len(tool_list)} · T{tool:02d}"
+            await emit_probe_progress(
+                progress,
+                "writing",
+                f"{label} — writing #920 and waiting idle…",
+            )
+            try:
+                await _wait_until(
+                    client,
+                    control_version,
+                    predicate=_is_idle,
+                    label=f"idle before T{tool}",
+                    timeout_s=start_timeout_s,
+                    poll_s=wait_poll,
+                    progress=progress,
+                    progress_phase="idle_wait",
+                )
+
+                await emit_probe_progress(
+                    progress,
+                    "writing",
+                    f"{label} — WRTMCNM #920={tool}",
+                )
+                ok, status, _verified = await client.write_macro_variable(
+                    macro_number=MEASUREMENT_TOOL_MACRO,
+                    value=float(tool),
+                    verbose=False,
+                    verify=True,
+                )
+                if not ok:
+                    desc = client.get_status_description(status or "00")
+                    raise RuntimeError(f"Failed writing #920={tool}: {status} ({desc})")
+
+                phase = "starting"
+                await emit_probe_progress(
+                    progress,
+                    "starting",
+                    f"{label} — MEMSTRT O{TOOL_LENGTH_PROGRAM:04d}",
+                )
+                ok, status = await client.change_mode("MEM", verbose=False)
+                if not ok and status != "60":
+                    desc = client.get_status_description(status or "00")
+                    raise RuntimeError(f"CHGMODE MEM failed: {status} ({desc})")
+
+                ok, status = await client.change_folder(folder, verbose=False)
+                if not ok:
+                    desc = client.get_status_description(status or "00")
+                    raise RuntimeError(f"FLDCHG {folder} failed: {status} ({desc})")
+
+                try:
+                    await _memstrt_catalog_target(client, TOOL_LENGTH_PROGRAM)
+                finally:
+                    await client.change_folder("/", verbose=False)
+
+                phase = "running"
+                memstrt_at = time.perf_counter()
+                start_deadline = memstrt_at + start_timeout_s
+                saw_running = False
+                last = _Snap()
+                while time.perf_counter() < start_deadline:
+                    last = await _snapshot(client, control_version)
+                    await emit_probe_progress(
+                        progress,
+                        "running",
+                        f"{label} — waiting start "
+                        f"(prd3={last.prd3_status!r} op={last.operation_status!r})",
+                        snap=last,
+                    )
+                    if _snap_unreadable(last):
+                        await asyncio.sleep(wait_poll)
+                        continue
+                    if last.prd3_status in FATAL_STATUSES:
+                        raise RuntimeError(
+                            "Machine error while waiting for tool measure start"
+                        )
+                    if _is_running(last):
+                        saw_running = True
+                        break
+                    if (
+                        _is_cycle_complete(last)
+                        and (time.perf_counter() - memstrt_at) >= 1.0
+                    ):
+                        saw_running = True
+                        break
+                    await asyncio.sleep(wait_poll)
+                if not saw_running:
+                    raise TimeoutError(
+                        f"Timeout waiting for O{TOOL_LENGTH_PROGRAM:04d} start "
+                        f"(prd3={last.prd3_status!r} op={last.operation_status!r})"
+                    )
+
+                phase = "waiting_complete"
+                await emit_probe_progress(
+                    progress,
+                    "waiting_complete",
+                    f"{label} — waiting cycle complete…",
+                )
+                await _wait_until(
+                    client,
+                    control_version,
+                    predicate=_is_cycle_complete,
+                    label=f"T{tool} cycle complete",
+                    timeout_s=cycle_timeout_s,
+                    poll_s=wait_poll,
+                    progress=progress,
+                    progress_phase="waiting_complete",
+                )
+                await asyncio.sleep(POST_CYCLE_SETTLE_S)
+                await _ensure_root_folder(client)
+
+                items.append(
+                    ToolBatchItemResult(
+                        tool=tool,
+                        ok=True,
+                        detail="measured",
+                        elapsed_s=time.perf_counter() - item_t0,
+                        index=idx,
+                    )
+                )
+                await emit_probe_progress(
+                    progress,
+                    "complete",
+                    f"{label} — ok ({items[-1].elapsed_s:.1f}s)",
+                )
+            except Exception as tool_err:
+                logger.exception(
+                    "tool batch aborted machine=%s tool=%s index=%s",
+                    machine_id,
+                    tool,
+                    idx,
+                )
+                items.append(
+                    ToolBatchItemResult(
+                        tool=tool,
+                        ok=False,
+                        detail=str(tool_err),
+                        elapsed_s=time.perf_counter() - item_t0,
+                        index=idx,
+                    )
+                )
+                remaining = len(tool_list) - idx - 1
+                msg = (
+                    f"{label} failed: {tool_err}"
+                    + (f" — aborted {remaining} remaining" if remaining else "")
+                )
+                await emit_probe_progress(progress, "error", msg, final=True)
+                return ToolBatchResult(
+                    ok=False,
+                    tools=items,
+                    phase=phase,
+                    error=msg,
+                    elapsed_s=time.perf_counter() - t0,
+                    aborted=remaining > 0,
+                )
+
+        await emit_probe_progress(
+            progress,
+            "complete",
+            f"Measured {len(items)} tools",
+            final=True,
+        )
+        return ToolBatchResult(
+            ok=True,
+            tools=items,
+            phase="complete",
+            elapsed_s=time.perf_counter() - t0,
+        )
+    except Exception as e:
+        logger.exception(
+            "tool length batch failed machine=%s phase=%s", machine_id, phase
+        )
+        await emit_probe_progress(progress, "error", str(e), final=True)
+        return ToolBatchResult(
+            ok=False,
+            tools=items,
+            phase=phase,
+            error=str(e),
+            elapsed_s=time.perf_counter() - t0,
+        )
+    finally:
+        if client:
+            try:
+                await client.change_folder("/", verbose=False)
+            except Exception:
+                pass
             await client.disconnect()

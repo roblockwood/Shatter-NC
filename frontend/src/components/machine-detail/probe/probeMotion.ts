@@ -786,10 +786,13 @@ function threePoint(
  * Compact cylindrical body (≈Ø34 class) with exchangeable flat measuring
  * surface on top; tool approaches in −Z onto the pad. Not spindle-probe kinematics.
  */
-function toolLength(): ProbeSim3D {
-  const path: Waypoint[] = startCycle();
-  plungeBookendToJog(path);
-
+function toolLengthFeatures(): {
+  features: Feature3D[];
+  labels: { text: string; at: Vec3 }[];
+  hitZ: number;
+  bodyR: number;
+  bodyMidZ: number;
+} {
   // Preview scale (mm-ish): body ~Ø18, pad slightly smaller, hit on pad top
   const bodyR = 9;
   const padR = 6.5;
@@ -798,28 +801,17 @@ function toolLength(): ProbeSim3D {
   const baseH = 3;
   const baseR = 11;
   const padTop = -6; // measure surface
-  const hitZ = padTop;
-
-  plungeToMeasure(path, hitZ);
-  const last = path[path.length - 1];
-  if (last) {
-    last.kind = 'touch';
-    last.hit = true;
-  }
-  retractToClearance(path);
-  endCycle(path);
-
   const padBot = padTop - padH;
   const bodyTop = padBot;
   const bodyBot = bodyTop - bodyH;
   const baseTop = bodyBot;
   const baseBot = baseTop - baseH;
-
   return {
-    path,
+    hitZ: padTop,
+    bodyR,
+    bodyMidZ: (bodyTop + bodyBot) / 2,
     features: [
       clearancePlaneFeature(28),
-      // Mounting flange / base
       {
         kind: 'cylinder',
         cx: 0,
@@ -828,7 +820,6 @@ function toolLength(): ProbeSim3D {
         r: baseR,
         h: baseH,
       },
-      // Z-Nano housing
       {
         kind: 'cylinder',
         cx: 0,
@@ -837,7 +828,6 @@ function toolLength(): ProbeSim3D {
         r: bodyR,
         h: bodyH,
       },
-      // Exchangeable flat measuring surface
       {
         kind: 'cylinder',
         cx: 0,
@@ -851,9 +841,68 @@ function toolLength(): ProbeSim3D {
   };
 }
 
+function toolLength(): ProbeSim3D {
+  const path: Waypoint[] = startCycle();
+  plungeBookendToJog(path);
+  const geom = toolLengthFeatures();
+
+  plungeToMeasure(path, geom.hitZ);
+  const last = path[path.length - 1];
+  if (last) {
+    last.kind = 'touch';
+    last.hit = true;
+  }
+  retractToClearance(path);
+  endCycle(path);
+
+  return {
+    path,
+    features: geom.features,
+    labels: geom.labels,
+  };
+}
+
+/** Sequenced Z-Nano hits for multi-tool O8100 batch preview (capped for UI). */
+function toolLengthMulti(toolCount: number): ProbeSim3D {
+  const n = Math.max(1, Math.min(8, Math.floor(toolCount) || 1));
+  const path: Waypoint[] = startCycle();
+  plungeBookendToJog(path);
+  const geom = toolLengthFeatures();
+
+  for (let i = 0; i < n; i++) {
+    // Brief XY jog between tools — ATC change placeholder
+    if (i > 0) {
+      const side = i % 2 === 0 ? 4 : -4;
+      push(path, { x: side, y: 0, z: 0 }, 'rapid');
+      push(path, { x: 0, y: 0, z: 0 }, 'rapid');
+    }
+    plungeToMeasure(path, geom.hitZ);
+    const last = path[path.length - 1];
+    if (last) {
+      last.kind = 'touch';
+      last.hit = true;
+    }
+    retractToClearance(path);
+  }
+  endCycle(path);
+
+  return {
+    path,
+    features: geom.features,
+    labels: [
+      ...geom.labels,
+      {
+        text: n > 1 ? `${n}× O8100` : 'O8100',
+        at: { x: 0, y: -(geom.bodyR + 4), z: geom.bodyMidZ },
+      },
+    ],
+  };
+}
+
 export function buildProbeSim3D(
   routineId: string,
-  params: Record<string, number>
+  params: Record<string, number>,
+  opts?: { toolCount?: number }
 ): ProbeSim3D {
   const x = n(params['901'], 10);
   const y = n(params['902'], 10);
@@ -867,6 +916,8 @@ export function buildProbeSim3D(
   switch (routineId) {
     case 'tool_length':
       return toolLength();
+    case 'tool_length_multi':
+      return toolLengthMulti(opts?.toolCount ?? 3);
     case 'single_face_x_plus':
       return singleFace('x', 15);
     case 'single_face_x_minus':

@@ -36,6 +36,15 @@ describe('probeCatalog', () => {
     expect(resolveProgram('tool_length', 'measure')).toBeNull();
   });
 
+  it('tool_length_multi is ATC multi-select with empty macros', () => {
+    const entry = resolveProgram('tool_length_multi', 'probe');
+    expect(entry?.program).toBe(8100);
+    expect(entry?.macros).toEqual([]);
+    const routine = probeCatalog.routines.find((r) => r.id === 'tool_length_multi');
+    expect(routine?.selection).toBe('atc_multi');
+    expect(resolveProgram('tool_length_multi', 'measure')).toBeNull();
+  });
+
   it('detects poison and wcs rules', () => {
     expect(isPoisonValue('900', 0)).toBe(true);
     expect(isPoisonValue('901', 999)).toBe(true);

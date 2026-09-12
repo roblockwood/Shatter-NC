@@ -242,6 +242,8 @@ function axisTriad(len = 12): [Vec3, Vec3, string][] {
 export interface ProbeCyclePreviewProps {
   routineId: string;
   params: Record<string, number>;
+  /** Tool numbers queued for tool_length_multi preview */
+  selectedTools?: number[];
   compact?: boolean;
   /** Freeze animation (e.g. confirm dialog static frame) */
   paused?: boolean;
@@ -251,11 +253,20 @@ export interface ProbeCyclePreviewProps {
 export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
   routineId,
   params,
+  selectedTools = [],
   compact = false,
   paused = false,
   className,
 }) => {
-  const sim = useMemo(() => buildProbeSim3D(routineId, params), [routineId, params]);
+  const isTool =
+    routineId === 'tool_length' || routineId === 'tool_length_multi';
+  const isMulti = routineId === 'tool_length_multi';
+  const toolCount = Math.max(1, selectedTools.length || 3);
+
+  const sim = useMemo(
+    () => buildProbeSim3D(routineId, params, isMulti ? { toolCount } : undefined),
+    [routineId, params, isMulti, toolCount]
+  );
 
   const [t, setT] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -426,7 +437,26 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
   const hitMarkers = sim.path.filter((p) => p.hit);
   const axisLabel = motionLabel(motion);
   const moving = motion.axes.length > 0;
-  const isTool = routineId === 'tool_length';
+
+  const queueLabel = useMemo(() => {
+    if (!isMulti || selectedTools.length === 0) return null;
+    const activeIdx =
+      selectedTools.length <= 1
+        ? 0
+        : Math.min(
+            selectedTools.length - 1,
+            Math.floor((paused || reducedMotion ? 0.35 : t) * selectedTools.length)
+          );
+    return {
+      text: selectedTools
+        .map((tn, i) => {
+          const label = `T${String(tn).padStart(2, '0')}`;
+          return i === activeIdx ? `[${label}]` : label;
+        })
+        .join(' → '),
+      activeIdx,
+    };
+  }, [isMulti, selectedTools, t, paused, reducedMotion]);
 
   const motionColors = motion.axes.map((a) => AXIS_COLOR[a.axis]);
   const shaftMid = {
@@ -481,7 +511,15 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
         CYCLE PREVIEW (ISO)
         {sample.onHit ? ' · HIT' : moving ? ` · ${axisLabel}` : ''}
         {isTool ? ' · TOOL' : ''}
+        {isMulti && selectedTools.length > 0
+          ? ` · ${selectedTools.length}×`
+          : ''}
       </div>
+      {queueLabel && (
+        <div className="probe-cycle-preview-queue" title={queueLabel.text}>
+          {queueLabel.text}
+        </div>
+      )}
       <svg
         className="probe-cycle-preview-svg"
         viewBox={`${projected.minX} ${projected.minY} ${projected.w} ${projected.h}`}
