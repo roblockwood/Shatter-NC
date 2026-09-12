@@ -29,49 +29,49 @@
       "key": "wcs",
       "label": "WCS",
       "unit": "",
-      "help": "54-59 for G54-G59, or negative for G54.1 P"
+      "help": "Whole number: 54-59 for G54-G59, or negative for G54.1 P"
     },
     "901": {
       "key": "x_dist",
       "label": "X DIST",
       "unit": "mm",
-      "help": "Signed approach distance to feature in X (whole mm)"
+      "help": "Signed approach distance to feature in X"
     },
     "902": {
       "key": "y_dist",
       "label": "Y DIST",
       "unit": "mm",
-      "help": "Signed approach distance to feature in Y (whole mm)"
+      "help": "Signed approach distance to feature in Y"
     },
     "903": {
       "key": "z_dist",
       "label": "Z DIST",
       "unit": "mm",
-      "help": "Signed Z depth or approach to top surface (whole mm)"
+      "help": "Signed Z depth or approach to top surface"
     },
     "904": {
       "key": "size",
       "label": "SIZE",
       "unit": "mm",
-      "help": "Nominal width or diameter (whole mm)"
+      "help": "Nominal width or diameter"
     },
     "905": {
       "key": "macro_905",
       "label": "CLR/ANG1",
       "unit": "",
-      "help": "Obstacle: positive clearance whole mm (Shatter writes −R for O8702 inside+Z). 3-pt: first angle H (deg, whole)"
+      "help": "Obstacle: positive clearance mm (Shatter writes −R for O8702 inside+Z). 3-pt: first angle H (deg)"
     },
     "906": {
       "key": "ang2",
       "label": "ANG 2",
       "unit": "deg",
-      "help": "Second 3-point probe angle (whole degrees)"
+      "help": "Second 3-point probe angle"
     },
     "907": {
       "key": "ang3",
       "label": "ANG 3",
       "unit": "deg",
-      "help": "Third 3-point probe angle (whole degrees)"
+      "help": "Third 3-point probe angle"
     },
     "920": {
       "key": "tool",

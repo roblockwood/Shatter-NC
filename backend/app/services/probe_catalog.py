@@ -99,8 +99,14 @@ def _is_poison_value(macro: str, value: float, poison: Dict[int, float]) -> bool
 
 
 def validate_wcs(value: float) -> Optional[str]:
-    """Return error message if WCS (#900) is invalid for a run."""
+    """Return error message if WCS (#900) is invalid for a run.
+
+    Work offset selectors (G54–G59 / G54.1 P) must be whole numbers.
+    """
     v = float(value)
+    if abs(v - round(v)) > 1e-9:
+        return "WCS (#900) must be a whole number (e.g. 54 for G54)"
+    v = float(round(v))
     if abs(v - POISON_WCS) < 1e-9:
         return "WCS (#900) is poisoned (0); set G54-G59 or negative G54.1 P"
     if 54.0 <= v <= 59.0:
@@ -108,14 +114,6 @@ def validate_wcs(value: float) -> Optional[str]:
     if v <= -1.0:
         return None
     return "WCS (#900) must be 54-59 (G54-G59) or negative (G54.1 P)"
-
-
-def validate_whole_number(macro: str, value: float) -> Optional[str]:
-    """Probe offsets / job macros are whole numbers only (no fractional mm)."""
-    v = float(value)
-    if abs(v - round(v)) > 1e-9:
-        return f"Macro #{macro} must be a whole number (no decimals)"
-    return None
 
 
 def validate_run_params(
@@ -128,6 +126,7 @@ def validate_run_params(
 
     params keys may be macro numbers as str/int ("900") or field keys ("wcs").
     Returns (resolved entry, macro_number -> value) ready to write.
+    Distances/sizes/angles may be fractional; WCS (#900) must be a whole number.
     """
     resolved = resolve_routine(routine_id, mode)
     fields = get_fields()
@@ -159,20 +158,16 @@ def validate_run_params(
 
     for macro in required:
         value = normalized[macro]
-        whole_err = validate_whole_number(macro, value)
-        if whole_err:
-            raise ProbeCatalogError(whole_err)
-        # Canonicalize floats that are whole (54.0 → 54.0 already)
-        normalized[macro] = float(round(value))
+        if macro == "900":
+            err = validate_wcs(value)
+            if err:
+                raise ProbeCatalogError(err)
+            normalized[macro] = float(round(value))
         if _is_poison_value(macro, normalized[macro], poison):
             raise ProbeCatalogError(
                 f"Macro #{macro} still has poison value {poison[int(macro)]}; "
                 "set a real job value before run"
             )
-        if macro == "900":
-            err = validate_wcs(normalized[macro])
-            if err:
-                raise ProbeCatalogError(err)
 
     writes = {int(m): normalized[m] for m in required}
 

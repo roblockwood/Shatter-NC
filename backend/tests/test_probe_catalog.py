@@ -57,34 +57,28 @@ def test_validate_run_params_ok():
     _, writes = validate_run_params(
         "corner_xyz",
         "probe",
-        {"900": 59, "901": -3, "902": -3, "903": -5},
+        {"900": 59, "901": -0.3, "902": -0.3, "903": -0.25},
     )
     assert writes[900] == 59.0
-    assert writes[901] == -3.0
+    assert writes[901] == -0.3
 
 
 def test_validate_run_params_accepts_field_keys():
     _, writes = validate_run_params(
         "diameter_inside",
         "probe",
-        {"wcs": 54, "size": 51},
+        {"wcs": 54, "size": 50.8},
     )
     assert writes[900] == 54.0
-    assert writes[904] == 51.0
+    assert writes[904] == 50.8
 
 
-def test_validate_rejects_fractional_offsets():
+def test_validate_rejects_fractional_wcs():
     with pytest.raises(ProbeCatalogError, match="whole number"):
         validate_run_params(
             "corner_xyz",
             "probe",
-            {"900": 54, "901": -0.3, "902": -3, "903": -5},
-        )
-    with pytest.raises(ProbeCatalogError, match="whole number"):
-        validate_run_params(
-            "diameter_inside",
-            "probe",
-            {"900": 54, "904": 50.8},
+            {"900": 54.5, "901": -3, "902": -3, "903": -5},
         )
 
 
@@ -98,6 +92,7 @@ def test_validate_wcs_rules():
     assert validate_wcs(-1) is None
     assert validate_wcs(0) is not None
     assert validate_wcs(60) is not None
+    assert validate_wcs(54.5) is not None
 
 
 def test_validate_rejects_missing_and_extra():
