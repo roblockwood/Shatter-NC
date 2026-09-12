@@ -90,7 +90,7 @@ async def test_write_macros_no_memstrt(monkeypatch):
         machine_id=1,
         routine_id="diameter_inside",
         mode="probe",
-        params={"900": 54, "904": 50.8},
+        params={"900": 54, "904": 51},
     )
 
     assert result.ok is True, result.error
@@ -173,7 +173,7 @@ async def test_start_memstrt_catalog_target(monkeypatch):
         machine_id=1,
         routine_id="diameter_inside",
         mode="probe",
-        params={"900": 54, "904": 50.8},
+        params={"900": 54, "904": 51},
         start_timeout_s=5,
         poll_s=0.01,
     )

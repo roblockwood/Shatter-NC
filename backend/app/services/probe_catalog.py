@@ -110,6 +110,14 @@ def validate_wcs(value: float) -> Optional[str]:
     return "WCS (#900) must be 54-59 (G54-G59) or negative (G54.1 P)"
 
 
+def validate_whole_number(macro: str, value: float) -> Optional[str]:
+    """Probe offsets / job macros are whole numbers only (no fractional mm)."""
+    v = float(value)
+    if abs(v - round(v)) > 1e-9:
+        return f"Macro #{macro} must be a whole number (no decimals)"
+    return None
+
+
 def validate_run_params(
     routine_id: str,
     mode: str,
@@ -151,13 +159,18 @@ def validate_run_params(
 
     for macro in required:
         value = normalized[macro]
-        if _is_poison_value(macro, value, poison):
+        whole_err = validate_whole_number(macro, value)
+        if whole_err:
+            raise ProbeCatalogError(whole_err)
+        # Canonicalize floats that are whole (54.0 → 54.0 already)
+        normalized[macro] = float(round(value))
+        if _is_poison_value(macro, normalized[macro], poison):
             raise ProbeCatalogError(
                 f"Macro #{macro} still has poison value {poison[int(macro)]}; "
                 "set a real job value before run"
             )
         if macro == "900":
-            err = validate_wcs(value)
+            err = validate_wcs(normalized[macro])
             if err:
                 raise ProbeCatalogError(err)
 
