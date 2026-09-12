@@ -130,11 +130,13 @@ Client wrappers live in [`_telnet_write_ops.py`](../backend/app/clients/_telnet_
 | `FLDCHG` | **Multipart**: empty args + payload folder name (`PROGRAM`) or `/` | Changes telnet data cwd. **Must restore `/` after** — otherwise `LOD MEM` fails with status `07` |
 
 **Remote measure / probe sequence (stepped):** Shatter **EXECUTE** wizard confirms each stage in one dialog.
-1. `POST .../probe/write` — write job macros only (no MEMSTRT)
+0. `POST .../probe/exclusive` `{ "active": true }` — pause that machine’s fleet poller (exclusive telnet)
+1. `POST .../probe/write` — write job macros only (no MEMSTRT); streams `probe_progress` on `/api/ws`
 2. Operator confirms success, then next step
 3. `POST .../probe/start` — `CHGMODE MEM` → `FLDCHG PROGRAM` → `MEMSTRT` catalog target → `FLDCHG /`
 4. Operator confirms motion started, then next step
-5. `POST .../probe/collect` — wait idle → read `#100–#107` → poison (salt)
+5. `POST .../probe/collect` — wait cycle-complete (0.25s poll while exclusive) → read `#100–#107` → poison (salt)
+6. `POST .../probe/exclusive` `{ "active": false }` — resume polling (also auto after ~5 min idle)
 
 Live scripts:
 
@@ -147,14 +149,17 @@ Live scripts:
 | Method | Path | Purpose |
 |--------|------|---------|
 | `GET` | `/api/machines/{id}/probe/catalog` | Blum routine catalog (`#900–#907`, O81xx/O82xx) |
+| `POST` | `/api/machines/{id}/probe/exclusive` | Begin/end exclusive hold — pauses that machine’s fast+tool pollers (`{ "active": true\|false }`) |
 | `POST` | `/api/machines/{id}/probe/write` | Write job macros only — **no motion** |
 | `POST` | `/api/machines/{id}/probe/start` | **MEMSTRT** catalog target O-number (allowlisted). Machine moves. |
-| `POST` | `/api/machines/{id}/probe/collect` | Wait idle, read `#100–#107`, poison |
+| `POST` | `/api/machines/{id}/probe/collect` | Wait cycle-complete, read `#100–#107`, poison |
 | `POST` | `/api/machines/{id}/probe/poison` | Force sentinel macros (`#900=0`, `#901–#907=999`, `#908=0`, `#920=0`) |
 
-Catalog source: [`backend/app/data/probe_catalog.json`](../backend/app/data/probe_catalog.json) (mirrored in frontend). UI: **Probes** pane — **EXECUTE** opens a confirm wizard (write macros → start motion → collect + salt). O8099 gate/M98 is abandoned (`docs/nc/O8099.NC` kept as archive only).
+Optional body field `client_run_id` on write/start/collect/poison filters WebSocket `probe_progress` events (see [WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md)).
 
-**Live smoke (C00):** stop backend, `POST .../probe/write`, confirm, `POST .../probe/start` for target O81xx, then `POST .../probe/collect`. Restart backend afterward.
+Catalog source: [`backend/app/data/probe_catalog.json`](../backend/app/data/probe_catalog.json) (mirrored in frontend). UI: **Probes** pane — **EXECUTE** opens a confirm wizard (exclusive hold → write macros → start motion → collect + salt). O8099 gate/M98 is abandoned (`docs/nc/O8099.NC` kept as archive only).
+
+**Live smoke (C00):** stop backend, `POST .../probe/exclusive` active, `POST .../probe/write`, confirm, `POST .../probe/start` for target O81xx, then `POST .../probe/collect`, exclusive end. Restart backend afterward.
 
 ---
 

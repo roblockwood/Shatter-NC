@@ -6,6 +6,7 @@ re-exports MachinePoller so existing imports continue to work.
 """
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Tuple
 from sqlalchemy.orm import Session
@@ -29,6 +30,54 @@ class PollingService:
         self.polling_task: Optional[asyncio.Task] = None
         self.tool_polling_task: Optional[asyncio.Task] = None  # Separate task for slow tool polling
         self.is_running = False
+        # Ref-counted pause so probe exclusive holds can nest safely.
+        self._polling_pause_counts: Dict[int, int] = {}
+        self._polling_pause_reasons: Dict[int, str] = {}
+
+    def pause_machine_polling(self, machine_id: int, reason: str = "probe") -> int:
+        """Increment pause refcount for a machine. Returns new count."""
+        count = self._polling_pause_counts.get(machine_id, 0) + 1
+        self._polling_pause_counts[machine_id] = count
+        self._polling_pause_reasons[machine_id] = reason
+        logger.info(
+            "Paused polling for machine %s (count=%s, reason=%s)",
+            machine_id,
+            count,
+            reason,
+        )
+        return count
+
+    def resume_machine_polling(self, machine_id: int) -> int:
+        """Decrement pause refcount. Returns remaining count (0 = resumed)."""
+        count = self._polling_pause_counts.get(machine_id, 0)
+        if count <= 0:
+            self._polling_pause_counts.pop(machine_id, None)
+            self._polling_pause_reasons.pop(machine_id, None)
+            logger.debug(
+                "resume_machine_polling called with no pause for machine %s",
+                machine_id,
+            )
+            return 0
+        count -= 1
+        if count <= 0:
+            self._polling_pause_counts.pop(machine_id, None)
+            reason = self._polling_pause_reasons.pop(machine_id, None)
+            logger.info(
+                "Resumed polling for machine %s (was paused for %s)",
+                machine_id,
+                reason,
+            )
+            return 0
+        self._polling_pause_counts[machine_id] = count
+        logger.info(
+            "Decremented polling pause for machine %s (count=%s)",
+            machine_id,
+            count,
+        )
+        return count
+
+    def is_machine_polling_paused(self, machine_id: int) -> bool:
+        return self._polling_pause_counts.get(machine_id, 0) > 0
 
     async def start(self):
         """Start the polling service."""
@@ -136,6 +185,12 @@ class PollingService:
             now = datetime.utcnow()
             machines_to_poll = []
             for machine in machines:
+                if self.is_machine_polling_paused(machine.id):
+                    logger.debug(
+                        "Skipping fast poll for machine %s (polling paused)",
+                        machine.id,
+                    )
+                    continue
                 poller = self.pollers.get(machine.id)
                 if not poller:
                     continue
@@ -257,6 +312,12 @@ class PollingService:
             now = datetime.utcnow()
             machines_to_poll = []
             for machine in machines:
+                if self.is_machine_polling_paused(machine.id):
+                    logger.debug(
+                        "Skipping tool poll for machine %s (polling paused)",
+                        machine.id,
+                    )
+                    continue
                 poller = self.pollers.get(machine.id)
                 if not poller:
                     continue
@@ -345,6 +406,13 @@ class PollingService:
         poller = self.pollers.get(machine_id)
         if not poller:
             raise ValueError(f"Machine {machine_id} is not being polled")
+
+        if self.is_machine_polling_paused(machine_id):
+            logger.info(
+                "Skipping refresh_tool_data for machine %s (polling paused)",
+                machine_id,
+            )
+            return {}
         
         # Poll tool data immediately
         tool_data = await poller.poll_tool_data()

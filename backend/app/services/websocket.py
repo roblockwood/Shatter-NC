@@ -239,6 +239,26 @@ class WebSocketManager:
         for connection in disconnected:
             self.disconnect(connection)
 
+    async def broadcast_probe_progress(self, data: Dict[str, Any]) -> None:
+        """Broadcast probe-session progress. Does NOT merge into last_status."""
+        if not self.active_connections:
+            return
+
+        message = {
+            "type": "probe_progress",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": data,
+        }
+        disconnected = []
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(jsonable_encoder(message))
+            except Exception as e:
+                logger.error(f"Error sending probe progress to WebSocket: {e}")
+                disconnected.append(connection)
+        for connection in disconnected:
+            self.disconnect(connection)
+
     async def send_message(self, websocket: WebSocket, message: Dict[str, Any]):
         """Send a message to a specific client."""
         try:

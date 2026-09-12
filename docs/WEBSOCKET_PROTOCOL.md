@@ -64,6 +64,38 @@ The server merges partial updates with cached fields (program name, tools, cycle
 
 Broadcast when a Kaeser compressor is polled. `data` includes `asset_kind: "compressor"` and `compressor_id`.
 
+### `probe_progress`
+
+Ephemeral progress for an active Probes pane session. **Does not** merge into `last_status` / fleet cards.
+
+Emitted while `POST .../probe/exclusive` hold is active and during write/start/collect/poison.
+
+```json
+{
+  "type": "probe_progress",
+  "timestamp": "2025-01-15T14:30:06.000000",
+  "data": {
+    "machine_id": 1,
+    "client_run_id": "optional-uuid-from-client",
+    "api_step": "collect",
+    "phase": "waiting_complete",
+    "message": "Waiting for cycle complete (prd3='operating' op=1)",
+    "snap": { "prd3_status": "operating", "operation_status": 1 },
+    "elapsed_s": 12.4,
+    "final": false
+  }
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `api_step` | `write` \| `start` \| `collect` \| `poison` \| `exclusive` |
+| `phase` | e.g. `connect`, `safety`, `writing`, `idle_wait`, `starting`, `running`, `waiting_complete`, `reading`, `poisoning`, `complete`, `error` |
+| `client_run_id` | Optional; UI filters multi-tab noise |
+| `final` | `true` on terminal success/error for that HTTP step |
+
+Clients should ignore unknown `type` values so future messages do not break status maps.
+
 ## Security notes
 
 - **FTP passwords and Kaeser passwords are not included** in WebSocket payloads under normal operation.

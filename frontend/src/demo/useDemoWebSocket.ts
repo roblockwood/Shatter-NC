@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import type { MachineStatus, CompressorStatus } from '../hooks/useWebSocket';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { MachineStatus, CompressorStatus, ProbeProgressCallback } from '../hooks/useWebSocket';
 import {
   createInitialCompressors,
   createInitialMachines,
@@ -56,6 +56,10 @@ export function useDemoWebSocket() {
   const noopAddMachine = useCallback((_machine: MachineStatus) => {}, []);
   const noopRemoveCompressor = useCallback((_compressorId: number) => {}, []);
   const noopAddCompressor = useCallback((_c: CompressorStatus) => {}, []);
+  const noopSubscribeProbeProgress = useCallback(
+    (_machineId: number, _cb: ProbeProgressCallback) => () => {},
+    []
+  );
 
   return {
     machines: Array.from(machines.values()),
@@ -65,5 +69,6 @@ export function useDemoWebSocket() {
     addMachine: noopAddMachine,
     removeCompressor: noopRemoveCompressor,
     addCompressor: noopAddCompressor,
+    subscribeProbeProgress: noopSubscribeProbeProgress,
   };
 }

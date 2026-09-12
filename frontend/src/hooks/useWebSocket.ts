@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface MachineStatus {
   machine_id: number;
@@ -93,10 +93,26 @@ export interface CompressorStatus {
   layout_config?: Record<string, unknown> | null;
 }
 
+export interface ProbeProgressEvent {
+  machine_id: number;
+  client_run_id?: string;
+  api_step: string;
+  phase: string;
+  message: string;
+  snap?: {
+    prd3_status?: string | null;
+    operation_status?: number | null;
+  };
+  elapsed_s?: number;
+  final?: boolean;
+}
+
+export type ProbeProgressCallback = (event: ProbeProgressEvent) => void;
+
 interface WebSocketMessage {
-  type: 'status_update' | 'initial_status' | 'compressor_status_update';
+  type: 'status_update' | 'initial_status' | 'compressor_status_update' | 'probe_progress' | string;
   timestamp: string;
-  data?: MachineStatus | CompressorStatus;
+  data?: MachineStatus | CompressorStatus | ProbeProgressEvent;
   machines?: MachineStatus[];
   compressors?: CompressorStatus[];
 }
@@ -108,6 +124,28 @@ export const useWebSocket = (url: string) => {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isConnectingRef = useRef(false);
+  const probeProgressListenersRef = useRef(
+    new Map<number, Set<ProbeProgressCallback>>()
+  );
+
+  const subscribeProbeProgress = useCallback(
+    (machineId: number, cb: ProbeProgressCallback) => {
+      const listeners = probeProgressListenersRef.current;
+      let set = listeners.get(machineId);
+      if (!set) {
+        set = new Set();
+        listeners.set(machineId, set);
+      }
+      set.add(cb);
+      return () => {
+        set!.delete(cb);
+        if (set!.size === 0) {
+          listeners.delete(machineId);
+        }
+      };
+    },
+    []
+  );
 
   useEffect(() => {
     const connect = () => {
@@ -162,6 +200,18 @@ export const useWebSocket = (url: string) => {
                 updated.set(c.compressor_id, prior ? { ...prior, ...c } : c);
                 return updated;
               });
+            } else if (message.type === 'probe_progress' && message.data) {
+              const p = message.data as ProbeProgressEvent;
+              const set = probeProgressListenersRef.current.get(p.machine_id);
+              if (set) {
+                set.forEach((cb) => {
+                  try {
+                    cb(p);
+                  } catch (err) {
+                    console.error('probe_progress listener error:', err);
+                  }
+                });
+              }
             }
           } catch (error) {
             console.error('Error parsing WebSocket message:', error);
@@ -238,5 +288,6 @@ export const useWebSocket = (url: string) => {
     addMachine,
     removeCompressor,
     addCompressor,
+    subscribeProbeProgress,
   };
 };
