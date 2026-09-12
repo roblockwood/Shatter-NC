@@ -531,90 +531,99 @@ async def apply_tool_changes_batch(
     successful = 0
     failed = 0
 
-    telnet_client = None
-    try:
-        if telnet_changes:
-            telnet_client = await create_fresh_connection(
-                ip_address=db_machine.ip_address,
-                port=10000,
-                timeout=10,
-            )
+    from app.services.probe_exclusive import exclusive_session
 
-            if any(c.operation_type in ("assignment", "cap") for c in telnet_changes):
-                atc_by_pot = await _read_atc_pot_map(telnet_client)
-                preclear_pots = pots_needing_preclear_before_assignments(changes, atc_by_pot)
-                if preclear_pots:
-                    logger.info(
-                        "Pre-clearing ATC pots %s before batch assignments (machine %s)",
-                        preclear_pots,
-                        machine_id,
-                    )
-                    await _preclear_atc_pots(
-                        telnet_client, machine_id, preclear_pots, atc_by_pot
-                    )
-
-            for change in telnet_changes:
-                try:
-                    success, status_code, msg, audit_op, details = await _apply_single_change(
-                        telnet_client, change
-                    )
-                    status_desc = (
-                        CNCTelnetClient.get_status_description(status_code or "00") if not success else None
-                    )
-                    AuditLogger.log_tool_modification(
-                        machine_id=machine_id,
-                        operation_type=audit_op,
-                        operation_details=details,
-                        success=success,
-                        error_message=status_desc,
-                        machine_state=None,
-                    )
-                    if success:
-                        results.append(_result_from_change(change, success=True, message=msg))
-                        successful += 1
-                    else:
-                        error_msg = status_desc or f"Failed with status code {status_code}"
-                        results.append(
-                            _result_from_change(
-                                change,
-                                success=False,
-                                error_code=status_code or "unknown",
-                                message=error_msg,
-                            )
-                        )
-                        failed += 1
-                except Exception as exc:
-                    results.append(
-                        _result_from_change(
-                            change,
-                            success=False,
-                            error_code="exception",
-                            message=str(exc),
-                        )
-                    )
-                    failed += 1
-                    logger.error("Exception applying tool change %s: %s", change.operation_type, exc)
-
-        if name_changes:
-            if telnet_client is None:
+    async with exclusive_session(machine_id, reason="tool_write"):
+        telnet_client = None
+        try:
+            if telnet_changes:
                 telnet_client = await create_fresh_connection(
                     ip_address=db_machine.ip_address,
                     port=10000,
                     timeout=10,
                 )
-            name_results = await _apply_name_changes_batch(
-                db_machine, machine_id, name_changes, telnet_client
-            )
-            for result in name_results:
-                results.append(result)
-                if result.success:
-                    successful += 1
-                else:
-                    failed += 1
 
-    finally:
-        if telnet_client:
-            await telnet_client.disconnect()
+                if any(c.operation_type in ("assignment", "cap") for c in telnet_changes):
+                    atc_by_pot = await _read_atc_pot_map(telnet_client)
+                    preclear_pots = pots_needing_preclear_before_assignments(changes, atc_by_pot)
+                    if preclear_pots:
+                        logger.info(
+                            "Pre-clearing ATC pots %s before batch assignments (machine %s)",
+                            preclear_pots,
+                            machine_id,
+                        )
+                        await _preclear_atc_pots(
+                            telnet_client, machine_id, preclear_pots, atc_by_pot
+                        )
+
+                for change in telnet_changes:
+                    try:
+                        success, status_code, msg, audit_op, details = await _apply_single_change(
+                            telnet_client, change
+                        )
+                        status_desc = (
+                            CNCTelnetClient.get_status_description(status_code or "00")
+                            if not success
+                            else None
+                        )
+                        AuditLogger.log_tool_modification(
+                            machine_id=machine_id,
+                            operation_type=audit_op,
+                            operation_details=details,
+                            success=success,
+                            error_message=status_desc,
+                            machine_state=None,
+                        )
+                        if success:
+                            results.append(_result_from_change(change, success=True, message=msg))
+                            successful += 1
+                        else:
+                            error_msg = status_desc or f"Failed with status code {status_code}"
+                            results.append(
+                                _result_from_change(
+                                    change,
+                                    success=False,
+                                    error_code=status_code or "unknown",
+                                    message=error_msg,
+                                )
+                            )
+                            failed += 1
+                    except Exception as exc:
+                        results.append(
+                            _result_from_change(
+                                change,
+                                success=False,
+                                error_code="exception",
+                                message=str(exc),
+                            )
+                        )
+                        failed += 1
+                        logger.error(
+                            "Exception applying tool change %s: %s",
+                            change.operation_type,
+                            exc,
+                        )
+
+            if name_changes:
+                if telnet_client is None:
+                    telnet_client = await create_fresh_connection(
+                        ip_address=db_machine.ip_address,
+                        port=10000,
+                        timeout=10,
+                    )
+                name_results = await _apply_name_changes_batch(
+                    db_machine, machine_id, name_changes, telnet_client
+                )
+                for result in name_results:
+                    results.append(result)
+                    if result.success:
+                        successful += 1
+                    else:
+                        failed += 1
+
+        finally:
+            if telnet_client:
+                await telnet_client.disconnect()
 
     return BatchToolChangesResponse(
         results=results,

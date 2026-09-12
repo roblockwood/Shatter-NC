@@ -43,8 +43,11 @@ async def execute_macro_write(
     """
     Write a macro variable using poller cache when fresh, otherwise one telnet session
     for minimal live validation (MEM + PRD3) and WRTMCNM with verify.
+
+    Pauses that machine's fleet poller for the duration of the write.
     """
     from app.clients.telnet_client import create_fresh_connection
+    from app.services.probe_exclusive import exclusive_session
 
     validator = MachineStateValidator()
     max_age = macro_write_cache_max_age_seconds(db_machine.poll_interval_seconds)
@@ -57,51 +60,52 @@ async def execute_macro_write(
         max_age_seconds=max_age,
     )
 
-    telnet_client = None
-    try:
-        telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
-            timeout=10,
-        )
-
-        # Cache may be stale (e.g. PRD3 still "operating" after cycle end) — confirm live
-        # before rejecting; only skip live check when cache confirms safe.
-        if cache_safe is not True:
-            is_safe, live_error, status_data = await validator.validate_macro_write_live_minimal(
-                telnet_client=telnet_client,
-                control_version=db_machine.control_version,
-                machine_id=machine_id,
-                machine_name=db_machine.name,
+    async with exclusive_session(machine_id, reason="macro_write"):
+        telnet_client = None
+        try:
+            telnet_client = await create_fresh_connection(
+                ip_address=db_machine.ip_address,
+                port=10000,
+                timeout=10,
             )
-            if not is_safe:
-                return MacroWriteOutcome(
-                    success=False,
-                    status_code=None,
-                    verified_value=None,
-                    status_data=status_data,
-                    error_message=live_error or cache_error,
+
+            # Cache may be stale (e.g. PRD3 still "operating" after cycle end) — confirm live
+            # before rejecting; only skip live check when cache confirms safe.
+            if cache_safe is not True:
+                is_safe, live_error, status_data = await validator.validate_macro_write_live_minimal(
+                    telnet_client=telnet_client,
+                    control_version=db_machine.control_version,
+                    machine_id=machine_id,
+                    machine_name=db_machine.name,
                 )
-        else:
-            logger.debug(
-                "Macro write for machine %s using cached poller status (age <= %ss)",
-                machine_id,
-                max_age,
+                if not is_safe:
+                    return MacroWriteOutcome(
+                        success=False,
+                        status_code=None,
+                        verified_value=None,
+                        status_data=status_data,
+                        error_message=live_error or cache_error,
+                    )
+            else:
+                logger.debug(
+                    "Macro write for machine %s using cached poller status (age <= %ss)",
+                    machine_id,
+                    max_age,
+                )
+
+            success, status_code, verified_value = await telnet_client.write_macro_variable(
+                macro_number=macro_number,
+                value=value,
+                verbose=False,
+                verify=True,
             )
 
-        success, status_code, verified_value = await telnet_client.write_macro_variable(
-            macro_number=macro_number,
-            value=value,
-            verbose=False,
-            verify=True,
-        )
-
-        return MacroWriteOutcome(
-            success=success,
-            status_code=status_code,
-            verified_value=verified_value,
-            status_data=status_data,
-        )
-    finally:
-        if telnet_client:
-            await telnet_client.disconnect()
+            return MacroWriteOutcome(
+                success=success,
+                status_code=status_code,
+                verified_value=verified_value,
+                status_data=status_data,
+            )
+        finally:
+            if telnet_client:
+                await telnet_client.disconnect()

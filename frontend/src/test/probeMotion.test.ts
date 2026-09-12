@@ -26,7 +26,6 @@ describe('probeMotion 3D NC sim (machine-aligned)', () => {
       'corner_xyz',
       'three_point_inside',
       'tool_length',
-      'tool_length_multi',
     ] as const) {
       const params =
         id === 'corner_xyz'
@@ -36,10 +35,7 @@ describe('probeMotion 3D NC sim (machine-aligned)', () => {
             : id.startsWith('diameter') || id.startsWith('three')
               ? { '904': 40 }
               : {};
-      const sim =
-        id === 'tool_length_multi'
-          ? buildProbeSim3D(id, params, { toolCount: 3 })
-          : buildProbeSim3D(id, params);
+      const sim = buildProbeSim3D(id, params);
       expectCycleBookends(sim.path);
       // First segment is pure Z−
       expect(sim.path[0].x).toBe(0);
@@ -53,9 +49,9 @@ describe('probeMotion 3D NC sim (machine-aligned)', () => {
     }
   });
 
-  it('tool_length_multi sequences multiple Z-Nano hits', () => {
-    const one = buildProbeSim3D('tool_length_multi', {}, { toolCount: 1 });
-    const three = buildProbeSim3D('tool_length_multi', {}, { toolCount: 3 });
+  it('tool_length sequences multiple Z-Nano hits when toolCount > 1', () => {
+    const one = buildProbeSim3D('tool_length', {}, { toolCount: 1 });
+    const three = buildProbeSim3D('tool_length', {}, { toolCount: 3 });
     expect(one.path.filter((p) => p.hit)).toHaveLength(1);
     expect(three.path.filter((p) => p.hit)).toHaveLength(3);
     expect(pathLength(three.path)).toBeGreaterThan(pathLength(one.path));

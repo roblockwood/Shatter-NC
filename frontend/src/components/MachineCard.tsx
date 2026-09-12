@@ -915,6 +915,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                         : null
                     }
                     atcPockets={machine.atc_pockets ?? 21}
+                    units={machine.units ?? 'in'}
                   />
                 ),
               },

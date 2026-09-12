@@ -86,6 +86,38 @@ async def test_exclusive_stale_timeout_auto_resume(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_exclusive_session_pauses_and_resumes(monkeypatch):
+    polling = PollingService(websocket_manager=MagicMock())
+    import app.api._status_state as status_state
+
+    status_state.polling_service = polling
+
+    async with probe_exclusive.exclusive_session(9, reason="tool_write"):
+        assert polling.is_machine_polling_paused(9) is True
+        assert probe_exclusive.is_exclusive_active(9) is True
+        assert probe_exclusive._holds[9]["reason"] == "tool_write"
+
+    assert polling.is_machine_polling_paused(9) is False
+    assert probe_exclusive.is_exclusive_active(9) is False
+
+
+@pytest.mark.asyncio
+async def test_exclusive_session_ends_on_error(monkeypatch):
+    polling = PollingService(websocket_manager=MagicMock())
+    import app.api._status_state as status_state
+
+    status_state.polling_service = polling
+
+    with pytest.raises(RuntimeError, match="boom"):
+        async with probe_exclusive.exclusive_session(4, reason="macro_write"):
+            assert polling.is_machine_polling_paused(4) is True
+            raise RuntimeError("boom")
+
+    assert polling.is_machine_polling_paused(4) is False
+    assert probe_exclusive.is_exclusive_active(4) is False
+
+
+@pytest.mark.asyncio
 async def test_wait_until_emits_progress_ticks(monkeypatch):
     client = MagicMock()
     ticks = {"n": 0}

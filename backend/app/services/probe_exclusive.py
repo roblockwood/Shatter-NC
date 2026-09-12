@@ -1,13 +1,17 @@
-"""Probe exclusive hold — pause fleet polling while a probe dialog owns telnet.
+"""Exclusive telnet hold — pause fleet polling while a write owns the machine port.
 
-The Probes pane begins a hold for the whole wizard/poison dialog. Hold lifetime
-is owned by begin/end (or auto-timeout if the dialog is abandoned).
+Used by:
+- Probes pane (dialog-scoped begin/end via POST /probe/exclusive)
+- Tool table / ATC / macro write paths (request-scoped via exclusive_session)
+
+Hold lifetime is owned by begin/end (or auto-timeout if abandoned).
 """
 from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, Optional
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +53,14 @@ async def begin_exclusive(machine_id: int, reason: str = "probe") -> Dict[str, A
             "last_activity_at": now,
             "reason": reason,
         }
-        logger.info("Probe exclusive begin machine=%s", machine_id)
+        logger.info("Exclusive begin machine=%s reason=%s", machine_id, reason)
     else:
         hold["refcount"] = int(hold.get("refcount", 1)) + 1
         hold["last_activity_at"] = now
         logger.info(
-            "Probe exclusive begin (nested) machine=%s count=%s",
+            "Exclusive begin (nested) machine=%s reason=%s count=%s",
             machine_id,
+            hold.get("reason") or reason,
             hold["refcount"],
         )
     return {"active": True, "machine_id": machine_id, **_hold_public(_holds[machine_id])}
@@ -65,7 +70,7 @@ async def end_exclusive(machine_id: int) -> Dict[str, Any]:
     """Resume polling when the last nested hold ends."""
     hold = _holds.get(machine_id)
     if hold is None:
-        logger.debug("Probe exclusive end with no hold machine=%s", machine_id)
+        logger.debug("Exclusive end with no hold machine=%s", machine_id)
         return {"active": False, "machine_id": machine_id}
 
     count = int(hold.get("refcount", 1)) - 1
@@ -73,7 +78,7 @@ async def end_exclusive(machine_id: int) -> Dict[str, Any]:
         hold["refcount"] = count
         hold["last_activity_at"] = time.monotonic()
         logger.info(
-            "Probe exclusive end (nested) machine=%s count=%s",
+            "Exclusive end (nested) machine=%s count=%s",
             machine_id,
             count,
         )
@@ -83,8 +88,20 @@ async def end_exclusive(machine_id: int) -> Dict[str, Any]:
     polling = _polling_service()
     if polling is not None:
         polling.resume_machine_polling(machine_id)
-    logger.info("Probe exclusive end machine=%s", machine_id)
+    logger.info("Exclusive end machine=%s", machine_id)
     return {"active": False, "machine_id": machine_id}
+
+
+@asynccontextmanager
+async def exclusive_session(
+    machine_id: int, reason: str = "write"
+) -> AsyncIterator[None]:
+    """Pause fleet polling for the duration of a single write request."""
+    await begin_exclusive(machine_id, reason=reason)
+    try:
+        yield
+    finally:
+        await end_exclusive(machine_id)
 
 
 async def force_end_exclusive(machine_id: int, *, reason: str = "timeout") -> None:
@@ -98,14 +115,14 @@ async def force_end_exclusive(machine_id: int, *, reason: str = "timeout") -> No
         while polling.is_machine_polling_paused(machine_id):
             polling.resume_machine_polling(machine_id)
     logger.warning(
-        "Probe exclusive force-end machine=%s reason=%s",
+        "Exclusive force-end machine=%s reason=%s",
         machine_id,
         reason,
     )
 
 
 async def sweep_stale_holds(timeout_s: float = EXCLUSIVE_HOLD_TIMEOUT_S) -> None:
-    """Auto-resume holds with no probe traffic for timeout_s."""
+    """Auto-resume holds with no activity for timeout_s."""
     now = time.monotonic()
     stale = [
         mid
