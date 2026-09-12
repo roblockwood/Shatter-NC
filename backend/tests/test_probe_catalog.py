@@ -73,6 +73,15 @@ def test_validate_run_params_accepts_field_keys():
     assert writes[904] == 50.8
 
 
+def test_validate_rejects_fractional_wcs():
+    with pytest.raises(ProbeCatalogError, match="whole number"):
+        validate_run_params(
+            "corner_xyz",
+            "probe",
+            {"900": 54.5, "901": -3, "902": -3, "903": -5},
+        )
+
+
 def test_validate_rejects_poison_wcs():
     with pytest.raises(ProbeCatalogError, match="poison"):
         validate_run_params("single_face_z", "probe", {"900": 0})
@@ -83,6 +92,7 @@ def test_validate_wcs_rules():
     assert validate_wcs(-1) is None
     assert validate_wcs(0) is not None
     assert validate_wcs(60) is not None
+    assert validate_wcs(54.5) is not None
 
 
 def test_validate_rejects_missing_and_extra():

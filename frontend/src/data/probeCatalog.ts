@@ -82,6 +82,7 @@ export function isPoisonValue(macro: string, value: number | null | undefined): 
 }
 
 export function isValidWcs(value: number): boolean {
+  if (!Number.isInteger(value)) return false;
   if (Math.abs(value - 0) < 1e-9) return false;
   if (value >= 54 && value <= 59) return true;
   if (value <= -1) return true;

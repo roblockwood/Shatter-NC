@@ -30,17 +30,26 @@ MACRO_VARIABLE_MAX = 999
 def format_macro_set_value(value: float) -> str:
     """Format a macro variable set value for WRTMCNM (12-byte data field).
 
-    Whole numbers are sent without a decimal point (Brother accepts the integer
-    part). Fractional values use four decimal places. The field is right-justified
-    to 12 characters, matching REDMCNM range response layout.
+    Whole numbers are sent without a decimal point. Fractional values use at most
+    three decimal places — Brother rejects four-place payloads (status 30), e.g.
+    ``12.5000`` fails while ``12.5`` / ``12.500`` succeed. The field is
+    right-justified to 12 characters.
     """
     rounded = round(value)
-    if abs(value - rounded) < 0.0001:
+    if abs(value - rounded) < 0.0005:
         return f"{int(rounded)}".rjust(12)[:12]
-    text = f"{value:.4f}"
-    if len(text) > 12:
-        text = f"{value:.3f}"[:12]
+    text = f"{value:.3f}".rstrip("0").rstrip(".")
     return text.rjust(12)[:12]
+
+
+def macro_values_match(expected: float, actual: float) -> bool:
+    """True when REDMCNM read-back matches the written value within Brother float noise.
+
+    Controls often return values like 54.00012 for an integer write of 54. Absolute
+    tolerance alone is too tight on larger magnitudes; combine a small floor with a
+    relative term. Also allow ~0.001 for 3-decimal write rounding.
+    """
+    return abs(actual - expected) <= max(0.001, abs(expected) * 1e-4)
 
 
 class CNCWriteOpsMixin:
@@ -289,7 +298,7 @@ class CNCWriteOpsMixin:
                     logger.warning(f"Macro #{macro_number} write succeeded but read-back failed")
                     return False, "verify_failed", None
 
-                if abs(read_back - value) > 0.0001:
+                if not macro_values_match(value, read_back):
                     logger.warning(
                         f"Macro #{macro_number} verify mismatch: wrote {value}, read {read_back}"
                     )

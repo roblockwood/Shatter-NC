@@ -256,6 +256,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       if (v == null || Number.isNaN(v)) return false;
       if (isPoisonValue(m, v)) return false;
       if (m === '900' && !isValidWcs(v)) return false;
+      if (m === '900' && !Number.isInteger(v)) return false;
       return true;
     });
 
@@ -857,10 +858,14 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                         className="probes-input"
                         type="number"
                         step={macro === '900' ? 1 : 'any'}
+                        inputMode={macro === '900' ? 'numeric' : 'decimal'}
                         value={params[macro] ?? ''}
                         disabled={controlsDisabled}
                         onChange={(e) => {
-                          const n = Number.parseFloat(e.target.value);
+                          const n =
+                            macro === '900'
+                              ? Number.parseInt(e.target.value, 10)
+                              : Number.parseFloat(e.target.value);
                           setParams((prev) => ({
                             ...prev,
                             [macro]: Number.isFinite(n) ? n : 0,
