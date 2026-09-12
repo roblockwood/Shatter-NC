@@ -3,6 +3,7 @@ import { Select } from '../ui';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
 import { API_BASE_URL } from '../../config/api';
+import { useWebSocketContext } from '../../contexts/WebSocketContext';
 import {
   assessMacroFreshness,
   fieldLabelFor,
@@ -192,6 +193,12 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
   const activityScrollRef = useRef<HTMLDivElement | null>(null);
   const lastLoggedLive = useRef<string | null>(null);
   const busyStartedAt = useRef<number | null>(null);
+  const clientRunIdRef = useRef<string | null>(null);
+  const exclusiveHeldRef = useRef(false);
+  const gotProbeProgressRef = useRef(false);
+  const lastProgressAtRef = useRef(0);
+  const lastProgressMsgRef = useRef<string | null>(null);
+  const { subscribeProbeProgress } = useWebSocketContext();
 
   const routine: ProbeRoutine | undefined = getRoutine(routineId);
   const availableModes = useMemo((): ProbeMode[] => {
@@ -280,15 +287,92 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     setActivityLog((prev) => [...prev, line]);
   }, []);
 
+  const endExclusiveHold = useCallback(async () => {
+    if (!exclusiveHeldRef.current) return;
+    exclusiveHeldRef.current = false;
+    clientRunIdRef.current = null;
+    try {
+      await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/exclusive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: false }),
+      });
+    } catch {
+      // Dialog close must not hang on exclusive end failures.
+    }
+  }, [machineId]);
+
+  const beginExclusiveHold = useCallback(async () => {
+    const runId =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `probe-${Date.now()}`;
+    clientRunIdRef.current = runId;
+    gotProbeProgressRef.current = false;
+    lastProgressAtRef.current = 0;
+    lastProgressMsgRef.current = null;
+    try {
+      await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/exclusive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: true }),
+      });
+      exclusiveHeldRef.current = true;
+      appendActivity('Exclusive telnet hold — fleet polling paused');
+    } catch (e) {
+      appendActivity(
+        `Exclusive hold failed: ${e instanceof Error ? e.message : 'request error'}`,
+        'warn'
+      );
+    }
+    return runId;
+  }, [machineId, appendActivity]);
+
   useEffect(() => {
     const el = activityScrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [activityLog]);
 
-  // Live machine snapshot from the poller while a dialog request is in flight.
+  // Server probe_progress → ACTIVITY (preferred over poller Live lines).
+  useEffect(() => {
+    if (!dialogOpen) return;
+    return subscribeProbeProgress(machineId, (ev) => {
+      const runId = clientRunIdRef.current;
+      if (runId && ev.client_run_id && ev.client_run_id !== runId) return;
+      gotProbeProgressRef.current = true;
+      lastProgressAtRef.current = Date.now();
+      let msg = ev.message || `${ev.api_step}/${ev.phase}`;
+      if (ev.snap) {
+        msg += ` · prd3=${ev.snap.prd3_status ?? '—'} op=${ev.snap.operation_status ?? '—'}`;
+      }
+      if (typeof ev.elapsed_s === 'number') {
+        msg += ` (${ev.elapsed_s.toFixed(1)}s)`;
+      }
+      if (lastProgressMsgRef.current === msg) return;
+      lastProgressMsgRef.current = msg;
+      const level: ActivityLevel =
+        ev.phase === 'error' ? 'fail' : ev.final && ev.phase === 'complete' ? 'ok' : 'info';
+      appendActivity(msg, level);
+    });
+  }, [dialogOpen, machineId, subscribeProbeProgress, appendActivity]);
+
+  // End exclusive hold when dialog closes; also on unmount.
+  useEffect(() => {
+    if (dialogOpen) return;
+    void endExclusiveHold();
+  }, [dialogOpen, endExclusiveHold]);
+
+  useEffect(() => {
+    return () => {
+      void endExclusiveHold();
+    };
+  }, [endExclusiveHold]);
+
+  // Fallback poller Live lines only until the first probe_progress event.
   useEffect(() => {
     if (!dialogOpen || stepUi !== 'busy') return;
+    if (gotProbeProgressRef.current) return;
     const line = formatLiveMachineLine(
       machineStatus,
       memMode,
@@ -308,7 +392,8 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     appendActivity,
   ]);
 
-  // Honest heartbeat while waiting on a long server call.
+  // Thin heartbeat only if WS probe_progress has been silent >3s after first event,
+  // or no progress yet after 5s.
   useEffect(() => {
     if (!dialogOpen || stepUi !== 'busy') {
       busyStartedAt.current = null;
@@ -317,13 +402,21 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     if (busyStartedAt.current == null) {
       busyStartedAt.current = Date.now();
     }
-    let lastBeatSec = 0;
+    let lastBeatAt = 0;
     const id = window.setInterval(() => {
       const started = busyStartedAt.current;
       if (started == null) return;
-      const sec = Math.floor((Date.now() - started) / 1000);
-      if (sec >= 5 && sec - lastBeatSec >= 5) {
-        lastBeatSec = sec;
+      const now = Date.now();
+      const sec = Math.floor((now - started) / 1000);
+      if (gotProbeProgressRef.current) {
+        if (now - lastProgressAtRef.current >= 3000 && now - lastBeatAt >= 3000) {
+          lastBeatAt = now;
+          appendActivity(`Still waiting on server… ${sec}s`);
+        }
+        return;
+      }
+      if (sec >= 5 && now - lastBeatAt >= 5000) {
+        lastBeatAt = now;
         appendActivity(`Still waiting on server… ${sec}s`);
       }
     }, 1000);
@@ -332,24 +425,12 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
 
   function seedActivity(banner: string): ActivityLine[] {
     activitySeq.current = 0;
-    const live = formatLiveMachineLine(
-      machineStatus,
-      memMode,
-      memOperationStatus,
-      alarms
-    );
-    lastLoggedLive.current = live;
+    lastLoggedLive.current = null;
     return [
       {
         id: ++activitySeq.current,
         at: formatActivityTime(),
         msg: banner,
-        level: 'info',
-      },
-      {
-        id: ++activitySeq.current,
-        at: formatActivityTime(),
-        msg: live,
         level: 'info',
       },
     ];
@@ -365,7 +446,10 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     setActivityLog(seedActivity('EXECUTE — starting write macros'));
     setPhase('wizard');
     setStatusLine('Wizard: writing macros…');
-    void runWizardStep('write', { force: true });
+    void (async () => {
+      await beginExclusiveHold();
+      await runWizardStep('write', { force: true });
+    })();
   }
 
   function openPoisonDialog() {
@@ -375,12 +459,16 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     setActivityLog(seedActivity('POISON — starting sentinel write'));
     setPhase('poison');
     setStatusLine('Poisoning macros…');
-    void runPoison({ force: true });
+    void (async () => {
+      await beginExclusiveHold();
+      await runPoison({ force: true });
+    })();
   }
 
   function abortDialog() {
     if (busy) return;
     appendActivity('Aborted by operator', 'warn');
+    void endExclusiveHold();
     setPhase('idle');
     setWizardStep('write');
     setStepUi('ready');
@@ -433,6 +521,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             type: routineId,
             mode: effectiveMode,
             params,
+            client_run_id: clientRunIdRef.current,
           }),
         });
         appendActivity(`WRITE — response HTTP ${res.status}`);
@@ -480,6 +569,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             type: routineId,
             mode: effectiveMode,
             params,
+            client_run_id: clientRunIdRef.current,
           }),
         });
         appendActivity(`MOTION — response HTTP ${res.status}`);
@@ -521,7 +611,10 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/collect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ poison: true }),
+        body: JSON.stringify({
+          poison: true,
+          client_run_id: clientRunIdRef.current,
+        }),
       });
       appendActivity(`SALT — response HTTP ${res.status}`);
       const payload = await parseProbeResponse(res);
@@ -593,6 +686,10 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       }
       const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/poison`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_run_id: clientRunIdRef.current,
+        }),
       });
       appendActivity(`POISON — response HTTP ${res.status}`);
       const payload = await parseProbeResponse(res);

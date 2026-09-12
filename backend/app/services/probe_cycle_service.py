@@ -61,6 +61,14 @@ class ProbeCycleResult:
     gate_program: Optional[int] = None
 
 
+@dataclass
+class ProbeProgressCtx:
+    machine_id: int
+    api_step: str
+    client_run_id: Optional[str] = None
+    t0: float = field(default_factory=time.perf_counter)
+
+
 def _cached_machine_status(machine_id: int) -> Dict[str, Any]:
     import app.api._status_state as status_state
 
@@ -71,6 +79,43 @@ def _cached_machine_status(machine_id: int) -> Dict[str, Any]:
     if ws is None:
         return {}
     return ws.get_machine_status(machine_id) or {}
+
+
+async def emit_probe_progress(
+    ctx: Optional[ProbeProgressCtx],
+    phase: str,
+    message: str,
+    *,
+    snap: Optional["_Snap"] = None,
+    final: bool = False,
+) -> None:
+    if ctx is None:
+        return
+    import app.api._status_state as status_state
+
+    polling = status_state.polling_service
+    ws = getattr(polling, "websocket_manager", None) if polling else None
+    if ws is None or not hasattr(ws, "broadcast_probe_progress"):
+        return
+    payload: Dict[str, Any] = {
+        "machine_id": ctx.machine_id,
+        "api_step": ctx.api_step,
+        "phase": phase,
+        "message": message,
+        "elapsed_s": round(time.perf_counter() - ctx.t0, 3),
+        "final": final,
+    }
+    if ctx.client_run_id:
+        payload["client_run_id"] = ctx.client_run_id
+    if snap is not None:
+        payload["snap"] = {
+            "prd3_status": snap.prd3_status,
+            "operation_status": snap.operation_status,
+        }
+    try:
+        await ws.broadcast_probe_progress(payload)
+    except Exception:
+        logger.debug("probe_progress broadcast failed", exc_info=True)
 
 
 @dataclass
@@ -147,12 +192,20 @@ async def _wait_until(
     timeout_s: float,
     poll_s: float,
     unreadable_limit: int = 5,
+    progress: Optional[ProbeProgressCtx] = None,
+    progress_phase: str = "waiting_complete",
 ) -> _Snap:
     deadline = time.perf_counter() + timeout_s
     last = _Snap()
     unreadable_streak = 0
     while time.perf_counter() < deadline:
         last = await _snapshot(client, control_version)
+        await emit_probe_progress(
+            progress,
+            progress_phase,
+            f"Waiting for {label} (prd3={last.prd3_status!r} op={last.operation_status!r})",
+            snap=last,
+        )
         if _snap_unreadable(last):
             unreadable_streak += 1
             if unreadable_streak >= unreadable_limit:
@@ -276,26 +329,50 @@ async def _memstrt_catalog_target(client: Any, program: int) -> None:
         raise RuntimeError(f"MEMSTRT {program:04d} failed: {status} ({desc})")
 
 
-async def poison_probe_macros(db_machine: Machine) -> ProbeCycleResult:
+async def poison_probe_macros(
+    db_machine: Machine,
+    *,
+    client_run_id: Optional[str] = None,
+) -> ProbeCycleResult:
     """Write sentinel values to all probe job macros without starting a cycle."""
     from app.clients.telnet_client import create_fresh_connection
 
     t0 = time.perf_counter()
+    progress = ProbeProgressCtx(
+        machine_id=db_machine.id,
+        api_step="poison",
+        client_run_id=client_run_id,
+        t0=t0,
+    )
     client = None
     try:
+        await emit_probe_progress(progress, "connect", "Connecting for poison…")
         client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
             timeout=15,
         )
+        await emit_probe_progress(progress, "poisoning", "Writing sentinel macros…")
         written = await _poison_macros(client)
         if not written:
+            await emit_probe_progress(
+                progress,
+                "error",
+                "No poison macros were written (WRTMCNM failed)",
+                final=True,
+            )
             return ProbeCycleResult(
                 ok=False,
                 phase="poisoning",
                 error="No poison macros were written (WRTMCNM failed)",
                 elapsed_s=time.perf_counter() - t0,
             )
+        await emit_probe_progress(
+            progress,
+            "complete",
+            f"Poisoned {len(written)} macros",
+            final=True,
+        )
         return ProbeCycleResult(
             ok=True,
             phase="poisoned",
@@ -304,6 +381,7 @@ async def poison_probe_macros(db_machine: Machine) -> ProbeCycleResult:
         )
     except Exception as e:
         logger.exception("probe poison failed for machine %s", db_machine.id)
+        await emit_probe_progress(progress, "error", str(e), final=True)
         return ProbeCycleResult(
             ok=False,
             phase="error",
@@ -321,14 +399,23 @@ async def write_probe_macros(
     routine_id: str,
     mode: str,
     params: Dict[str, float],
+    *,
+    client_run_id: Optional[str] = None,
 ) -> ProbeCycleResult:
     """Validate + write job macros only. Does not MEMSTRT / cause motion."""
     from app.clients.telnet_client import create_fresh_connection
 
     t0 = time.perf_counter()
+    progress = ProbeProgressCtx(
+        machine_id=machine_id,
+        api_step="write",
+        client_run_id=client_run_id,
+        t0=t0,
+    )
     try:
         resolved, writes = validate_run_params(routine_id, mode, params)
     except ProbeCatalogError as e:
+        await emit_probe_progress(progress, "error", str(e), final=True)
         return ProbeCycleResult(
             ok=False,
             routine_id=routine_id,
@@ -343,6 +430,7 @@ async def write_probe_macros(
     phase = "connect"
 
     try:
+        await emit_probe_progress(progress, "connect", "Connecting for macro write…")
         client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
@@ -350,8 +438,15 @@ async def write_probe_macros(
         )
 
         phase = "safety"
+        await emit_probe_progress(progress, "safety", "Checking machine safety…")
         safe, err, status_data = await _ensure_safety(db_machine, machine_id, client)
         if not safe:
+            await emit_probe_progress(
+                progress,
+                "error",
+                err or "Machine not safe for macro write",
+                final=True,
+            )
             return ProbeCycleResult(
                 ok=False,
                 target_program=target_program,
@@ -366,9 +461,16 @@ async def write_probe_macros(
         # Same gate as execute_macro_write: safety already blocks operating.
         # Do not idle-poll here — empty MEM/PRD3 reads never look "idle" and hang.
         phase = "writing"
+        await emit_probe_progress(progress, "writing", "Writing job macros…")
         await _ensure_root_folder(client)
         await _write_macros(client, writes)
 
+        await emit_probe_progress(
+            progress,
+            "complete",
+            f"Wrote {len(writes)} macros",
+            final=True,
+        )
         return ProbeCycleResult(
             ok=True,
             program=target_program,
@@ -387,6 +489,7 @@ async def write_probe_macros(
             routine_id,
             phase,
         )
+        await emit_probe_progress(progress, "error", str(e), final=True)
         return ProbeCycleResult(
             ok=False,
             target_program=target_program,
@@ -412,6 +515,7 @@ async def start_probe_program(
     folder: str = DEFAULT_FOLDER,
     poll_s: float = DEFAULT_POLL_S,
     start_timeout_s: float = DEFAULT_START_TIMEOUT_S,
+    client_run_id: Optional[str] = None,
 ) -> ProbeCycleResult:
     """
     MEMSTRT the catalog target program (motion). Allowlisted O-numbers only.
@@ -422,9 +526,16 @@ async def start_probe_program(
     from app.clients.telnet_client import create_fresh_connection
 
     t0 = time.perf_counter()
+    progress = ProbeProgressCtx(
+        machine_id=machine_id,
+        api_step="start",
+        client_run_id=client_run_id,
+        t0=t0,
+    )
     try:
         resolved, _writes = validate_run_params(routine_id, mode, params)
     except ProbeCatalogError as e:
+        await emit_probe_progress(progress, "error", str(e), final=True)
         return ProbeCycleResult(
             ok=False,
             routine_id=routine_id,
@@ -440,6 +551,7 @@ async def start_probe_program(
     phase = "connect"
 
     try:
+        await emit_probe_progress(progress, "connect", "Connecting for MEMSTRT…")
         client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
@@ -447,8 +559,15 @@ async def start_probe_program(
         )
 
         phase = "safety"
+        await emit_probe_progress(progress, "safety", "Checking machine safety…")
         safe, err, status_data = await _ensure_safety(db_machine, machine_id, client)
         if not safe:
+            await emit_probe_progress(
+                progress,
+                "error",
+                err or "Machine not safe for probe start",
+                final=True,
+            )
             return ProbeCycleResult(
                 ok=False,
                 program=target_program,
@@ -464,6 +583,7 @@ async def start_probe_program(
         await _ensure_root_folder(client)
 
         phase = "idle_wait"
+        await emit_probe_progress(progress, "idle_wait", "Waiting for idle before MEMSTRT…")
         await _wait_until(
             client,
             control_version,
@@ -471,9 +591,16 @@ async def start_probe_program(
             label="idle before MEMSTRT",
             timeout_s=start_timeout_s,
             poll_s=poll_s,
+            progress=progress,
+            progress_phase="idle_wait",
         )
 
         phase = "starting"
+        await emit_probe_progress(
+            progress,
+            "starting",
+            f"MEMSTRT O{target_program:04d}…",
+        )
         ok, status = await client.change_mode("MEM", verbose=False)
         if not ok:
             desc = client.get_status_description(status or "00")
@@ -490,6 +617,7 @@ async def start_probe_program(
             await client.change_folder("/", verbose=False)
 
         phase = "running"
+        await emit_probe_progress(progress, "running", "Waiting for program start…")
         # Short Blum cycles can finish before the first poll sees "operating".
         # Wait at least 1s before treating idle as "already done" so we don't
         # race the MEMSTRT start latch.
@@ -499,6 +627,12 @@ async def start_probe_program(
         last = _Snap()
         while time.perf_counter() < start_deadline:
             last = await _snapshot(client, control_version)
+            await emit_probe_progress(
+                progress,
+                "running",
+                f"Waiting for start (prd3={last.prd3_status!r} op={last.operation_status!r})",
+                snap=last,
+            )
             if _snap_unreadable(last):
                 await asyncio.sleep(poll_s)
                 continue
@@ -520,6 +654,13 @@ async def start_probe_program(
                 f"(prd3={last.prd3_status!r} op={last.operation_status!r})"
             )
 
+        await emit_probe_progress(
+            progress,
+            "complete",
+            f"O{target_program:04d} started",
+            snap=last,
+            final=True,
+        )
         return ProbeCycleResult(
             ok=True,
             program=target_program,
@@ -542,6 +683,7 @@ async def start_probe_program(
                 await client.change_folder("/", verbose=False)
             except Exception:
                 pass
+        await emit_probe_progress(progress, "error", str(e), final=True)
         return ProbeCycleResult(
             ok=False,
             program=target_program,
@@ -561,9 +703,10 @@ async def collect_probe_results(
     db_machine: Machine,
     machine_id: int,
     *,
-    poll_s: float = DEFAULT_COLLECT_POLL_S,
+    poll_s: Optional[float] = None,
     cycle_timeout_s: float = DEFAULT_CYCLE_TIMEOUT_S,
     poison: bool = True,
+    client_run_id: Optional[str] = None,
 ) -> ProbeCycleResult:
     """Wait for cycle complete, read #100+, optionally poison.
 
@@ -571,14 +714,24 @@ async def collect_probe_results(
     the control was busy and could trigger CM7522 (abnormal end command).
     """
     from app.clients.telnet_client import create_fresh_connection
+    from app.services.probe_exclusive import collect_poll_seconds
 
     t0 = time.perf_counter()
+    progress = ProbeProgressCtx(
+        machine_id=machine_id,
+        api_step="collect",
+        client_run_id=client_run_id,
+        t0=t0,
+    )
+    if poll_s is None:
+        poll_s = collect_poll_seconds(machine_id, DEFAULT_COLLECT_POLL_S)
     control_version = db_machine.control_version or "C00"
     client = None
     phase = "connect"
     results: Dict[str, Optional[float]] = {}
 
     try:
+        await emit_probe_progress(progress, "connect", "Connecting for collect…")
         client = await create_fresh_connection(
             ip_address=db_machine.ip_address,
             port=10000,
@@ -588,6 +741,11 @@ async def collect_probe_results(
         await _ensure_root_folder(client)
 
         phase = "waiting_complete"
+        await emit_probe_progress(
+            progress,
+            "waiting_complete",
+            f"Waiting for cycle complete (poll {poll_s:.2f}s)…",
+        )
         await _wait_until(
             client,
             control_version,
@@ -595,6 +753,8 @@ async def collect_probe_results(
             label="cycle complete",
             timeout_s=cycle_timeout_s,
             poll_s=poll_s,
+            progress=progress,
+            progress_phase="waiting_complete",
         )
 
         # Let M30 / mode settle before REDMCNM / WRTMCNM bursts.
@@ -602,14 +762,23 @@ async def collect_probe_results(
         await _ensure_root_folder(client)
 
         phase = "reading"
+        await emit_probe_progress(progress, "reading", "Reading result macros #100+…")
         results = await _read_results(client)
 
         macros_written: Dict[int, float] = {}
         if poison:
             phase = "poisoning"
+            await emit_probe_progress(progress, "poisoning", "Salting job macros…")
             # Refuse salt while still cutting — avoids CM7522 / status 32 storms.
             snap = await _snapshot(client, control_version)
             if _is_running(snap):
+                await emit_probe_progress(
+                    progress,
+                    "error",
+                    "Results read, but machine still running — skipped salt",
+                    snap=snap,
+                    final=True,
+                )
                 return ProbeCycleResult(
                     ok=False,
                     results=results,
@@ -622,6 +791,12 @@ async def collect_probe_results(
                 )
             macros_written = await _poison_macros(client)
             if not macros_written:
+                await emit_probe_progress(
+                    progress,
+                    "error",
+                    "Results read, but salt/poison wrote no macros",
+                    final=True,
+                )
                 return ProbeCycleResult(
                     ok=False,
                     results=results,
@@ -630,6 +805,12 @@ async def collect_probe_results(
                     elapsed_s=time.perf_counter() - t0,
                 )
 
+        await emit_probe_progress(
+            progress,
+            "complete",
+            "Collect complete",
+            final=True,
+        )
         return ProbeCycleResult(
             ok=True,
             results=results,
@@ -639,6 +820,7 @@ async def collect_probe_results(
         )
     except Exception as e:
         logger.exception("probe collect failed machine=%s phase=%s", machine_id, phase)
+        await emit_probe_progress(progress, "error", str(e), final=True)
         return ProbeCycleResult(
             ok=False,
             results=results or {},

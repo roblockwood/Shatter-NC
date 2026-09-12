@@ -2,7 +2,11 @@ import React, { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useDemoWebSocket } from '../demo/useDemoWebSocket';
-import type { MachineStatus, CompressorStatus } from '../hooks/useWebSocket';
+import type {
+  MachineStatus,
+  CompressorStatus,
+  ProbeProgressCallback,
+} from '../hooks/useWebSocket';
 import { WS_URL } from '../config/api';
 import { IS_DEMO_MODE } from '../config/demo';
 
@@ -14,6 +18,10 @@ interface WebSocketContextType {
   addMachine: (machine: MachineStatus) => void;
   removeCompressor: (compressorId: number) => void;
   addCompressor: (compressor: CompressorStatus) => void;
+  subscribeProbeProgress: (
+    machineId: number,
+    cb: ProbeProgressCallback
+  ) => () => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);

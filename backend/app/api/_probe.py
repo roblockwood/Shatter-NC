@@ -2,6 +2,7 @@
 
 Routes:
     GET  /{machine_id}/probe/catalog  — Blum routine catalog
+    POST /{machine_id}/probe/exclusive — begin/end exclusive telnet hold
     POST /{machine_id}/probe/write    — write job macros only (no motion)
     POST /{machine_id}/probe/start    — MEMSTRT catalog target (motion)
     POST /{machine_id}/probe/collect  — wait idle, read #100+, poison
@@ -25,6 +26,12 @@ from app.services.probe_cycle_service import (
     start_probe_program,
     write_probe_macros,
 )
+from app.services.probe_exclusive import (
+    begin_exclusive,
+    end_exclusive,
+    sweep_stale_holds,
+    touch_probe_activity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +45,31 @@ class ProbeRunRequest(BaseModel):
         default_factory=dict,
         description="Macro values keyed by number (900) or field key (wcs)",
     )
+    client_run_id: Optional[str] = Field(
+        None,
+        description="Optional client UUID to filter probe_progress WebSocket events",
+    )
 
 
 class ProbeCollectRequest(BaseModel):
     poison: bool = Field(
         True,
         description="Poison job macros after reading results (default true)",
+    )
+    client_run_id: Optional[str] = Field(
+        None,
+        description="Optional client UUID to filter probe_progress WebSocket events",
+    )
+
+
+class ProbeExclusiveRequest(BaseModel):
+    active: bool = Field(..., description="True to begin exclusive hold, False to end")
+
+
+class ProbePoisonRequest(BaseModel):
+    client_run_id: Optional[str] = Field(
+        None,
+        description="Optional client UUID to filter probe_progress WebSocket events",
     )
 
 
@@ -93,11 +119,29 @@ def _raise_for_result(result: Any, payload: Dict[str, Any]) -> None:
     )
 
 
+async def _touch_and_sweep(machine_id: int) -> None:
+    await sweep_stale_holds()
+    touch_probe_activity(machine_id)
+
+
 @router.get("/{machine_id}/probe/catalog")
 async def get_probe_catalog(machine_id: int, db: Session = Depends(get_db)):
     """Return Blum probe/measure routine catalog for the Probes pane."""
     _get_machine(db, machine_id)
     return catalog_for_api()
+
+
+@router.post("/{machine_id}/probe/exclusive")
+async def post_probe_exclusive(
+    machine_id: int,
+    body: ProbeExclusiveRequest,
+    db: Session = Depends(get_db),
+):
+    """Begin/end exclusive telnet hold (pauses that machine's fleet poller)."""
+    _get_machine(db, machine_id)
+    if body.active:
+        return await begin_exclusive(machine_id)
+    return await end_exclusive(machine_id)
 
 
 @router.post("/{machine_id}/probe/write")
@@ -108,6 +152,7 @@ async def post_probe_write(
 ):
     """Write job macros only. Does not MEMSTRT or cause axis motion."""
     machine = _get_machine(db, machine_id)
+    await _touch_and_sweep(machine_id)
     logger.info(
         "Probe write requested machine=%s type=%s mode=%s",
         machine_id,
@@ -120,6 +165,7 @@ async def post_probe_write(
         routine_id=body.type,
         mode=body.mode,
         params=body.params or {},
+        client_run_id=body.client_run_id,
     )
     payload = _result_payload(result)
     _raise_for_result(result, payload)
@@ -138,6 +184,7 @@ async def post_probe_start(
     Allowlisted O-numbers only. Call /probe/write first so macros are current.
     """
     machine = _get_machine(db, machine_id)
+    await _touch_and_sweep(machine_id)
     logger.info(
         "Probe start requested machine=%s type=%s mode=%s",
         machine_id,
@@ -150,6 +197,7 @@ async def post_probe_start(
         routine_id=body.type,
         mode=body.mode,
         params=body.params or {},
+        client_run_id=body.client_run_id,
     )
     payload = _result_payload(result)
     _raise_for_result(result, payload)
@@ -164,11 +212,14 @@ async def post_probe_collect(
 ):
     """Wait for idle after motion, read #100+, optionally poison."""
     machine = _get_machine(db, machine_id)
+    await _touch_and_sweep(machine_id)
     poison = True if body is None else body.poison
+    client_run_id = None if body is None else body.client_run_id
     result = await collect_probe_results(
         db_machine=machine,
         machine_id=machine_id,
         poison=poison,
+        client_run_id=client_run_id,
     )
     payload = _result_payload(result)
     if not result.ok:
@@ -180,10 +231,16 @@ async def post_probe_collect(
 
 
 @router.post("/{machine_id}/probe/poison")
-async def post_probe_poison(machine_id: int, db: Session = Depends(get_db)):
+async def post_probe_poison(
+    machine_id: int,
+    body: Optional[ProbePoisonRequest] = None,
+    db: Session = Depends(get_db),
+):
     """Write sentinel values to probe job macros (#900-908, #920)."""
     machine = _get_machine(db, machine_id)
-    result = await poison_probe_macros(machine)
+    await _touch_and_sweep(machine_id)
+    client_run_id = None if body is None else body.client_run_id
+    result = await poison_probe_macros(machine, client_run_id=client_run_id)
     payload = _result_payload(result)
     if not result.ok:
         raise HTTPException(
