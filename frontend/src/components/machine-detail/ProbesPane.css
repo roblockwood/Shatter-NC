@@ -163,6 +163,11 @@
   flex: 1 1 auto;
 }
 
+.probes-main--atc-multi {
+  /* Wider pot grid; keep preview readable but secondary */
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 220px);
+}
+
 .probes-fields {
   display: flex;
   flex-direction: column;

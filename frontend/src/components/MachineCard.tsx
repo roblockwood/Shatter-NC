@@ -906,6 +906,15 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     alarms={machine.alarms}
                     pollTimestamp={fastPollLastSuccessAt(machine)}
                     pollIntervalSeconds={machine.poll_interval_seconds ?? 5}
+                    toolsUnified={
+                      machine.tools_unified
+                        ? {
+                            ...machine.tools_unified,
+                            spindle: machine.tools_unified.spindle ?? null,
+                          }
+                        : null
+                    }
+                    atcPockets={machine.atc_pockets ?? 21}
                   />
                 ),
               },

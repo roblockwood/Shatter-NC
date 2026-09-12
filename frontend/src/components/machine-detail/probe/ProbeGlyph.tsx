@@ -43,6 +43,21 @@ export function ProbeGlyph({ glyphId, className }: { glyphId: string; className?
           <Tip x={12} y={4.2} />
         </Frame>
       );
+    case 'tool_length_multi':
+      return (
+        <Frame className={className}>
+          <ellipse cx="12" cy="20" rx="7" ry="1.8" />
+          <path d="M5 20 L5 12 Q5 9 12 9 Q19 9 19 12 L19 20" />
+          <ellipse cx="12" cy="9" rx="5" ry="1.4" />
+          {/* three tool tips in a row */}
+          <line x1="6" y1="2" x2="6" y2="6" />
+          <Tip x={6} y={6} />
+          <line x1="12" y1="1" x2="12" y2="5.5" />
+          <Tip x={12} y={5.5} />
+          <line x1="18" y1="2" x2="18" y2="6" />
+          <Tip x={18} y={6} />
+        </Frame>
+      );
     case 'face_x_plus':
       return (
         <Frame className={className}>

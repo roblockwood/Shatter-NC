@@ -131,6 +131,22 @@
       "view": "tool"
     },
     {
+      "id": "tool_length_multi",
+      "category": "tool",
+      "label": "Tool length · multi",
+      "prerequisites": "Select occupied ATC pots; table tool setter clear. Shatter runs O8100 once per tool.",
+      "field_labels": {},
+      "modes": {
+        "probe": {
+          "program": 8100,
+          "macros": []
+        }
+      },
+      "glyph_id": "tool_length_multi",
+      "view": "tool",
+      "selection": "atc_multi"
+    },
+    {
       "id": "single_face_x_plus",
       "category": "single_face",
       "label": "X+ face",

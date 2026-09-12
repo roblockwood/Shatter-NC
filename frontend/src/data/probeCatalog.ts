@@ -28,6 +28,8 @@ export interface ProbeRoutine {
   prerequisites?: string;
   field_labels?: Record<string, string>;
   modes: Partial<Record<ProbeMode, ProbeModeEntry>>;
+  /** atc_multi = ATC pot multi-select instead of scalar macros */
+  selection?: 'atc_multi' | string;
 }
 
 export interface ProbeCatalog {

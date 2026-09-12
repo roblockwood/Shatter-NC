@@ -1,0 +1,127 @@
+.atc-pot-select {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.atc-pot-select-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.atc-pot-select-title {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-xs, 11px);
+  color: var(--color-text-muted, #888);
+  letter-spacing: 0.04em;
+}
+
+.atc-pot-select-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.atc-pot-select-link {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #00ff00;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.atc-pot-select-link:hover:not(:disabled) {
+  color: #33ff33;
+}
+
+.atc-pot-select-link:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.atc-pot-select-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr));
+  gap: 4px;
+}
+
+.atc-pot-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  margin: 0;
+  padding: 5px 6px 4px;
+  border: 1px solid #2a2a2a;
+  background: #0a0a0a;
+  color: #888;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  text-align: left;
+  cursor: pointer;
+  min-height: 2.8rem;
+}
+
+.atc-pot-cell--full {
+  color: #c8c8c8;
+  border-color: #3a3a3a;
+}
+
+.atc-pot-cell--full:hover:not(:disabled) {
+  border-color: #00ff00;
+  color: #e0e0e0;
+}
+
+.atc-pot-cell--selected {
+  border-color: #00ff00;
+  box-shadow: inset 0 0 0 1px #00ff00;
+  color: #00ff00;
+}
+
+.atc-pot-cell--empty {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.atc-pot-cell:disabled {
+  cursor: not-allowed;
+}
+
+.atc-pot-cell-swatch {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  bottom: 0;
+}
+
+.atc-pot-cell-pot {
+  font-size: 9px;
+  color: #666;
+  line-height: 1.1;
+}
+
+.atc-pot-cell--selected .atc-pot-cell-pot {
+  color: #33ff33;
+}
+
+.atc-pot-cell-tool {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.atc-pot-cell-meta {
+  font-size: 8px;
+  color: #666;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

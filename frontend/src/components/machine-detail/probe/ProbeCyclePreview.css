@@ -31,6 +31,18 @@
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
 }
 
+.probe-cycle-preview-queue {
+  flex: 0 0 auto;
+  color: #00ff00;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .probe-cycle-preview-svg {
   width: 100%;
   flex: 1 1 0%;
