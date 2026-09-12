@@ -256,7 +256,7 @@ async def _ensure_safety(
 
 async def _write_macros(client: Any, writes: Dict[int, float]) -> None:
     for macro, value in writes.items():
-        ok, status, _ = await client.write_macro_variable(
+        ok, status, verified = await client.write_macro_variable(
             macro_number=macro,
             value=value,
             verbose=False,
@@ -264,7 +264,10 @@ async def _write_macros(client: Any, writes: Dict[int, float]) -> None:
         )
         if not ok:
             desc = client.get_status_description(status or "00")
-            raise RuntimeError(f"Failed writing #{macro}={value}: {status} ({desc})")
+            detail = f"Failed writing #{macro}={value}: {status} ({desc})"
+            if status == "verify_mismatch" and verified is not None:
+                detail += f" read_back={verified}"
+            raise RuntimeError(detail)
 
 
 async def _poison_macros(

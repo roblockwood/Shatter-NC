@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.clients._telnet_write_ops import format_macro_set_value
+from app.clients._telnet_write_ops import format_macro_set_value, macro_values_match
 from app.clients.telnet_client import CNCTelnetClient
 from tests.helpers import FakeReader, FakeWriter, make_brother_response
 
@@ -143,8 +143,35 @@ async def test_write_tool_offset_success():
 def test_format_macro_set_value_twelve_bytes():
     assert len(format_macro_set_value(42.0)) == 12
     assert format_macro_set_value(42.0).strip() == "42"
-    assert format_macro_set_value(12.5).strip() == "12.5000"
+    assert format_macro_set_value(12.5).strip() == "12.5"
+    assert format_macro_set_value(12.5) == "        12.5"
     assert format_macro_set_value(5.0) == "           5"
+    assert format_macro_set_value(0.1234).strip() == "0.123"
+    assert format_macro_set_value(10.25).strip() == "10.25"
+    # Four-place payloads are rejected by Brother (status 30)
+    assert "." not in format_macro_set_value(54.0)
+    assert len(format_macro_set_value(12.5).split(".")[-1]) <= 3 if "." in format_macro_set_value(12.5) else True
+
+
+def test_macro_values_match_tolerates_brother_float_noise():
+    # Live C00 read-back for WCS #900=54 was 54.00012 (old 1e-4 tol failed).
+    assert macro_values_match(54.0, 54.00012)
+    assert macro_values_match(10.0, 10.00005)
+    assert macro_values_match(999.0, 999.00015)
+    assert not macro_values_match(54.0, 0.0)
+    assert not macro_values_match(54.0, 55.0)
+
+
+@pytest.mark.asyncio
+async def test_write_macro_variable_verify_tolerates_noise(monkeypatch):
+    client, writer = _connected(make_brother_response("WRTMCNM", status="00"))
+    monkeypatch.setattr(
+        client, "_fetch_macro_variable_unlocked", AsyncMock(return_value=54.00012)
+    )
+    ok, status, verified = await client.write_macro_variable(900, 54.0, verify=True)
+    assert ok is True
+    assert status == "00"
+    assert verified == pytest.approx(54.00012)
 
 
 @pytest.mark.asyncio
