@@ -31,18 +31,14 @@ describe('probeCatalog', () => {
     ]);
   });
 
-  it('tool_length has probe only', () => {
-    expect(resolveProgram('tool_length', 'probe')?.program).toBe(8100);
-    expect(resolveProgram('tool_length', 'measure')).toBeNull();
-  });
-
-  it('tool_length_multi is ATC multi-select with empty macros', () => {
-    const entry = resolveProgram('tool_length_multi', 'probe');
+  it('tool_length is ATC select with #920 for single writes', () => {
+    const entry = resolveProgram('tool_length', 'probe');
     expect(entry?.program).toBe(8100);
-    expect(entry?.macros).toEqual([]);
-    const routine = probeCatalog.routines.find((r) => r.id === 'tool_length_multi');
+    expect(entry?.macros).toEqual(['920']);
+    const routine = probeCatalog.routines.find((r) => r.id === 'tool_length');
     expect(routine?.selection).toBe('atc_multi');
-    expect(resolveProgram('tool_length_multi', 'measure')).toBeNull();
+    expect(resolveProgram('tool_length', 'measure')).toBeNull();
+    expect(probeCatalog.routines.find((r) => r.id === 'tool_length_multi')).toBeUndefined();
   });
 
   it('detects poison and wcs rules', () => {

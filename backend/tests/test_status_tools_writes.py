@@ -245,6 +245,9 @@ async def test_batch_apply_tool_changes_mixed_success(monkeypatch):
         assert result.successful == 4
         assert result.failed == 0
         assert call_order == ["delete", "assignment", "color", "offset"]
+        _state.polling_service.pause_machine_polling.assert_called_with(1, reason="tool_write")
+        _state.polling_service.resume_machine_polling.assert_called_with(1)
+        _state.polling_service.refresh_tool_data.assert_awaited_once_with(1)
     finally:
         _state.polling_service = None
 

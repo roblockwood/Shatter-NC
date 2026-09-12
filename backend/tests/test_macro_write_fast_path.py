@@ -163,6 +163,8 @@ async def test_execute_macro_write_uses_cache_only(monkeypatch):
     telnet.write_macro_variable.assert_awaited_once_with(
         macro_number=920, value=12.0, verbose=False, verify=True
     )
+    polling.pause_machine_polling.assert_called_with(1, reason="macro_write")
+    polling.resume_machine_polling.assert_called_with(1)
 
 
 @pytest.mark.asyncio

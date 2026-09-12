@@ -1,5 +1,5 @@
 /** ATC pot multi-select grid for multi-tool length measure. */
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { UnifiedToolView } from '../../../utils/unifiedToolView';
 import './AtcPotSelectGrid.css';
 
@@ -43,6 +43,22 @@ function parsePot(pot: string | number | undefined): number | null {
   if (typeof pot === 'string' && pot.toUpperCase() === 'SPINDLE') return null;
   const n = typeof pot === 'number' ? pot : Number.parseInt(String(pot), 10);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Prefer a rectangular grid matching container aspect (not one long row). */
+export function idealAtcColumns(count: number, aspectWOverH = 1.2): number {
+  if (count <= 1) return 1;
+  const aspect = Math.max(0.55, Math.min(2.8, aspectWOverH));
+  let cols = Math.round(Math.sqrt(count * aspect));
+  cols = Math.max(2, Math.min(count, cols));
+  // If last row would be a single orphan cell, tighten columns when possible.
+  if (count % cols === 1 && cols > 3) {
+    const alt = cols - 1;
+    if (Math.ceil(count / alt) <= Math.ceil(count / cols) + 1) {
+      cols = alt;
+    }
+  }
+  return cols;
 }
 
 export function buildAtcPotCells(
@@ -129,6 +145,25 @@ export const AtcPotSelectGrid: React.FC<AtcPotSelectGridProps> = ({
   );
   const selected = useMemo(() => new Set(selectedPots), [selectedPots]);
   const fullCount = cells.filter((c) => !c.empty && c.toolNumber != null).length;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [cols, setCols] = useState(() => idealAtcColumns(cells.length));
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const n = cells.length;
+    const update = () => {
+      const w = el.clientWidth || 1;
+      const h = el.clientHeight || 0;
+      // Until laid out with height, bias slightly wider than square.
+      const aspect = h > 48 ? w / h : 1.25;
+      setCols(idealAtcColumns(n, aspect));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [cells.length]);
 
   function toggle(cell: AtcPotCell) {
     if (disabled || cell.empty || cell.toolNumber == null) return;
@@ -153,7 +188,7 @@ export const AtcPotSelectGrid: React.FC<AtcPotSelectGridProps> = ({
   }
 
   return (
-    <div className="atc-pot-select">
+    <div className="atc-pot-select" ref={rootRef}>
       <div className="atc-pot-select-header">
         <span className="atc-pot-select-title">
           ATC POTS · {selectedPots.length} selected / {fullCount} full
@@ -179,6 +214,7 @@ export const AtcPotSelectGrid: React.FC<AtcPotSelectGridProps> = ({
       </div>
       <div
         className="atc-pot-select-grid"
+        style={{ ['--atc-cols' as string]: String(cols) }}
         role="group"
         aria-label="ATC pot multi-select for tool length measure"
       >

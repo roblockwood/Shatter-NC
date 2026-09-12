@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildAtcPotCells } from '../components/machine-detail/probe/AtcPotSelectGrid';
+import {
+  buildAtcPotCells,
+  idealAtcColumns,
+} from '../components/machine-detail/probe/AtcPotSelectGrid';
 import type { UnifiedToolView } from '../utils/unifiedToolView';
 
 describe('buildAtcPotCells', () => {
@@ -42,5 +45,18 @@ describe('buildAtcPotCells', () => {
       length: 45,
     });
     expect(cells[3]).toMatchObject({ pot: 4, empty: true, isCap: true });
+  });
+});
+
+describe('idealAtcColumns', () => {
+  it('aims for a near-square layout for common ATC sizes', () => {
+    expect(idealAtcColumns(21, 1)).toBeGreaterThanOrEqual(4);
+    expect(idealAtcColumns(21, 1)).toBeLessThanOrEqual(6);
+    expect(idealAtcColumns(14, 1.2)).toBeGreaterThanOrEqual(3);
+    expect(idealAtcColumns(14, 1.2)).toBeLessThanOrEqual(5);
+  });
+
+  it('uses more columns when the container is wide', () => {
+    expect(idealAtcColumns(21, 2.2)).toBeGreaterThan(idealAtcColumns(21, 0.7));
   });
 });

@@ -137,6 +137,7 @@ function TabletPaneContent({
                 : null
             }
             atcPockets={machine.atc_pockets ?? 21}
+            units={machine.units ?? 'in'}
           />
         </div>
       );

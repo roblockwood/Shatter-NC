@@ -915,9 +915,9 @@ export function buildProbeSim3D(
 
   switch (routineId) {
     case 'tool_length':
-      return toolLength();
-    case 'tool_length_multi':
-      return toolLengthMulti(opts?.toolCount ?? 3);
+      return (opts?.toolCount ?? 1) > 1
+        ? toolLengthMulti(opts!.toolCount!)
+        : toolLength();
     case 'single_face_x_plus':
       return singleFace('x', 15);
     case 'single_face_x_minus':

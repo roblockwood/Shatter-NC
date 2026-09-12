@@ -15,7 +15,8 @@ Routes:
     PUT  /{machine_id}/tools/measurement-tool         — set macro #920 (measurement tool)
 """
 from datetime import datetime
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
 from sqlalchemy.orm import Session
 from app.db.base import get_db
@@ -37,6 +38,30 @@ router = APIRouter()
 MEASUREMENT_TOOL_MACRO = 920
 
 _MACRO_WRITE_RETRY_CODES = ("32", "36", "37", "63", "verify_failed", "verify_mismatch")
+
+
+@asynccontextmanager
+async def _exclusive_fresh_telnet(
+    db_machine: Machine,
+    machine_id: int,
+    *,
+    reason: str = "tool_write",
+    timeout: int = 10,
+) -> AsyncIterator:
+    """Pause fleet polling and open a dedicated telnet session for one write."""
+    from app.clients.telnet_client import create_fresh_connection
+    from app.services.probe_exclusive import exclusive_session
+
+    async with exclusive_session(machine_id, reason=reason):
+        client = await create_fresh_connection(
+            ip_address=db_machine.ip_address,
+            port=10000,
+            timeout=timeout,
+        )
+        try:
+            yield client
+        finally:
+            await client.disconnect()
 
 
 async def _run_macro_write(
@@ -198,21 +223,16 @@ async def change_tool_color(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import CNCTelnetClient, create_fresh_connection
+        from app.clients.telnet_client import CNCTelnetClient
 
-        telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
-            timeout=10
-        )
-
-        success, status_code = await telnet_client.change_atc_tool(
-            operation_type='C',
-            magazine_pos=pot_number,
-            tool_num=tool_number,
-            new_value=color,
-            verbose=True
-        )
+        async with _exclusive_fresh_telnet(db_machine, machine_id) as telnet_client:
+            success, status_code = await telnet_client.change_atc_tool(
+                operation_type='C',
+                magazine_pos=pot_number,
+                tool_num=tool_number,
+                new_value=color,
+                verbose=True
+            )
 
         logger.info(f"Color change result: success={success}, status_code={status_code}")
 
@@ -444,18 +464,12 @@ async def change_tool_assignment(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import create_fresh_connection
-        telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
-            timeout=10
-        )
-
-        success, status_code = await telnet_client.assign_tool_to_pot(
-            pot_number=pot_number,
-            tool_number=tool_number,
-            verbose=True
-        )
+        async with _exclusive_fresh_telnet(db_machine, machine_id) as telnet_client:
+            success, status_code = await telnet_client.assign_tool_to_pot(
+                pot_number=pot_number,
+                tool_number=tool_number,
+                verbose=True
+            )
 
         from app.services.audit_logger import AuditLogger
         from app.clients.telnet_client import CNCTelnetClient
@@ -558,18 +572,12 @@ async def change_tool_type(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import create_fresh_connection
-        telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
-            timeout=10
-        )
-
-        success, status_code = await telnet_client.change_tool_type(
-            pot_number=pot_number,
-            tool_type=tool_type,
-            verbose=True
-        )
+        async with _exclusive_fresh_telnet(db_machine, machine_id) as telnet_client:
+            success, status_code = await telnet_client.change_tool_type(
+                pot_number=pot_number,
+                tool_type=tool_type,
+                verbose=True
+            )
 
         from app.services.audit_logger import AuditLogger
         from app.clients.telnet_client import CNCTelnetClient
@@ -669,18 +677,12 @@ async def delete_tool_from_pot(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import create_fresh_connection
-        telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
-            timeout=10
-        )
-
-        success, status_code = await telnet_client.remove_tool_from_pot(
-            pot_number=pot_number,
-            tool_number=tool_number,
-            verbose=True
-        )
+        async with _exclusive_fresh_telnet(db_machine, machine_id) as telnet_client:
+            success, status_code = await telnet_client.remove_tool_from_pot(
+                pot_number=pot_number,
+                tool_number=tool_number,
+                verbose=True
+            )
 
         from app.services.audit_logger import AuditLogger
         from app.clients.telnet_client import CNCTelnetClient
@@ -774,17 +776,11 @@ async def change_spindle_tool(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import create_fresh_connection
-        telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
-            timeout=10
-        )
-
-        success, status_code = await telnet_client.change_spindle_tool(
-            tool_number=tool_number,
-            verbose=True
-        )
+        async with _exclusive_fresh_telnet(db_machine, machine_id) as telnet_client:
+            success, status_code = await telnet_client.change_spindle_tool(
+                tool_number=tool_number,
+                verbose=True
+            )
 
         from app.services.audit_logger import AuditLogger
         from app.clients.telnet_client import CNCTelnetClient
@@ -886,19 +882,13 @@ async def set_tool_life(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import create_fresh_connection
-        telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
-            timeout=10
-        )
-
-        success, status_code = await telnet_client.write_tool_life(
-            tool_number=tool_number,
-            life_value=life_value,
-            life_type=life_type,
-            verbose=True
-        )
+        async with _exclusive_fresh_telnet(db_machine, machine_id) as telnet_client:
+            success, status_code = await telnet_client.write_tool_life(
+                tool_number=tool_number,
+                life_value=life_value,
+                life_type=life_type,
+                verbose=True
+            )
 
         from app.services.audit_logger import AuditLogger
         from app.clients.telnet_client import CNCTelnetClient
@@ -998,19 +988,13 @@ async def set_tool_offset(
                 detail=error_message or "Machine is not in a safe state for this operation",
             )
 
-        from app.clients.telnet_client import create_fresh_connection
-        telnet_client = await create_fresh_connection(
-            ip_address=db_machine.ip_address,
-            port=10000,
-            timeout=10
-        )
-
-        success, status_code = await telnet_client.write_tool_offset(
-            tool_number=tool_number,
-            offset_type=offset_type,
-            value=value,
-            verbose=True
-        )
+        async with _exclusive_fresh_telnet(db_machine, machine_id) as telnet_client:
+            success, status_code = await telnet_client.write_tool_offset(
+                tool_number=tool_number,
+                offset_type=offset_type,
+                value=value,
+                verbose=True
+            )
 
         from app.services.audit_logger import AuditLogger
         from app.clients.telnet_client import CNCTelnetClient

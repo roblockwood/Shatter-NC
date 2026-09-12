@@ -49,19 +49,13 @@ def test_resolve_diameter_inside_measure():
 def test_tool_length_probe_only():
     resolved = resolve_routine("tool_length", "probe")
     assert resolved["program"] == 8100
+    assert resolved["macros"] == ["920"]
     with pytest.raises(ProbeCatalogError):
         resolve_routine("tool_length", "measure")
-
-
-def test_tool_length_multi_probe_only_empty_macros():
-    resolved = resolve_routine("tool_length_multi", "probe")
-    assert resolved["program"] == 8100
-    assert resolved["macros"] == []
-    with pytest.raises(ProbeCatalogError):
-        resolve_routine("tool_length_multi", "measure")
     cat = load_probe_catalog()
-    routine = next(r for r in cat["routines"] if r["id"] == "tool_length_multi")
+    routine = next(r for r in cat["routines"] if r["id"] == "tool_length")
     assert routine.get("selection") == "atc_multi"
+    assert not any(r["id"] == "tool_length_multi" for r in cat["routines"])
 
 
 def test_validate_run_params_ok():

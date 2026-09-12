@@ -41,6 +41,8 @@ export interface ProbesPaneProps {
   pollIntervalSeconds?: number;
   toolsUnified?: UnifiedToolView | null;
   atcPockets?: number;
+  /** Machine units for tool-table diameters in the multi-tool preview */
+  units?: 'in' | 'mm';
   onExpand?: () => void;
 }
 
@@ -60,14 +62,14 @@ interface ActivityLine {
 
 const WIZARD_STEPS: WizardStep[] = ['write', 'motion', 'salt'];
 
-function wizardStepTitle(step: WizardStep, multi = false): string {
+function wizardStepTitle(step: WizardStep, batch = false): string {
   switch (step) {
     case 'write':
-      return multi ? '1 / 3  CONFIRM TOOLS' : '1 / 3  WRITE MACROS';
+      return batch ? '1 / 3  CONFIRM TOOLS' : '1 / 3  WRITE MACROS';
     case 'motion':
-      return multi ? '2 / 3  CONFIRM BATCH' : '2 / 3  START MOTION';
+      return batch ? '2 / 3  CONFIRM BATCH' : '2 / 3  START MOTION';
     case 'salt':
-      return multi ? '3 / 3  MEASURE BATCH' : '3 / 3  COLLECT + SALT';
+      return batch ? '3 / 3  MEASURE BATCH' : '3 / 3  COLLECT + SALT';
   }
 }
 
@@ -177,6 +179,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
   pollIntervalSeconds = 5,
   toolsUnified = null,
   atcPockets = 21,
+  units = 'in',
 }) => {
   const [mode, setMode] = useState<ProbeMode>('probe');
   const [category, setCategory] = useState('corner');
@@ -220,7 +223,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     routine?.modes[mode] != null ? mode : availableModes[0] ?? 'probe';
   const modeEntry = resolveProgram(routineId, effectiveMode);
   const required = requiredMacros(routineId, effectiveMode);
-  const isAtcMulti = routine?.selection === 'atc_multi';
+  const isAtcSelect = routine?.selection === 'atc_multi';
   const potCells = useMemo(
     () => buildAtcPotCells(toolsUnified, atcPockets),
     [toolsUnified, atcPockets]
@@ -233,6 +236,18 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     }
     return tools;
   }, [selectedPots, potCells]);
+  /** Multiple ATC tools → sequenced O8100 batch; one tool → normal write/start/collect. */
+  const isToolBatch = isAtcSelect && selectedTools.length > 1;
+
+  /** Parallel to selectedTools — table Ø in mm; 0 = missing/zero (preview uses random). */
+  const selectedToolDiametersMm = useMemo(() => {
+    return selectedPots.map((pot) => {
+      const cell = potCells.find((c) => c.pot === pot);
+      const d = cell?.diameter;
+      if (d == null || !Number.isFinite(d) || d <= 0) return 0;
+      return units === 'in' ? d * 25.4 : d;
+    });
+  }, [selectedPots, potCells, units]);
 
   // Category change may leave routine elsewhere — pick first in category only
   useEffect(() => {
@@ -272,7 +287,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
   const freshness = assessMacroFreshness(required, params, macros);
   const operating = (machineStatus || '').toLowerCase() === 'operating';
   const macrosReady =
-    !isAtcMulti &&
+    !isAtcSelect &&
     required.every((m) => {
       const v = params[m];
       if (v == null || Number.isNaN(v)) return false;
@@ -285,7 +300,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     !busy &&
     !operating &&
     modeEntry != null &&
-    (isAtcMulti ? selectedTools.length > 0 : macrosReady);
+    (isAtcSelect ? selectedTools.length > 0 : macrosReady);
 
   const dialogOpen = phase === 'wizard' || phase === 'poison';
   const controlsDisabled = busy || dialogOpen;
@@ -473,14 +488,18 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     setStepLog('');
     setActivityLog(
       seedActivity(
-        isAtcMulti
+        isToolBatch
           ? 'EXECUTE — confirming ATC pot selection'
-          : 'EXECUTE — starting write macros'
+          : isAtcSelect
+            ? 'EXECUTE — writing #920 for selected tool'
+            : 'EXECUTE — starting write macros'
       )
     );
     setPhase('wizard');
     setStatusLine(
-      isAtcMulti ? 'Wizard: confirming tools…' : 'Wizard: writing macros…'
+      isToolBatch
+        ? 'Wizard: confirming tools…'
+        : 'Wizard: writing macros…'
     );
     void (async () => {
       await beginExclusiveHold();
@@ -520,7 +539,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       return;
     }
     const next = WIZARD_STEPS[idx + 1];
-    appendActivity(`—— ${wizardStepTitle(next, isAtcMulti)} ——`);
+    appendActivity(`—— ${wizardStepTitle(next, isToolBatch)} ——`);
     setWizardStep(next);
     setStepUi('ready');
     setStepLog('');
@@ -546,15 +565,15 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     busyStartedAt.current = Date.now();
     try {
       if (step === 'write') {
-        if (isAtcMulti) {
-          if (selectedTools.length === 0) {
-            const msg = 'Select at least one full ATC pot';
-            appendActivity(msg, 'fail');
-            setStepUi('fail');
-            setStepLog(msg);
-            setError(msg);
-            return;
-          }
+        if (isAtcSelect && selectedTools.length === 0) {
+          const msg = 'Select at least one full ATC pot';
+          appendActivity(msg, 'fail');
+          setStepUi('fail');
+          setStepLog(msg);
+          setError(msg);
+          return;
+        }
+        if (isToolBatch) {
           setStatusLine('Wizard: confirming tool list…');
           const summary = selectedPots
             .map((pot) => {
@@ -570,17 +589,24 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
           setStatusLine('Tool list ready — continue to confirm batch');
           return;
         }
+        const writeParams =
+          isAtcSelect && selectedTools[0] != null
+            ? { '920': selectedTools[0] }
+            : params;
         setStatusLine('Wizard: writing macros…');
         appendActivity('WRITE — opening telnet session');
         appendActivity('WRITE — safety check (block if operating)');
         appendActivity('WRITE — FLDCHG / then WRTMCNM job macros (no MEMSTRT)');
+        if (isAtcSelect) {
+          appendActivity(`WRITE — #920 = T${String(selectedTools[0]).padStart(2, '0')}`);
+        }
         const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}/probe/write`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: routineId,
             mode: effectiveMode,
-            params,
+            params: writeParams,
             client_run_id: clientRunIdRef.current,
           }),
         });
@@ -614,7 +640,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       }
 
       if (step === 'motion') {
-        if (isAtcMulti) {
+        if (isToolBatch) {
           setStatusLine('Wizard: confirm multi-tool measure…');
           appendActivity(
             `MOTION — will change tools and run O8100 for ${selectedTools.length} tools`,
@@ -626,6 +652,10 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
           setStatusLine('Confirmed — continue to measure batch');
           return;
         }
+        const startParams =
+          isAtcSelect && selectedTools[0] != null
+            ? { '920': selectedTools[0] }
+            : params;
         const targetPad = String(modeEntry?.program ?? '').padStart(4, '0');
         setStatusLine('Wizard: MEMSTRT — machine moving…');
         appendActivity('MOTION — opening telnet session');
@@ -640,7 +670,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
           body: JSON.stringify({
             type: routineId,
             mode: effectiveMode,
-            params,
+            params: startParams,
             client_run_id: clientRunIdRef.current,
           }),
         });
@@ -674,7 +704,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       }
 
       // salt = collect + poison, or multi-tool batch measure
-      if (isAtcMulti) {
+      if (isToolBatch) {
         setStatusLine('Wizard: measuring tool batch…');
         appendActivity(
           `BATCH — measuring ${selectedTools.length} tools via O8100 (#920 each)`
@@ -966,13 +996,13 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
               <span className={`probes-freshness probes-freshness--${freshness.toLowerCase()}`}>
                 {freshness}
               </span>
-              {phase === 'wizard' ? ` | WIZARD · ${wizardStepTitle(wizardStep, isAtcMulti)}` : ''}
+              {phase === 'wizard' ? ` | WIZARD · ${wizardStepTitle(wizardStep, isToolBatch)}` : ''}
               {phase === 'poison' ? ' | POISON' : ''}
               {phase === 'complete' ? ' | COMPLETE' : ''}
             </div>
           )}
 
-          <div className={`probes-main${isAtcMulti ? ' probes-main--atc-multi' : ''}`}>
+          <div className={`probes-main${isAtcSelect ? ' probes-main--atc-multi' : ''}`}>
             <div className="probes-fields">
               {showModeSelect && (
                 <label className="probes-field probes-field--mode">
@@ -987,7 +1017,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                   />
                 </label>
               )}
-              {isAtcMulti ? (
+              {isAtcSelect ? (
                 <AtcPotSelectGrid
                   unified={toolsUnified}
                   numPockets={atcPockets}
@@ -1079,6 +1109,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
               routineId={routineId}
               params={params}
               selectedTools={selectedTools}
+              toolDiametersMm={selectedToolDiametersMm}
             />
           </div>
 
@@ -1095,7 +1126,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                 operating
                   ? 'Machine is operating'
                   : !canRun
-                    ? isAtcMulti
+                    ? isAtcSelect
                       ? 'Select at least one full ATC pot'
                       : 'Fill valid non-poison params'
                     : 'Open stepped execute wizard'
@@ -1124,8 +1155,10 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             </div>
             <div className="probes-prereq">
               *{' '}
-              {isAtcMulti
-                ? 'EXECUTE confirms pot selection then measures each tool with O8100 (abort on first failure).'
+              {isAtcSelect
+                ? isToolBatch
+                  ? 'EXECUTE confirms pot selection then measures each tool with O8100 (abort on first failure).'
+                  : 'EXECUTE writes #920 for the selected tool, then MEMSTRT O8100 and collect.'
                 : 'EXECUTE starts write immediately; motion still needs confirm.'}{' '}
               POISON starts on click.
               {routine?.prerequisites ? ` · ${routine.prerequisites}` : ''}
@@ -1153,7 +1186,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
         <div className="probes-confirm-overlay" role="dialog" aria-modal="true">
           <div className="probes-confirm-box probes-wizard-box">
             <div className="probes-confirm-title">
-              {wizardStepTitle(wizardStep, isAtcMulti)}
+              {wizardStepTitle(wizardStep, isToolBatch)}
             </div>
 
             <div className="probes-wizard-progress" aria-hidden="true">
@@ -1172,7 +1205,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
             </div>
 
             <div className="probes-confirm-body">
-              {wizardStep === 'write' && isAtcMulti && (
+              {wizardStep === 'write' && isToolBatch && (
                 <>
                   <div>
                     Confirm the ATC pot selection. Shatter will measure each selected
@@ -1190,7 +1223,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                   </div>
                 </>
               )}
-              {wizardStep === 'write' && !isAtcMulti && (
+              {wizardStep === 'write' && !isToolBatch && (
                 <>
                   <div>Shatter will write job macros only. No axis motion.</div>
                   <div>
@@ -1198,11 +1231,15 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                     {effectiveMode.toUpperCase()} · {routine?.label ?? routineId}
                   </div>
                   <div className="probes-confirm-params">
-                    {required.map((m) => (
-                      <div key={m}>
-                        #{m} = {params[m]}
-                      </div>
-                    ))}
+                    {isAtcSelect && selectedTools[0] != null ? (
+                      <div>#{'920'} = {selectedTools[0]}</div>
+                    ) : (
+                      required.map((m) => (
+                        <div key={m}>
+                          #{m} = {params[m]}
+                        </div>
+                      ))
+                    )}
                   </div>
                 </>
               )}
@@ -1210,7 +1247,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
               {wizardStep === 'motion' && (
                 <>
                   <div className="probes-confirm-warn">
-                    {isAtcMulti
+                    {isToolBatch
                       ? `MACHINE WILL CHANGE TOOLS AND MEASURE ${selectedTools.length} TOOLS (O8100 each).`
                       : `MACHINE WILL MOVE. Shatter will MEMSTRT O${String(modeEntry.program).padStart(4, '0')} now.`}
                   </div>
@@ -1221,6 +1258,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                     routineId={routineId}
                     params={params}
                     selectedTools={selectedTools}
+                    toolDiametersMm={selectedToolDiametersMm}
                     compact
                     className="probes-confirm-preview"
                   />
@@ -1236,7 +1274,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                 </>
               )}
 
-              {wizardStep === 'salt' && isAtcMulti && (
+              {wizardStep === 'salt' && isToolBatch && (
                 <>
                   <div>
                     Shatter will write #920 and MEMSTRT O8100 for each selected tool,
@@ -1245,7 +1283,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                   <div>{selectedTools.length} tools queued</div>
                 </>
               )}
-              {wizardStep === 'salt' && !isAtcMulti && (
+              {wizardStep === 'salt' && !isToolBatch && (
                 <>
                   <div>
                     Wait until the machine is idle, then read result macros (#100+) and
@@ -1294,7 +1332,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                 >
                   {stepUi === 'fail'
                     ? '[ RETRY ]'
-                    : isAtcMulti
+                    : isToolBatch
                       ? '[ CONFIRM BATCH ]'
                       : '[ START MOTION ]'}
                 </button>

@@ -138,11 +138,10 @@ Client wrappers live in [`_telnet_write_ops.py`](../backend/app/clients/_telnet_
 5. `POST .../probe/collect` — wait cycle-complete (0.25s poll while exclusive) → read `#100–#107` → poison (salt)
 6. `POST .../probe/exclusive` `{ "active": false }` — resume polling (also auto after ~5 min idle)
 
-**Multi-tool length (`tool_length_multi`):** ATC pot multi-select in Probes → Shatter sequences O8100 per tool (same as `test_measure_tools.py`), aborting remaining tools on first failure:
+**Tool length:** ATC pot multi-select in Probes. One selected tool uses the normal write `#920` → MEMSTRT O8100 → collect path. Several tools use `POST .../probe/tool-batch` (sequenced O8100, abort on first failure):
 0. Exclusive hold (same as above)
-1. Confirm selected pots / tools (no macro write yet)
-2. Confirm batch motion
-3. `POST .../probe/tool-batch` `{ "tools": [1, 3, 12], "client_run_id": "…" }` — for each tool: WRTMCNM `#920` → MEMSTRT O8100 → wait cycle complete
+1. One tool: write `#920` / confirm / MEMSTRT / collect · Several: confirm tools → confirm batch → `tool-batch`
+2. `POST .../probe/tool-batch` `{ "tools": [1, 3, 12], "client_run_id": "…" }` when measuring multiple tools
 
 Live scripts:
 
@@ -164,7 +163,7 @@ Live scripts:
 
 Optional body field `client_run_id` on write/start/collect/poison/tool-batch filters WebSocket `probe_progress` events (see [WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md)).
 
-Catalog source: [`backend/app/data/probe_catalog.json`](../backend/app/data/probe_catalog.json) (mirrored in frontend). UI: **Probes** pane — **EXECUTE** opens a confirm wizard (exclusive hold → write macros → start motion → collect + salt). Multi-tool length uses ATC pot icons (full pots only) then `tool-batch`. O8099 gate/M98 is abandoned (`docs/nc/O8099.NC` kept as archive only).
+Catalog source: [`backend/app/data/probe_catalog.json`](../backend/app/data/probe_catalog.json) (mirrored in frontend). UI: **Probes** pane — **EXECUTE** opens a confirm wizard (exclusive hold → write macros → start motion → collect + salt). Tool length uses ATC pot icons (full pots only); one tool follows the stepped write/start/collect path, several use `tool-batch`. O8099 gate/M98 is abandoned (`docs/nc/O8099.NC` kept as archive only).
 
 **Live smoke (C00):** stop backend, `POST .../probe/exclusive` active, `POST .../probe/write`, confirm, `POST .../probe/start` for target O81xx, then `POST .../probe/collect`, exclusive end. Restart backend afterward.
 
@@ -183,6 +182,8 @@ Catalog source: [`backend/app/data/probe_catalog.json`](../backend/app/data/prob
 | 39 | Tool not registered in TOLN |
 | 40 | Other port holds connection |
 | 63 | Tool change in progress |
+
+**Exclusive hold on tool/macro writes:** Batch tool changes, legacy single ATC/tool writes, and `PUT .../macros/{n}` / measurement-tool automatically pause that machine’s fleet poller for the request (`exclusive_session`, same mechanism as `POST .../probe/exclusive`). Polling resumes when the write finishes so a follow-up tool refresh can run.
 
 Writes use extended read timeout (~5s) and hold the machine lock for the full operation.
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildProbeSim3D,
   motionAxes,
@@ -17,6 +17,19 @@ const PROBE_DIA_MM = 3;
 const PROBE_R_MM = PROBE_DIA_MM / 2;
 const STEM_LEN = 12;
 const ARROW_LEN = 5;
+
+/** Default schematic tool radius when not multi / no Ø known. */
+const DEFAULT_TOOL_R = 2.2;
+
+/** Map real tool Ø (mm) → schematic preview radius (clamped for the Z-Nano frame). */
+function diameterMmToPreviewRadius(diameterMm: number): number {
+  return Math.min(4.8, Math.max(1.15, (diameterMm / 2) * 0.4));
+}
+
+function randomPreviewDiameterMm(): number {
+  // Typical small/medium end mills when table Ø is blank
+  return 3 + Math.random() * 12;
+}
 
 const AXIS_COLOR: Record<MotionAxisId, string> = {
   x: '#ff2200',
@@ -242,8 +255,13 @@ function axisTriad(len = 12): [Vec3, Vec3, string][] {
 export interface ProbeCyclePreviewProps {
   routineId: string;
   params: Record<string, number>;
-  /** Tool numbers queued for tool_length_multi preview */
+  /** Tool numbers queued for tool_length ATC preview (1 = single cycle, >1 = sequenced) */
   selectedTools?: number[];
+  /**
+   * Parallel to selectedTools: table diameters in mm.
+   * 0 / missing → stable random Ø for that tool in the animation.
+   */
+  toolDiametersMm?: number[];
   compact?: boolean;
   /** Freeze animation (e.g. confirm dialog static frame) */
   paused?: boolean;
@@ -254,18 +272,25 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
   routineId,
   params,
   selectedTools = [],
+  toolDiametersMm = [],
   compact = false,
   paused = false,
   className,
 }) => {
-  const isTool =
-    routineId === 'tool_length' || routineId === 'tool_length_multi';
-  const isMulti = routineId === 'tool_length_multi';
-  const toolCount = Math.max(1, selectedTools.length || 3);
+  const isTool = routineId === 'tool_length';
+  const isMultiAnim = isTool && selectedTools.length > 1;
+  const toolCount = Math.max(1, selectedTools.length || 1);
+  /** Stable random Ø fallbacks keyed by T-number (or slot index). */
+  const randomDiaByKey = useRef(new Map<string, number>());
 
   const sim = useMemo(
-    () => buildProbeSim3D(routineId, params, isMulti ? { toolCount } : undefined),
-    [routineId, params, isMulti, toolCount]
+    () =>
+      buildProbeSim3D(
+        routineId,
+        params,
+        isMultiAnim ? { toolCount } : undefined
+      ),
+    [routineId, params, isMultiAnim, toolCount]
   );
 
   const [t, setT] = useState(0);
@@ -439,7 +464,7 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
   const moving = motion.axes.length > 0;
 
   const queueLabel = useMemo(() => {
-    if (!isMulti || selectedTools.length === 0) return null;
+    if (!isMultiAnim || selectedTools.length === 0) return null;
     const activeIdx =
       selectedTools.length <= 1
         ? 0
@@ -456,7 +481,24 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
         .join(' → '),
       activeIdx,
     };
-  }, [isMulti, selectedTools, t, paused, reducedMotion]);
+  }, [isMultiAnim, selectedTools, t, paused, reducedMotion]);
+
+  const activeToolDiameterMm = useMemo(() => {
+    if (!isTool || selectedTools.length === 0) return null;
+    const idx = isMultiAnim ? (queueLabel?.activeIdx ?? 0) : 0;
+    const fromTable = toolDiametersMm[idx];
+    if (fromTable != null && Number.isFinite(fromTable) && fromTable > 0) {
+      return fromTable;
+    }
+    const tn = selectedTools[idx];
+    const key = tn != null ? `T${tn}` : `slot-${idx}`;
+    let rnd = randomDiaByKey.current.get(key);
+    if (rnd == null) {
+      rnd = randomPreviewDiameterMm();
+      randomDiaByKey.current.set(key, rnd);
+    }
+    return rnd;
+  }, [isTool, isMultiAnim, queueLabel?.activeIdx, toolDiametersMm, selectedTools]);
 
   const motionColors = motion.axes.map((a) => AXIS_COLOR[a.axis]);
   const shaftMid = {
@@ -476,7 +518,10 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
   const toolGeom = useMemo(() => {
     if (!isTool) return null;
     const tip = sample.pos;
-    const r = 2.2;
+    const r =
+      activeToolDiameterMm != null
+        ? diameterMmToPreviewRadius(activeToolDiameterMm)
+        : DEFAULT_TOOL_R;
     const shankTop = STEM_LEN;
     const bodyH = STEM_LEN * 0.45;
     // Square-ish tool body — schematic, not fluted CAD
@@ -500,8 +545,14 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
       shankBot: corners(1.2 + bodyH, r * 0.7),
       shankTopRing: corners(shankTop, r * 0.7),
       axisTop: { x: tip.x, y: tip.y, z: tip.z + shankTop } as Vec3,
+      radius: r,
     };
-  }, [isTool, sample.pos]);
+  }, [isTool, sample.pos, activeToolDiameterMm]);
+
+  const diameterHint =
+    isTool && activeToolDiameterMm != null
+      ? ` · Ø${activeToolDiameterMm.toFixed(1)}`
+      : '';
 
   return (
     <div
@@ -511,9 +562,10 @@ export const ProbeCyclePreview: React.FC<ProbeCyclePreviewProps> = ({
         CYCLE PREVIEW (ISO)
         {sample.onHit ? ' · HIT' : moving ? ` · ${axisLabel}` : ''}
         {isTool ? ' · TOOL' : ''}
-        {isMulti && selectedTools.length > 0
+        {isMultiAnim && selectedTools.length > 0
           ? ` · ${selectedTools.length}×`
           : ''}
+        {diameterHint}
       </div>
       {queueLabel && (
         <div className="probe-cycle-preview-queue" title={queueLabel.text}>

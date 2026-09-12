@@ -115,7 +115,7 @@
       "id": "tool_length",
       "category": "tool",
       "label": "Tool length",
-      "prerequisites": "Tool in spindle or ATC; table tool setter clear",
+      "prerequisites": "Select occupied ATC pot(s); table tool setter clear. One tool runs O8100 once; several are sequenced.",
       "field_labels": {
         "920": "TOOL"
       },
@@ -125,21 +125,6 @@
           "macros": [
             "920"
           ]
-        }
-      },
-      "glyph_id": "tool_length",
-      "view": "tool"
-    },
-    {
-      "id": "tool_length_multi",
-      "category": "tool",
-      "label": "Tool length · multi",
-      "prerequisites": "Select occupied ATC pots; table tool setter clear. Shatter runs O8100 once per tool.",
-      "field_labels": {},
-      "modes": {
-        "probe": {
-          "program": 8100,
-          "macros": []
         }
       },
       "glyph_id": "tool_length_multi",

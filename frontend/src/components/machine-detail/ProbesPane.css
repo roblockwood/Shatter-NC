@@ -166,6 +166,17 @@
 .probes-main--atc-multi {
   /* Wider pot grid; keep preview readable but secondary */
   grid-template-columns: minmax(0, 1fr) minmax(140px, 220px);
+  align-items: stretch;
+}
+
+.probes-main--atc-multi .probes-fields {
+  height: 100%;
+  overflow: hidden;
+}
+
+.probes-main--atc-multi .atc-pot-select {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .probes-fields {
