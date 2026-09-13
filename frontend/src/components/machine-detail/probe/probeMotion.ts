@@ -870,11 +870,10 @@ function toolLengthMulti(toolCount: number): ProbeSim3D {
   const geom = toolLengthFeatures();
 
   for (let i = 0; i < n; i++) {
-    // Brief XY jog between tools — ATC change placeholder
     if (i > 0) {
-      const side = i % 2 === 0 ? 4 : -4;
-      push(path, { x: side, y: 0, z: 0 }, 'rapid');
-      push(path, { x: 0, y: 0, z: 0 }, 'rapid');
+      // ATC change: Z+ clears the viewport, Z− returns with the next tool (no XY)
+      push(path, { x: 0, y: 0, z: CYCLE_Z_BOOKEND }, 'rapid');
+      push(path, { x: 0, y: 0, z: 0 }, 'feed');
     }
     plungeToMeasure(path, geom.hitZ);
     const last = path[path.length - 1];

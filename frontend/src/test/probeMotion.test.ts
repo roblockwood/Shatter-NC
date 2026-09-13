@@ -55,6 +55,12 @@ describe('probeMotion 3D NC sim (machine-aligned)', () => {
     expect(one.path.filter((p) => p.hit)).toHaveLength(1);
     expect(three.path.filter((p) => p.hit)).toHaveLength(3);
     expect(pathLength(three.path)).toBeGreaterThan(pathLength(one.path));
+    // ATC change is pure Z clear / return — no XY between tools
+    expect(three.path.every((p) => Math.abs(p.x) < 1e-9 && Math.abs(p.y) < 1e-9)).toBe(
+      true
+    );
+    const zs = three.path.map((p) => p.z);
+    expect(Math.max(...zs)).toBeGreaterThan(0);
   });
 
   it('inside diameter measures at jog Z (no invented plunge) — O8116 omits Z', () => {
