@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- Add layout_config column to machines table for storing custom pane layouts
 -- This allows each machine to have its own customized detail pane layout
 

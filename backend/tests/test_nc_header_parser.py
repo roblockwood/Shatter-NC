@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests for NC header comment parsing and program note formatting."""
 from app.parsers.nc_header_parser import extract_nc_program_header, format_program_note
 

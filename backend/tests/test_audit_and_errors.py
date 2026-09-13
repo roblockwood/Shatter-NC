@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Audit logger and remaining small coverage wins."""
 from app.services.audit_logger import AuditLogger
 from app.utils.api_errors import public_error_detail

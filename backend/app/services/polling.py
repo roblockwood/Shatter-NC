@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Background polling service for CNC machines.
 
 MachinePoller (single-machine logic) lives in _machine_poller.py.

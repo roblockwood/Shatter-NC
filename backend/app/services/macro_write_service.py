@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Fast-path macro variable writes (cached validation + single telnet session)."""
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple

@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { MachineStatus, CompressorStatus } from '../../hooks/useWebSocket';
 import type { PanelData } from '../../components/machine-detail/PanelPane';
 import { DEMO_BOOT_MS, DEMO_NOW } from './demoTime';

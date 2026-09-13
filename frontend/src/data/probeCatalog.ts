@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Blum V4A probe routine catalog (mirrors backend/app/data/probe_catalog.json).
  */

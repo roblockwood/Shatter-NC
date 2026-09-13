@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Numeric pressure / outlet temperature from SC2 operational payloads for timeline samples."""
 from __future__ import annotations
 

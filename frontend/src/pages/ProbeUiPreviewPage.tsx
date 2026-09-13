@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Local-only UI preview for Probes glyph grid + cycle preview.
  * Open /probe-preview while vite is running — no backend required for layout/motion.

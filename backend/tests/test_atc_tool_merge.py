@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 from app.services.atc_tool_merge import merge_atc_tools_for_display
 
 

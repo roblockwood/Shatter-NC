@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Mocked one-tick MachinePoller.poll() coverage."""
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch

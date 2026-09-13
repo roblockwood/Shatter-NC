@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /** Persists chosen CNC machine id per browser (multi-tablet / single build). */
 export const TABLET_MACHINE_STORAGE_KEY = 'shatter.tablet.machine_id';
 

@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Single-machine poller extracted from polling.py."""
 import asyncio
 from app.clients.telnet_client import create_fresh_connection, CNCTelnetClient

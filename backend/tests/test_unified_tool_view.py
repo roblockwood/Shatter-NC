@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 from app.services.unified_tool_view import (
     build_unified_tool_view,
     expand_atc_parsed_to_pocket_count,

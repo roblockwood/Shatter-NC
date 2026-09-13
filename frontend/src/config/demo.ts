@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 export const IS_DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 
 /** GitHub Pages project-site repo segment (project site at /Shatter-NC/). */

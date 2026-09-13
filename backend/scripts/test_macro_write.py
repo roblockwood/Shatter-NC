@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Ad-hoc WRTMCNM test against a live Brother CNC (measurement tool macro #920)."""
 import argparse
 import asyncio

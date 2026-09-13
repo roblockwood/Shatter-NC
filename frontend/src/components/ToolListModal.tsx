@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import React from 'react';
 import { Modal } from './ui/Modal';
 import { formatDimension } from '../utils/formatDimension';

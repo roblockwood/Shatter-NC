@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests for macro write fast path and cache validation."""
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace

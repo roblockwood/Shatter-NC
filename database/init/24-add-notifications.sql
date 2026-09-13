@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- Add notification channels and rules for machine status alerts
 
 CREATE TABLE IF NOT EXISTS notification_channels (

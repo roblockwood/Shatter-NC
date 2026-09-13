@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- Add program tracking and event logging tables to Shatter database
 -- This script adds support for:
 -- - NC program versioning and deployment tracking

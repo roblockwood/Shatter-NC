@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests for debounced display_online and failure payloads on MachinePoller."""
 import time
 from datetime import datetime

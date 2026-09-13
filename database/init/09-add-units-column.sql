@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- Add units column to machines table
 -- Specifies whether the machine is configured in inches (in) or millimeters (mm)
 -- This affects how tolerances and measurements are interpreted

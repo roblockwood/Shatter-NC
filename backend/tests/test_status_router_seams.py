@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Seam-level tests for app.api.status.
 
 These tests lock in the public interface of the status router so that a

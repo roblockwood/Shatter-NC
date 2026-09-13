@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- Fix foreign key constraint on program_deployments.replaced_by
 -- This migration updates the constraint to allow cascading deletions
 -- Required to fix machine deletion errors

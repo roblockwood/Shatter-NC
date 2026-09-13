@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests for G-code parser operation extraction."""
 import pytest
 from app.parsers.gcode_parser import GCodeParser

@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Read-only telnet operations for Brother CNC machines.
 
 CNCDataReadsMixin provides every method that loads data from the controller

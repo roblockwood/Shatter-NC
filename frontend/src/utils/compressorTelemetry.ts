@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import type { CompressorStatus } from '../hooks/useWebSocket';
 
 export function asRecord(v: unknown): Record<string, unknown> | undefined {

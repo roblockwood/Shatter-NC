@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import React, { useEffect } from 'react';
 import './SaveConfirmModal.css';
 

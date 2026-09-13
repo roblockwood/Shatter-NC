@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import React, { useEffect, useRef, useState } from 'react';
 import type { StatusEvent } from '../../api/summary';
 import { useLocalChartTimeAxisMode } from '../../hooks/useLocalChartTimeAxisMode';

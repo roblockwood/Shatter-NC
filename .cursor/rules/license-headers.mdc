@@ -1,0 +1,25 @@
+---
+description: Every source file must carry the AGPL SPDX license header; stamp new files
+alwaysApply: true
+---
+
+# License headers (agents)
+
+Shatter-NC is **AGPL-3.0-or-later** (see [LICENSE](../../LICENSE)). License
+attribution is enforced per-file, not just per-repo.
+
+## Rules
+
+1. **Never remove or alter** `Copyright` / `SPDX-License-Identifier` headers.
+2. **Every new source file you create must get a header.** After adding files, run:
+   `python3 scripts/stamp-license-headers.py`
+   The script is idempotent — it only stamps files missing a header and preserves
+   shebangs, encoding declarations, and `@charset` lines.
+3. Header styles by language (the script handles this; only needed if you write one by hand):
+   - `#` — Python, shell, YAML
+   - `//` — TypeScript, JavaScript
+   - `--` — SQL
+   - `/* */` block — CSS
+4. Do not commit new source files without headers. If CI or review flags a missing
+   header, run the script and amend. Exception: `.github/workflows/` is
+   intentionally excluded (separate GitHub permission required to modify).

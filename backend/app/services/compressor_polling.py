@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Background polling for Kaeser compressors directly via SC2/Connect (no sidecar, no MQTT)."""
 from __future__ import annotations
 

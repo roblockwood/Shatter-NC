@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Shared state and Pydantic models for status API sub-routers.
 
 Holds ``polling_service`` (injected at startup via ``set_polling_service``)

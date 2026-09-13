@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """More machines API coverage via TestClient + dependency overrides."""
 from datetime import datetime
 from types import SimpleNamespace

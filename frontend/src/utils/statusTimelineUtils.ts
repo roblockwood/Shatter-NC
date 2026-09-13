@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 export type TimeRange = '1h' | '8h' | '24h' | '7d';
 
 export type MachineStatus = 'operating' | 'standby' | 'stopped' | 'error' | 'off';

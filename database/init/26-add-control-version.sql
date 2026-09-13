@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- Add control_version column to machines table
 -- Allows explicit machine control selection instead of runtime inference.
 -- Values:

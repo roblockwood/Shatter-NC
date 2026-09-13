@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Machine model - stores CNC machine configurations."""
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON, Float
 from sqlalchemy.sql import func
