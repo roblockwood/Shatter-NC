@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests for ProgramService upload/deploy with mocked DB."""
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch

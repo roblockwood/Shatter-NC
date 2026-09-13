@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- Add tolerance override flags to machines table
 -- These flags control whether to use machine-defined tolerances or G-code defaults
 -- When FALSE (default): Use G-code values (E parameter for WCS, exact match for tools)

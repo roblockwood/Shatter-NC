@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Patch tool names in TOLNn file content without altering other fields."""
 from __future__ import annotations
 

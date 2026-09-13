@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Live demo: dance B.SKIP / OP.STP / SINGL / M.LCK for ~30s via CHG* keys.
 
 Validated CHGOPTS layout (C00): command CHGxxxx + args ON/OFF.

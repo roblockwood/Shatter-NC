@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests that hung telnet operations cannot block polling or hold locks indefinitely."""
 import asyncio
 import time

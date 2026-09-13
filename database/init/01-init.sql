@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- Initialize Shatter database with TimescaleDB extension
 -- This script runs automatically when the PostgreSQL container first starts
 

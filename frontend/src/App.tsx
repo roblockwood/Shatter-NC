@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';

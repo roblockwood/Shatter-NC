@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests for ftp_sync_service helpers and retry paths."""
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch

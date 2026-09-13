@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Additional poller tick + notification helper coverage."""
 from datetime import datetime, timezone
 from types import SimpleNamespace

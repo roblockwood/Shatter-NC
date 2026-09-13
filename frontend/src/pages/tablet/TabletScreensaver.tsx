@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ShatterAsciiLogo } from '../../components/ShatterAsciiLogo';
 import { TABLET_SCREENSAVER_IDLE_MS_DEFAULT } from './tabletScreensaverStorage';

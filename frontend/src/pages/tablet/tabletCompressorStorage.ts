@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /** Persists chosen compressor id per browser for compressor kiosk (`/tablet/compressor/...`). */
 export const TABLET_COMPRESSOR_STORAGE_KEY = 'shatter.tablet.compressor_id';
 

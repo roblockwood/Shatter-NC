@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Persist compressor status samples (Timescale) — MQTT and/or poll sources, throttled."""
 from __future__ import annotations
 

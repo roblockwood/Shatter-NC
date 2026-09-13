@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """More ATC write-route coverage via mocked validator + telnet."""
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock

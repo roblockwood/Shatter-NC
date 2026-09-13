@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { Navigate, useParams } from 'react-router-dom';
 import { TABLET_DEFAULT_COMPRESSOR_PANE } from './tabletCompressorPaneConfig';
 import './tablet.css';

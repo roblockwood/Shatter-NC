@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- High-frequency compressor status samples (MQTT operational-data path; ingest interval from app env).
 -- Separate from compressor_status_events (transition log on poll). Retention/compression superseded by 19-*.sql.
 

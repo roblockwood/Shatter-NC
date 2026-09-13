@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- Add validation tolerance fields to machines table
 -- These fields define per-machine validation tolerances for tool diameter, length, and WCS offsets
 

@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Pydantic schemas for Machine API endpoints."""
 from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List, Dict, Any, Literal

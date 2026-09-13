@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Sidecar JSON → compressor_status payload mapping."""
 from datetime import datetime, timezone
 

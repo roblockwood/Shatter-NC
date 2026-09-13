@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Merge ATCTL magazine rows with TOLN tool table for ATC display."""
 from __future__ import annotations
 

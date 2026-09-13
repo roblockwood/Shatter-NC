@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Flat phosphor SVG glyphs for probe routine selection (compressor TileIcon style).
  * Inspired by Blum V4A APPLext overview; hand-drawn, not vendor art.

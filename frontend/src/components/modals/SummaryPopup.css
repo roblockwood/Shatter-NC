@@ -1,3 +1,8 @@
+/*
+ * Copyright (C) 2024 Shatter-NC contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 .summary-popup {
   position: fixed;
   background: var(--color-bg-darker, #0a0a0a);

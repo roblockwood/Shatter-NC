@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Normalize MONTR `operation_program_no` for machine status payloads."""
 from typing import Any, Dict, Optional
 

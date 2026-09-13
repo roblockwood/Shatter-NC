@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Services for background tasks and WebSocket management."""
 from app.services.websocket import WebSocketManager
 from app.services.polling import PollingService

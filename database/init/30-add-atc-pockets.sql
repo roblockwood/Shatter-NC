@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- ATC magazine pocket count per machine (Brother Speedio models vary: 21, 30, etc.)
 -- Used to gap-fill ATCTL rows so empty-pocket views show all configured pockets.
 

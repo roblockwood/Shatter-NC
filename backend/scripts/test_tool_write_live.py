@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Live-machine test: write all v1-supported fields for a tool, verify, restore.
 
 Table (TOLN / WRTTOFS / WRTTLLF): length H, diameter D, wear W, life

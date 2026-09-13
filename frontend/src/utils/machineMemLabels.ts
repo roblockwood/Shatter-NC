@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /** MEM mode from CNC poll (`mem_mode`). */
 export function formatMemMode(mode: number | undefined): string {
   if (mode === undefined || mode === null || Number.isNaN(Number(mode))) return '—';

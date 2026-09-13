@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- Add tool_poll_interval_seconds column to machines table
 -- This controls how frequently tool table and ATC magazine data is polled (slower than fast status polling)
 -- Default: 30 seconds (separate from poll_interval_seconds which defaults to 5 seconds)

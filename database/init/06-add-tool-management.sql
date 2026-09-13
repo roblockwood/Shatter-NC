@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- Add tool management tables and indexes for Shatter database
 -- This script adds support for:
 -- - Tool instance tracking (physical tool lifecycle management)

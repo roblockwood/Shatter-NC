@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests for operational → sample metrics telemetry extraction."""
 from app.services.compressor_telemetry_sample import telemetry_fields_from_operational
 

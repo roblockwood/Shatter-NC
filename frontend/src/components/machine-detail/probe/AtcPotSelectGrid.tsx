@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /** ATC pot multi-select grid for multi-tool length measure. */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { UnifiedToolView } from '../../../utils/unifiedToolView';

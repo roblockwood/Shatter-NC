@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Exclusive telnet hold — pause fleet polling while a write owns the machine port.
 
 Used by:

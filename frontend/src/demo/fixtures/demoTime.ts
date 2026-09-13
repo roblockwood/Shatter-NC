@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Shatter-NC contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /** Relative timestamps for demo fixtures (stable at page load, moves with real time). */
 const boot = Date.now();
 

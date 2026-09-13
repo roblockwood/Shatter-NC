@@ -1,3 +1,8 @@
+/*
+ * Copyright (C) 2024 Shatter-NC contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 /* Fade in only after webfonts resolve — avoids Android painting ⊞/█ from mixed fallbacks */
 .shatter-logo-font-wrap {
   display: inline-block;

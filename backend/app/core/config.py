@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Application configuration using Pydantic settings."""
 from pydantic_settings import BaseSettings
 from pydantic import Field

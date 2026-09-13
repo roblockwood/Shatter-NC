@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- Add FTP folder sync tables for local-folder-to-machine upload workflows
 
 CREATE TABLE IF NOT EXISTS ftp_sync_configs (

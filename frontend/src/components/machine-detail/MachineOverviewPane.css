@@ -1,3 +1,8 @@
+/*
+ * Copyright (C) 2024 Shatter-NC contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 /* Overview: single scroll region; inner body is a responsive grid (landscape / wide → columns). */
 .machine-overview-pane.alarm-pane .terminal-box-content {
   display: flex;

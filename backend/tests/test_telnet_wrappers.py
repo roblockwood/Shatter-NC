@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Broader telnet mixin coverage via mocked _send_command / wrappers."""
 from unittest.mock import AsyncMock, patch
 

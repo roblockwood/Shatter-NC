@@ -1,3 +1,6 @@
+-- Copyright (C) 2024 Shatter-NC contributors
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- Add PRD3 status history table for status/runs derived from PRD3/PRDD3
 
 CREATE TABLE IF NOT EXISTS prd3_status_history (

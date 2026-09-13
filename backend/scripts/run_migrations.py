@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Run pending database migrations on startup."""
 import os
 import sys

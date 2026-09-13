@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Behavioral tests for MONTR parser v2."""
 from app.parsers.montr_parser_v2 import parse_montr_v2
 

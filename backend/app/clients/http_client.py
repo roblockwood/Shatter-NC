@@ -1,3 +1,6 @@
+# Copyright (C) 2024 Shatter-NC contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """HTTP client for communicating with Brother CNC machines.
 
 Brother CNC machines use a custom HTTP server that requires raw socket connections
