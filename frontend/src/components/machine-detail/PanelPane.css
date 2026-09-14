@@ -417,3 +417,85 @@
   }
 }
 
+
+/* ---- Interactive panel I/O (toggle buttons + mode selector) ---- */
+
+.led-switch {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: var(--spacing-xs);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.led-switch:hover:not(:disabled) {
+  border-color: var(--color-border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.led-switch:focus-visible {
+  outline: 2px solid var(--color-accent, #00aaff);
+  outline-offset: 2px;
+}
+
+.led-switch:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.led-switch-on {
+  border-color: rgba(0, 255, 0, 0.35);
+}
+
+.led-switch-pending .led {
+  animation: led-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes led-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.mode-switch-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-sm);
+}
+
+.mode-switch-btn {
+  background: #1a1a1a;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+  padding: 4px 10px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+
+.mode-switch-btn:hover:not(:disabled) {
+  border-color: var(--color-text-secondary);
+  color: var(--color-text);
+}
+
+.mode-switch-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.mode-switch-active {
+  border-color: #00ff00;
+  color: #00ff00;
+}
+
+.panel-error {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid rgba(255, 80, 80, 0.5);
+  border-radius: 4px;
+  color: #ff8080;
+  font-size: var(--font-xs);
+}

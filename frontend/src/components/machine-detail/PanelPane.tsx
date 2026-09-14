@@ -1,9 +1,10 @@
 // Copyright (C) 2024 Shatter-NC contributors
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { PollingStatusLight } from '../ui/PollingStatusLight';
 import { PaneTerminalFooter, PaneTerminalHeader } from './PaneTerminalChrome';
+import { API_BASE_URL } from '../../config/api';
 import './PanelPane.css';
 
 /** CNC panel poll payload (doors, mode/screen, overrides). Reused by overview mini panel. */
@@ -49,6 +50,8 @@ interface PanelPaneProps {
   onExpand?: () => void;
   pollTimestamp?: string | null;
   pollIntervalSeconds?: number;
+  /** When provided, the four validated function keys become live I/O toggles. */
+  machineId?: number;
 }
 
 const MODE_LABELS: { [key: number]: string } = {
@@ -73,6 +76,22 @@ const SCREEN_LABELS: { [key: number]: string } = {
   9: 'GRAPH',
 };
 
+/** Panel function keys with live I/O toggles (CHGxxxx ON/OFF, C00-validated). */
+const PANEL_TOGGLES = [
+  { key: 'block_skip', label: 'BLK SKIP' },
+  { key: 'opt_stop', label: 'OPT STOP' },
+  { key: 'single_block', label: 'SGL BLK' },
+  { key: 'machine_lock', label: 'MACH LOCK' },
+] as const;
+
+/** CHGMODE args with their PANEL mode values (0=Manual, 1=MDI, 2=Memory, 3=Edit). */
+const MODE_BUTTONS = [
+  { arg: 'MNL', label: 'MANUAL', panelMode: 0 },
+  { arg: 'MDI', label: 'MDI', panelMode: 1 },
+  { arg: 'MEM', label: 'MEMORY', panelMode: 2 },
+  { arg: 'EDIT', label: 'EDIT', panelMode: 3 },
+] as const;
+
 // LED Indicator Component
 const LED: React.FC<{ on: boolean; label: string; color?: string; statusText?: string }> = ({ on, label, color = '#00ff00', statusText }) => {
   const displayStatus = statusText !== undefined ? statusText : (on ? 'ON' : 'OFF');
@@ -89,6 +108,35 @@ const LED: React.FC<{ on: boolean; label: string; color?: string; statusText?: s
       </div>
       <div className={`led-status ${statusClass}`}>{displayStatus}</div>
     </div>
+  );
+};
+
+// Clickable LED toggle for validated panel function keys (I/O button).
+const PanelSwitch: React.FC<{
+  on: boolean;
+  label: string;
+  pending?: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}> = ({ on, label, pending, disabled, onToggle }) => {
+  return (
+    <button
+      type="button"
+      className={`led-indicator led-switch${on ? ' led-switch-on' : ''}${pending ? ' led-switch-pending' : ''}`}
+      onClick={onToggle}
+      disabled={disabled || pending}
+      title={disabled ? 'Panel control unavailable' : `Toggle ${label}`}
+      aria-pressed={on}
+    >
+      <div className="led-label">{label}</div>
+      <div className={`led ${on ? 'led-on' : 'led-off'}`} style={{ '--led-color': on ? '#00ff00' : '#333333' } as React.CSSProperties}>
+        <div className="led-glow"></div>
+        <div className="led-inner"></div>
+      </div>
+      <div className={`led-status ${on ? 'led-status-on' : 'led-status-off'}`}>
+        {pending ? '···' : on ? 'ON' : 'OFF'}
+      </div>
+    </button>
   );
 };
 
@@ -305,8 +353,86 @@ export const PanelPane: React.FC<PanelPaneProps> = ({
   panelData,
   pollTimestamp,
   pollIntervalSeconds = 5,
+  machineId,
 }) => {
   const pollMs = Math.max((pollIntervalSeconds ?? 5) * 1000, 1000);
+
+  // Interactive panel I/O state. Optimistic values come from the API's PANEL
+  // read-back and are cleared once the poller reports the same value.
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [panelError, setPanelError] = useState<string | null>(null);
+  const [optimistic, setOptimistic] = useState<Record<string, number>>({});
+
+  const liveModeFunc = panelData?.mode_and_functions || {};
+  const effValue = (key: string): number | undefined =>
+    key in optimistic ? optimistic[key] : (liveModeFunc as Record<string, number | undefined>)[key];
+
+  useEffect(() => {
+    setOptimistic((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const key of Object.keys(next)) {
+        const live = (liveModeFunc as Record<string, number | undefined>)[key];
+        if (live === next[key]) {
+          delete next[key];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [panelData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const postPanel = async (path: string, body: Record<string, unknown>) => {
+    const res = await fetch(`${API_BASE_URL}/api/machines/${machineId}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || `Request failed (${res.status})`);
+    }
+    return data;
+  };
+
+  const togglePanelFunction = async (key: string) => {
+    if (machineId == null || busyKey) return;
+    const next = !(effValue(key) === 1);
+    if (key === 'machine_lock' && next) {
+      if (!window.confirm('Turn MACHINE LOCK on? Axes will not move while locked.')) return;
+    }
+    setBusyKey(key);
+    setPanelError(null);
+    try {
+      const data = await postPanel('/panel/function', { function: key, state: next });
+      const confirmed = typeof data.confirmed_state === 'number' ? data.confirmed_state : (next ? 1 : 0);
+      setOptimistic((prev) => ({ ...prev, [key]: confirmed }));
+    } catch (e) {
+      setPanelError(e instanceof Error ? e.message : 'Failed to toggle panel function');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const changeMode = async (arg: string) => {
+    if (machineId == null || busyKey) return;
+    if (!window.confirm(`Switch NC mode to ${arg}?`)) return;
+    const busy = `mode:${arg}`;
+    setBusyKey(busy);
+    setPanelError(null);
+    try {
+      const data = await postPanel('/panel/mode', { mode: arg });
+      if (typeof data.confirmed_mode === 'number') {
+        setOptimistic((prev) => ({ ...prev, mode: data.confirmed_mode }));
+      }
+    } catch (e) {
+      setPanelError(e instanceof Error ? e.message : 'Failed to change mode');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const interactive = machineId != null;
 
   const panelTitleHeader = (
     <PaneTerminalHeader label="PANEL STATUS">
@@ -464,7 +590,7 @@ export const PanelPane: React.FC<PanelPaneProps> = ({
             <div className="panel-info-grid">
               <div className="info-item">
                 <span className="info-label">MODE:</span>
-                <span className="info-value">{MODE_LABELS[modeFunc.mode ?? -1] || 'UNKNOWN'}</span>
+                <span className="info-value">{MODE_LABELS[effValue('mode') ?? -1] || 'UNKNOWN'}</span>
               </div>
               {modeFunc.screen !== undefined && (
                 <div className="info-item">
@@ -473,32 +599,54 @@ export const PanelPane: React.FC<PanelPaneProps> = ({
                 </div>
               )}
             </div>
+            {interactive && (
+              <div className="mode-switch-group" role="group" aria-label="NC mode">
+                {MODE_BUTTONS.map((m) => {
+                  const active = effValue('mode') === m.panelMode;
+                  return (
+                    <button
+                      key={m.arg}
+                      type="button"
+                      className={`mode-switch-btn${active ? ' mode-switch-active' : ''}`}
+                      disabled={busyKey !== null}
+                      onClick={() => changeMode(m.arg)}
+                      aria-pressed={active}
+                      title={`Switch NC mode to ${m.label}`}
+                    >
+                      {busyKey === `mode:${m.arg}` ? '···' : m.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {panelError && (
+              <div className="panel-error" role="alert">{panelError}</div>
+            )}
             <div className="led-group-separator" aria-hidden="true" />
             <div className="led-group led-group-switches">
-              <LED 
-                on={modeFunc.block_skip === 1} 
-                label="BLK SKIP" 
-                color={getSwitchLEDColor(modeFunc.block_skip)}
-              />
-              <LED 
-                on={modeFunc.opt_stop === 1} 
-                label="OPT STOP" 
-                color={getSwitchLEDColor(modeFunc.opt_stop)}
-              />
-              <LED 
-                on={modeFunc.single_block === 1} 
-                label="SGL BLK" 
-                color={getSwitchLEDColor(modeFunc.single_block)}
-              />
+              {PANEL_TOGGLES.map((t) =>
+                interactive ? (
+                  <PanelSwitch
+                    key={t.key}
+                    on={effValue(t.key) === 1}
+                    label={t.label}
+                    pending={busyKey === t.key}
+                    disabled={busyKey !== null}
+                    onToggle={() => togglePanelFunction(t.key)}
+                  />
+                ) : (
+                  <LED
+                    key={t.key}
+                    on={modeFunc[t.key as keyof typeof modeFunc] === 1}
+                    label={t.label}
+                    color={getSwitchLEDColor(modeFunc[t.key as keyof typeof modeFunc])}
+                  />
+                )
+              )}
               <LED 
                 on={modeFunc.dry_run === 1} 
                 label="DRY RUN" 
                 color={getSwitchLEDColor(modeFunc.dry_run)}
-              />
-              <LED 
-                on={modeFunc.machine_lock === 1} 
-                label="MACH LOCK" 
-                color={getSwitchLEDColor(modeFunc.machine_lock)}
               />
               <LED 
                 on={modeFunc.coolant_pump === 1} 

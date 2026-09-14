@@ -234,9 +234,9 @@ def test_upload_file_route_registered():
 # ---------------------------------------------------------------------------
 
 def test_total_route_count():
-    """Exactly 30 routes must be registered. Catches silent deletions during split."""
+    """Exactly 32 routes must be registered. Catches silent deletions during split."""
     sigs = _route_signatures(status_module.router)
-    assert len(sigs) == 30, f"Expected 30 routes, got {len(sigs)}: {sigs}"
+    assert len(sigs) == 32, f"Expected 32 routes, got {len(sigs)}: {sigs}"
 
 
 # ---------------------------------------------------------------------------

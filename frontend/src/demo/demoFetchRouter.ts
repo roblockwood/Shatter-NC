@@ -4,6 +4,7 @@
 import {
   machineConfigById,
   machinesForApiRegistry,
+  setDemoPanelOverride,
 } from './fixtures/fleet';
 import {
   deploymentDetailById,
@@ -58,6 +59,52 @@ function matchCompressorId(pathname: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+const DEMO_PANEL_FUNCTIONS = ['block_skip', 'opt_stop', 'single_block', 'machine_lock'];
+const DEMO_PANEL_MODES: Record<string, number> = { MNL: 0, MDI: 1, MEM: 2, EDIT: 3 };
+
+function parseJsonBody(init?: RequestInit): Record<string, unknown> {
+  try {
+    const raw = init?.body;
+    if (typeof raw === 'string' && raw.length > 0) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed as Record<string, unknown>;
+    }
+  } catch {
+    /* fall through */
+  }
+  return {};
+}
+
+/** Demo stand-in for POST .../panel/function — persists the toggle in the mocked PANEL. */
+function demoPanelFunctionToggle(machineId: number, init?: RequestInit): Response {
+  const body = parseJsonBody(init);
+  const fn = String(body.function ?? '').trim().toLowerCase();
+  if (!DEMO_PANEL_FUNCTIONS.includes(fn)) {
+    return jsonResponse({ detail: `Invalid panel function (must be one of ${DEMO_PANEL_FUNCTIONS.join(', ')})` }, 400);
+  }
+  const value = body.state === true ? 1 : 0;
+  setDemoPanelOverride(machineId, fn, value);
+  return jsonResponse({
+    success: true,
+    function: fn,
+    requested_state: body.state === true,
+    confirmed_state: value,
+    status_code: '00',
+  });
+}
+
+/** Demo stand-in for POST .../panel/mode — persists the mode in the mocked PANEL. */
+function demoPanelModeChange(machineId: number, init?: RequestInit): Response {
+  const body = parseJsonBody(init);
+  const mode = String(body.mode ?? '').trim().toUpperCase();
+  if (!(mode in DEMO_PANEL_MODES)) {
+    return jsonResponse({ detail: `Invalid mode (must be one of ${Object.keys(DEMO_PANEL_MODES).join(', ')})` }, 400);
+  }
+  const value = DEMO_PANEL_MODES[mode];
+  setDemoPanelOverride(machineId, 'mode', value);
+  return jsonResponse({ success: true, mode, confirmed_mode: value, status_code: '00' });
+}
+
 export function routeDemoFetch(input: RequestInfo | URL, init?: RequestInit): Response | null {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   const method = (init?.method ?? (typeof input !== 'string' && !(input instanceof URL) ? input.method : 'GET')).toUpperCase();
@@ -65,6 +112,17 @@ export function routeDemoFetch(input: RequestInfo | URL, init?: RequestInit): Re
   if (!parsed) return null;
 
   const { pathname, searchParams } = parsed;
+
+  // Panel I/O writes are emulated in demo mode (all other writes stay forbidden).
+  const writeMachineId = matchMachineId(pathname);
+  if (method === 'POST' && writeMachineId !== null) {
+    if (pathname === `/api/machines/${writeMachineId}/panel/function`) {
+      return demoPanelFunctionToggle(writeMachineId, init);
+    }
+    if (pathname === `/api/machines/${writeMachineId}/panel/mode`) {
+      return demoPanelModeChange(writeMachineId, init);
+    }
+  }
 
   if (method !== 'GET') {
     return jsonResponse(DEMO_FORBIDDEN, 403);

@@ -176,6 +176,38 @@ export function tickPanelForMachine(
   machineId: number,
   panel?: PanelData | null,
 ): PanelData {
+  const ticked = _baseTickPanelForMachine(machineId, panel);
+  // Demo panel I/O: operator toggles (POST .../panel/function|mode) win over
+  // the ambient demo animation so the mocked panel converges like the real one.
+  const ov = demoPanelOverrides.get(machineId);
+  if (!ov || Object.keys(ov).length === 0) return ticked;
+  return {
+    ...ticked,
+    mode_and_functions: { ...ticked.mode_and_functions, ...ov },
+  };
+}
+
+/** Demo-only panel I/O overrides, keyed by machine id then PANEL field. */
+const demoPanelOverrides = new Map<number, Record<string, number>>();
+
+/**
+ * Demo-only: persist a panel function/mode toggle so the mocked PANEL data
+ * converges on it (mirrors the real API's PANEL read-back).
+ */
+export function setDemoPanelOverride(
+  machineId: number,
+  field: string,
+  value: number,
+): void {
+  const cur = demoPanelOverrides.get(machineId) ?? {};
+  cur[field] = value;
+  demoPanelOverrides.set(machineId, cur);
+}
+
+function _baseTickPanelForMachine(
+  machineId: number,
+  panel?: PanelData | null,
+): PanelData {
   demoFleetState.panelTick += 1;
   const t = demoFleetState.panelTick;
   const phase = Math.floor((Date.now() - DEMO_BOOT_MS) / 4000);
