@@ -587,6 +587,11 @@ export const PanelPane: React.FC<PanelPaneProps> = ({
           {/* Mode & Functions Section */}
           <div className="panel-section">
             <div className="panel-section-title">MODE & FUNCTIONS</div>
+            {effValue('machine_lock') === 1 && (
+              <div className="panel-safety-banner" role="status">
+                MACHINE LOCK ENGAGED — axes will not move
+              </div>
+            )}
             <div className="panel-info-grid">
               <div className="info-item">
                 <span className="info-label">MODE:</span>

@@ -138,6 +138,25 @@ Productized as `CNCTelnetClient.set_panel_function()` and the panel I/O API.
 `CHGDRYR` (dry run) is the same family but was **not** covered by the dance
 script — it remains unvalidated and is display-only in the UI.
 
+#### Machine lock as a test safety interlock
+
+`CHGMACL` inhibits **axis motion only**: the program still executes, but no
+axis moves. That makes it the safety net for live-machine testing — engage it
+before running anything that could move the machine and the worst case is a
+program that runs through without motion. Scope note: spindle, tool change,
+and other M/S/T functions still execute, so it prevents motion crashes, not
+every hazard.
+
+- HTTP path: `POST /api/machines/{id}/panel/function`
+  `{ "function": "machine_lock", "state": true }` — refuses with 409 while a
+  program is running; the UI shows a `MACHINE LOCK ENGAGED` banner while on.
+- Direct-telnet path: `machine_lock_guard()` in
+  `backend/app/clients/_panel_safety.py` — fail-closed async context manager:
+  the guarded body only runs after PANEL read-back confirms MACHINE LOCK is
+  ON; on exit it restores the prior MLOCK state (verified via read-back), so
+  it never clobbers an operator's pre-existing lock. `test_panel_key_dance.py`
+  runs inside it as the reference pattern.
+
 ### Folder ops (multipart)
 
 | Command | Form | Notes |

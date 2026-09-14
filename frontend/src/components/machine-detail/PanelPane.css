@@ -499,3 +499,16 @@
   color: #ff8080;
   font-size: var(--font-xs);
 }
+
+/* Safety banner shown while MACHINE LOCK is engaged (axes disabled). */
+.panel-safety-banner {
+  margin: var(--spacing-sm) 0;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid rgba(255, 200, 40, 0.6);
+  border-radius: 4px;
+  background: rgba(255, 200, 40, 0.08);
+  color: #ffd24a;
+  font-size: var(--font-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}

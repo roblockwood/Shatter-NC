@@ -57,3 +57,26 @@ notifications. Python/FastAPI backend, TypeScript/React frontend.
 - Static demo (no backend): `cd frontend && npm run dev:demo`
 - Keep PRs small, update the smallest relevant doc in `docs/` alongside code changes,
   and never hand-maintain REST API details — those live in OpenAPI (`/docs`, `/redoc`).
+
+## Live-machine testing safety
+
+The Brother control permits only **one telnet connection**. For any live test:
+stop the backend first, open a fresh telnet connection, and restart the
+backend afterward — even if the test fails partway.
+
+Before running anything that could move the machine, engage MACHINE LOCK
+(`CHGMACL`): it inhibits axis motion while the program still executes, so the
+worst case is a program that runs through without motion. Spindle, tool
+change, and other M/S/T functions still execute — it prevents motion crashes,
+not every hazard.
+
+- Via HTTP: `POST /api/machines/{id}/panel/function`
+  `{"function": "machine_lock", "state": true}` (refuses with 409 while a
+  program is running; the UI shows a banner while the lock is on).
+- Via direct telnet: wrap the test in `machine_lock_guard()` from
+  `backend/app/clients/_panel_safety.py` — fail-closed (the test body never
+  runs unless PANEL read-back confirms the lock is ON), and it restores the
+  prior lock state on exit instead of clobbering it.
+
+Get explicit human approval before any live-machine test, and never run
+motion commands (jog, MDI moves, cycle start) without a verified machine lock.

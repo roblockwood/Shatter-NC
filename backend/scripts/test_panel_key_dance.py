@@ -11,7 +11,10 @@ Siblings assumed same family:
   CHGSNGL  — single block
   CHGMACL  — machine lock
 
-Restores all four to OFF on exit (including Ctrl+C).
+The whole run is wrapped in machine_lock_guard (fail-closed): MACHINE LOCK
+is verified ON via PANEL read-back before the dance starts, and M.LCK is
+restored to its prior state on exit (including Ctrl+C). The other three keys
+are restored to OFF on exit.
 
     cd backend && PYTHONPATH=. python3 scripts/test_panel_key_dance.py
     cd backend && PYTHONPATH=. python3 scripts/test_panel_key_dance.py --seconds 30 --interval 0.4
@@ -26,6 +29,7 @@ import time
 from typing import Optional
 
 from app.clients.telnet_client import CNCTelnetClient, create_fresh_connection
+from app.clients._panel_safety import machine_lock_guard
 from app.parsers.panel_parser_v2 import parse_panel_v2
 
 DEFAULT_IP = "192.168.86.89"
@@ -80,8 +84,15 @@ def _fmt(state: dict[str, Optional[int]]) -> str:
 
 
 async def _all_off(client: CNCTelnetClient) -> None:
-    print("Restoring all keys OFF…")
+    """Restore the non-lock keys OFF.
+
+    M.LCK is owned by machine_lock_guard, which restores it to the state it
+    found on entry (rather than blindly forcing OFF).
+    """
+    print("Restoring keys OFF (M.LCK handled by machine_lock_guard)…")
     for command, _, label in KEYS:
+        if command == "CHGMACL":
+            continue
         await _set_key(client, command, False)
     state = await _read_keys(client)
     print(f"Final: {_fmt(state)}")
@@ -119,35 +130,36 @@ async def main() -> int:
         signal.signal(signal.SIGINT, lambda *_: abort.set())
 
     try:
-        await _ensure_root_cwd(client)
-        if not args.skip_mem:
-            ok, status, _ = await client._send_command("CHGMODE", "MEM", verbose=False)
-            if not ok and status != "60":
-                print(f"WARNING: CHGMODE MEM → {status}")
+        async with machine_lock_guard(client):
+            await _ensure_root_cwd(client)
+            if not args.skip_mem:
+                ok, status, _ = await client._send_command("CHGMODE", "MEM", verbose=False)
+                if not ok and status != "60":
+                    print(f"WARNING: CHGMODE MEM → {status}")
 
-        start = await _read_keys(client)
-        print(f"Start: {_fmt(start)}")
-        print(f"Dancing for {args.seconds:.0f}s (Ctrl+C to stop)…\n")
+            start = await _read_keys(client)
+            print(f"Start: {_fmt(start)}")
+            print(f"Dancing for {args.seconds:.0f}s (Ctrl+C to stop)…\n")
 
-        deadline = time.monotonic() + args.seconds
-        step = 0
-        # Chase pattern: walk ON through keys, then walk OFF
-        while time.monotonic() < deadline and not abort.is_set():
-            idx = step % len(KEYS)
-            phase = (step // len(KEYS)) % 2  # 0 = turn ON, 1 = turn OFF
-            command, field, label = KEYS[idx]
-            want_on = phase == 0
-            await _set_key(client, command, want_on)
-            state = await _read_keys(client)
-            print(f"[{step:03d}] {label} → {'ON ' if want_on else 'OFF'}  {_fmt(state)}")
-            step += 1
-            await asyncio.sleep(args.interval)
+            deadline = time.monotonic() + args.seconds
+            step = 0
+            # Chase pattern: walk ON through keys, then walk OFF
+            while time.monotonic() < deadline and not abort.is_set():
+                idx = step % len(KEYS)
+                phase = (step // len(KEYS)) % 2  # 0 = turn ON, 1 = turn OFF
+                command, field, label = KEYS[idx]
+                want_on = phase == 0
+                await _set_key(client, command, want_on)
+                state = await _read_keys(client)
+                print(f"[{step:03d}] {label} → {'ON ' if want_on else 'OFF'}  {_fmt(state)}")
+                step += 1
+                await asyncio.sleep(args.interval)
 
-        if abort.is_set():
-            print("\nInterrupted.")
-        else:
-            print("\nDone.")
-        return 0
+            if abort.is_set():
+                print("\nInterrupted.")
+            else:
+                print("\nDone.")
+            return 0
     finally:
         try:
             await _all_off(client)
