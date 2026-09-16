@@ -8,6 +8,7 @@ Routes are split across focused sub-modules:
   _status_tools.py  — POST refresh, PUT/DELETE ATC writes, life, offset
   _status_files.py  — GET programs/position/download/metadata/view, POST upload
   _probe.py         — GET probe/catalog, POST probe/write|start|collect|poison
+  _panel.py         — POST panel/function|mode (operation-panel I/O toggles)
 
 All routes and all public import paths are preserved unchanged.
 """
@@ -17,6 +18,7 @@ import app.api._status_reads as _reads
 import app.api._status_tools as _tools
 import app.api._status_files as _files
 import app.api._probe as _probe
+import app.api._panel as _panel
 
 # Re-export models so existing callers can still do:
 #   from app.api.status import ColorChangeRequest
@@ -32,6 +34,7 @@ router.include_router(_reads.router)
 router.include_router(_tools.router)
 router.include_router(_files.router)
 router.include_router(_probe.router)
+router.include_router(_panel.router)
 
 # Module-level alias kept for backwards compatibility (tests inspect status.polling_service)
 polling_service = _state.polling_service

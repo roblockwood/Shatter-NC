@@ -950,6 +950,7 @@ export const MachineCard: React.FC<MachineCardProps> = ({
                     onExpand={undefined}
                     pollTimestamp={fastPollLastSuccessAt(machine)}
                     pollIntervalSeconds={machine.poll_interval_seconds ?? 5}
+                    machineId={machine.machine_id}
                   />
                 ),
               },

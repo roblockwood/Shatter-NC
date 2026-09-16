@@ -115,12 +115,52 @@ Client wrappers live in [`_telnet_write_ops.py`](../backend/app/clients/_telnet_
 
 | Command | Args (8-byte field) | Notes |
 |---------|---------------------|-------|
-| `CHGMODE` | `MEM`, `EDIT`, `MDI`, `MNL` (space-padded) | Status `60` if already in that mode |
-| `CHGOPTS` | `ON` / `OFF` | Optional stop (OP.STP). Same layout family as `CHGMODE`. Sibling keys (not all smoke-tested): `CHGDRYR`, `CHGSNGL`, `CHGBLKS`, `CHGMACL` |
+| `CHGMODE` | `MEM`, `EDIT`, `MDI`, `MNL` (space-padded) | Status `60` if already in that mode. Also exposed as `POST .../panel/mode` |
 | `CHGPROG` | 4-digit O-number, e.g. `8112` | **Folder-scoped.** Only finds programs in the current telnet data directory. Not available during operation; Edit mode may return `31`. Not yet a named client method (scripts only). |
 | `MEMSTRT` | Optional 4-digit O-number, e.g. `8100` | Starts memory operation; with a number, bypasses external PRO select signals |
 | `MEMSTOP` | `ON` / `OFF` | Latches feed-hold when `ON` — must send `OFF` (or clear on panel) to resume |
 | `MEMQTST` | Optional 4-digit O-number | External start variant (pallet-param fallback if omitted); not smoke-tested |
+
+### Panel function keys (CHGxxxx ON/OFF)
+
+Same 7-char-command layout family as `CHGMODE`; `ON`/`OFF` padded into the
+8-byte arg field. Status `60` (already in requested state) is treated as
+success. `CHGBLKS`/`CHGOPTS`/`CHGSNGL` ON/OFF were validated on a C00 via
+`test_panel_key_dance.py` with PANEL read-back; `CHGMACL` ON/OFF was validated
+on a C00 by an earlier revision of that script — the current script holds
+M.LCK ON continuously through `machine_lock_guard` and never toggles it.
+Productized as `CNCTelnetClient.set_panel_function()` and the panel I/O API.
+
+| Command | Function key | Panel LED |
+|---------|--------------|-----------|
+| `CHGBLKS` | `block_skip` | BLK SKIP |
+| `CHGOPTS` | `opt_stop` | OPT STOP |
+| `CHGSNGL` | `single_block` | SGL BLK |
+| `CHGMACL` | `machine_lock` | MACH LOCK |
+
+`CHGDRYR` (dry run) is the same family but was **not** covered by the dance
+script — it remains unvalidated and is display-only in the UI.
+
+#### Machine lock as a test safety interlock
+
+`CHGMACL` inhibits **axis motion only**: the program still executes, but no
+axis moves. That makes it the safety net for live-machine testing — engage it
+before running anything that could move the machine and the worst case is a
+program that runs through without motion. Scope note: spindle, tool change,
+and other M/S/T functions still execute, so it prevents motion crashes, not
+every hazard.
+
+- HTTP path: `POST /api/machines/{id}/panel/function`
+  `{ "function": "machine_lock", "state": true }` — refuses with 409 while a
+  program is running; the UI shows a `MACHINE LOCK ENGAGED` banner while on.
+- Direct-telnet path: `machine_lock_guard()` in
+  `backend/app/clients/_panel_safety.py` — fail-closed async context manager:
+  the guarded body only runs after PANEL read-back confirms MACHINE LOCK is
+  ON; on exit it restores the prior MLOCK state (verified via read-back), so
+  it never clobbers an operator's pre-existing lock. `test_panel_key_dance.py`
+  runs inside it as the reference pattern: the dance toggles only
+  `CHGBLKS`/`CHGOPTS`/`CHGSNGL` and never writes `CHGMACL`, so MACHINE LOCK
+  stays ON for the entire guarded body.
 
 ### Folder ops (multipart)
 
@@ -148,6 +188,7 @@ Live scripts:
 - [`backend/scripts/test_chgprog.py`](../backend/scripts/test_chgprog.py) — `CHGMODE` / `FLDCHG` / `CHGPROG` (no start)
 - [`backend/scripts/test_measure_tools.py`](../backend/scripts/test_measure_tools.py) — sequential `#920` + `MEMSTRT` measure cycles
 - [`backend/scripts/test_optstop.py`](../backend/scripts/test_optstop.py) — `CHGOPTS` ON/OFF (PANEL `opt_stop`)
+- [`backend/scripts/test_panel_key_dance.py`](../backend/scripts/test_panel_key_dance.py) — `CHGBLKS`/`CHGOPTS`/`CHGSNGL` ON/OFF with PANEL read-back; M.LCK held ON throughout by `machine_lock_guard` (the script never toggles `CHGMACL`)
 
 ### Probe cycle API
 
@@ -166,6 +207,20 @@ Optional body field `client_run_id` on write/start/collect/poison/tool-batch fil
 Catalog source: [`backend/app/data/probe_catalog.json`](../backend/app/data/probe_catalog.json) (mirrored in frontend). UI: **Probes** pane — **EXECUTE** opens a confirm wizard (exclusive hold → write macros → start motion → collect + salt). Tool length uses ATC pot icons (full pots only); one tool follows the stepped write/start/collect path, several use `tool-batch`. O8099 gate/M98 is abandoned (`docs/nc/O8099.NC` kept as archive only).
 
 **Live smoke (C00):** stop backend, `POST .../probe/exclusive` active, `POST .../probe/write`, confirm, `POST .../probe/start` for target O81xx, then `POST .../probe/collect`, exclusive end. Restart backend afterward.
+
+### Panel I/O API
+
+Both routes hold a request-scoped exclusive telnet session (fleet poller paused),
+refuse with `409` while the machine is running a program, and return the PANEL
+read-back so the UI converges on controller state.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/api/machines/{id}/panel/function` | Set `block_skip` / `opt_stop` / `single_block` / `machine_lock` — body `{ "function": "opt_stop", "state": true }` |
+| `POST` | `/api/machines/{id}/panel/mode` | CHGMODE — body `{ "mode": "MEM" }` (one of `MEM`, `MDI`, `MNL`, `EDIT`) |
+
+UI: **Panel** pane — the four validated LEDs are I/O buttons (confirm dialog on
+MACHINE LOCK and on mode changes); all other panel items stay display-only.
 
 ---
 
@@ -193,7 +248,8 @@ Writes use extended read timeout (~5s) and hold the machine lock for the full op
 
 Telnet file upload (SAV), auto-notification (SNC/SND), and most directory variants (DRQSEL, DRQPRAL). File upload/download in Shatter uses **FTP**, not telnet SAV.
 
-`CHGPROG` / `CHGOPTS` and related panel-key commands remain script-validated only (not probe-cycle product APIs).
+`CHGPROG` remains script-validated only (not a product API). `CHGDRYR` (dry run) was
+never covered by the dance script and stays display-only in the UI.
 
 ---
 

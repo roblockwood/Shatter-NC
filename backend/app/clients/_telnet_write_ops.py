@@ -804,3 +804,66 @@ class CNCWriteOpsMixin:
         except Exception as e:
             logger.error(f"Error in MEMSTOP {arg}: {e}")
             return False, None
+
+    # ------------------------------------------------------------------
+    # Operation panel function keys (CHGxxxx ON/OFF)
+    # ------------------------------------------------------------------
+
+    #: Panel function key -> CHGxxxx telnet command. Validated on a Brother
+    #: C00 via backend/scripts/test_panel_key_dance.py (ON/OFF args, PANEL
+    #: read-back). Same command family as CHGMODE (7-char command, ON/OFF
+    #: padded into the 8-byte arg field by _send_command).
+    PANEL_FUNCTION_COMMANDS = {
+        "block_skip": "CHGBLKS",
+        "opt_stop": "CHGOPTS",
+        "single_block": "CHGSNGL",
+        "machine_lock": "CHGMACL",
+    }
+
+    async def set_panel_function(
+        self, function: str, on: bool, verbose: bool = False
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Toggle an operation-panel function key via CHGxxxx ON/OFF.
+
+        Verify with LOD PANEL -> mode_and_functions.<function>.
+
+        Args:
+            function: One of 'block_skip', 'opt_stop', 'single_block', 'machine_lock'
+            on: True to turn ON, False to turn OFF
+            verbose: Log command details
+
+        Returns:
+            (success, status_code). Status 60 (already in requested state)
+            is treated as success, mirroring change_mode().
+        """
+        if not self._connected:
+            connected = await self.connect()
+            if not connected:
+                return False, None
+
+        command = self.PANEL_FUNCTION_COMMANDS.get((function or "").strip().lower())
+        if not command:
+            logger.error(f"Unknown panel function: {function!r}")
+            return False, "30"
+
+        arg = "ON" if on else "OFF"
+        machine_lock = await _get_machine_lock(self.ip_address, self.port)
+        try:
+            async with machine_lock:
+                success, status, _ = await self._send_command(
+                    command, arg, verbose=verbose
+                )
+                if success:
+                    logger.info(f"[WRITE] Panel {function} -> {arg}")
+                    return True, status
+                if status == "60":
+                    return True, status
+                status_desc = self.get_status_description(status or "00")
+                logger.warning(
+                    f"Failed to set panel function {function} {arg}: {status_desc}"
+                )
+                return False, status
+        except Exception as e:
+            logger.error(f"Error in {command} {arg}: {e}")
+            return False, None
