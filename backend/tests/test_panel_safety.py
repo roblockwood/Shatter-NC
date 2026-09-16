@@ -138,3 +138,30 @@ async def test_guard_raises_when_restore_fails_and_leaves_locked():
     assert ran == [True]
     # Safe direction: machine stays locked rather than silently unlocked.
     assert await _read_machine_lock(client) == 1
+
+
+def test_dance_script_never_toggles_machine_lock():
+    """Regression: the guarded dance script must not clear M.LCK mid-run.
+
+    machine_lock_guard holds MACHINE LOCK ON for the whole guarded body. If
+    test_panel_key_dance.py toggled CHGMACL in its chase pattern, the dance
+    could switch the lock OFF inside the guard and defeat the interlock.
+    Parse the script's KEYS toggle set (AST, no import — the script pulls
+    heavy telnet deps at module level) and assert CHGMACL is absent.
+    """
+    import ast
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "scripts" / "test_panel_key_dance.py"
+    tree = ast.parse(script.read_text(encoding="utf-8"))
+    keys = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "KEYS":
+                    keys = ast.literal_eval(node.value)
+    assert keys is not None, "KEYS toggle set not found in dance script"
+    commands = [command for command, _field, _label in keys]
+    fields = [field for _command, field, _label in keys]
+    assert "CHGMACL" not in commands
+    assert "machine_lock" not in fields

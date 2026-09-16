@@ -125,7 +125,10 @@ Client wrappers live in [`_telnet_write_ops.py`](../backend/app/clients/_telnet_
 
 Same 7-char-command layout family as `CHGMODE`; `ON`/`OFF` padded into the
 8-byte arg field. Status `60` (already in requested state) is treated as
-success. Validated on a C00 via `test_panel_key_dance.py` with PANEL read-back.
+success. `CHGBLKS`/`CHGOPTS`/`CHGSNGL` ON/OFF were validated on a C00 via
+`test_panel_key_dance.py` with PANEL read-back; `CHGMACL` ON/OFF was validated
+on a C00 by an earlier revision of that script — the current script holds
+M.LCK ON continuously through `machine_lock_guard` and never toggles it.
 Productized as `CNCTelnetClient.set_panel_function()` and the panel I/O API.
 
 | Command | Function key | Panel LED |
@@ -155,7 +158,9 @@ every hazard.
   the guarded body only runs after PANEL read-back confirms MACHINE LOCK is
   ON; on exit it restores the prior MLOCK state (verified via read-back), so
   it never clobbers an operator's pre-existing lock. `test_panel_key_dance.py`
-  runs inside it as the reference pattern.
+  runs inside it as the reference pattern: the dance toggles only
+  `CHGBLKS`/`CHGOPTS`/`CHGSNGL` and never writes `CHGMACL`, so MACHINE LOCK
+  stays ON for the entire guarded body.
 
 ### Folder ops (multipart)
 
@@ -183,7 +188,7 @@ Live scripts:
 - [`backend/scripts/test_chgprog.py`](../backend/scripts/test_chgprog.py) — `CHGMODE` / `FLDCHG` / `CHGPROG` (no start)
 - [`backend/scripts/test_measure_tools.py`](../backend/scripts/test_measure_tools.py) — sequential `#920` + `MEMSTRT` measure cycles
 - [`backend/scripts/test_optstop.py`](../backend/scripts/test_optstop.py) — `CHGOPTS` ON/OFF (PANEL `opt_stop`)
-- [`backend/scripts/test_panel_key_dance.py`](../backend/scripts/test_panel_key_dance.py) — `CHGBLKS`/`CHGOPTS`/`CHGSNGL`/`CHGMACL` ON/OFF with PANEL read-back
+- [`backend/scripts/test_panel_key_dance.py`](../backend/scripts/test_panel_key_dance.py) — `CHGBLKS`/`CHGOPTS`/`CHGSNGL` ON/OFF with PANEL read-back; M.LCK held ON throughout by `machine_lock_guard` (the script never toggles `CHGMACL`)
 
 ### Probe cycle API
 

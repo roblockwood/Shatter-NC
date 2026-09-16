@@ -2,19 +2,18 @@
 # Copyright (C) 2024 Shatter-NC contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Live demo: dance B.SKIP / OP.STP / SINGL / M.LCK for ~30s via CHG* keys.
+"""Live demo: dance B.SKIP / OP.STP / SINGL for ~30s via CHG* keys.
 
 Validated CHGOPTS layout (C00): command CHGxxxx + args ON/OFF.
 Siblings assumed same family:
   CHGBLKS  — block skip
   CHGOPTS  — optional stop
   CHGSNGL  — single block
-  CHGMACL  — machine lock
 
-The whole run is wrapped in machine_lock_guard (fail-closed): MACHINE LOCK
-is verified ON via PANEL read-back before the dance starts, and M.LCK is
-restored to its prior state on exit (including Ctrl+C). The other three keys
-are restored to OFF on exit.
+CHGMACL (machine lock) is intentionally NOT danced: the whole run is wrapped
+in machine_lock_guard (fail-closed), which holds MACHINE LOCK ON for the
+entire guarded body and restores its prior state on exit. The script never
+writes CHGMACL, so the lock cannot be cleared mid-run.
 
     cd backend && PYTHONPATH=. python3 scripts/test_panel_key_dance.py
     cd backend && PYTHONPATH=. python3 scripts/test_panel_key_dance.py --seconds 30 --interval 0.4
@@ -35,11 +34,13 @@ from app.parsers.panel_parser_v2 import parse_panel_v2
 DEFAULT_IP = "192.168.86.89"
 
 # (command, PANEL mode_and_functions field, label)
+# NOTE: CHGMACL is deliberately absent. machine_lock_guard holds MACHINE LOCK
+# ON for the whole guarded body; toggling it here could clear the lock
+# mid-run and defeat the interlock. See test_panel_safety.py regression test.
 KEYS = (
     ("CHGBLKS", "block_skip", "B.SKIP"),
     ("CHGOPTS", "opt_stop", "OP.STP"),
     ("CHGSNGL", "single_block", "SINGL"),
-    ("CHGMACL", "machine_lock", "M.LCK"),
 )
 
 
@@ -84,15 +85,14 @@ def _fmt(state: dict[str, Optional[int]]) -> str:
 
 
 async def _all_off(client: CNCTelnetClient) -> None:
-    """Restore the non-lock keys OFF.
+    """Restore the danced keys OFF.
 
-    M.LCK is owned by machine_lock_guard, which restores it to the state it
-    found on entry (rather than blindly forcing OFF).
+    M.LCK is owned by machine_lock_guard, which holds it ON for the whole
+    guarded body and restores its prior state on exit — this script never
+    writes CHGMACL.
     """
-    print("Restoring keys OFF (M.LCK handled by machine_lock_guard)…")
+    print("Restoring keys OFF (M.LCK held by machine_lock_guard)…")
     for command, _, label in KEYS:
-        if command == "CHGMACL":
-            continue
         await _set_key(client, command, False)
     state = await _read_keys(client)
     print(f"Final: {_fmt(state)}")
