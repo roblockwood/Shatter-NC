@@ -43,6 +43,18 @@ class Settings(BaseSettings):
     TELNET_MACRO_TIMEOUT_SECONDS: float = Field(default=10.0, ge=1.0, le=60.0)
     TELNET_READ_MAX_TOTAL_SECONDS: float = Field(default=10.0, ge=1.0, le=60.0)
 
+    # Telnet gateway (Phase 0 — flag-gated; poller routes through it in Phase 1+).
+    # All durations/delays are user-tunable via these env vars.
+    SHATTER_TELNET_GATEWAY_ENABLED: bool = Field(default=False)
+    SHATTER_TELNET_GW_TTL_VOLATILE: float = Field(default=8.0, ge=0)
+    SHATTER_TELNET_GW_TTL_SEMISTATIC: float = Field(default=60.0, ge=0)
+    SHATTER_TELNET_GW_TTL_SLOW: float = Field(default=300.0, ge=0)
+    SHATTER_TELNET_GW_MIN_DELAY: float = Field(default=0.2, ge=0)
+    SHATTER_TELNET_GW_MAX_DELAY: float = Field(default=2.0, ge=0)
+    SHATTER_TELNET_GW_BREAKER_FAILURES: int = Field(default=3, ge=1)
+    SHATTER_TELNET_GW_BREAKER_COOLDOWN: float = Field(default=30.0, ge=0)
+    SHATTER_TELNET_GW_KEEPALIVE_IDLE: float = Field(default=60.0, ge=0)
+
     # FTP folder sync
     FTP_SYNC_ENABLED: bool = True
     FTP_SYNC_LOCAL_WATCH_ENABLED: bool = False
