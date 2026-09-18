@@ -12,6 +12,7 @@ from app.clients.http_client import CNCHttpClient
 from app.clients.ftp_client import CNCFtpClient
 from app.utils.protocol_detector import detect_protocols
 from app.utils.api_errors import public_error_detail
+from app.services._gateway_shadow import gw_on_demand
 import logging
 
 logger = logging.getLogger(__name__)
@@ -175,7 +176,10 @@ async def test_connection(machine_id: int, db: Session = Depends(get_db)):
         # This mirrors the same read path used by polling and is more reliable than a
         # single-shot command check under transient contention.
         start_time = datetime.now()
-        mem_data = await telnet_client.load_data("MEM", verbose=False, max_retries=2)
+        mem_data = await gw_on_demand(
+            db_machine.ip_address, "MEM",
+            lambda: telnet_client.load_data("MEM", verbose=False, max_retries=2),
+        )
         end_time = datetime.now()
         latency = (end_time - start_time).total_seconds() * 1000
 
@@ -419,7 +423,10 @@ async def refresh_program_name(machine_id: int, db: Session = Depends(get_db)):
             port=10000,
             timeout=10
         )
-        mem_data = await telnet_client.get_memory_data(verbose=False)
+        mem_data = await gw_on_demand(
+            machine.ip_address, "MEM",
+            lambda: telnet_client.get_memory_data(verbose=False),
+        )
         
         if not mem_data:
             # Connection is cleaned up automatically - don't disconnect manually

@@ -17,6 +17,11 @@ from app.db.base import get_db
 from app.models.machine import Machine
 from app.clients.http_client import CNCHttpClient
 from app.utils.time_utils import format_cnc_time
+from app.services._gateway_shadow import (
+    gw_on_demand,
+    read_atc_via_gateway,
+    read_prd3_via_gateway,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -70,7 +75,10 @@ async def get_machine_status(
         control_version = await telnet_client.detect_control_type()
         is_online = True
 
-        montr_data = await telnet_client.get_monitor_data(verbose=False)
+        montr_data = await gw_on_demand(
+            db_machine.ip_address, "MONTR",
+            lambda: telnet_client.get_monitor_data(verbose=False),
+        )
         if not montr_data:
             raise HTTPException(
                 status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -79,14 +87,22 @@ async def get_machine_status(
 
         parsed = parse_montr_v2(montr_data.encode('utf-8'), control_version=control_version)
 
-        prd3_data = await telnet_client.get_prd3_data(control_version=control_version, verbose=False)
+        prd3_data = await gw_on_demand(
+            db_machine.ip_address,
+            "PRDD3" if control_version == "D00" else "PRD3",
+            lambda: telnet_client.get_prd3_data(control_version=control_version, verbose=False),
+            gateway_fn=lambda gw, **kw: read_prd3_via_gateway(gw, control_version, **kw),
+        )
         prd3_parsed = None
         if prd3_data:
             prd3_parsed = parse_prd3_v2(prd3_data.encode('utf-8'), control_version=control_version)
 
         mem_parsed = None
         if include_mem:
-            mem_data = await telnet_client.get_memory_data(verbose=False)
+            mem_data = await gw_on_demand(
+                db_machine.ip_address, "MEM",
+                lambda: telnet_client.get_memory_data(verbose=False),
+            )
             if mem_data:
                 mem_parsed = parse_mem_v2(mem_data.encode('utf-8'), control_version=control_version)
 
@@ -134,7 +150,10 @@ async def get_machine_status(
         }
 
         try:
-            alarm_data_raw = await telnet_client.get_alarm_data(verbose=False)
+            alarm_data_raw = await gw_on_demand(
+                db_machine.ip_address, "ALARM",
+                lambda: telnet_client.get_alarm_data(verbose=False),
+            )
             if alarm_data_raw:
                 alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=None)
                 all_alarms = alarm_parsed.get("alarms", []) + alarm_parsed.get("loading_alarms", [])
@@ -195,7 +214,10 @@ async def get_running_log(machine_id: int, db: Session = Depends(get_db)):
         )
 
         control_version = await telnet_client.detect_control_type()
-        montr_data = await telnet_client.get_monitor_data(verbose=False)
+        montr_data = await gw_on_demand(
+            db_machine.ip_address, "MONTR",
+            lambda: telnet_client.get_monitor_data(verbose=False),
+        )
 
         if not montr_data:
             raise HTTPException(
@@ -251,7 +273,10 @@ async def get_work_counters(machine_id: int, db: Session = Depends(get_db)):
         )
 
         control_version = await telnet_client.detect_control_type()
-        montr_data = await telnet_client.get_monitor_data(verbose=False)
+        montr_data = await gw_on_demand(
+            db_machine.ip_address, "MONTR",
+            lambda: telnet_client.get_monitor_data(verbose=False),
+        )
 
         if not montr_data:
             raise HTTPException(
@@ -316,7 +341,10 @@ async def get_alarms_live(machine_id: int, db: Session = Depends(get_db)):
             timeout=10
         )
 
-        alarm_data_raw = await telnet_client.get_alarm_data(verbose=False)
+        alarm_data_raw = await gw_on_demand(
+            db_machine.ip_address, "ALARM",
+            lambda: telnet_client.get_alarm_data(verbose=False),
+        )
 
         if alarm_data_raw is None:
             return {
@@ -388,7 +416,10 @@ async def get_tools(
             )
 
             data_name = "TOLNI1" if db_machine.units == 'in' else "TOLNM1"
-            tool_table_content = await telnet_client.get_tool_table_data(units=db_machine.units, verbose=False)
+            tool_table_content = await gw_on_demand(
+                db_machine.ip_address, data_name,
+                lambda: telnet_client.get_tool_table_data(units=db_machine.units, verbose=False),
+            )
             if tool_table_content is None:
                 raise HTTPException(
                     status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -411,7 +442,11 @@ async def get_tools(
             try:
                 from app.parsers.atctl_parser_v2 import parse_atctl_v2
 
-                atc_data = await telnet_client.get_atc_magazine_data(control_version=None)
+                atc_data = await gw_on_demand(
+                    db_machine.ip_address, "ATCTL",
+                    lambda: telnet_client.get_atc_magazine_data(control_version=None),
+                    gateway_fn=lambda gw, **kw: read_atc_via_gateway(gw, None, **kw),
+                )
 
                 if atc_data:
                     atc_parsed = parse_atctl_v2(atc_data.encode('utf-8'), control_version=None)
@@ -451,7 +486,10 @@ async def get_tools(
 
             try:
                 from app.parsers.mem_parser_v2 import parse_mem_v2
-                mem_data = await telnet_client.get_memory_data()
+                mem_data = await gw_on_demand(
+                    db_machine.ip_address, "MEM",
+                    lambda: telnet_client.get_memory_data(),
+                )
                 if mem_data:
                     logger.debug(f"Raw MEM content: {repr(mem_data)}")
                     parsed_mem = parse_mem_v2(mem_data.encode('utf-8'), control_version=None)
@@ -487,7 +525,11 @@ async def get_tools(
                 timeout=10
             )
 
-            atc_data = await telnet_client.get_atc_magazine_data(control_version=None, verbose=False)
+            atc_data = await gw_on_demand(
+                db_machine.ip_address, "ATCTL",
+                lambda: telnet_client.get_atc_magazine_data(control_version=None, verbose=False),
+                gateway_fn=lambda gw, **kw: read_atc_via_gateway(gw, None, **kw),
+            )
             if atc_data is None:
                 raise HTTPException(
                     status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -506,7 +548,10 @@ async def get_tools(
             data_name = "TOLNI1" if db_machine.units == 'in' else "TOLNM1"
             tool_table_content = None
             try:
-                tool_table_content = await telnet_client.get_tool_table_data(units=db_machine.units, verbose=False)
+                tool_table_content = await gw_on_demand(
+                    db_machine.ip_address, data_name,
+                    lambda: telnet_client.get_tool_table_data(units=db_machine.units, verbose=False),
+                )
 
                 if tool_table_content:
                     first_line = tool_table_content.strip().split('\n')[0].strip() if tool_table_content.strip() else ""
@@ -565,7 +610,10 @@ async def get_tools(
 
             try:
                 from app.parsers.mem_parser_v2 import parse_mem_v2
-                mem_data = await telnet_client.get_memory_data()
+                mem_data = await gw_on_demand(
+                    db_machine.ip_address, "MEM",
+                    lambda: telnet_client.get_memory_data(),
+                )
                 if mem_data:
                     logger.debug(f"Raw MEM content: {repr(mem_data)}")
                     parsed_mem = parse_mem_v2(mem_data.encode('utf-8'), control_version=None)

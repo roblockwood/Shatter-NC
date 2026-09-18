@@ -17,6 +17,7 @@ from app.api._status_state import (
     ToolChangeResult,
 )
 from app.models.machine import Machine
+from app.services._gateway_shadow import invalidate_tool_data_caches
 
 logger = logging.getLogger(__name__)
 
@@ -627,6 +628,12 @@ async def apply_tool_changes_batch(
         finally:
             if telnet_client:
                 await telnet_client.disconnect()
+
+    # Phase 1b: successful tool writes change TOLN/ATCTL on the control —
+    # drop the gateway's cached tool data so the next poll re-reads instead
+    # of serving pre-write bytes. Best-effort; never fails the response.
+    if successful > 0:
+        await invalidate_tool_data_caches(db_machine.ip_address, 10000)
 
     return BatchToolChangesResponse(
         results=results,

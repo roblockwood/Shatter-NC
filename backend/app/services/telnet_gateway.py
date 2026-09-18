@@ -65,6 +65,11 @@ class GatewayNotStarted(RuntimeError):
 # TTL tiers — which LOD data names belong to which freshness tier.
 # Tier *durations* come from settings (user-tunable); membership lives here.
 # Verified against backend/app/clients/_telnet_data_reads.py data names.
+#
+# Phase 1b: TOLN/ATC reads can also be issued with a per-call ``ttl``
+# override (state-aware: short while the operator may be editing at the
+# panel, slow while the machine is operating). Command-path reads
+# (``read_command``) default to the volatile tier unless overridden.
 # ---------------------------------------------------------------------------
 
 _TTL_TIER_VOLATILE = frozenset(
@@ -105,10 +110,10 @@ def _default_client_factory(ip_address: str, port: int):
 
 @dataclass(order=False)
 class _QueueItem:
-    kind: str  # "read" | "write"
+    kind: str  # "read" | "write" ("read" covers LOD reads and read_command() fns)
     future: "asyncio.Future[Any]"
-    data_name: Optional[str] = None
-    fn: Optional[Callable[[Any], Awaitable[Any]]] = None
+    data_name: Optional[str] = None  # LOD name for read(); cache key for read_command()
+    fn: Optional[Callable[[Any], Awaitable[Any]]] = None  # write() op, or read_command() fn
     invalidate: Tuple[str, ...] = ()
 
 
@@ -151,9 +156,11 @@ class TelnetGateway:
         self._closed = False
 
         # Read coalescing: data_name -> shared future for the in-flight LOD.
-        self._inflight: Dict[str, "asyncio.Future[Optional[str]]"] = {}
-        # TTL cache: data_name -> (value, fetched_at_monotonic).
-        self._cache: Dict[str, Tuple[Optional[str], float]] = {}
+        self._inflight: Dict[str, "asyncio.Future[Any]"] = {}
+        # TTL cache: data_name -> (value, fetched_at_monotonic). Values are
+        # raw LOD strings for read(); arbitrary comparable values for
+        # read_command().
+        self._cache: Dict[str, Tuple[Any, float]] = {}
 
         # Adaptive pacing.
         self._current_delay = self._min_delay
@@ -272,6 +279,56 @@ class TelnetGateway:
         fut: "asyncio.Future[Optional[str]]" = loop.create_future()
         self._inflight[data_name] = fut
         item = _QueueItem(kind="read", future=fut, data_name=data_name)
+        await self._enqueue(item, priority)
+        if timeout is not None:
+            return await asyncio.wait_for(asyncio.shield(fut), timeout)
+        return await asyncio.shield(fut)
+
+    async def read_command(
+        self,
+        cache_key: str,
+        fn: Callable[[Any], Awaitable[Any]],
+        *,
+        priority: int = PRIORITY_READ,
+        ttl: Optional[float] = None,
+        force_refresh: bool = False,
+        timeout: Optional[float] = None,
+    ) -> Any:
+        """Run an arbitrary read command ``fn(client)`` through the gateway.
+
+        Phase 1b: not every machine read is a ``LOD <data_name>`` — the
+        macro range read uses ``REDMCNM``. This runs any client coroutine
+        while keeping the gateway's priority queue, adaptive pacing,
+        circuit breaker, TTL cache, read coalescing, and stats, keyed by
+        ``cache_key`` (e.g. ``"MACRO:500:500"``).
+
+        ``fn`` runs on the gateway-owned client inside the worker task; it
+        may acquire the per-machine lock itself, exactly like
+        ``load_data()`` does. It must return a value that is safely
+        comparable — callers canonicalize it (e.g. to JSON) for shadow
+        comparison. ``ttl`` defaults to the volatile tier: command reads
+        are assumed fresh-sensitive unless the caller says otherwise.
+        """
+        await self._ensure_started()
+        loop = asyncio.get_running_loop()
+        now = loop.time()
+        if ttl is None:
+            ttl = self._ttl_volatile
+
+        if not force_refresh and ttl > 0:
+            cached = self._cache.get(cache_key)
+            if cached is not None and now - cached[1] < ttl:
+                self._counters["cache_hits"] += 1
+                return cached[0]
+
+        existing = self._inflight.get(cache_key)
+        if existing is not None:
+            self._counters["coalesced"] += 1
+            return await asyncio.shield(existing)
+
+        fut: "asyncio.Future[Any]" = loop.create_future()
+        self._inflight[cache_key] = fut
+        item = _QueueItem(kind="read", future=fut, data_name=cache_key, fn=fn)
         await self._enqueue(item, priority)
         if timeout is not None:
             return await asyncio.wait_for(asyncio.shield(fut), timeout)
@@ -474,7 +531,13 @@ class TelnetGateway:
             await self._pace()
             t0 = loop.time()
             await self._ensure_connected()
-            value = await self._client.load_data(key)
+            if item.fn is not None:
+                # Phase 1b command path (e.g. REDMCNM macro range): run the
+                # caller's coroutine on the shared client. Like load_data(),
+                # it may acquire the per-machine lock itself.
+                value = await item.fn(self._client)
+            else:
+                value = await self._client.load_data(key)
             latency = loop.time() - t0
             self._record_latency(latency)
             self._last_command_at = loop.time()

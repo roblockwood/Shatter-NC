@@ -22,6 +22,7 @@ from app.utils.api_errors import public_error_detail
 from app.clients.ftp_client import CNCFtpClient
 from app.parsers.gcode_parser import parse_gcode
 from app.services.program_service import ProgramService
+from app.services._gateway_shadow import gw_on_demand
 import logging
 
 logger = logging.getLogger(__name__)
@@ -159,7 +160,11 @@ async def get_position(machine_id: int, db: Session = Depends(get_db)):
             timeout=10
         )
 
-        position_data = await telnet_client.get_position_data(units=db_machine.units, verbose=False)
+        position_data = await gw_on_demand(
+            db_machine.ip_address,
+            "POSNI1" if db_machine.units == 'in' else "POSNM1",
+            lambda: telnet_client.get_position_data(units=db_machine.units, verbose=False),
+        )
 
         if not position_data:
             raise HTTPException(

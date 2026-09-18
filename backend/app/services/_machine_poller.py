@@ -5,7 +5,17 @@
 import asyncio
 from app.clients.telnet_client import create_fresh_connection, CNCTelnetClient
 from app.services.telnet_gateway import get_gateway
-from app.services._gateway_shadow import ShadowComparator, read_prd3_via_gateway
+from app.services._gateway_shadow import (
+    ShadowComparator,
+    read_prd3_via_gateway,
+    read_atc_via_gateway,
+    read_macro_range_via_gateway,
+    macro_cache_key,
+    canonical_json,
+    gw_on_demand,
+    ondemand_shadow_snapshot,
+    TOOL_DATA_NAMES,
+)
 from app.parsers.prd3_parser_v2 import parse_prd3_v2
 from app.parsers.alarm_parser_v2 import parse_alarm_v2
 from app.parsers.tolni_parser_v2 import parse_tolni_v2
@@ -75,6 +85,10 @@ class MachinePoller:
         # program name seen by fast poll (drives MEM cache invalidation).
         self._shadow_comparator = ShadowComparator()
         self._last_fast_program_name: Optional[str] = None
+
+        # Phase 1b: last spindle tool seen by the tool poll (drives
+        # tool-data cache invalidation on tool change).
+        self._last_tool_poll_current_tool: Optional[int] = None
 
         # NC header comments cached when a production run starts (via background FTP fetch)
         self._active_run_nc_header: Optional[dict] = None
@@ -299,7 +313,13 @@ class MachinePoller:
                     timeout=10,
                 )
 
-                mem_data = await telnet_client.get_memory_data(verbose=False)
+                # Phase 1b: on-demand MEM read goes through the gateway when
+                # enabled (shadow: direct authoritative + gateway comparison).
+                mem_data = await gw_on_demand(
+                    self.machine.ip_address,
+                    "MEM",
+                    lambda: telnet_client.get_memory_data(verbose=False),
+                )
                 if mem_data:
                     logger.debug(f"Machine {self.machine.id} - Raw MEM content: {repr(mem_data)}")
                     parsed_mem = parse_mem_v2(mem_data.encode('utf-8'), control_version=None)
@@ -396,6 +416,70 @@ class MachinePoller:
             return {}
         return self.websocket_manager.get_machine_status(self.machine.id) or {}
 
+    def _tool_data_ttl(self) -> float:
+        """State-aware TTL for TOLN/ATC gateway reads (Phase 1b).
+
+        While the machine is operating, tool data is effectively frozen
+        (and the tool poll skips anyway) -> slow tier. Otherwise the
+        operator may be editing offsets at the panel -> short TTL so the
+        dashboard never shows minutes-old tool data during setup.
+        """
+        if self.last_known_prd3_status == "operating":
+            return settings.SHATTER_TELNET_GW_TTL_SLOW
+        return settings.SHATTER_TELNET_GW_TTL_TOOL_IDLE
+
+    async def _read_dataset(
+        self,
+        step_key: str,
+        data_name: str,
+        direct_fn: Callable[[], Awaitable[Any]],
+        gateway_fn: Callable[..., Awaitable[Any]],
+        *,
+        telnet_gateway: Any,
+        gateway_authoritative: bool,
+        step_times: Dict[str, float],
+        canonicalize: Optional[Callable[[Any], Optional[str]]] = None,
+    ) -> Any:
+        """Read one dataset via gateway and/or direct client.
+
+        - Gateway disabled: direct client only (today's behavior).
+        - Shadow mode: the direct result is authoritative; the gateway
+          read runs with force_refresh for a fair comparison and can
+          never fail the poll (exceptions are swallowed).
+        - Authoritative mode: the gateway result is used; the direct
+          client is untouched for this dataset.
+
+        ``canonicalize`` maps non-string results (e.g. macro
+        ``list[float]``) to a canonical string for the shadow byte
+        comparison. Gateway reads go through ``load_data()`` (or the
+        command path), which already acquires the per-machine lock —
+        never wrap this in another non-reentrant lock.
+        """
+        step_start = time.time()
+        canon = canonicalize or (lambda v: v)
+        if telnet_gateway is None:
+            result = await direct_fn()
+            step_times[step_key] = time.time() - step_start
+            return result
+        if gateway_authoritative:
+            result = await gateway_fn(force_refresh=False)
+            step_times[step_key] = time.time() - step_start
+            return result
+        # Shadow mode: direct stays authoritative.
+        result = await direct_fn()
+        step_times[step_key] = time.time() - step_start
+        shadow_start = time.time()
+        try:
+            gw_result = await gateway_fn(force_refresh=True)
+            self._shadow_comparator.compare(data_name, canon(result), canon(gw_result))
+        except Exception as exc:
+            logger.debug(
+                f"Machine {self.machine.id} - gateway shadow read "
+                f"{data_name} failed (ignored): {exc}"
+            )
+        step_times[step_key + "_gw_shadow"] = time.time() - shadow_start
+        return result
+
     async def poll_tool_data(self) -> Dict[str, Any]:
         """
         Poll tool table and ATC magazine data (slow polling operation).
@@ -433,6 +517,25 @@ class MachinePoller:
         step_times: Dict[str, float] = {}
         telnet_client = None
 
+        # Phase 1b telnet gateway (flag-gated). When enabled, the tool-poll
+        # TOLN/ATC reads go through the gateway with the same
+        # shadow/authoritative semantics as the fast poll. None = today's
+        # behavior, zero change.
+        telnet_gateway = None
+        gateway_authoritative = False
+        if settings.SHATTER_TELNET_GATEWAY_ENABLED:
+            try:
+                telnet_gateway = await get_gateway(self.machine.ip_address, 10000)
+                gateway_authoritative = settings.SHATTER_TELNET_GW_AUTHORITATIVE
+            except Exception as exc:
+                # Never let gateway setup break polling: fall back to the
+                # direct client path (today's behavior).
+                logger.warning(
+                    f"Machine {self.machine.id} - telnet gateway unavailable "
+                    f"for tool poll ({exc}); using direct client"
+                )
+                telnet_gateway = None
+
         async def _run_tool_poll() -> Dict[str, Any]:
             nonlocal telnet_client
             tool_data: Dict[str, Any] = {}
@@ -447,11 +550,49 @@ class MachinePoller:
                 timeout=10,
             )
             step_times['get_connection'] = time.time() - step_start
-            
+
+            # Phase 1b: tool-poll reads go through the gateway when enabled.
+            # TOLN/ATC use the state-aware TTL (short while the operator may
+            # be editing at the panel, slow while operating).
+            toln_name = "TOLNI1" if self.machine.units == "in" else "TOLNM1"
+            atc_name = "ATDTL" if self.machine.control_version == "D00" else "ATCTL"
+            tool_ttl = self._tool_data_ttl()
+
+            async def _read_tool_dataset(step_key, data_name, direct_fn, gateway_fn):
+                return await self._read_dataset(
+                    step_key,
+                    data_name,
+                    direct_fn,
+                    gateway_fn,
+                    telnet_gateway=telnet_gateway,
+                    gateway_authoritative=gateway_authoritative,
+                    step_times=step_times,
+                )
+
+            async def _gw_read_toln(*, force_refresh: bool) -> Optional[str]:
+                return await telnet_gateway.read(
+                    toln_name, force_refresh=force_refresh, ttl=tool_ttl
+                )
+
+            async def _gw_read_atc(*, force_refresh: bool) -> Optional[str]:
+                return await read_atc_via_gateway(
+                    telnet_gateway,
+                    self.machine.control_version,
+                    force_refresh=force_refresh,
+                    ttl=tool_ttl,
+                    # Mirror the direct path's post-upload retry in
+                    # authoritative mode; shadow stays single-attempt
+                    # best-effort (failures are swallowed there anyway).
+                    attempts=3 if gateway_authoritative else 1,
+                )
+
             # Get tool table data first (needed for both ATC merge and TABLE display)
-            step_start = time.time()
-            tool_table_content = await telnet_client.get_tool_table_data(units=self.machine.units, verbose=False)
-            step_times['get_tool_table'] = time.time() - step_start
+            tool_table_content = await _read_tool_dataset(
+                "get_tool_table",
+                toln_name,
+                lambda: telnet_client.get_tool_table_data(units=self.machine.units, verbose=False),
+                _gw_read_toln,
+            )
             
             if tool_table_content:
                 step_start = time.time()
@@ -463,9 +604,12 @@ class MachinePoller:
                 step_times['parse_tool_table'] = time.time() - step_start
                 
                 # Get ATC magazine data (pot/tool mappings) for merging
-                step_start = time.time()
-                atc_data = await self._fetch_atc_data_with_retry(telnet_client)
-                step_times['get_atc'] = time.time() - step_start
+                atc_data = await _read_tool_dataset(
+                    "get_atc",
+                    atc_name,
+                    lambda: self._fetch_atc_data_with_retry(telnet_client),
+                    _gw_read_atc,
+                )
                 
                 # Start with pure TOLN (table) data
                 tool_table_tools = tool_table_parsed.get("tools", [])
@@ -588,6 +732,27 @@ class MachinePoller:
                 logger.debug(f"[TOOL_POLL] Machine {self.machine.id} ({self.machine.name}) - Tool poll completed in {total_time_ms}ms | Steps: {step_summary}")
             else:
                 logger.warning(f"Machine {self.machine.id} - No tool table data available via Telnet")
+
+            # Phase 1b: when the spindle tool changes between tool polls, drop
+            # the gateway's cached tool data (mirror of the fast poll's
+            # MEM/program-name hook). MONTR carries no tool number, so the
+            # ATCTL spindle pot is the change signal. Invalidation is always
+            # safe — the next read simply goes back to the machine.
+            spindle_tool = tool_data.get("current_tool")
+            if (
+                telnet_gateway is not None
+                and spindle_tool is not None
+                and self._last_tool_poll_current_tool is not None
+                and spindle_tool != self._last_tool_poll_current_tool
+            ):
+                telnet_gateway.invalidate(*TOOL_DATA_NAMES)
+                logger.debug(
+                    f"Machine {self.machine.id} - spindle tool changed "
+                    f"{self._last_tool_poll_current_tool} -> {spindle_tool}; "
+                    f"invalidated gateway tool-data cache"
+                )
+            if spindle_tool is not None:
+                self._last_tool_poll_current_tool = spindle_tool
             return tool_data
 
         try:
@@ -666,44 +831,58 @@ class MachinePoller:
             async def _gw_read_mem(*, force_refresh: bool) -> Optional[str]:
                 return await telnet_gateway.read("MEM", force_refresh=force_refresh)
 
+            async def _gw_read_alarm(*, force_refresh: bool) -> Optional[str]:
+                return await telnet_gateway.read("ALARM", force_refresh=force_refresh)
+
+            async def _gw_read_panel(*, force_refresh: bool) -> Optional[str]:
+                return await telnet_gateway.read("PANEL", force_refresh=force_refresh)
+
+            async def _gw_read_macros(*, force_refresh: bool) -> Optional[list]:
+                # Phase 1b: the macro range read is a REDMCNM command, not
+                # LOD — it rides the gateway command path.
+                return await read_macro_range_via_gateway(
+                    telnet_gateway,
+                    500,
+                    500,
+                    force_refresh=force_refresh,
+                    timeout=settings.TELNET_MACRO_TIMEOUT_SECONDS,
+                )
+
+            async def _direct_macros() -> Optional[list]:
+                try:
+                    return await asyncio.wait_for(
+                        telnet_client.get_macro_variable_range(500, 500, verbose=False),
+                        timeout=settings.TELNET_MACRO_TIMEOUT_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "Machine %s (%s) macro fetch timed out after %.1fs",
+                        self.machine.id,
+                        self.machine.name,
+                        settings.TELNET_MACRO_TIMEOUT_SECONDS,
+                    )
+                    return None
+
+            # Phase 1b: the read dispatch now lives on the poller
+            # (``_read_dataset``) so the tool poll can reuse it; this thin
+            # wrapper keeps the fast-poll call sites unchanged.
             async def _read_fast_dataset(
                 step_key: str,
                 data_name: str,
-                direct_fn: Callable[[], Awaitable[Optional[str]]],
-                gateway_fn: Callable[..., Awaitable[Optional[str]]],
-            ) -> Optional[str]:
-                """Read one fast-poll dataset via gateway and/or direct client.
-
-                - Gateway disabled: direct client only (today's behavior).
-                - Shadow mode: the direct result is authoritative; the gateway
-                  read runs with force_refresh for a fair comparison and can
-                  never fail the poll (exceptions are swallowed).
-                - Authoritative mode: the gateway result is used; the direct
-                  client is untouched for this dataset.
-                """
-                step_start = time.time()
-                if telnet_gateway is None:
-                    result = await direct_fn()
-                    step_times[step_key] = time.time() - step_start
-                    return result
-                if gateway_authoritative:
-                    result = await gateway_fn(force_refresh=False)
-                    step_times[step_key] = time.time() - step_start
-                    return result
-                # Shadow mode: direct stays authoritative.
-                result = await direct_fn()
-                step_times[step_key] = time.time() - step_start
-                shadow_start = time.time()
-                try:
-                    gw_result = await gateway_fn(force_refresh=True)
-                    self._shadow_comparator.compare(data_name, result, gw_result)
-                except Exception as exc:
-                    logger.debug(
-                        f"Machine {self.machine.id} - gateway shadow read "
-                        f"{data_name} failed (ignored): {exc}"
-                    )
-                step_times[step_key + "_gw_shadow"] = time.time() - shadow_start
-                return result
+                direct_fn: Callable[[], Awaitable[Any]],
+                gateway_fn: Callable[..., Awaitable[Any]],
+                canonicalize: Optional[Callable[[Any], Optional[str]]] = None,
+            ) -> Any:
+                return await self._read_dataset(
+                    step_key,
+                    data_name,
+                    direct_fn,
+                    gateway_fn,
+                    telnet_gateway=telnet_gateway,
+                    gateway_authoritative=gateway_authoritative,
+                    step_times=step_times,
+                    canonicalize=canonicalize,
+                )
 
             # Get MONTR data (replaces HTTP /running_log and /work_counter)
             montr_data = await _read_fast_dataset(
@@ -841,12 +1020,16 @@ class MachinePoller:
                 ],
             }
             
-            # Get alarms from Telnet (Phase 5: Migrate to Telnet)
+            # Get alarms from Telnet (Phase 5: Migrate to Telnet).
+            # Phase 1b: routed through the gateway (display use only — the
+            # write-gate safety reads in machine_state_validator stay direct).
             try:
-                step_start = time.time()
-                
-                alarm_data_raw = await telnet_client.get_alarm_data(verbose=False)
-                step_times['get_alarms'] = time.time() - step_start
+                alarm_data_raw = await _read_fast_dataset(
+                    "get_alarms",
+                    "ALARM",
+                    lambda: telnet_client.get_alarm_data(verbose=False),
+                    _gw_read_alarm,
+                )
                 if alarm_data_raw:
                     step_start = time.time()
                     alarm_parsed = parse_alarm_v2(alarm_data_raw.encode('utf-8'), control_version=control_version)
@@ -862,12 +1045,17 @@ class MachinePoller:
                 logger.warning(f"Machine {self.machine.id} - Failed to fetch alarms: {e}")
                 status_data["alarms"] = []
             
-            # Get panel data from Telnet
+            # Get panel data from Telnet.
+            # Phase 1b: routed through the gateway (display use only — the
+            # machine-lock/mode safety read-backs in _panel_safety and
+            # api/_panel stay direct).
             try:
-                step_start = time.time()
-                
-                panel_data_raw = await telnet_client.get_panel_data(verbose=False)
-                step_times['get_panel'] = time.time() - step_start
+                panel_data_raw = await _read_fast_dataset(
+                    "get_panel",
+                    "PANEL",
+                    lambda: telnet_client.get_panel_data(verbose=False),
+                    _gw_read_panel,
+                )
                 if panel_data_raw:
                     step_start = time.time()
                     panel_parsed = parse_panel_v2(panel_data_raw.encode('utf-8'), control_version=control_version)
@@ -879,23 +1067,18 @@ class MachinePoller:
                 logger.warning(f"Machine {self.machine.id} - Failed to fetch panel data: {e}")
                 status_data["panel"] = None
             
-            # Get macro variables from Telnet (macros #500-999)
+            # Get macro variables from Telnet (macros #500-999).
+            # Phase 1b: REDMCNM rides the gateway command path. Results are
+            # list[float]; the shadow comparison uses the canonical JSON
+            # form of both sides.
             try:
-                step_start = time.time()
-                try:
-                    macro_values = await asyncio.wait_for(
-                        telnet_client.get_macro_variable_range(500, 500, verbose=False),
-                        timeout=settings.TELNET_MACRO_TIMEOUT_SECONDS,
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning(
-                        "Machine %s (%s) macro fetch timed out after %.1fs",
-                        self.machine.id,
-                        self.machine.name,
-                        settings.TELNET_MACRO_TIMEOUT_SECONDS,
-                    )
-                    macro_values = None
-                step_times['get_macros'] = time.time() - step_start
+                macro_values = await _read_fast_dataset(
+                    "get_macros",
+                    macro_cache_key(500, 500),
+                    _direct_macros,
+                    _gw_read_macros,
+                    canonicalize=canonical_json,
+                )
                 if macro_values:
                     # Convert list to dictionary mapping macro number to value
                     macros_dict = {}
@@ -984,9 +1167,11 @@ class MachinePoller:
 
             # Phase 1 gateway observability (only present when the gateway is
             # enabled): shadow comparison counters + gateway internals.
+            # Phase 1b: also the on-demand (API) shadow counters.
             if telnet_gateway is not None:
                 status_data["gw_shadow"] = self._shadow_comparator.snapshot()
                 status_data["gw_stats"] = telnet_gateway.stats()
+                status_data["gw_shadow_ondemand"] = ondemand_shadow_snapshot()
             
             # Ensure program_name is explicitly included (even if None)
             if "program_name" not in status_data:
