@@ -64,14 +64,21 @@ def _working_direct_fake(montr_program_no="2045"):
     return fake
 
 
-def _fake_gateway(montr=None, prd3=None, mem=None, read_side_effect=None):
-    """Fake gateway: read() serves canned bytes per data name."""
+_UNSET = object()
+
+
+def _fake_gateway(montr=_UNSET, prd3=_UNSET, mem=_UNSET, read_side_effect=None):
+    """Fake gateway: read() serves canned bytes per data name.
+
+    Explicit None means "the machine returned nothing" (offline path);
+    omit the argument for the default canned payload.
+    """
     gw = MagicMock()
     canned = {
-        "MONTR": montr if montr is not None else _montr_bytes().decode(),
-        "PRD3": prd3 if prd3 is not None else _prd3_bytes(2).decode(),
+        "MONTR": _montr_bytes().decode() if montr is _UNSET else montr,
+        "PRD3": _prd3_bytes(2).decode() if prd3 is _UNSET else prd3,
         "PRDD3": None,
-        "MEM": mem if mem is not None else _mem_bytes().decode(),
+        "MEM": _mem_bytes().decode() if mem is _UNSET else mem,
     }
     if read_side_effect is not None:
         gw.read = AsyncMock(side_effect=read_side_effect)
