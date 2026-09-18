@@ -595,6 +595,7 @@ class CNCHttpClient:
             import asyncio
             from app.clients.telnet_client import create_fresh_connection
             from app.parsers.mem_parser_v2 import parse_mem_v2
+            from app.services._gateway_shadow import gw_on_demand
 
             async def fetch_mem():
                 telnet_client = await create_fresh_connection(
@@ -603,7 +604,10 @@ class CNCHttpClient:
                     timeout=10
                 )
                 try:
-                    mem_data = await telnet_client.get_memory_data(verbose=False)
+                    mem_data = await gw_on_demand(
+                        machine.ip_address, "MEM",
+                        lambda: telnet_client.get_memory_data(verbose=False),
+                    )
                     return mem_data
                 finally:
                     await telnet_client.disconnect()

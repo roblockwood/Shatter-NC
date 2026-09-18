@@ -59,7 +59,7 @@ def _working_direct_fake(montr_program_no="2045"):
     fake.get_memory_data = AsyncMock(return_value=_mem_bytes(montr_program_no).decode())
     fake.get_alarm_data = AsyncMock(return_value="")
     fake.get_panel_data = AsyncMock(return_value=None)
-    fake.get_macro_variable_range = AsyncMock(return_value=[])
+    fake.get_macro_variable_range = AsyncMock(return_value=[1.0, 2.0])
     fake.disconnect = AsyncMock()
     return fake
 
@@ -67,7 +67,7 @@ def _working_direct_fake(montr_program_no="2045"):
 _UNSET = object()
 
 
-def _fake_gateway(montr=_UNSET, prd3=_UNSET, mem=_UNSET, read_side_effect=None):
+def _fake_gateway(montr=_UNSET, prd3=_UNSET, mem=_UNSET, read_side_effect=None, macros=_UNSET):
     """Fake gateway: read() serves canned bytes per data name.
 
     Explicit None means "the machine returned nothing" (offline path);
@@ -87,6 +87,10 @@ def _fake_gateway(montr=_UNSET, prd3=_UNSET, mem=_UNSET, read_side_effect=None):
             return canned.get(data_name)
 
         gw.read = AsyncMock(side_effect=_read)
+    # Phase 1b: REDMCNM command path serves a canned parsed macro list.
+    gw.read_command = AsyncMock(
+        return_value=[1.0, 2.0] if macros is _UNSET else macros
+    )
     gw.invalidate = MagicMock()
     gw.stats = MagicMock(return_value={"breaker_state": "closed"})
     return gw
@@ -150,7 +154,7 @@ async def test_read_prd3_via_gateway_falls_back_to_alternate():
     gw2.read = AsyncMock(return_value="PRDD3-data")
     result = await read_prd3_via_gateway(gw2, "D00", force_refresh=True)
     assert result == "PRDD3-data"
-    gw2.read.assert_awaited_once_with("PRDD3", force_refresh=True)
+    gw2.read.assert_awaited_once_with("PRDD3", force_refresh=True, ttl=None)
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +203,9 @@ async def test_shadow_mode_gateway_exception_never_fails_poll(monkeypatch):
     poller = MachinePoller(_machine(), None)
     direct = _working_direct_fake()
     gw = _fake_gateway(read_side_effect=RuntimeError("gateway boom"))
+    # Phase 1b: the macro command path must explode too, or its shadow
+    # comparison would record a (matching) entry.
+    gw.read_command = AsyncMock(side_effect=RuntimeError("gateway boom"))
 
     result = await _poll_with(poller, monkeypatch, direct, gw, True, False)
 
@@ -235,17 +242,22 @@ async def test_authoritative_mode_uses_gateway_not_direct(monkeypatch):
 
     result = await _poll_with(poller, monkeypatch, direct, gw, True, True)
 
-    # The three fast-poll reads must NOT touch the direct client...
+    # Phase 1b: all fast-poll reads go through the gateway — the direct
+    # client must not be touched at all.
     direct.get_monitor_data.assert_not_called()
     direct.get_prd3_data.assert_not_called()
     direct.get_memory_data.assert_not_called()
-    # ...but alarms/panel/macros still do (out of Phase 1 scope).
-    direct.get_alarm_data.assert_awaited()
+    direct.get_alarm_data.assert_not_called()
+    direct.get_panel_data.assert_not_called()
+    direct.get_macro_variable_range.assert_not_called()
     # Gateway bytes parse exactly like direct bytes.
     assert result["program_name"] == "O2045"
     assert result["status"] == "standby"
+    assert result["macros"] == {"500": 1.0, "501": 2.0}
     # Gateway reads were NOT force-refreshed in authoritative mode (cache applies).
     for call in gw.read.await_args_list:
+        assert call.kwargs.get("force_refresh") is False
+    for call in gw.read_command.await_args_list:
         assert call.kwargs.get("force_refresh") is False
 
 

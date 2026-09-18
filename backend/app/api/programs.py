@@ -18,6 +18,7 @@ from app.parsers.gcode_parser import parse_gcode
 # Note: use parse_posni_v2 for work offset parsing
 from app.clients.ftp_client import CNCFtpClient
 from app.utils.api_errors import public_error_detail
+from app.services._gateway_shadow import gw_on_demand, read_atc_via_gateway
 from app.api import websocket as websocket_api
 from app.schemas.program import (
     ProgramUploadRequest,
@@ -296,20 +297,32 @@ async def validate_program(
                 )
 
                 # Read tool table first (diameter/length/name)
-                tool_table_content = await tool_telnet_client.get_tool_table_data(units=machine.units, verbose=False)
-                if not tool_table_content:
-                    # Force one fresh reconnect and retry for transient sessions
-                    await tool_telnet_client.disconnect()
-                    tool_telnet_client = await create_fresh_connection(
-                        ip_address=machine.ip_address,
-                        port=10000,
-                        timeout=10,
-                    )
+                toln_name = "TOLNI1" if machine.units == 'in' else "TOLNM1"
+
+                async def _direct_tool_table() -> Optional[str]:
+                    nonlocal tool_telnet_client
                     tool_table_content = await tool_telnet_client.get_tool_table_data(units=machine.units, verbose=False)
+                    if not tool_table_content:
+                        # Force one fresh reconnect and retry for transient sessions
+                        await tool_telnet_client.disconnect()
+                        tool_telnet_client = await create_fresh_connection(
+                            ip_address=machine.ip_address,
+                            port=10000,
+                            timeout=10,
+                        )
+                        tool_table_content = await tool_telnet_client.get_tool_table_data(units=machine.units, verbose=False)
+                    return tool_table_content
+
+                tool_table_content = await gw_on_demand(machine.ip_address, toln_name, _direct_tool_table)
 
                 # Read ATC pot mappings
                 control_version = machine.control_version if machine.control_version in ("C00", "D00") else None
-                atc_data = await tool_telnet_client.get_atc_magazine_data(control_version=control_version, verbose=False)
+                atc_data = await gw_on_demand(
+                    machine.ip_address,
+                    "ATDTL" if control_version == "D00" else "ATCTL",
+                    lambda: tool_telnet_client.get_atc_magazine_data(control_version=control_version, verbose=False),
+                    gateway_fn=lambda gw, **kw: read_atc_via_gateway(gw, control_version, **kw),
+                )
 
                 if tool_table_content and atc_data:
                     tool_table_parsed = parse_tolni_v2(
@@ -415,7 +428,11 @@ async def validate_program(
                 timeout=10
             )
 
-            position_data = await telnet_client.get_position_data(units=machine.units, verbose=False)
+            position_data = await gw_on_demand(
+                machine.ip_address,
+                "POSNI1" if machine.units == 'in' else "POSNM1",
+                lambda: telnet_client.get_position_data(units=machine.units, verbose=False),
+            )
             if not position_data:
                 raise Exception(
                     "Could not retrieve POSNI1.NC/POSNM1.NC from machine via Telnet "

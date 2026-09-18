@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     SHATTER_TELNET_GW_TTL_VOLATILE: float = Field(default=3.0, ge=0)
     SHATTER_TELNET_GW_TTL_SEMISTATIC: float = Field(default=60.0, ge=0)
     SHATTER_TELNET_GW_TTL_SLOW: float = Field(default=300.0, ge=0)
+    # Phase 1b: state-aware TTL for tool data (TOLN/ATC). While the machine
+    # is operating, tool data is effectively frozen -> slow tier. Otherwise
+    # the operator may be editing offsets at the panel -> short TTL so the
+    # dashboard never shows minutes-old tool data during setup.
+    SHATTER_TELNET_GW_TTL_TOOL_IDLE: float = Field(default=30.0, ge=0)
     SHATTER_TELNET_GW_MIN_DELAY: float = Field(default=0.2, ge=0)
     SHATTER_TELNET_GW_MAX_DELAY: float = Field(default=2.0, ge=0)
     SHATTER_TELNET_GW_BREAKER_FAILURES: int = Field(default=3, ge=1)

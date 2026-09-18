@@ -18,6 +18,7 @@ from app.services.tolni_patch import (
     patch_tool_names,
     tool_names_match,
 )
+from app.services._gateway_shadow import invalidate_tool_data_caches
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +239,12 @@ async def write_tool_names_via_ftp(
             atc_assignments,
             telnet_client,
         )
+
+        # Phase 1b: the TOLN upload replaced the tool table on the control
+        # (and the restore above re-uploaded ATCTL) — drop the gateway's
+        # cached tool data now that the machine is in its final state.
+        # Best-effort; never fails the write.
+        await invalidate_tool_data_caches(db_machine.ip_address, 10000)
     finally:
         await ftp.disconnect()
 
