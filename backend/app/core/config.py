@@ -46,7 +46,14 @@ class Settings(BaseSettings):
     # Telnet gateway (Phase 0 — flag-gated; poller routes through it in Phase 1+).
     # All durations/delays are user-tunable via these env vars.
     SHATTER_TELNET_GATEWAY_ENABLED: bool = Field(default=False)
-    SHATTER_TELNET_GW_TTL_VOLATILE: float = Field(default=8.0, ge=0)
+    # Phase 1: when authoritative, the gateway (not a direct client) serves
+    # fast-poll reads. Shadow mode (authoritative off) keeps the direct
+    # client authoritative and only compares gateway bytes against it.
+    SHATTER_TELNET_GW_AUTHORITATIVE: bool = Field(default=False)
+    # Phase 1 decision: volatile TTL stays under the default fast-poll
+    # interval (5s) so the cache only dedups within a poll cycle.
+    # Cross-cycle caching is a later tuning decision.
+    SHATTER_TELNET_GW_TTL_VOLATILE: float = Field(default=3.0, ge=0)
     SHATTER_TELNET_GW_TTL_SEMISTATIC: float = Field(default=60.0, ge=0)
     SHATTER_TELNET_GW_TTL_SLOW: float = Field(default=300.0, ge=0)
     SHATTER_TELNET_GW_MIN_DELAY: float = Field(default=0.2, ge=0)

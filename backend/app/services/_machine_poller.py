@@ -4,6 +4,8 @@
 """Single-machine poller extracted from polling.py."""
 import asyncio
 from app.clients.telnet_client import create_fresh_connection, CNCTelnetClient
+from app.services.telnet_gateway import get_gateway
+from app.services._gateway_shadow import ShadowComparator, read_prd3_via_gateway
 from app.parsers.prd3_parser_v2 import parse_prd3_v2
 from app.parsers.alarm_parser_v2 import parse_alarm_v2
 from app.parsers.tolni_parser_v2 import parse_tolni_v2
@@ -23,7 +25,7 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any, Optional, Tuple, List, Callable, Awaitable
 from sqlalchemy.orm import Session
 from app.models.machine import Machine
 from app.models.program import ProgramDeployment
@@ -68,6 +70,11 @@ class MachinePoller:
         # Cache for program_name from mem.nc (fetched on-demand, not during regular polling)
         self.cached_program_name: Optional[str] = None
         self.program_name_fetched = False  # Track if we've fetched program_name at least once
+
+        # Phase 1 telnet gateway: shadow-mode comparison stats, plus the last
+        # program name seen by fast poll (drives MEM cache invalidation).
+        self._shadow_comparator = ShadowComparator()
+        self._last_fast_program_name: Optional[str] = None
 
         # NC header comments cached when a production run starts (via background FTP fetch)
         self._active_run_nc_header: Optional[dict] = None
@@ -612,6 +619,16 @@ class MachinePoller:
         step_times: Dict[str, float] = {}
         telnet_client = None
 
+        # Phase 1 telnet gateway (flag-gated). When enabled, the fast-poll
+        # MONTR/PRD3/MEM reads go through the gateway: shadow mode keeps the
+        # direct client authoritative and only compares bytes, authoritative
+        # mode uses the gateway results. None = today's behavior, zero change.
+        telnet_gateway = None
+        gateway_authoritative = False
+        if settings.SHATTER_TELNET_GATEWAY_ENABLED:
+            telnet_gateway = await get_gateway(self.machine.ip_address, 10000)
+            gateway_authoritative = settings.SHATTER_TELNET_GW_AUTHORITATIVE
+
         async def _run_fast_poll() -> Dict[str, Any]:
             nonlocal telnet_client
             logger.debug(f"[POLL] Machine {self.machine.id} ({self.machine.name}) - Starting fast poll")
@@ -626,13 +643,66 @@ class MachinePoller:
                 timeout=10,
             )
             step_times['get_connection'] = time.time() - step_start
-            
+
             control_version = self.machine.control_version
 
+            async def _gw_read_montr(*, force_refresh: bool) -> Optional[str]:
+                return await telnet_gateway.read("MONTR", force_refresh=force_refresh)
+
+            async def _gw_read_prd3(*, force_refresh: bool) -> Optional[str]:
+                return await read_prd3_via_gateway(
+                    telnet_gateway, control_version, force_refresh=force_refresh
+                )
+
+            async def _gw_read_mem(*, force_refresh: bool) -> Optional[str]:
+                return await telnet_gateway.read("MEM", force_refresh=force_refresh)
+
+            async def _read_fast_dataset(
+                step_key: str,
+                data_name: str,
+                direct_fn: Callable[[], Awaitable[Optional[str]]],
+                gateway_fn: Callable[..., Awaitable[Optional[str]]],
+            ) -> Optional[str]:
+                """Read one fast-poll dataset via gateway and/or direct client.
+
+                - Gateway disabled: direct client only (today's behavior).
+                - Shadow mode: the direct result is authoritative; the gateway
+                  read runs with force_refresh for a fair comparison and can
+                  never fail the poll (exceptions are swallowed).
+                - Authoritative mode: the gateway result is used; the direct
+                  client is untouched for this dataset.
+                """
+                step_start = time.time()
+                if telnet_gateway is None:
+                    result = await direct_fn()
+                    step_times[step_key] = time.time() - step_start
+                    return result
+                if gateway_authoritative:
+                    result = await gateway_fn(force_refresh=False)
+                    step_times[step_key] = time.time() - step_start
+                    return result
+                # Shadow mode: direct stays authoritative.
+                result = await direct_fn()
+                step_times[step_key] = time.time() - step_start
+                shadow_start = time.time()
+                try:
+                    gw_result = await gateway_fn(force_refresh=True)
+                    self._shadow_comparator.compare(data_name, result, gw_result)
+                except Exception as exc:
+                    logger.debug(
+                        f"Machine {self.machine.id} - gateway shadow read "
+                        f"{data_name} failed (ignored): {exc}"
+                    )
+                step_times[step_key + "_gw_shadow"] = time.time() - shadow_start
+                return result
+
             # Get MONTR data (replaces HTTP /running_log and /work_counter)
-            step_start = time.time()
-            montr_data = await telnet_client.get_monitor_data(verbose=False)
-            step_times['get_montr'] = time.time() - step_start
+            montr_data = await _read_fast_dataset(
+                "get_montr",
+                "MONTR",
+                lambda: telnet_client.get_monitor_data(verbose=False),
+                _gw_read_montr,
+            )
             if not montr_data:
                 raise ConnectionError("Failed to fetch MONTR data - machine may be unreachable")
             
@@ -641,9 +711,12 @@ class MachinePoller:
             step_times['parse_montr'] = time.time() - step_start
             
             # Get PRD3 data (contains current status and status history)
-            step_start = time.time()
-            prd3_data = await telnet_client.get_prd3_data(control_version=control_version, verbose=False)
-            step_times['get_prd3'] = time.time() - step_start
+            prd3_data = await _read_fast_dataset(
+                "get_prd3",
+                "PRD3",
+                lambda: telnet_client.get_prd3_data(control_version=control_version, verbose=False),
+                _gw_read_prd3,
+            )
             prd3_parsed = None
             if prd3_data:
                 step_start = time.time()
@@ -658,9 +731,12 @@ class MachinePoller:
             # Get MEM data to check mode and operation_status (needed for frontend validation)
             mem_parsed = None
             try:
-                step_start = time.time()
-                mem_data = await telnet_client.get_memory_data(verbose=False)
-                step_times['get_mem'] = time.time() - step_start
+                mem_data = await _read_fast_dataset(
+                    "get_mem",
+                    "MEM",
+                    lambda: telnet_client.get_memory_data(verbose=False),
+                    _gw_read_mem,
+                )
                 if mem_data:
                     step_start = time.time()
                     mem_parsed = parse_mem_v2(mem_data.encode('utf-8'), control_version=control_version)
@@ -716,6 +792,22 @@ class MachinePoller:
             _montr_program = program_info.get("operation_program_no")
             _mem_program = mem_parsed.get("program_name") if mem_parsed else None
             _resolved_program_name = _montr_program or _mem_program or "----"
+
+            # Phase 1: when the program changes, drop the gateway's MEM cache
+            # entry so the next cycle re-reads it instead of serving the
+            # (60s TTL) stale entry.
+            if telnet_gateway is not None:
+                if (
+                    self._last_fast_program_name is not None
+                    and _resolved_program_name != self._last_fast_program_name
+                ):
+                    telnet_gateway.invalidate("MEM")
+                    logger.debug(
+                        f"Machine {self.machine.id} - program changed "
+                        f"{self._last_fast_program_name} -> {_resolved_program_name}; "
+                        f"invalidated gateway MEM cache"
+                    )
+                self._last_fast_program_name = _resolved_program_name
 
             status_data = {
                 "ip_address": self.machine.ip_address,
@@ -880,6 +972,12 @@ class MachinePoller:
                 "part_display_mode": getattr(self.machine, "part_display_mode", "parts"),
                 "atc_pockets": getattr(self.machine, "atc_pockets", 21) or 21,
             })
+
+            # Phase 1 gateway observability (only present when the gateway is
+            # enabled): shadow comparison counters + gateway internals.
+            if telnet_gateway is not None:
+                status_data["gw_shadow"] = self._shadow_comparator.snapshot()
+                status_data["gw_stats"] = telnet_gateway.stats()
             
             # Ensure program_name is explicitly included (even if None)
             if "program_name" not in status_data:

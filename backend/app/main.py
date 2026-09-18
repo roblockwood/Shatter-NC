@@ -168,6 +168,8 @@ async def shutdown_event():
     try:
         from app.clients.telnet_client import close_all_connections
         await close_all_connections()
+        from app.services.telnet_gateway import close_all_gateways
+        await close_all_gateways()
     except Exception:
         # Best-effort cleanup; shutdown must continue
         pass

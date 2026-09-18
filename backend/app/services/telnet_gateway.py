@@ -299,6 +299,15 @@ class TelnetGateway:
             return await asyncio.wait_for(asyncio.shield(fut), timeout)
         return await asyncio.shield(fut)
 
+    def invalidate(self, *data_names: str) -> None:
+        """Drop cached entries (e.g. MEM after a program change is detected).
+
+        The next read() for the name goes back to the machine. Unknown names
+        are a no-op.
+        """
+        for name in data_names:
+            self._cache.pop(name, None)
+
     def stats(self) -> Dict[str, Any]:
         """Snapshot of per-gateway observability counters."""
         lat = self._latencies
