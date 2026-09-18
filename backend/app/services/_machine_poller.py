@@ -626,8 +626,17 @@ class MachinePoller:
         telnet_gateway = None
         gateway_authoritative = False
         if settings.SHATTER_TELNET_GATEWAY_ENABLED:
-            telnet_gateway = await get_gateway(self.machine.ip_address, 10000)
-            gateway_authoritative = settings.SHATTER_TELNET_GW_AUTHORITATIVE
+            try:
+                telnet_gateway = await get_gateway(self.machine.ip_address, 10000)
+                gateway_authoritative = settings.SHATTER_TELNET_GW_AUTHORITATIVE
+            except Exception as exc:
+                # Never let gateway setup break polling: fall back to the
+                # direct client path (today's behavior).
+                logger.warning(
+                    f"Machine {self.machine.id} - telnet gateway unavailable "
+                    f"({exc}); using direct client"
+                )
+                telnet_gateway = None
 
         async def _run_fast_poll() -> Dict[str, Any]:
             nonlocal telnet_client
