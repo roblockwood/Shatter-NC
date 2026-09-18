@@ -85,8 +85,13 @@ def _fake_gateway(montr=None, prd3=None, mem=None, read_side_effect=None):
     return gw
 
 
-def _poll_with(poller, monkeypatch, direct_fake, gateway_fake, enabled, authoritative):
-    """Run one poll() with the gateway flags set and fakes installed."""
+async def _poll_with(poller, monkeypatch, direct_fake, gateway_fake, enabled, authoritative):
+    """Run one poll() with the gateway flags set and fakes installed.
+
+    NOTE: this helper is async on purpose -- poll() must be awaited INSIDE
+    the patch context managers, otherwise the fakes are uninstalled before
+    the coroutine runs and the real network clients get used.
+    """
     monkeypatch.setattr(
         "app.services._machine_poller.settings.SHATTER_TELNET_GATEWAY_ENABLED",
         enabled,
@@ -105,7 +110,7 @@ def _poll_with(poller, monkeypatch, direct_fake, gateway_fake, enabled, authorit
                 _discard_create_task,
             ):
                 with patch("app.services._machine_poller.SessionLocal"):
-                    return poller.poll()
+                    return await poller.poll()
 
 
 # ---------------------------------------------------------------------------
