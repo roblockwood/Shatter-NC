@@ -1,0 +1,17 @@
+{
+  "client_id": "https://raw.githubusercontent.com/roblockwood/shatter-nc/cimd/fusion-compute-client.json",
+  "client_name": "Calypso (Muse personal agent for Rob Lockwood)",
+  "redirect_uris": [
+    "https://example.com/mcp-callback",
+    "http://127.0.0.1:8919/mcp-callback"
+  ],
+  "grant_types": [
+    "authorization_code",
+    "refresh_token"
+  ],
+  "response_types": [
+    "code"
+  ],
+  "token_endpoint_auth_method": "none",
+  "scope": "mcp:read mcp:write offline_access"
+}
