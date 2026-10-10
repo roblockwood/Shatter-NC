@@ -121,6 +121,7 @@ interface ProbeRunResponse {
   phase?: string;
   error?: string;
   elapsed_s?: number;
+  warnings?: string[];
 }
 
 function liveMacro(
@@ -805,6 +806,9 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
           `SALT failed @ ${payload.phase ?? 'unknown'}: ${msg}`,
           'fail'
         );
+        for (const w of payload.warnings ?? []) {
+          appendActivity(`SALT — ${w}`, 'warn');
+        }
         if (payload.results) {
           setResults(payload.results);
           appendActivity('Partial results were returned — see RESULTS below', 'warn');
@@ -822,6 +826,10 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       if (resultSummary) {
         appendActivity(`SALT — results ${resultSummary}`);
       }
+      const readWarnings = payload.warnings ?? [];
+      for (const w of readWarnings) {
+        appendActivity(`SALT — ${w}`, 'warn');
+      }
       const poisoned = Object.keys(payload.macros_written ?? {}).length;
       appendActivity(
         `SALT ok in ${(payload.elapsed_s ?? 0).toFixed(1)}s — salted ${poisoned} macros`,
@@ -829,7 +837,8 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       );
       setStepUi('ok');
       setStepLog(
-        `OK — results read · macros salted (${(payload.elapsed_s ?? 0).toFixed(1)}s)`
+        `OK — results read · macros salted (${(payload.elapsed_s ?? 0).toFixed(1)}s)` +
+          (readWarnings.length ? `\n⚠ ${readWarnings.join('\n⚠ ')}` : '')
       );
       setStatusLine(
         `Complete in ${(payload.elapsed_s ?? 0).toFixed(1)}s — macros poisoned`

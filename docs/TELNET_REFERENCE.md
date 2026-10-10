@@ -175,7 +175,7 @@ every hazard.
 2. Operator confirms success, then next step
 3. `POST .../probe/start` — `CHGMODE MEM` → `FLDCHG PROGRAM` → `MEMSTRT` catalog target → `FLDCHG /`
 4. Operator confirms motion started, then next step
-5. `POST .../probe/collect` — wait cycle-complete (0.25s poll while exclusive) → read `#100–#107` → poison (salt)
+5. `POST .../probe/collect` — wait cycle-complete (0.25s poll while exclusive) → read `#100–#107` → poison (salt). Vacant result macros come back as `null`; the response `warnings` list says whether every result was vacant (Blum clears `#[#111+0..9]` at cycle start) or the REDMCNM read itself failed.
 6. `POST .../probe/exclusive` `{ "active": false }` — resume polling (also auto after ~5 min idle)
 
 **Tool length:** ATC pot multi-select in Probes. One selected tool uses the normal write `#920` → MEMSTRT O8100 → collect path. Several tools use `POST .../probe/tool-batch` (sequenced O8100, abort on first failure):

@@ -14,6 +14,7 @@ from app.services.probe_cycle_service import (
     _is_running,
     _memstrt_catalog_target,
     _normalize_tool_list,
+    _read_results,
     _wait_until,
     collect_probe_results,
     poison_probe_macros,
@@ -250,6 +251,114 @@ async def test_collect_probe_results(monkeypatch):
     client.get_macro_variable_range.assert_awaited()
     client.change_folder.assert_awaited_with("/", verbose=False)
     assert client.write_macro_variable.await_count >= 1
+
+
+def _results_client(range_values, single=lambda n: None):
+    client = MagicMock()
+    client.get_macro_variable_range = AsyncMock(return_value=range_values)
+    client.get_macro_variable = AsyncMock(
+        side_effect=lambda n, verbose=False: single(n)
+    )
+    return client
+
+
+@pytest.mark.asyncio
+async def test_read_results_full_range():
+    client = _results_client([float(n) for n in range(100, 108)])
+    results, warnings = await _read_results(client)
+    assert results == {str(n): float(n) for n in range(100, 108)}
+    assert warnings == []
+    client.get_macro_variable_range.assert_awaited_with(
+        100, 8, verbose=False, vacant_as_none=True
+    )
+    client.get_macro_variable.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_read_results_partial_vacant_is_trusted():
+    client = _results_client([1.5, 2.5, None, None, None, None, None, None])
+    results, warnings = await _read_results(client)
+    assert results["100"] == 1.5
+    assert results["102"] is None
+    assert warnings == []
+    client.get_macro_variable.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_read_results_all_vacant_falls_back_per_variable():
+    client = _results_client([None] * 8, single=lambda n: float(n) + 0.5)
+    results, warnings = await _read_results(client)
+    assert results == {str(n): float(n) + 0.5 for n in range(100, 108)}
+    assert warnings == []
+    assert client.get_macro_variable.await_count == 8
+
+
+@pytest.mark.asyncio
+async def test_read_results_all_vacant_everywhere_warns_vacant():
+    client = _results_client([None] * 8)
+    results, warnings = await _read_results(client)
+    assert all(v is None for v in results.values())
+    assert len(warnings) == 1
+    assert "vacant" in warnings[0]
+
+
+@pytest.mark.asyncio
+async def test_read_results_range_none_falls_back():
+    client = _results_client(None, single=lambda n: float(n))
+    results, warnings = await _read_results(client)
+    assert results["107"] == 107.0
+    assert len(warnings) == 1
+    assert "0/8" in warnings[0]
+
+
+@pytest.mark.asyncio
+async def test_read_results_range_none_and_singles_fail_warns_read_failed():
+    client = _results_client(None)
+    results, warnings = await _read_results(client)
+    assert all(v is None for v in results.values())
+    assert len(warnings) == 1
+    assert "read failed" in warnings[0].lower()
+
+
+@pytest.mark.asyncio
+async def test_read_results_short_range_reads_rest_individually():
+    client = _results_client([1.0, 2.0, 3.0], single=lambda n: float(n))
+    results, warnings = await _read_results(client)
+    assert results["100"] == 1.0
+    assert results["102"] == 3.0
+    assert results["103"] == 103.0
+    assert results["107"] == 107.0
+    assert client.get_macro_variable.await_count == 5
+    assert "3/8" in warnings[0]
+
+
+@pytest.mark.asyncio
+async def test_collect_surfaces_vacant_warning(monkeypatch):
+    machine = SimpleNamespace(id=1, ip_address="10.0.0.1", control_version="C00")
+    client = MagicMock()
+    client.disconnect = AsyncMock()
+    client.change_folder = AsyncMock(return_value=(True, "00"))
+    client.get_macro_variable_range = AsyncMock(return_value=[None] * 8)
+    client.get_macro_variable = AsyncMock(return_value=None)
+    client.write_macro_variable = AsyncMock(return_value=(True, "00", None))
+    client.get_status_description = MagicMock(return_value="OK")
+
+    async def idle(c, cv):
+        return _Snap(prd3_status="standby", operation_status=0)
+
+    async def fake_create(*args, **kwargs):
+        return client
+
+    monkeypatch.setattr("app.clients.telnet_client.create_fresh_connection", fake_create)
+    monkeypatch.setattr("app.services.probe_cycle_service._snapshot", idle)
+    monkeypatch.setattr("app.services.probe_cycle_service.POST_CYCLE_SETTLE_S", 0)
+
+    result = await collect_probe_results(
+        db_machine=machine, machine_id=1, cycle_timeout_s=5, poll_s=0.01
+    )
+    assert result.ok is True
+    assert all(v is None for v in result.results.values())
+    assert result.warnings and "vacant" in result.warnings[0]
 
 
 @pytest.mark.asyncio
