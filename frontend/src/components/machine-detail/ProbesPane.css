@@ -661,6 +661,15 @@
     width: 8.5rem;
   }
 
+  .probes-input-wrap--signed {
+    width: 10.5rem;
+  }
+
+  .probes-sign-btn {
+    width: 2rem;
+    font-size: var(--font-sm);
+  }
+
   .probes-input {
     font-size: 16px; /* ≥16px stops iOS zoom-on-focus */
     padding: 6px 6px 6px 8px;
