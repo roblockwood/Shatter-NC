@@ -13,6 +13,9 @@
   min-width: 0;
   min-height: 0;
   position: relative;
+  /* Stack on pane width, not viewport — the pane is also a tablet / grid tile */
+  container-type: inline-size;
+  container-name: probes-pane;
 }
 
 .probes-pane > .terminal-box {
@@ -164,14 +167,16 @@
   grid-template-columns: minmax(148px, 188px) minmax(0, 1fr);
   gap: 10px;
   align-items: start;
-  min-height: 0;
-  flex: 1 1 auto;
+  /* Never shrink below the fields — short panes scroll .probes-pane-content instead */
+  flex: 0 0 auto;
 }
 
 .probes-main--atc-multi {
   /* Wider pot grid; keep preview readable but secondary */
   grid-template-columns: minmax(0, 1fr) minmax(140px, 220px);
   align-items: stretch;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .probes-main--atc-multi .probes-fields {
@@ -563,10 +568,77 @@
   color: #8f8;
 }
 
-@media (max-width: 420px) {
-  .probes-main {
-    grid-template-columns: 1fr;
-    flex: 0 1 auto;
+/*
+ * Narrow pane (phones, split tablet tiles): one column — all fields first at full
+ * width, preview below. Nothing may shrink below its content: .probes-pane-content
+ * is the only scroller, so every input is reachable by normal scrolling.
+ */
+@container probes-pane (max-width: 560px) {
+  .probes-pane-content > * {
+    flex-shrink: 0;
+  }
+
+  .probes-main,
+  .probes-main--atc-multi {
+    grid-template-columns: minmax(0, 1fr);
+    flex: 0 0 auto;
+    align-items: start;
+  }
+
+  .probes-fields,
+  .probes-main--atc-multi .probes-fields {
+    overflow: visible;
+    height: auto;
+  }
+
+  .probes-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'label input'
+      'live  input';
+    column-gap: 10px;
+    row-gap: 2px;
+    align-items: center;
+    width: 100%;
+  }
+
+  .probes-field > .probes-field-label {
+    grid-area: label;
+  }
+
+  .probes-field > .probes-input-wrap {
+    grid-area: input;
+  }
+
+  .probes-field > .probes-live {
+    grid-area: live;
+  }
+
+  .probes-field--mode {
+    display: flex;
+    align-items: stretch;
+  }
+
+  .probes-input-wrap {
+    width: 8.5rem;
+  }
+
+  .probes-input {
+    font-size: 16px; /* ≥16px stops iOS zoom-on-focus */
+    padding: 6px 6px 6px 8px;
+  }
+
+  .probes-input-wrap .probes-input {
+    padding: 6px 6px 6px 8px;
+  }
+
+  .probes-spin {
+    width: 2rem;
+  }
+
+  .probes-spin-btn {
+    font-size: 9px;
   }
 
   .probes-glyph-grid {
