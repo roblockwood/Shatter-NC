@@ -113,6 +113,7 @@ def _result_payload(result: Any) -> Dict[str, Any]:
         "error": result.error,
         "status_data": result.status_data,
         "elapsed_s": result.elapsed_s,
+        "warnings": list(getattr(result, "warnings", None) or []),
     }
 
 

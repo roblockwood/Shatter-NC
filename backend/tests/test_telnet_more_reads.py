@@ -59,6 +59,20 @@ async def test_get_macro_variable_range():
     assert len(values) == 2
 
 
+def test_parse_macro_range_vacant_fields():
+    blank = " " * 12
+    payload = "004" + f"{1.5:12.4f}" + blank + "*" * 12 + blank
+    parse = CNCTelnetClient._parse_macro_range_response
+    assert parse(payload) == [1.5, 0.0, 0.0, 0.0]
+    assert parse(payload, vacant_as_none=True) == [1.5, None, None, None]
+
+
+def test_parse_macro_range_all_vacant_keeps_trailing_blanks():
+    payload = "008" + " " * 96 + "\r\n"
+    parse = CNCTelnetClient._parse_macro_range_response
+    assert parse(payload, vacant_as_none=True) == [None] * 8
+
+
 @pytest.mark.asyncio
 async def test_get_plc_signal_range_bools():
     client = _client()

@@ -16,7 +16,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from app.models.machine import Machine
 from app.parsers.mem_parser_v2 import parse_mem_v2
@@ -60,6 +60,7 @@ class ProbeCycleResult:
     error: Optional[str] = None
     status_data: Dict[str, Any] = field(default_factory=dict)
     elapsed_s: float = 0.0
+    warnings: List[str] = field(default_factory=list)
     # Deprecated — kept for API compatibility with older clients
     gate_program: Optional[int] = None
 
@@ -335,26 +336,67 @@ async def _poison_macros(
     return written
 
 
-async def _read_results(client: Any) -> Dict[str, Optional[float]]:
-    """Read Blum result macros (#100–#107) via one REDMCNM range when possible."""
+async def _read_results(
+    client: Any,
+) -> Tuple[Dict[str, Optional[float]], List[str]]:
+    """Read Blum result macros (#100–#107); returns ``(results, warnings)``.
+
+    One REDMCNM range read first (vacant entries → None). Any macro the range did
+    not cover — or every macro when the range came back all-vacant — is re-read
+    individually. Warnings distinguish a failed read from macros that are
+    genuinely vacant (Blum clears #[#111+0..9] at cycle start).
+    """
     nums = get_result_macro_numbers()
     results: Dict[str, Optional[float]] = {str(n): None for n in nums}
+    warnings: List[str] = []
     if not nums:
-        return results
+        return results, warnings
 
     start = min(nums)
     size = max(nums) - start + 1
-    values = await client.get_macro_variable_range(start, size, verbose=False)
-    if values is not None:
-        for num in nums:
-            idx = num - start
-            if 0 <= idx < len(values):
-                results[str(num)] = values[idx]
-        return results
+    label = f"#{start}–#{max(nums)}"
+    values = await client.get_macro_variable_range(
+        start, size, verbose=False, vacant_as_none=True
+    )
+    logger.info("probe results REDMCNM range %s -> %r", label, values)
 
+    retry: List[int] = []
     for num in nums:
-        results[str(num)] = await client.get_macro_variable(num, verbose=False)
-    return results
+        idx = num - start
+        if values is not None and 0 <= idx < len(values):
+            results[str(num)] = values[idx]
+        else:
+            retry.append(num)
+    if values is not None and not retry and all(v is None for v in results.values()):
+        retry = list(nums)
+
+    if retry:
+        for num in retry:
+            results[str(num)] = await client.get_macro_variable(num, verbose=False)
+        logger.info(
+            "probe results per-variable re-read %s -> %r",
+            retry,
+            {n: results[str(n)] for n in retry},
+        )
+
+    if all(v is None for v in results.values()):
+        if values is None:
+            warnings.append(
+                f"Result read failed: REDMCNM {label} returned no data "
+                "(range and per-variable reads)"
+            )
+        else:
+            warnings.append(
+                f"Result macros {label} are all vacant — the cycle did not write "
+                "results (or the control cleared them)"
+            )
+    elif values is None or len(values) < size:
+        got = 0 if values is None else len(values)
+        warnings.append(
+            f"REDMCNM range {label} returned {got}/{size} values — "
+            "remaining macros read individually"
+        )
+    return results, warnings
 
 
 async def _memstrt_catalog_target(client: Any, program: int) -> None:
@@ -770,6 +812,7 @@ async def collect_probe_results(
     client = None
     phase = "connect"
     results: Dict[str, Optional[float]] = {}
+    read_warnings: List[str] = []
 
     try:
         await emit_probe_progress(progress, "connect", "Connecting for collect…")
@@ -804,7 +847,9 @@ async def collect_probe_results(
 
         phase = "reading"
         await emit_probe_progress(progress, "reading", "Reading result macros #100+…")
-        results = await _read_results(client)
+        results, read_warnings = await _read_results(client)
+        for warning in read_warnings:
+            await emit_probe_progress(progress, "reading", f"WARNING: {warning}")
 
         macros_written: Dict[int, float] = {}
         if poison:
@@ -829,6 +874,7 @@ async def collect_probe_results(
                         "skipped salt/poison. Retry when idle."
                     ),
                     elapsed_s=time.perf_counter() - t0,
+                    warnings=read_warnings,
                 )
             macros_written = await _poison_macros(client, progress=progress)
             if not macros_written:
@@ -844,6 +890,7 @@ async def collect_probe_results(
                     phase=phase,
                     error="Results read, but salt/poison wrote no macros",
                     elapsed_s=time.perf_counter() - t0,
+                    warnings=read_warnings,
                 )
 
         await emit_probe_progress(
@@ -858,6 +905,7 @@ async def collect_probe_results(
             macros_written=macros_written,
             phase="complete",
             elapsed_s=time.perf_counter() - t0,
+            warnings=read_warnings,
         )
     except Exception as e:
         logger.exception("probe collect failed machine=%s phase=%s", machine_id, phase)
@@ -868,6 +916,7 @@ async def collect_probe_results(
             phase=phase,
             error=str(e),
             elapsed_s=time.perf_counter() - t0,
+            warnings=read_warnings,
         )
     finally:
         if client:

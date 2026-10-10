@@ -1135,18 +1135,25 @@ class CNCDataReadsMixin:
                 return None
 
     @staticmethod
-    def _parse_macro_range_response(data: str) -> Optional[list[float]]:
-        """Parse REDMCNM range response data into float values."""
+    def _parse_macro_range_response(
+        data: str, vacant_as_none: bool = False
+    ) -> Optional[list[Optional[float]]]:
+        """Parse REDMCNM range response data into float values.
+
+        Vacant (blank) or undisplayable (``*****``) fields parse as ``0.0`` by default,
+        or ``None`` when ``vacant_as_none`` is set.
+        """
         if not data:
             return None
 
-        data_line = data.replace("\n", "").replace("\r", "").strip()
+        # Only strip leading whitespace: trailing all-blank (vacant) fields are data.
+        data_line = data.replace("\n", "").replace("\r", "").lstrip()
         if len(data_line) < 3:
             return None
 
         try:
             returned_size = int(data_line[0:3])
-            values = []
+            values: list[Optional[float]] = []
             offset = 3
             for _ in range(returned_size):
                 if offset + 12 > len(data_line):
@@ -1155,7 +1162,7 @@ class CNCDataReadsMixin:
                 try:
                     values.append(float(value_str))
                 except ValueError:
-                    values.append(0.0)
+                    values.append(None if vacant_as_none else 0.0)
                 offset += 12
             return values
         except (ValueError, IndexError) as e:
@@ -1163,8 +1170,12 @@ class CNCDataReadsMixin:
             return None
 
     async def _fetch_macro_variable_range_unlocked(
-        self, start_macro: int, data_size: int, verbose: bool = False
-    ) -> Optional[list[float]]:
+        self,
+        start_macro: int,
+        data_size: int,
+        verbose: bool = False,
+        vacant_as_none: bool = False,
+    ) -> Optional[list[Optional[float]]]:
         """Read macro variables via REDMCNM range; caller must hold the machine lock."""
         if not self._connected:
             connected = await self.connect()
@@ -1192,7 +1203,13 @@ class CNCDataReadsMixin:
                 logger.warning(f"Failed to get macro variable range: status {status}")
                 return None
 
-            return self._parse_macro_range_response(data or "")
+            if verbose:
+                logger.info(
+                    "REDMCNM range #%d+%d raw data: %r", start_macro, data_size, data
+                )
+            return self._parse_macro_range_response(
+                data or "", vacant_as_none=vacant_as_none
+            )
         except Exception as e:
             logger.error(f"Error getting macro variable range: {e}")
             return None
@@ -1255,7 +1272,11 @@ class CNCDataReadsMixin:
             return await self._fetch_macro_variable_unlocked(macro_number, verbose=verbose)
 
     async def get_macro_variable_range(
-        self, start_macro: int, data_size: int, verbose: bool = False
+        self,
+        start_macro: int,
+        data_size: int,
+        verbose: bool = False,
+        vacant_as_none: bool = False,
     ) -> Optional[list]:
         """
         Get macro variable values in range using REDMCNM command (range).
@@ -1264,6 +1285,7 @@ class CNCDataReadsMixin:
             start_macro: Starting macro variable number (100-999)
             data_size: Number of variables to read (1-999)
             verbose: If True, log command details
+            vacant_as_none: Return None (not 0.0) for vacant/unparseable entries
 
         Returns:
             List of macro variable values (floats), or None on failure
@@ -1285,5 +1307,5 @@ class CNCDataReadsMixin:
                 return None
 
             return await self._fetch_macro_variable_range_unlocked(
-                start_macro, data_size, verbose=verbose
+                start_macro, data_size, verbose=verbose, vacant_as_none=vacant_as_none
             )
