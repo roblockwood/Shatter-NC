@@ -183,6 +183,8 @@ every hazard.
 1. One tool: write `#920` / confirm / MEMSTRT / collect · Several: confirm tools → confirm batch → `tool-batch`
 2. `POST .../probe/tool-batch` `{ "tools": [1, 3, 12], "client_run_id": "…" }` when measuring multiple tools
 
+**Probes pane params:** signed fields (WCS, X/Y/Z DIST, angles) accept typed `-` and have a `±` toggle; SIZE/TOOL stay non-negative. Values that wrote successfully are cached in `localStorage` per machine + routine + mode (`shatter.probeParams.<machineId>.<routineId>.<mode>`) and pre-fill next time; cached values are re-validated (poison / WCS / sign rules) before use. After a successful collect, **RUN AGAIN** releases the exclusive hold and restarts at the write step with the same values — never straight to motion.
+
 Live scripts:
 
 - [`backend/scripts/test_chgprog.py`](../backend/scripts/test_chgprog.py) — `CHGMODE` / `FLDCHG` / `CHGPROG` (no start)

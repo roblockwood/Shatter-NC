@@ -13,7 +13,6 @@ import {
   getRoutine,
   getRoutinesForCategory,
   isPoisonValue,
-  isValidWcs,
   probeCatalog,
   requiredMacros,
   resolveProgram,
@@ -22,6 +21,19 @@ import {
 } from '../../data/probeCatalog';
 import { ProbeGlyph } from './probe/ProbeGlyph';
 import { ProbeCyclePreview } from './probe/ProbeCyclePreview';
+import {
+  formatParam,
+  initialParamText,
+  isEditableDraft,
+  isIntegerMacro,
+  isSignedMacro,
+  paramError,
+  parseParamText,
+  parseParams,
+  saveCachedParams,
+  stepParam,
+  toggleSign,
+} from './probe/probeParams';
 import {
   AtcPotSelectGrid,
   buildAtcPotCells,
@@ -134,19 +146,6 @@ function liveMacro(
   return macros[asInt];
 }
 
-function defaultParamsFor(macros: string[]): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const m of macros) {
-    if (m === '900') out[m] = 54;
-    else if (m === '920') out[m] = 1;
-    else if (m === '904') out[m] = 50;
-    else if (m === '905' || m === '906' || m === '907') {
-      out[m] = m === '905' ? 0 : m === '906' ? 120 : 240;
-    } else out[m] = 10;
-  }
-  return out;
-}
-
 function resultLabel(macro: string): string {
   const map: Record<string, string> = {
     '100': 'X / EDGE X',
@@ -192,7 +191,9 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     [category]
   );
   const [routineId, setRoutineId] = useState('corner_xyz');
-  const [params, setParams] = useState<Record<string, number>>({});
+  /** Raw field text — kept while editing so `-`, `-1.` etc. survive keystrokes. */
+  const [paramText, setParamText] = useState<Record<string, string>>({});
+  const params = useMemo(() => parseParams(paramText), [paramText]);
   const [selectedPots, setSelectedPots] = useState<number[]>([]);
   const [phase, setPhase] = useState<RunPhase>('idle');
   const [statusLine, setStatusLine] = useState<string>('Ready');
@@ -272,7 +273,7 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
 
   useEffect(() => {
     const macrosNeeded = requiredMacros(routineId, effectiveMode);
-    setParams(defaultParamsFor(macrosNeeded));
+    setParamText(initialParamText(machineId, routineId, effectiveMode, macrosNeeded));
     setSelectedPots([]);
     setResults(null);
     setError(null);
@@ -285,21 +286,15 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
       setActivityLog([]);
       setMacrosWritten(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on routine/mode
-  }, [routineId, effectiveMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on machine/routine/mode
+  }, [machineId, routineId, effectiveMode]);
 
   const freshness = assessMacroFreshness(required, params, macros);
   const operating = (machineStatus || '').toLowerCase() === 'operating';
-  const macrosReady =
-    !isAtcSelect &&
-    required.every((m) => {
-      const v = params[m];
-      if (v == null || Number.isNaN(v)) return false;
-      if (isPoisonValue(m, v)) return false;
-      if (m === '900' && !isValidWcs(v)) return false;
-      if (m === '900' && !Number.isInteger(v)) return false;
-      return true;
-    });
+  const paramErrors: Record<string, string | null> = {};
+  for (const m of required) paramErrors[m] = paramError(m, params[m]);
+  const firstParamError = required.find((m) => paramErrors[m] != null);
+  const macrosReady = !isAtcSelect && firstParamError === undefined;
   const canRun =
     !busy &&
     !operating &&
@@ -511,6 +506,16 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
     })();
   }
 
+  /** Fresh write → motion → collect with the same routine/mode/params (macros were salted). */
+  function runAgain() {
+    if (busy || !canRun) return;
+    void (async () => {
+      // Exclusive hold is refcounted server-side — release before openWizard re-takes it.
+      await endExclusiveHold();
+      openWizard();
+    })();
+  }
+
   function openPoisonDialog() {
     setError(null);
     setStepUi('ready');
@@ -630,6 +635,9 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
         }
         const written = payload.macros_written ?? {};
         setMacrosWritten(written);
+        if (!isAtcSelect) {
+          saveCachedParams(machineId, routineId, effectiveMode, writeParams);
+        }
         const lines = Object.entries(written)
           .map(([k, v]) => `#${k}=${v}`)
           .join(' · ');
@@ -1044,30 +1052,57 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                   : probeCatalog.fields[macro]?.label ?? `#${macro}`;
                 const unit = probeCatalog.fields[macro]?.unit ?? '';
                 const live = liveMacro(macros, macro);
+                const fieldError = paramErrors[macro];
+                const signed = isSignedMacro(macro);
+                const inputId = `probe-param-${machineId}-${macro}`;
                 return (
-                  <label key={macro} className="probes-field">
+                  <label key={macro} className="probes-field" htmlFor={inputId}>
                     <span className="probes-field-label">
                       {label}
                       {unit ? ` (${unit})` : ''}
                       <span className="probes-field-macro"> #{macro}</span>
                     </span>
-                    <span className="probes-input-wrap">
+                    <span
+                      className={`probes-input-wrap${signed ? ' probes-input-wrap--signed' : ''}${fieldError ? ' probes-input-wrap--invalid' : ''}`}
+                      title={fieldError ?? undefined}
+                    >
+                      {signed && (
+                        <button
+                          type="button"
+                          className="probes-sign-btn"
+                          tabIndex={-1}
+                          disabled={controlsDisabled}
+                          aria-label={`Toggle sign of ${label}`}
+                          onClick={() => {
+                            setParamText((prev) => ({
+                              ...prev,
+                              [macro]: toggleSign(prev[macro] ?? ''),
+                            }));
+                          }}
+                        >
+                          ±
+                        </button>
+                      )}
                       <input
+                        id={inputId}
                         className="probes-input"
-                        type="number"
-                        step={macro === '900' ? 1 : 'any'}
-                        inputMode={macro === '900' ? 'numeric' : 'decimal'}
-                        value={params[macro] ?? ''}
+                        type="text"
+                        inputMode={isIntegerMacro(macro) ? 'numeric' : 'decimal'}
+                        autoComplete="off"
+                        spellCheck={false}
+                        aria-invalid={fieldError != null}
+                        value={paramText[macro] ?? ''}
                         disabled={controlsDisabled}
                         onChange={(e) => {
-                          const n =
-                            macro === '900'
-                              ? Number.parseInt(e.target.value, 10)
-                              : Number.parseFloat(e.target.value);
-                          setParams((prev) => ({
-                            ...prev,
-                            [macro]: Number.isFinite(n) ? n : 0,
-                          }));
+                          const text = e.target.value.trim();
+                          if (!isEditableDraft(macro, text)) return;
+                          setParamText((prev) => ({ ...prev, [macro]: text }));
+                        }}
+                        onBlur={() => {
+                          setParamText((prev) => {
+                            const n = parseParamText(macro, prev[macro]);
+                            return n == null ? prev : { ...prev, [macro]: formatParam(n) };
+                          });
                         }}
                       />
                       <span className="probes-spin">
@@ -1078,9 +1113,9 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                           disabled={controlsDisabled}
                           aria-label={`Increase ${label}`}
                           onClick={() => {
-                            setParams((prev) => ({
+                            setParamText((prev) => ({
                               ...prev,
-                              [macro]: (prev[macro] ?? 0) + 1,
+                              [macro]: stepParam(macro, prev[macro], 1),
                             }));
                           }}
                         >
@@ -1093,9 +1128,9 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                           disabled={controlsDisabled}
                           aria-label={`Decrease ${label}`}
                           onClick={() => {
-                            setParams((prev) => ({
+                            setParamText((prev) => ({
                               ...prev,
-                              [macro]: (prev[macro] ?? 0) - 1,
+                              [macro]: stepParam(macro, prev[macro], -1),
                             }));
                           }}
                         >
@@ -1140,11 +1175,15 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                   : !canRun
                     ? isAtcSelect
                       ? 'Select at least one full ATC pot'
-                      : 'Fill valid non-poison params'
-                    : 'Open stepped execute wizard'
+                      : firstParamError
+                        ? `#${firstParamError}: ${paramErrors[firstParamError]}`
+                        : 'Fill valid non-poison params'
+                    : phase === 'complete'
+                      ? 'Run the same routine again — writes macros first'
+                      : 'Open stepped execute wizard'
               }
             >
-              [ EXECUTE ]
+              {phase === 'complete' ? '[ RUN AGAIN ]' : '[ EXECUTE ]'}
             </button>
             <button
               type="button"
@@ -1364,6 +1403,21 @@ export const ProbesPane: React.FC<ProbesPaneProps> = ({
                   onClick={() => advanceWizard()}
                 >
                   [ NEXT ]
+                </button>
+              )}
+
+              {stepUi === 'ok' && wizardStep === 'salt' && (
+                <button
+                  type="button"
+                  className="terminal-button-sm danger"
+                  disabled={busy || !canRun}
+                  title="Restart at step 1 (write macros) with the same routine and values"
+                  onClick={() => {
+                    appendActivity('Sequence complete — running again', 'ok');
+                    runAgain();
+                  }}
+                >
+                  [ RUN AGAIN ]
                 </button>
               )}
 

@@ -269,8 +269,45 @@
   box-sizing: border-box;
 }
 
+.probes-input-wrap--signed {
+  width: 6.85rem;
+}
+
 .probes-input-wrap:focus-within {
   border-color: #00ff00;
+}
+
+.probes-input-wrap--invalid,
+.probes-input-wrap--invalid:focus-within {
+  border-color: var(--color-error, #ff0000);
+}
+
+.probes-sign-btn {
+  flex: 0 0 auto;
+  width: 1.1rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-right: 1px solid #2a2a2a;
+  background: #0a0a0a;
+  color: #00ff00;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  cursor: pointer;
+}
+
+.probes-sign-btn:hover:not(:disabled) {
+  background: #121212;
+  color: #33ff33;
+}
+
+.probes-sign-btn:active:not(:disabled) {
+  color: #ffaa00;
+}
+
+.probes-sign-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .probes-input-wrap .probes-input {
@@ -622,6 +659,15 @@
 
   .probes-input-wrap {
     width: 8.5rem;
+  }
+
+  .probes-input-wrap--signed {
+    width: 10.5rem;
+  }
+
+  .probes-sign-btn {
+    width: 2rem;
+    font-size: var(--font-sm);
   }
 
   .probes-input {
